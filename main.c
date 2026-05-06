@@ -22,8 +22,8 @@ struct watched_item_node * WATCHED_ITEMS;
 
 FILE *REPORT;
 
-void getAbsPath(const char *relativePath, char *absolutePath) {
-	realpath(relativePath, absolutePath);
+char * getAbsPath(const char *relativePath, char *absolutePath) {
+	return realpath(relativePath, absolutePath);
 }
 
 void getEventNameFromMask(uint32_t mask, char *dest, size_t dest_size){
@@ -36,6 +36,8 @@ void getEventNameFromMask(uint32_t mask, char *dest, size_t dest_size){
     if (mask & IN_MOVED_FROM) 	strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVED_TO) 	strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
     if (mask & IN_ISDIR) 	strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE_SELF) 	strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_IGNORED) 	strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
     
     if (dest[0] == '\0') {
         strncpy(dest, "UNRECOGNIZED", dest_size - 1);
@@ -43,7 +45,12 @@ void getEventNameFromMask(uint32_t mask, char *dest, size_t dest_size){
 }
 
 void processEvent(int inotifyFd, uint32_t mask, struct inotify_event *event) {
-	if (event->mask & IN_ISDIR){
+	/* 
+	 * IN_ISDIR & IN_CREATE : A new dir has been created inside a watched
+	 * 			  directory. We have to add a new  watch  for
+	 *			  this new directory.
+	 */
+	if (event->mask & IN_ISDIR && event->mask & IN_CREATE){
 		char abs_path[PATH_MAX];
                 int n = snprintf(abs_path, PATH_MAX, "%s/%s", WATCHED_ITEMS[event->wd].abs_path, event->name);
 		if (n >= sizeof(abs_path)) {
@@ -52,7 +59,7 @@ void processEvent(int inotifyFd, uint32_t mask, struct inotify_event *event) {
 			exit(-1);
 		}
 		int wd = inotify_add_watch(inotifyFd, abs_path, mask);
-		if (wd == NUM_WATCHED_ITEMS) {
+		if (wd >= NUM_WATCHED_ITEMS) {
 			NUM_WATCHED_ITEMS = NUM_WATCHED_ITEMS * 10;
 			WATCHED_ITEMS = (struct watched_item_node *) realloc(WATCHED_ITEMS, NUM_WATCHED_ITEMS*sizeof(struct watched_item_node));
 		}
@@ -64,10 +71,30 @@ void processEvent(int inotifyFd, uint32_t mask, struct inotify_event *event) {
                         printf("Watching on %s using wd = %d\n", WATCHED_ITEMS[wd].abs_path, WATCHED_ITEMS[wd].wd);
                 }
 	}
+
+	/* 
+	 * IN_DELETE_SELF        : A watched dir has been deleted. We don' t  need
+	 * 			   to remove any watch because kernel will do that
+	 *			   for us. We just print some information about it
+	 */
+	if (event->mask & IN_DELETE_SELF) {
+		printf("Removing watch on %s with wd = %d\n", WATCHED_ITEMS[event->wd].abs_path, WATCHED_ITEMS[event->wd].wd);
+	}
+	
+	/* 
+	 * IN_IGNORED	         : Kernel automatically removed a watch on a monitored
+	 *			   directory. We have to clear our internal data struc
+	 *			   tures.
+	 */
+	if (event->mask & IN_IGNORED) {
+		printf("Removed watch on monitored %s with wd = %d because of a remove cmd\n", WATCHED_ITEMS[event->wd].abs_path, WATCHED_ITEMS[event->wd].wd);
+		WATCHED_ITEMS[event->wd].abs_path[0] = '\0';	
+		WATCHED_ITEMS[event->wd].wd = -1;	
+		
+	}
 }
 
 void displayEvent(struct inotify_event *event) {
-
 	const int eventLen = 256;
 	char eventName[eventLen];
 	getEventNameFromMask(event->mask, eventName, eventLen);
@@ -121,7 +148,7 @@ int main(int argc, char *argv[]){
 	ssize_t numRead;
 	struct inotify_event *event;
 
-	uint32_t mask = IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ISDIR;
+	uint32_t mask = IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_ISDIR | IN_IGNORED;
 
 	NUM_WATCHED_ITEMS = argc;
 	WATCHED_ITEMS = (struct watched_item_node *)malloc(NUM_WATCHED_ITEMS * sizeof(struct watched_item_node));
