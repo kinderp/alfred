@@ -21,6 +21,7 @@ Tutti gli eventi monitorati devono essere stampati su schermo e scritti su un fi
 1. **IN_CREATE** ( creazione di un file )
 2. **IN_DELETE** ( rimozione di un file )
 3. **IN_MOVED_FROM - IN_MOVED_TO** ( rinominazione o spostamento di un file)
-4. **IN_ISDIR**  ( creazione di una nuova directory )
+4. **IN_ISDIR | IN_CREATE**  ( creazione di una nuova directory )
+5. **IN_ISDIR | IN_DELETE**  ( rimozione di una nuova directory )
      
-  __Nota__: Nel caso 4 ( IN_ISDIR ) deve essere aggiunto un watch per la nuova directory
+  __Nota__: Nel caso 4 ( IN_ISDIR ) deve essere aggiunto un nuovo watch per la nuova directory da monitorare
