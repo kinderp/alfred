@@ -1,7 +1,7 @@
 # alfred
 
 Il progetto prevede la realizzazione di un software per il monitoraggio di file e cartelle a partire dalla directory radice del progetto.
-Deve essere possibile passare, da riga di comando, all'avvio del programma la lista di directory da monitorare. Per ogni cartella in
+Deve essere possibile passare, da riga di comando all'avvio del programma, la lista di directory da monitorare. Per ogni cartella in
 questa lista deve essere aggiunto un watch per una serie di eventi da monitorare (vedi sotto per i dettagli sugli eventi).
 Tutti gli eventi monitorati devono essere stampati su schermo e scritti su un file "report.txt". Sotto un esempio di come strutturare il file di report.
 
