@@ -88,6 +88,8 @@ const char* getANameFromAType(event_type_t type) {
 void buildAEvent(struct alfred_event *aevent, event_type_t type, char *fields[]){
 	aevent->type = type;
 	switch (type) {
+		case MOV_DIR:
+		case REN_DIR:
 		case MOV_FILE:
 		case REN_FILE:
 				aevent->src_path = fields[0];
@@ -182,7 +184,30 @@ void saveAEvent(struct alfred_event *aevent) {
                 );
                 fflush(AREPORT);
 		break;
-
+	case REN_DIR:
+    		fprintf(AREPORT, "[%s] [%s] (PID:%d) from=%s/%s,to=%s/%s\n",
+            		iso_time,
+			aEventName,
+            		getpid(),
+            		aevent->src_path,
+			aevent->src_name,
+			aevent->dst_path,
+			aevent->dst_name
+		);
+                fflush(AREPORT);
+		break;
+	case MOV_DIR:
+    		fprintf(AREPORT, "[%s] [%s] (PID:%d) from=%s/%s,to=%s/%s\n",
+            		iso_time,
+			aEventName,
+            		getpid(),
+            		aevent->src_path,
+			aevent->src_name,
+			aevent->dst_path,
+			aevent->dst_name
+		);
+                fflush(AREPORT);
+		break;
 	case ADD_FILE:
 		fprintf(AREPORT, "[%s] [%s] (PID:%d) new=%s/%s\n",
                         iso_time,
@@ -287,7 +312,8 @@ void handleMoveLogic(struct inotify_event *event) {
 		};
 
                 if (event->wd == moveCache[i].src_wd){
-			buildAEvent(&aevent, REN_FILE, fields);
+			event_type_t atype = (event->mask & IN_ISDIR) ? REN_DIR : REN_FILE;
+			buildAEvent(&aevent, atype, fields);
 			saveAEvent(&aevent);
                 	moveCache[i].cookie = 0; // Free space for consumed cookie
 			moveCache[i].src_wd = -1;
@@ -299,7 +325,8 @@ void handleMoveLogic(struct inotify_event *event) {
 			 * gered from two different dir  so from and to paths
 			 * are different (it's a MOVE) 
 			 */
-			buildAEvent(&aevent, MOV_FILE, fields);
+			event_type_t atype = (event->mask & IN_ISDIR) ? MOV_DIR : MOV_FILE;
+			buildAEvent(&aevent, atype, fields);
 			saveAEvent(&aevent);
 			if (strcmp(moveCache[i].src_name, event->name) !=0) {
 				/*
@@ -307,7 +334,8 @@ void handleMoveLogic(struct inotify_event *event) {
 				 * cached  name  and event->name are  different
 				 * It's a MOVE and a RENAME at the same time
 				 */
-				buildAEvent(&aevent, REN_FILE, fields);
+				event_type_t atype = (event->mask & IN_ISDIR) ? REN_DIR : REN_FILE;
+				buildAEvent(&aevent, atype, fields);
                         	saveAEvent(&aevent);	
 			}
                 	moveCache[i].cookie = 0; // Free space for consumed cookie
