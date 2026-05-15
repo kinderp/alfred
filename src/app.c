@@ -127,8 +127,11 @@ static int add_initial_paths(app_t *app, int argc, char **argv)
 
 int app_init(app_t *app, int argc, char **argv)
 {
-    if (app == NULL)
-        return ERR_INVALID_ARG;
+    error_t error = ERR_UNKNOWN;
+    if (app == NULL){
+        error = ERR_INVALID_ARG;
+	goto fail;
+    }
 
     memset(app, 0, sizeof(*app));
 
@@ -149,7 +152,8 @@ int app_init(app_t *app, int argc, char **argv)
                     app->config.error_log) != 0) {
 
         fprintf(stderr, "logger_init failed\n");
-        return ERR_IO;
+        error = ERR_IO;
+        goto fail;
     }
 
     logger_info(&app->logger, "logger initialized");
@@ -163,7 +167,8 @@ int app_init(app_t *app, int argc, char **argv)
         logger_error(&app->logger,
                      "watcher_init failed");
 
-        return ERR_ALLOC;
+        error = ERR_ALLOC;
+	goto fail;
     }
 
     logger_info(&app->logger,
@@ -178,7 +183,8 @@ int app_init(app_t *app, int argc, char **argv)
         logger_error(&app->logger,
                      "move_cache_init failed");
 
-        return ERR_ALLOC;
+        error = ERR_ALLOC;
+	goto fail;
     }
 
     logger_info(&app->logger,
@@ -197,7 +203,8 @@ int app_init(app_t *app, int argc, char **argv)
                      errno,
                      strerror(errno));
 
-        return ERR_INOTIFY;
+        error = ERR_INOTIFY;
+	goto fail;
     }
 
     logger_info(&app->logger,
@@ -219,7 +226,8 @@ int app_init(app_t *app, int argc, char **argv)
     if (argc < 2) {
         logger_error(&app->logger,
                      "no startup paths provided");
-        return ERR_INVALID_ARG;
+        error = ERR_INVALID_ARG;
+	goto fail;
     }
 
     add_initial_paths(app, argc, argv);
@@ -228,6 +236,10 @@ int app_init(app_t *app, int argc, char **argv)
                 "application startup complete");
 
     return ERR_OK;
+
+fail:
+    app_shutdown(app);
+    return error;
 }
 
 /* ============================================================================
