@@ -7,7 +7,8 @@ typedef enum {
     ERR_IO = -2,
     ERR_INOTIFY = -3,
     ERR_CONFIG = -4,
-    ERR_INVALID_ARG = -5
+    ERR_INVALID_ARG = -5,
+    ERR_UNKNOWN = -1000
 } error_t;
 
 #endif
