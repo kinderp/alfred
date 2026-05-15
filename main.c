@@ -344,8 +344,6 @@ void handleMoveLogic(struct inotify_event *event) {
 		}
 	    }
         }
-        // Se arriviamo qui, il cookie non è in cache (spostato da fuori)
-        printf("[EVENTO] ADD_FILE (via move-in): %s\n", event->name);
     }
 }
 
