@@ -77,6 +77,7 @@ SRCS := \
 	$(SRC_DIR)/main.c \
 	$(SRC_DIR)/app.c \
 	$(SRC_DIR)/watcher.c \
+	$(SRC_DIR)/watch_manager.c \
 	$(SRC_DIR)/move_cache.c \
 	$(SRC_DIR)/logger.c \
 	$(SRC_DIR)/utils.c \
@@ -166,6 +167,15 @@ run: all
 	@printf "$(BLUE)[RUN]$(RESET)\n"
 	@./$(TARGET)
 
+# -----------------------------------------------------------------------------
+# TEST
+# You can run all test in two ways:
+# 1. make && make test
+# 2. cd tests/functional && ./run_all.sh
+# -----------------------------------------------------------------------------
+
+test:
+	cd tests/functional && bash run_all.sh
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
