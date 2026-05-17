@@ -21,6 +21,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <limits.h>
+#include <sys/inotify.h>
 
 /* ============================================================================
  * ISO TIMESTAMP
@@ -258,4 +259,23 @@ void mem_zero(void *ptr, size_t size)
         return;
 
     memset(ptr, 0, size);
+}
+
+void raw_event_name_from_mask(uint32_t mask, char *dest, size_t dest_size){
+    if (dest == NULL || dest_size == 0) return;
+
+    dest[0] = '\0';
+
+    if (mask & IN_CREATE) 	strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE) 	strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_FROM) 	strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_TO) 	strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
+    if (mask & IN_ISDIR) 	strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE_SELF) 	strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_IGNORED) 	strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
+    if (mask & IN_Q_OVERFLOW) 	strncat(dest, "IN_Q_OVERFLOW ", dest_size - strlen(dest) - 1);
+
+    if (dest[0] == '\0') {
+        strncpy(dest, "UNRECOGNIZED", dest_size - 1);
+    }
 }

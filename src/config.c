@@ -4,6 +4,7 @@
  * ========================================================================== */
 
 #include "config.h"
+#include "watch_manager.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +27,8 @@ void config_defaults(config_t *cfg)
 
     cfg->move_cache_size    = 128;
     cfg->watcher_capacity   = 128;
+
+    cfg->watch_mask = watch_manager_default_mask();
 
     snprintf(cfg->raw_log,
              sizeof(cfg->raw_log),

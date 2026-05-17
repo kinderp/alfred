@@ -16,6 +16,7 @@
 #include "app.h"
 #include "events.h"
 #include "utils.h"
+#include "watch_manager.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -142,6 +143,16 @@ static void handle_create(app_t *app,
                : EVT_FILE_CREATED,
         full,
         NULL);
+
+    /* ---------------------------------------------------------
+     * Recursive runtime add
+     * ------------------------------------------------------- */
+    if (is_dir &&
+        app->config.recursive) {
+
+        watch_manager_add_recursive(app,
+                                    full);
+    }
 }
 
 /* ============================================================================

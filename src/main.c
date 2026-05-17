@@ -8,8 +8,9 @@ int main(int argc, char **argv)
 
     int rc = app_init(&app, argc, argv);
     
-    if (app_init(&app, argc, argv) != 0) {
+    if (rc != 0) {
         fprintf(stderr, "startup failed\n");
+        app_shutdown(&app);
         return 1;
     }
 

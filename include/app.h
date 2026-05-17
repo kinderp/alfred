@@ -15,7 +15,7 @@
 #include "logger.h"
 #include "move_cache.h"
 
-typedef struct {
+typedef struct app {
 
     int running;
     int inotify_fd;

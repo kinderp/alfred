@@ -3,6 +3,7 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct {
 
@@ -12,6 +13,8 @@ typedef struct {
 
     size_t move_cache_size;
     size_t watcher_capacity;
+
+    uint32_t watch_mask;
 
     char raw_log[PATH_MAX];
     char event_log[PATH_MAX];

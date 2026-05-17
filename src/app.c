@@ -7,6 +7,7 @@
 #include "app.h"
 #include "errors.h"
 #include "utils.h"
+#include "watch_manager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +74,7 @@ static void setup_signals(void)
  * INTERNAL: ADD STARTUP WATCH PATHS
  * ========================================================================== */
 
+/*
 static int add_initial_paths(app_t *app, int argc, char **argv)
 {
     uint32_t mask =
@@ -120,6 +122,7 @@ static int add_initial_paths(app_t *app, int argc, char **argv)
 
     return 0;
 }
+*/
 
 /* ============================================================================
  * PUBLIC: APP INIT
@@ -230,7 +233,17 @@ int app_init(app_t *app, int argc, char **argv)
 	goto fail;
     }
 
-    add_initial_paths(app, argc, argv);
+
+    for (int i = 1; i < argc; i++) {
+        if (app->config.recursive) {
+            watch_manager_add_recursive(app,
+                                        argv[i]);
+        }
+        else {
+            watch_manager_add(app,
+                              argv[i]);
+        }
+    }
 
     logger_info(&app->logger,
                 "application startup complete");
@@ -256,6 +269,7 @@ int app_run(app_t *app)
     logger_info(&app->logger,
                 "event loop started");
 
+    char mask_str[256];
     while (app->running) {
 
         ssize_t bytes =
@@ -308,6 +322,16 @@ int app_run(app_t *app)
 
             struct inotify_event *ev =
                 (struct inotify_event *)ptr;
+
+            raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
+            logger_raw(&app->logger,
+                 "%s wd=%d path=%s name=%s",
+                 mask_str,
+                 ev->wd,
+                 watcher_get_path(&app->watchers, ev->wd),
+                 ev->len ? ev->name : ""
+            );
+
 
             app_dispatch_raw_event(app, ev);
 
