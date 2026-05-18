@@ -8,15 +8,15 @@
 #include <stdint.h>
 
 /* forward declaration */
-typedef struct app app_t;
+struct app;
 
-int watch_manager_add(app_t *app,
+int watch_manager_add(struct app *app,
                       const char *path);
 
-int watch_manager_remove(app_t *app,
+int watch_manager_remove(struct app *app,
                          int wd);
 
-int watch_manager_add_recursive(app_t *app,
+int watch_manager_add_recursive(struct app *app,
                                 const char *root);
 
 uint32_t watch_manager_default_mask(void);

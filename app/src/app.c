@@ -32,7 +32,6 @@
 
 static void setup_signals(void);
 static void handle_signal(int sig);
-static int add_initial_paths(app_t *app, int argc, char **argv);
 
 /* Questo verrà implementato nel modulo event_engine.c */
 extern void app_dispatch_raw_event(app_t *app,

@@ -1,6 +1,6 @@
 # =============================================================================
 # Makefile
-# Professional build system for fsmon
+# Build system for fsmon
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -8,15 +8,20 @@
 # -----------------------------------------------------------------------------
 
 TARGET      := fsmon
+MODULES     ?= inotify
 
 # -----------------------------------------------------------------------------
 # DIRECTORIES
 # -----------------------------------------------------------------------------
 
-SRC_DIR     := src
-INC_DIR     := include
+APP_DIR     := app
+CORE_DIR    := core
+MODULE_DIR  := modules
 BUILD_DIR   := build
 OBJ_DIR     := $(BUILD_DIR)/obj
+
+APP_INC_DIR := $(APP_DIR)/include
+CORE_INC_DIR := $(CORE_DIR)/include
 
 # -----------------------------------------------------------------------------
 # COMPILER
@@ -56,9 +61,11 @@ SANITIZERS  := \
 	-fsanitize=address \
 	-fsanitize=undefined
 
-INCLUDES    := -I$(INC_DIR)
+INCLUDES    := \
+	-I$(APP_INC_DIR) \
+	-I$(CORE_INC_DIR)
 
-CFLAGS      := \
+CFLAGS      = \
 	$(C_STANDARD) \
 	$(WARNINGS) \
 	$(DEBUG_FLAGS) \
@@ -73,23 +80,38 @@ LDFLAGS     := \
 # SOURCES
 # -----------------------------------------------------------------------------
 
-SRCS := \
-	$(SRC_DIR)/main.c \
-	$(SRC_DIR)/app.c \
-	$(SRC_DIR)/watcher.c \
-	$(SRC_DIR)/watch_manager.c \
-	$(SRC_DIR)/move_cache.c \
-	$(SRC_DIR)/logger.c \
-	$(SRC_DIR)/utils.c \
-	$(SRC_DIR)/events.c \
-	$(SRC_DIR)/config.c
-	
+APP_SRCS := \
+	$(APP_DIR)/src/main.c \
+	$(APP_DIR)/src/app.c \
+	$(APP_DIR)/src/config.c \
+	$(APP_DIR)/src/logger.c \
+	$(APP_DIR)/src/utils.c
+
+# The imported core is kept in tree but is not linked yet: its internal headers
+# are still missing from the imported codebase. The next integration step should
+# make CORE_SRCS buildable and then add it to SRCS.
+CORE_SRCS :=
+
+MODULE_SRCS :=
+
+ifneq ($(filter inotify,$(MODULES)),)
+INCLUDES += -I$(MODULE_DIR)/inotify/include
+CFLAGS += -DALFRED_ENABLE_INOTIFY
+MODULE_SRCS += \
+	$(MODULE_DIR)/inotify/src/events.c \
+	$(MODULE_DIR)/inotify/src/move_cache.c \
+	$(MODULE_DIR)/inotify/src/watch_manager.c \
+	$(MODULE_DIR)/inotify/src/watcher.c
+endif
+
+SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
 
 # -----------------------------------------------------------------------------
 # OBJECTS
 # -----------------------------------------------------------------------------
 
-OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
+OBJ_DIRS := $(sort $(dir $(OBJS)))
 
 # -----------------------------------------------------------------------------
 # COLORS
@@ -120,7 +142,7 @@ $(TARGET): $(OBJS)
 # COMPILE
 # -----------------------------------------------------------------------------
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%.o: %.c
 	@printf "$(YELLOW)[CC]$(RESET) %s\n" "$<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
@@ -130,7 +152,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 
 directories:
 	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(OBJ_DIR)
+	@mkdir -p $(OBJ_DIRS)
 
 # -----------------------------------------------------------------------------
 # CLEAN
@@ -150,7 +172,7 @@ re: fclean all
 # RELEASE BUILD
 # -----------------------------------------------------------------------------
 
-release: CFLAGS := \
+release: CFLAGS = \
 	$(C_STANDARD) \
 	$(WARNINGS) \
 	$(RELEASE_FLAGS) \
@@ -169,13 +191,14 @@ run: all
 
 # -----------------------------------------------------------------------------
 # TEST
-# You can run all test in two ways:
+# You can run all tests in two ways:
 # 1. make && make test
 # 2. cd tests/functional && ./run_all.sh
 # -----------------------------------------------------------------------------
 
 test:
 	cd tests/functional && bash run_all.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -200,8 +223,10 @@ gdb: all
 
 format:
 	clang-format -i \
-		$(SRC_DIR)/*.c \
-		$(INC_DIR)/*.h
+		$(APP_DIR)/src/*.c \
+		$(APP_DIR)/include/*.h \
+		$(MODULE_DIR)/inotify/src/*.c \
+		$(MODULE_DIR)/inotify/include/*.h
 
 # -----------------------------------------------------------------------------
 # STATIC ANALYSIS
@@ -212,8 +237,9 @@ scan:
 		--enable=all \
 		--inconclusive \
 		--std=gnu99 \
-		-I $(INC_DIR) \
-		$(SRC_DIR)
+		$(INCLUDES) \
+		$(APP_DIR)/src \
+		$(MODULE_DIR)/inotify/src
 
 # -----------------------------------------------------------------------------
 # CLANG TIDY
@@ -221,8 +247,9 @@ scan:
 
 tidy:
 	clang-tidy \
-		$(SRC_DIR)/*.c \
-		-- -I$(INC_DIR)
+		$(APP_DIR)/src/*.c \
+		$(MODULE_DIR)/inotify/src/*.c \
+		-- $(INCLUDES)
 
 # -----------------------------------------------------------------------------
 # BANNER
@@ -247,6 +274,7 @@ banner:
 	re \
 	release \
 	run \
+	test \
 	valgrind \
 	gdb \
 	format \
