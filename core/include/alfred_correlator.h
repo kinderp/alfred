@@ -33,7 +33,7 @@
  *
  * NOTE:
  *   This header contains only declarations.
- *   Implementation lives in src/*.c
+ *   Implementation lives in core source files.
  *
  *======================================================================*/
 

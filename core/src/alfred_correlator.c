@@ -35,6 +35,20 @@
 #include "alfred_tables.h"
 
 /*======================================================================
+ * DEFAULT CONFIGURATION
+ *======================================================================*/
+
+void alfred_config_default(alfred_config_t *cfg)
+{
+    if (!cfg)
+        return;
+
+    cfg->move_timeout_ms = 250;
+    cfg->modify_debounce_ms = 50;
+    cfg->create_ready_ms = 250;
+}
+
+/*======================================================================
  * ENGINE ALLOCATION
  *======================================================================*/
 

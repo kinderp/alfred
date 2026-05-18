@@ -22,6 +22,7 @@ OBJ_DIR     := $(BUILD_DIR)/obj
 
 APP_INC_DIR := $(APP_DIR)/include
 CORE_INC_DIR := $(CORE_DIR)/include
+CORE_PRIVATE_INC_DIR := $(CORE_DIR)/src
 
 # -----------------------------------------------------------------------------
 # COMPILER
@@ -63,7 +64,8 @@ SANITIZERS  := \
 
 INCLUDES    := \
 	-I$(APP_INC_DIR) \
-	-I$(CORE_INC_DIR)
+	-I$(CORE_INC_DIR) \
+	-I$(CORE_PRIVATE_INC_DIR)
 
 CFLAGS      = \
 	$(C_STANDARD) \
@@ -87,10 +89,10 @@ APP_SRCS := \
 	$(APP_DIR)/src/logger.c \
 	$(APP_DIR)/src/utils.c
 
-# The imported core is kept in tree but is not linked yet: its internal headers
-# are still missing from the imported codebase. The next integration step should
-# make CORE_SRCS buildable and then add it to SRCS.
-CORE_SRCS :=
+CORE_SRCS := \
+	$(CORE_DIR)/src/alfred_correlator.c \
+	$(CORE_DIR)/src/alfred_tables.c \
+	$(CORE_DIR)/src/alfred_utils.c
 
 MODULE_SRCS :=
 
