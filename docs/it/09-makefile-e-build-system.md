@@ -268,6 +268,54 @@ LDFLAGS := ...
 
 I sanitizer devono comparire sia in compilazione sia in linking.
 
+## Dipendenze dagli header
+
+Quando un file `.c` include un header `.h`, una modifica all'header deve far
+ricompilare anche il `.c`.
+
+Esempio:
+
+```text
+app/src/main.c include app/include/app.h
+```
+
+Se cambia `app.h`, anche `main.c` deve essere ricompilato.
+
+Per questo il Makefile usa:
+
+```make
+DEPFLAGS := -MMD -MP
+```
+
+Questi flag chiedono a `gcc` di generare file `.d` accanto agli object file.
+
+Esempio:
+
+```text
+build/obj/app/src/main.o
+build/obj/app/src/main.d
+```
+
+Il file `.d` contiene dipendenze come:
+
+```make
+build/obj/app/src/main.o: app/src/main.c app/include/app.h ...
+```
+
+Poi il Makefile include questi file:
+
+```make
+-include $(DEPS)
+```
+
+Il trattino davanti a `include` significa: non fallire se i file `.d` non
+esistono ancora. Alla prima build infatti non esistono; vengono creati durante
+la compilazione.
+
+Questa parte e' importante. Senza dependency tracking, potresti modificare una
+struct in un header e lasciare compilati vecchi `.o` non aggiornati. In C questo
+puo' causare bug difficili da capire.
+
 ## Liste dei sorgenti
 
 Il Makefile separa i sorgenti per livello:

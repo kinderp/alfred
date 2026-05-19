@@ -62,6 +62,8 @@ SANITIZERS  := \
 	-fsanitize=address \
 	-fsanitize=undefined
 
+DEPFLAGS    := -MMD -MP
+
 INCLUDES    := \
 	-I$(APP_INC_DIR) \
 	-I$(CORE_INC_DIR) \
@@ -72,6 +74,7 @@ CFLAGS      = \
 	$(WARNINGS) \
 	$(DEBUG_FLAGS) \
 	$(SANITIZERS) \
+	$(DEPFLAGS) \
 	$(INCLUDES)
 
 LDFLAGS     := \
@@ -115,6 +118,7 @@ SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
 # -----------------------------------------------------------------------------
 
 OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
+DEPS := $(OBJS:.o=.d)
 OBJ_DIRS := $(sort $(dir $(OBJS)))
 
 # -----------------------------------------------------------------------------
@@ -180,6 +184,7 @@ release: CFLAGS = \
 	$(C_STANDARD) \
 	$(WARNINGS) \
 	$(RELEASE_FLAGS) \
+	$(DEPFLAGS) \
 	$(INCLUDES)
 
 release: LDFLAGS :=
@@ -286,3 +291,5 @@ banner:
 	tidy \
 	banner \
 	directories
+
+-include $(DEPS)
