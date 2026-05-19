@@ -1,0 +1,300 @@
+# Debugging, test e strumenti
+
+Questo capitolo spiega gli strumenti usati per trovare bug, controllare la
+qualita' del codice e verificare il comportamento del programma.
+
+## Compilazione di sviluppo
+
+Il comando principale e':
+
+```bash
+make
+```
+
+La build di sviluppo usa:
+
+- simboli di debug
+- ottimizzazioni disabilitate
+- AddressSanitizer
+- UndefinedBehaviorSanitizer
+- warning severi
+
+Questa configurazione e' pensata per trovare errori durante lo sviluppo.
+
+## Sanitizer
+
+I sanitizer sono controlli automatici inseriti dal compilatore nel programma.
+Quando il programma gira, questi controlli intercettano errori che in C spesso
+sono difficili da vedere.
+
+### AddressSanitizer
+
+Trova problemi di memoria.
+
+Esempi:
+
+```c
+char buf[4];
+buf[10] = 'x'; /* errore: fuori dai limiti */
+```
+
+Oppure:
+
+```c
+free(p);
+printf("%s\n", p); /* errore: uso dopo free */
+```
+
+Quando AddressSanitizer trova un errore, stampa:
+
+- tipo di errore
+- file e riga
+- stack trace
+- indirizzo di memoria coinvolto
+
+### UndefinedBehaviorSanitizer
+
+Trova comportamenti indefiniti.
+
+In C, "comportamento indefinito" significa che il linguaggio non garantisce
+cosa succede. Il programma potrebbe sembrare funzionare oppure rompersi in modo
+imprevedibile.
+
+Esempi:
+
+- overflow di interi signed
+- shift con numero di bit non valido
+- accesso a puntatori non validi
+
+## Valgrind
+
+Valgrind esegue il programma dentro un ambiente controllato e controlla come
+usa la memoria.
+
+Comando:
+
+```bash
+make valgrind
+```
+
+Il target usa opzioni severe:
+
+```text
+--leak-check=full
+--show-leak-kinds=all
+--track-origins=yes
+```
+
+### Differenza tra sanitizer e Valgrind
+
+| Strumento | Punti forti | Limiti |
+| --- | --- | --- |
+| Sanitizer | veloce, ottimo durante sviluppo | richiede ricompilazione |
+| Valgrind | molto dettagliato sui leak | molto piu' lento |
+
+Di solito si usa prima la build con sanitizer. Valgrind si usa per controlli
+piu' approfonditi.
+
+## GDB
+
+GDB e' il debugger.
+
+Comando:
+
+```bash
+make gdb
+```
+
+Comandi GDB utili:
+
+```text
+run
+break app_init
+next
+step
+print app
+backtrace
+quit
+```
+
+Significato:
+
+- `break`: mette un breakpoint
+- `run`: avvia il programma
+- `next`: esegue la prossima riga senza entrare nelle funzioni
+- `step`: entra dentro una funzione
+- `print`: stampa una variabile
+- `backtrace`: mostra la catena di chiamate
+
+## Test funzionali
+
+Il progetto contiene test in:
+
+```text
+tests/functional/
+```
+
+Per eseguirli:
+
+```bash
+make test
+```
+
+Oppure direttamente:
+
+```bash
+cd tests/functional
+bash run_all.sh
+```
+
+I test funzionali verificano il comportamento del programma dall'esterno.
+Per esempio possono creare, spostare o cancellare file e poi controllare che il
+programma abbia registrato gli eventi corretti.
+
+## Stress test
+
+Gli stress test sono in:
+
+```text
+tests/stress/
+```
+
+Servono per produrre molti eventi rapidamente e verificare che il programma non
+si rompa sotto carico.
+
+Esempi:
+
+```text
+stress_create.py
+stress_move.py
+stress_recursive.py
+stress_rename.py
+```
+
+## clang-format
+
+`clang-format` formatta automaticamente il codice.
+
+Comando:
+
+```bash
+make format
+```
+
+Serve a evitare discussioni inutili su spazi, indentazione e stile.
+
+Prima di usarlo su grandi porzioni di codice conviene avere una configurazione
+condivisa, per esempio un file `.clang-format`.
+
+## cppcheck
+
+`cppcheck` e' uno strumento di analisi statica.
+
+Comando:
+
+```bash
+make scan
+```
+
+"Analisi statica" significa che lo strumento legge il codice senza eseguirlo e
+cerca problemi probabili.
+
+Puo' trovare:
+
+- variabili non inizializzate
+- codice morto
+- errori di memoria potenziali
+- controlli mancanti
+
+## clang-tidy
+
+`clang-tidy` e' un analizzatore piu' avanzato.
+
+Comando:
+
+```bash
+make tidy
+```
+
+Puo' controllare:
+
+- bug probabili
+- modernizzazione del codice
+- stile
+- performance
+- leggibilita'
+
+Anche qui, in futuro conviene aggiungere una configurazione condivisa.
+
+## Cosa fare quando qualcosa fallisce
+
+### La compilazione fallisce
+
+Guarda la prima riga di errore reale, non solo l'ultima.
+
+Spesso Make stampa alla fine:
+
+```text
+make: *** [...] Error 1
+```
+
+Quella non e' la causa. La causa e' alcune righe prima.
+
+### Il linker fallisce
+
+Cerca messaggi come:
+
+```text
+undefined reference to `nome_funzione`
+```
+
+Significa che una funzione e' stata dichiarata o chiamata, ma il linker non ha
+trovato la sua implementazione.
+
+### Il programma fa segmentation fault
+
+Usa:
+
+```bash
+make gdb
+```
+
+Poi dentro GDB:
+
+```text
+run
+backtrace
+```
+
+### Sanitizer segnala un errore
+
+Leggi:
+
+- tipo di errore
+- file e riga
+- stack trace
+
+Correggi prima il primo errore: molti errori successivi possono essere effetti
+secondari.
+
+### Un test fallisce
+
+Controlla:
+
+- quale test e' fallito
+- quale output era atteso
+- quale output e' stato prodotto
+- se ci sono log in `raw.log`, `events.log`, `errors.log`
+
+## Strategia consigliata per studenti
+
+Quando modifichi il codice:
+
+1. compila con `make`
+2. correggi warning o errori
+3. esegui `make test`
+4. se tocchi memoria o puntatori, usa anche `make valgrind`
+5. se non capisci un crash, usa `make gdb`
+
+Non aspettare di aver scritto molto codice prima di compilare. In C conviene
+fare piccoli passi e verificare spesso.
