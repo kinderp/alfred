@@ -19,10 +19,27 @@ Evento vicino al sistema operativo, non ancora interpretato completamente.
 
 Evento gia' interpretato dal core, per esempio `FILE_RENAMED`.
 
+## Directory contenitore
+
+Directory che contiene direttamente un file o un'altra directory. Per il path
+`/tmp/progetto/a.txt`, la directory contenitore e' `/tmp/progetto` e il nome
+dell'oggetto e' `a.txt`.
+
 ## File descriptor
 
 Numero intero usato da Unix/Linux per rappresentare una risorsa aperta, per
 esempio un file o un descrittore inotify.
+
+## Relocate
+
+Operazione in cui un oggetto cambia sia directory contenitore sia nome. Per
+esempio `/tmp/a.txt -> /var/b.txt` diventa `FILE_RELOCATED`.
+
+## Shadow mode
+
+Modalita' temporanea in cui il vecchio dispatcher e il nuovo core ricevono gli
+stessi eventi raw. Il vecchio dispatcher resta il comportamento ufficiale,
+mentre il core viene osservato e confrontato.
 
 ## Linking
 

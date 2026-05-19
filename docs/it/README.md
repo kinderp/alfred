@@ -19,7 +19,8 @@ piu' dettaglio.
 10. [Debugging, test e strumenti](10-debugging-test-e-strumenti.md)
 11. [Come contribuire](11-come-contribuire.md)
 12. [Confronto shadow mode](12-confronto-shadow-mode.md)
-13. [Glossario](glossario.md)
+13. [Semantica degli eventi](13-semantica-eventi.md)
+14. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

@@ -219,7 +219,10 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
 dispatcher. Significa che molti casi base sono allineati e che le differenze
-rimaste indicano decisioni semantiche da prendere.
+rimaste indicano decisioni semantiche da documentare.
+
+Le decisioni semantiche sono raccolte in
+[Semantica degli eventi](13-semantica-eventi.md).
 
 ### Differenza: delete directory
 
@@ -241,15 +244,17 @@ DIR_DELETED path=$ROOT/delete-dir
 La differenza e' `WATCH_REMOVED`.
 
 Questo accade perche' `IN_IGNORED` e' un dettaglio specifico di inotify: indica
-che un watch e' stato rimosso. Il core oggi non ha un evento raw dedicato per
-questa informazione.
+che un watch e' stato rimosso.
 
-Decisione futura:
+Decisione:
 
 ```text
-vogliamo che WATCH_REMOVED sia un evento semantico del core,
-oppure deve restare un dettaglio diagnostico del backend?
+WATCH_REMOVED deve restare diagnostica del backend, non evento semantico core.
 ```
+
+Il legacy logga gia' sia `WATCH_ADDED` sia `WATCH_REMOVED`, ma oggi li scrive
+attraverso `logger_event()`. In futuro potremo spostarli o duplicarli nel
+raw/backend log, mantenendoli comunque fuori dalla semantica del core.
 
 ### Differenza: move and rename file
 
@@ -267,16 +272,17 @@ FILE_RELOCATED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
 ```
 
 Qui il core esprime con un solo evento il fatto che il file ha cambiato sia
-directory sia nome.
+directory contenitore sia nome.
 
-Decisione futura:
+Decisione:
 
 ```text
-preferiamo due eventi separati, come legacy,
-o un evento unico FILE_RELOCATED, come core?
+preferiamo un evento unico FILE_RELOCATED, come core.
 ```
 
-Questa e' una decisione di API semantica, non solo una differenza tecnica.
+Questa e' una decisione di API semantica, non solo una differenza tecnica. Se
+un'applicazione vuole trattare `FILE_RELOCATED` come "move + rename", potra'
+farlo a livello applicativo.
 
 ## Prossimi scenari da aggiungere
 

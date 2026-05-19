@@ -23,4 +23,5 @@ Stati usati:
 | Completo | `10-debugging-test-e-strumenti.md` |
 | Parziale | `11-come-contribuire.md` |
 | Completo | `12-confronto-shadow-mode.md` |
+| Completo | `13-semantica-eventi.md` |
 | Parziale | `glossario.md` |
