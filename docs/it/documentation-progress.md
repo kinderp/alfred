@@ -17,7 +17,7 @@ Stati usati:
 | Completo | `04-livello-applicazione.md` |
 | Completo | `05-modulo-inotify.md` |
 | Completo | `06-core-engine.md` |
-| Da fare | `07-flusso-eventi.md` |
+| Completo | `07-flusso-eventi.md` |
 | Completo | `08-guida-c-usato-nel-progetto.md` |
 | Completo | `09-makefile-e-build-system.md` |
 | Completo | `10-debugging-test-e-strumenti.md` |

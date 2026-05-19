@@ -11,7 +11,9 @@
  */
 
 #include "app.h"
+#include "core_logger.h"
 #include "errors.h"
+#include "inotify_adapter.h"
 #include "utils.h"
 #include "watch_manager.h"
 
@@ -38,6 +40,8 @@
 
 static void setup_signals(void);
 static void handle_signal(int sig);
+static void dispatch_event_to_core(app_t *app,
+                                   const struct inotify_event *ev);
 
 /*
  * TODO(core-integration): this function is implemented by the current inotify
@@ -99,6 +103,56 @@ static void setup_signals(void)
 }
 
 /* ============================================================================
+ * Core Shadow Dispatch
+ * ========================================================================== */
+
+/*
+ * dispatch_event_to_core - feed one inotify event to the core in shadow mode
+ * @app: initialized application context
+ * @ev: inotify event read from the kernel
+ *
+ * Converts the backend-specific event into alfred_raw_event_t and sends it to
+ * the core. The legacy dispatcher still handles the official runtime behavior;
+ * this path exists so both outputs can be compared during integration.
+ */
+static void dispatch_event_to_core(app_t *app,
+                                   const struct inotify_event *ev)
+{
+    if (app == NULL || app->core == NULL || ev == NULL)
+        return;
+
+    const char *parent =
+        watcher_get_path(&app->watchers, ev->wd);
+
+    /*
+     * Some inotify records, such as queue overflow, may not map to a watched
+     * path. The legacy dispatcher still handles those cases for now.
+     */
+    if (parent == NULL)
+        return;
+
+    char full_path[PATH_MAX];
+    alfred_raw_event_t raw;
+
+    if (inotify_adapter_build_raw(ev,
+                                  parent,
+                                  full_path,
+                                  sizeof(full_path),
+                                  &raw) != 0) {
+        logger_error(&app->logger,
+                     "failed to build core raw event wd=%d",
+                     ev->wd);
+        return;
+    }
+
+    if (alfred_process(app->core, &raw) != 0) {
+        logger_error(&app->logger,
+                     "core failed to process raw event wd=%d",
+                     ev->wd);
+    }
+}
+
+/* ============================================================================
  * Application Lifecycle
  * ========================================================================== */
 
@@ -149,6 +203,27 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     logger_info(&app->logger, "logger initialized");
+
+    /*
+     * The core is initialized after the logger because its emit callback writes
+     * semantic events through logger_event(). For now the core runs in shadow
+     * mode beside the legacy dispatcher.
+     */
+    alfred_config_default(&app->core_config);
+    app->core = alfred_create(&app->core_config,
+                              core_logger_on_event,
+                              &app->logger);
+
+    if (app->core == NULL) {
+        logger_error(&app->logger,
+                     "alfred core initialization failed");
+
+        error = ERR_ALLOC;
+        goto fail;
+    }
+
+    logger_info(&app->logger,
+                "alfred core initialized in shadow mode");
 
     /*
      * The watcher table maps inotify watch descriptors back to paths. Event
@@ -335,6 +410,7 @@ int app_run(app_t *app)
             );
 
             app_dispatch_raw_event(app, ev);
+            dispatch_event_to_core(app, ev);
 
             ptr += sizeof(struct inotify_event)
                    + ev->len;
@@ -377,6 +453,15 @@ void app_shutdown(app_t *app)
 
     /* The move cache owns pending rename/move source names. */
     move_cache_destroy(&app->moves);
+
+    /*
+     * Destroy the core before closing the logger. Future flush behavior may
+     * emit final semantic events during shutdown.
+     */
+    if (app->core != NULL) {
+        alfred_destroy(app->core);
+        app->core = NULL;
+    }
 
     /*
      * The logger is closed last so shutdown activity can still be recorded.

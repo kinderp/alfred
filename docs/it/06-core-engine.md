@@ -258,9 +258,13 @@ Al momento:
 - il core compila
 - l'adapter inotify compila
 - la callback `core_logger_on_event()` compila
-- il runtime usa ancora la vecchia strada in `events.c`
+- il core e' inizializzato dentro `app_t`
+- il runtime invia eventi al core in shadow mode
+- il vecchio dispatcher in `events.c` resta ancora attivo
 
-Non abbiamo ancora inizializzato `alfred_engine_t` dentro `app_t`.
+Shadow mode significa che il core riceve gli eventi, produce output e lo scrive
+nel log, ma non e' ancora l'unica fonte ufficiale di eventi semantici.
 
-Il prossimo passo sara' decidere come aggiungere il core allo stato
-applicativo senza rompere il comportamento esistente.
+Il prossimo passo sara' confrontare il vecchio output con quello del core e poi
+decidere quando rimuovere gradualmente la vecchia logica semantica da
+`modules/inotify/src/events.c`.

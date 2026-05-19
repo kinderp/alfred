@@ -59,6 +59,8 @@ typedef struct app {
     config_t config;
     watcher_table_t watchers;
     logger_t logger;
+    alfred_config_t core_config;
+    alfred_engine_t *core;
     move_cache_t moves;
 } app_t;
 ```
@@ -72,11 +74,17 @@ Campi importanti:
 - `config`: configurazione runtime
 - `watchers`: tabella watch descriptor -> path
 - `logger`: gestore dei file di log
+- `core_config`: configurazione del core semantico
+- `core`: istanza del motore semantico Alfred
 - `moves`: cache temporanea per correlare eventi move
 
 Nota architetturale: oggi `app_t` contiene ancora stato specifico di inotify.
 In futuro una parte di questo stato dovrebbe spostarsi dentro il backend
 `modules/inotify`.
+
+Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
+In questa fase pero' lavora in shadow mode: riceve gli stessi eventi del vecchio
+dispatcher, ma non sostituisce ancora il comportamento ufficiale.
 
 ## app/src/main.c
 
@@ -109,14 +117,18 @@ Questo stile e' utile perche':
 1. reset della struct `app_t`
 2. configurazione di default
 3. logger
-4. tabella watcher
-5. move cache
-6. inotify
-7. signal handler
-8. watch sui percorsi passati da riga di comando
+4. core in shadow mode
+5. tabella watcher
+6. move cache
+7. inotify
+8. signal handler
+9. watch sui percorsi passati da riga di comando
 
 L'ordine e' importante. Per esempio, il logger viene inizializzato presto
 perche' gli altri sottosistemi possono usarlo per scrivere errori.
+
+Il core viene inizializzato dopo il logger perche' la callback del core scrive
+gli eventi semantici attraverso `logger_event()`.
 
 ### app_run()
 
@@ -130,13 +142,38 @@ flowchart TD
     B -->|errore reale| D[log errore]
     B -->|ok| E[itera eventi]
     E --> F[log raw event]
-    F --> G[dispatch evento]
-    G --> A
+    F --> G[vecchio dispatcher]
+    G --> H[core shadow dispatch]
+    H --> A
 ```
 
 Il file descriptor e' non bloccante. Questo significa che `read()` puo'
 restituire `EAGAIN` quando non ci sono eventi. Non e' un errore: il programma
 aspetta pochi millisecondi e riprova.
+
+### Shadow mode
+
+Durante l'integrazione il ciclo eventi usa due percorsi:
+
+```text
+struct inotify_event
+    -> app_dispatch_raw_event()
+    -> vecchio logger eventi
+
+struct inotify_event
+    -> dispatch_event_to_core()
+    -> inotify_adapter_build_raw()
+    -> alfred_process()
+    -> core_logger_on_event()
+    -> logger_event()
+```
+
+Il vecchio dispatcher resta il comportamento ufficiale. Il core lavora in
+parallelo e produce righe con prefisso `core`, utili per confrontare il nuovo
+motore con il comportamento esistente.
+
+Questo approccio riduce il rischio: possiamo osservare il core prima di
+rimuovere `events.c` e `move_cache.c` dal modulo inotify.
 
 ### app_shutdown()
 
@@ -145,10 +182,14 @@ aspetta pochi millisecondi e riprova.
 1. file descriptor inotify
 2. tabella watcher
 3. move cache
-4. logger
+4. core
+5. logger
 
 Il logger viene chiuso per ultimo cosi' puo' registrare anche le fasi di
 shutdown.
+
+Il core viene distrutto prima del logger. In futuro, se il core fara' flush di
+eventi pendenti durante lo shutdown, il logger sara' ancora disponibile.
 
 ## app/src/config.c
 
@@ -256,6 +297,7 @@ un valore che il chiamante deve controllare.
 - `app_init()` costruisce le risorse.
 - `app_run()` legge e dispatcha eventi.
 - `app_shutdown()` libera le risorse.
+- Il core oggi gira in shadow mode.
 - La configurazione non possiede memoria dinamica.
 - Il logger possiede i suoi `FILE *`.
 - Alcune responsabilita' sono temporanee e verranno spostate nel core o nel

@@ -14,6 +14,7 @@
 #define APP_H
 
 #include "config.h"
+#include "alfred_correlator.h"
 #include "watcher.h"
 #include "logger.h"
 #include "move_cache.h"
@@ -51,6 +52,16 @@ typedef struct app {
 
     /* Raw, semantic, and error log sink. */
     logger_t logger;
+
+    /*
+     * Core correlator configuration and engine.
+     *
+     * During integration the engine runs in shadow mode: the legacy inotify
+     * dispatcher still produces the official event log, while the core receives
+     * the same raw events for comparison.
+     */
+    alfred_config_t core_config;
+    alfred_engine_t *core;
 
     /*
      * Temporary move correlation cache used by the current inotify dispatcher.
