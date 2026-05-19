@@ -41,10 +41,12 @@ Status values:
 | Status | File |
 | --- | --- |
 | Pending | `modules/inotify/include/events.h` |
+| Done | `modules/inotify/include/inotify_adapter.h` |
 | Pending | `modules/inotify/include/move_cache.h` |
 | Pending | `modules/inotify/include/watch_manager.h` |
 | Pending | `modules/inotify/include/watcher.h` |
 | Pending | `modules/inotify/src/events.c` |
+| Done | `modules/inotify/src/inotify_adapter.c` |
 | Pending | `modules/inotify/src/move_cache.c` |
 | Pending | `modules/inotify/src/watch_manager.c` |
 | Pending | `modules/inotify/src/watcher.c` |

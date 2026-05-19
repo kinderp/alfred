@@ -15,7 +15,7 @@ Stati usati:
 | Completo | `02-architettura-generale.md` |
 | Parziale | `03-struttura-cartelle.md` |
 | Completo | `04-livello-applicazione.md` |
-| Da fare | `05-modulo-inotify.md` |
+| Completo | `05-modulo-inotify.md` |
 | Da fare | `06-core-engine.md` |
 | Da fare | `07-flusso-eventi.md` |
 | Completo | `08-guida-c-usato-nel-progetto.md` |

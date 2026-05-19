@@ -100,6 +100,7 @@ ifneq ($(filter inotify,$(MODULES)),)
 INCLUDES += -I$(MODULE_DIR)/inotify/include
 CFLAGS += -DALFRED_ENABLE_INOTIFY
 MODULE_SRCS += \
+	$(MODULE_DIR)/inotify/src/inotify_adapter.c \
 	$(MODULE_DIR)/inotify/src/events.c \
 	$(MODULE_DIR)/inotify/src/move_cache.c \
 	$(MODULE_DIR)/inotify/src/watch_manager.c \
