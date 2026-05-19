@@ -1,6 +1,9 @@
 /* ============================================================================
- * config.c
- * Runtime configuration manager
+ * config.c - runtime configuration manager
+ *
+ * The configuration manager provides defaults and an optional key-value file
+ * parser. It deliberately stores values in a plain struct so application
+ * startup can initialize configuration before any subsystem owns resources.
  * ========================================================================== */
 
 #include "config.h"
@@ -11,9 +14,17 @@
 #include <stdlib.h>
 
 /* ============================================================================
- * DEFAULT CONFIGURATION
+ * Default Configuration
  * ========================================================================== */
 
+/*
+ * config_defaults - initialize configuration with safe defaults
+ * @cfg: configuration object to initialize
+ *
+ * The defaults favor development visibility: recursive watching is enabled,
+ * logs use predictable local filenames, and the watch mask comes from the
+ * inotify watch manager.
+ */
 void config_defaults(config_t *cfg)
 {
     if (cfg == NULL)
@@ -44,9 +55,17 @@ void config_defaults(config_t *cfg)
 }
 
 /* ============================================================================
- * INTERNAL PARSER HELPERS
+ * Parser Helpers
  * ========================================================================== */
 
+/*
+ * trim_newline - remove line terminators from a mutable string
+ * @s: string to modify
+ *
+ * Configuration lines come from fgets(), which keeps trailing newline
+ * characters. Removing both LF and CR keeps Unix and Windows-style files
+ * readable by the same parser.
+ */
 static void trim_newline(char *s)
 {
     if (s == NULL)
@@ -63,6 +82,15 @@ static void trim_newline(char *s)
     }
 }
 
+/*
+ * parse_bool - parse a permissive boolean value
+ * @value: string value to parse
+ *
+ * Recognizes the common true values used in simple config files. Unknown
+ * values are treated as false.
+ *
+ * Return: 1 for true values, 0 otherwise.
+ */
 static int parse_bool(const char *value)
 {
     if (value == NULL)
@@ -77,16 +105,27 @@ static int parse_bool(const char *value)
 }
 
 /* ============================================================================
- * LOAD CONFIG FILE
+ * Config File Loading
+ * ========================================================================== */
+
+/*
+ * config_load - load runtime configuration from a key-value file
+ * @cfg: configuration object to update
+ * @path: path to the configuration file
+ *
+ * Parses simple `key=value` records. Empty lines and lines beginning with '#'
+ * are ignored. Unknown keys are skipped so configuration can evolve without
+ * making older binaries fail immediately.
  *
  * Example:
  *
- * recursive=true
- * use_epoll=false
- * move_cache_size=256
- * raw_log=myraw.log
- * ========================================================================== */
-
+ *   recursive=true
+ *   use_epoll=false
+ *   move_cache_size=256
+ *   raw_log=myraw.log
+ *
+ * Return: 0 on success, -1 on invalid input or file open failure.
+ */
 int config_load(config_t *cfg, const char *path)
 {
     if (cfg == NULL || path == NULL)
@@ -103,11 +142,11 @@ int config_load(config_t *cfg, const char *path)
 
         trim_newline(line);
 
-        /* skip empty */
+        /* Empty lines are allowed for readability. */
         if (line[0] == '\0')
             continue;
 
-        /* skip comments */
+        /* Shell-style comments are ignored. */
         if (line[0] == '#')
             continue;
 
@@ -121,54 +160,36 @@ int config_load(config_t *cfg, const char *path)
         char *key   = line;
         char *value = eq + 1;
 
-        /* ---------------------------------------------------------
-         * recursive
-         * ------------------------------------------------------- */
         if (strcmp(key, "recursive") == 0) {
 
             cfg->recursive =
                 parse_bool(value);
         }
 
-        /* ---------------------------------------------------------
-         * use_epoll
-         * ------------------------------------------------------- */
         else if (strcmp(key, "use_epoll") == 0) {
 
             cfg->use_epoll =
                 parse_bool(value);
         }
 
-        /* ---------------------------------------------------------
-         * flush_immediately
-         * ------------------------------------------------------- */
         else if (strcmp(key, "flush_immediately") == 0) {
 
             cfg->flush_immediately =
                 parse_bool(value);
         }
 
-        /* ---------------------------------------------------------
-         * move_cache_size
-         * ------------------------------------------------------- */
         else if (strcmp(key, "move_cache_size") == 0) {
 
             cfg->move_cache_size =
                 atoi(value);
         }
 
-        /* ---------------------------------------------------------
-         * watcher_capacity
-         * ------------------------------------------------------- */
         else if (strcmp(key, "watcher_capacity") == 0) {
 
             cfg->watcher_capacity =
                 atoi(value);
         }
 
-        /* ---------------------------------------------------------
-         * raw_log
-         * ------------------------------------------------------- */
         else if (strcmp(key, "raw_log") == 0) {
 
             snprintf(cfg->raw_log,
@@ -177,9 +198,6 @@ int config_load(config_t *cfg, const char *path)
                      value);
         }
 
-        /* ---------------------------------------------------------
-         * event_log
-         * ------------------------------------------------------- */
         else if (strcmp(key, "event_log") == 0) {
 
             snprintf(cfg->event_log,
@@ -188,9 +206,6 @@ int config_load(config_t *cfg, const char *path)
                      value);
         }
 
-        /* ---------------------------------------------------------
-         * error_log
-         * ------------------------------------------------------- */
         else if (strcmp(key, "error_log") == 0) {
 
             snprintf(cfg->error_log,

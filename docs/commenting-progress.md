@@ -14,15 +14,15 @@ Status values:
 | Status | File |
 | --- | --- |
 | Done | `app/include/app.h` |
-| Pending | `app/include/config.h` |
-| Pending | `app/include/errors.h` |
-| Pending | `app/include/logger.h` |
-| Pending | `app/include/utils.h` |
+| Done | `app/include/config.h` |
+| Done | `app/include/errors.h` |
+| Done | `app/include/logger.h` |
+| Done | `app/include/utils.h` |
 | Done | `app/src/app.c` |
-| Pending | `app/src/config.c` |
-| Pending | `app/src/logger.c` |
+| Done | `app/src/config.c` |
+| Done | `app/src/logger.c` |
 | Done | `app/src/main.c` |
-| Pending | `app/src/utils.c` |
+| Done | `app/src/utils.c` |
 
 ## Core
 

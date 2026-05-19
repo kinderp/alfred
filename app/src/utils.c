@@ -1,6 +1,5 @@
 /* ============================================================================
- * utils.c
- * Shared utility helpers
+ * utils.c - shared application utility helpers
  *
  * Responsibilities:
  *   - ISO8601 timestamps
@@ -11,7 +10,7 @@
  * Used by:
  *   logger.c
  *   app.c
- *   event_engine.c
+ *   modules/inotify event handling
  * ========================================================================== */
 
 #include "utils.h"
@@ -24,12 +23,20 @@
 #include <sys/inotify.h>
 
 /* ============================================================================
- * ISO TIMESTAMP
+ * Time Formatting
+ * ========================================================================== */
+
+/*
+ * iso_timestamp - format the current wall-clock time
+ * @buf: destination buffer
+ * @len: destination buffer length
+ *
+ * Produces an ISO-like timestamp with millisecond precision and timezone
+ * offset. The timestamp is intended for logs, not for monotonic timing.
  *
  * Example:
  *   2026-05-11T14:55:21.123+0200
- * ========================================================================== */
-
+ */
 void iso_timestamp(char *buf, size_t len)
 {
     if (buf == NULL || len == 0)
@@ -64,16 +71,21 @@ void iso_timestamp(char *buf, size_t len)
 }
 
 /* ============================================================================
- * SAFE PATH JOIN
- *
- * Joins:
- *   /tmp + file.txt => /tmp/file.txt
- *
- * Returns:
- *   0 success
- *  -1 overflow
+ * Path Helpers
  * ========================================================================== */
 
+/*
+ * path_join - concatenate a base path and child name
+ * @dst: destination buffer
+ * @len: destination buffer length
+ * @base: parent path
+ * @name: child name
+ *
+ * Joins `/tmp` and `file.txt` as `/tmp/file.txt`. If @base already ends in
+ * '/', no extra slash is inserted.
+ *
+ * Return: 0 on success, -1 on invalid input or truncation.
+ */
 int path_join(char *dst,
               size_t len,
               const char *base,
@@ -116,13 +128,12 @@ int path_join(char *dst,
     return 0;
 }
 
-/* ============================================================================
- * NORMALIZE TRAILING SLASH
+/*
+ * path_trim_slashes - remove trailing slashes from a path in place
+ * @path: mutable path string
  *
- * "/tmp///" -> "/tmp"
- * except "/" remains "/"
- * ========================================================================== */
-
+ * Converts `/tmp///` to `/tmp` while preserving the root path `/`.
+ */
 void path_trim_slashes(char *path)
 {
     if (path == NULL)
@@ -139,13 +150,13 @@ void path_trim_slashes(char *path)
     }
 }
 
-/* ============================================================================
- * BASENAME POINTER
+/*
+ * path_basename - return the final path component
+ * @path: path to inspect
  *
- * "/tmp/a/b.txt" -> "b.txt"
- * ========================================================================== */
-
-const char* path_basename(const char *path)
+ * Return: pointer inside @path, or NULL when @path is NULL.
+ */
+const char *path_basename(const char *path)
 {
     if (path == NULL)
         return NULL;
@@ -158,12 +169,16 @@ const char* path_basename(const char *path)
     return p + 1;
 }
 
-/* ============================================================================
- * DIRECTORYNAME COPY
+/*
+ * path_dirname - copy a path's parent directory
+ * @dst: destination buffer
+ * @len: destination buffer length
+ * @src: source path
  *
- * "/tmp/a/b.txt" -> "/tmp/a"
- * ========================================================================== */
-
+ * Copies `/tmp/a` when @src is `/tmp/a/b.txt`. Paths without a slash use ".".
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
 int path_dirname(char *dst,
                  size_t len,
                  const char *src)
@@ -193,9 +208,17 @@ int path_dirname(char *dst,
 }
 
 /* ============================================================================
- * STRING SAFE COPY
+ * Generic Helpers
  * ========================================================================== */
 
+/*
+ * str_copy - copy a possibly NULL string into a fixed buffer
+ * @dst: destination buffer
+ * @len: destination buffer length
+ * @src: source string, or NULL
+ *
+ * NULL input is converted to an empty string.
+ */
 void str_copy(char *dst,
               size_t len,
               const char *src)
@@ -211,31 +234,36 @@ void str_copy(char *dst,
     snprintf(dst, len, "%s", src);
 }
 
-/* ============================================================================
- * BOOL TEXT
- * ========================================================================== */
-
-const char* yesno(int value)
+/*
+ * yesno - convert a boolean-like integer to text
+ * @value: integer value to convert
+ *
+ * Return: "yes" when @value is nonzero, otherwise "no".
+ */
+const char *yesno(int value)
 {
     return value ? "yes" : "no";
 }
 
-/* ============================================================================
- * FILETYPE FROM MASK
+/*
+ * filetype_name - convert a directory flag to text
+ * @is_dir: nonzero for directory, zero for file
  *
- * is_dir=1 => "dir"
- * else     => "file"
- * ========================================================================== */
-
-const char* filetype_name(int is_dir)
+ * Return: "dir" or "file".
+ */
+const char *filetype_name(int is_dir)
 {
     return is_dir ? "dir" : "file";
 }
 
-/* ============================================================================
- * CLAMP INT
- * ========================================================================== */
-
+/*
+ * clamp_int - clamp an integer to a closed range
+ * @value: input value
+ * @min: minimum returned value
+ * @max: maximum returned value
+ *
+ * Return: @value limited to [@min, @max].
+ */
 int clamp_int(int value,
               int min,
               int max)
@@ -249,10 +277,11 @@ int clamp_int(int value,
     return value;
 }
 
-/* ============================================================================
- * ZERO MEMORY WRAPPER
- * ========================================================================== */
-
+/*
+ * mem_zero - zero a memory region when the pointer is valid
+ * @ptr: memory region to clear
+ * @size: number of bytes to clear
+ */
 void mem_zero(void *ptr, size_t size)
 {
     if (ptr == NULL)
@@ -261,21 +290,50 @@ void mem_zero(void *ptr, size_t size)
     memset(ptr, 0, size);
 }
 
-void raw_event_name_from_mask(uint32_t mask, char *dest, size_t dest_size){
-    if (dest == NULL || dest_size == 0) return;
+/* ============================================================================
+ * inotify Formatting
+ * ========================================================================== */
+
+/*
+ * raw_event_name_from_mask - render an inotify mask as text
+ * @mask: inotify event mask
+ * @dest: destination buffer
+ * @dest_size: destination buffer length
+ *
+ * Appends known inotify flag names into @dest. Unknown masks are rendered as
+ * "UNRECOGNIZED".
+ *
+ * TODO(core-integration): this helper belongs in modules/inotify because it is
+ * specific to Linux inotify masks.
+ */
+void raw_event_name_from_mask(uint32_t mask,
+                              char *dest,
+                              size_t dest_size)
+{
+    if (dest == NULL || dest_size == 0)
+        return;
 
     dest[0] = '\0';
 
-    if (mask & IN_CREATE) 	strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
-    if (mask & IN_DELETE) 	strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
-    if (mask & IN_MOVED_FROM) 	strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
-    if (mask & IN_MOVED_TO) 	strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
-    if (mask & IN_ISDIR) 	strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
-    if (mask & IN_DELETE_SELF) 	strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
-    if (mask & IN_IGNORED) 	strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
-    if (mask & IN_Q_OVERFLOW) 	strncat(dest, "IN_Q_OVERFLOW ", dest_size - strlen(dest) - 1);
+    if (mask & IN_CREATE)
+        strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE)
+        strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_FROM)
+        strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_TO)
+        strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
+    if (mask & IN_ISDIR)
+        strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE_SELF)
+        strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_IGNORED)
+        strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
+    if (mask & IN_Q_OVERFLOW)
+        strncat(dest, "IN_Q_OVERFLOW ", dest_size - strlen(dest) - 1);
 
     if (dest[0] == '\0') {
         strncpy(dest, "UNRECOGNIZED", dest_size - 1);
+        dest[dest_size - 1] = '\0';
     }
 }

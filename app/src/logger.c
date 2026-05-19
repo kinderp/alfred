@@ -1,6 +1,5 @@
 /* ============================================================================
- * logger.c
- * Professional logging subsystem
+ * logger.c - multi-stream logging subsystem
  *
  * Streams:
  *   raw.log    -> raw kernel/inotify messages
@@ -23,13 +22,18 @@
 #include <stdarg.h>
 
 /* ============================================================================
- * INTERNAL HELPERS
+ * Internal Helpers
  * ========================================================================== */
 
 /*
- * Open file append mode.
+ * open_log_file - open one log stream in append mode
+ * @path: file path to open
+ *
+ * Append mode preserves previous runs, which is useful during manual testing.
+ *
+ * Return: opened FILE stream on success, NULL on invalid input or I/O failure.
  */
-static FILE* open_log_file(const char *path)
+static FILE *open_log_file(const char *path)
 {
     if (path == NULL)
         return NULL;
@@ -38,7 +42,14 @@ static FILE* open_log_file(const char *path)
 }
 
 /*
- * Generic formatted writer.
+ * write_line - write one timestamped log record
+ * @fp: destination stream
+ * @level: textual log level
+ * @fmt: printf-style format string
+ * @ap: variadic argument list matching @fmt
+ *
+ * Every record is flushed immediately so logs remain useful when the process
+ * crashes during development or tests.
  */
 static void write_line(FILE *fp,
                        const char *level,
@@ -62,11 +73,20 @@ static void write_line(FILE *fp,
 }
 
 /* ============================================================================
- * PUBLIC API
+ * Public API
  * ========================================================================== */
 
 /*
- * Initialize all log streams.
+ * logger_init - open all log streams
+ * @lg: logger object to initialize
+ * @raw_path: raw event log path
+ * @event_path: semantic event and info log path
+ * @error_path: error log path
+ *
+ * Opens streams in dependency order and unwinds partially opened resources on
+ * failure. The logger owns all successfully opened streams.
+ *
+ * Return: 0 on success, -1 on invalid input or I/O failure.
  */
 int logger_init(logger_t *lg,
                 const char *raw_path,
@@ -106,7 +126,11 @@ int logger_init(logger_t *lg,
 }
 
 /*
- * Close all streams.
+ * logger_close - close all streams owned by a logger
+ * @lg: logger object to close
+ *
+ * Safe to call with NULL. All stream pointers are reset after close so repeated
+ * shutdown paths do not reuse stale FILE pointers.
  */
 void logger_close(logger_t *lg)
 {
@@ -130,9 +154,14 @@ void logger_close(logger_t *lg)
 }
 
 /* ============================================================================
- * INFO
+ * Log Writers
  * ========================================================================== */
 
+/*
+ * logger_info - write an informational message
+ * @lg: initialized logger
+ * @fmt: printf-style format string
+ */
 void logger_info(logger_t *lg,
                  const char *fmt,
                  ...)
@@ -148,10 +177,11 @@ void logger_info(logger_t *lg,
     va_end(ap);
 }
 
-/* ============================================================================
- * ERROR
- * ========================================================================== */
-
+/*
+ * logger_error - write an error message
+ * @lg: initialized logger
+ * @fmt: printf-style format string
+ */
 void logger_error(logger_t *lg,
                   const char *fmt,
                   ...)
@@ -167,10 +197,11 @@ void logger_error(logger_t *lg,
     va_end(ap);
 }
 
-/* ============================================================================
- * RAW
- * ========================================================================== */
-
+/*
+ * logger_raw - write a raw backend event message
+ * @lg: initialized logger
+ * @fmt: printf-style format string
+ */
 void logger_raw(logger_t *lg,
                 const char *fmt,
                 ...)
@@ -186,11 +217,11 @@ void logger_raw(logger_t *lg,
     va_end(ap);
 }
 
-/* ============================================================================
- * EVENT
- * semantic filesystem event
- * ========================================================================== */
-
+/*
+ * logger_event - write a semantic filesystem event message
+ * @lg: initialized logger
+ * @fmt: printf-style format string
+ */
 void logger_event(logger_t *lg,
                   const char *fmt,
                   ...)
@@ -207,11 +238,14 @@ void logger_event(logger_t *lg,
 }
 
 /* ============================================================================
- * OPTIONAL HELPERS
+ * Optional Helpers
  * ========================================================================== */
 
 /*
- * Flush immediately all streams.
+ * logger_flush - flush all open streams
+ * @lg: initialized logger
+ *
+ * This is useful before controlled shutdown or before tests inspect logs.
  */
 void logger_flush(logger_t *lg)
 {
@@ -229,7 +263,8 @@ void logger_flush(logger_t *lg)
 }
 
 /*
- * Banner startup.
+ * logger_banner - write a startup banner to the event log
+ * @lg: initialized logger
  */
 void logger_banner(logger_t *lg)
 {

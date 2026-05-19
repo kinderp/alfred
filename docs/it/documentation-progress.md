@@ -14,11 +14,11 @@ Stati usati:
 | Completo | `01-panoramica-progetto.md` |
 | Completo | `02-architettura-generale.md` |
 | Parziale | `03-struttura-cartelle.md` |
-| Parziale | `04-livello-applicazione.md` |
+| Completo | `04-livello-applicazione.md` |
 | Da fare | `05-modulo-inotify.md` |
 | Da fare | `06-core-engine.md` |
 | Da fare | `07-flusso-eventi.md` |
-| Da fare | `08-guida-c-usato-nel-progetto.md` |
+| Completo | `08-guida-c-usato-nel-progetto.md` |
 | Completo | `09-makefile-e-build-system.md` |
 | Completo | `10-debugging-test-e-strumenti.md` |
 | Parziale | `11-come-contribuire.md` |
