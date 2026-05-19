@@ -15,11 +15,13 @@ Status values:
 | --- | --- |
 | Done | `app/include/app.h` |
 | Done | `app/include/config.h` |
+| Done | `app/include/core_logger.h` |
 | Done | `app/include/errors.h` |
 | Done | `app/include/logger.h` |
 | Done | `app/include/utils.h` |
 | Done | `app/src/app.c` |
 | Done | `app/src/config.c` |
+| Done | `app/src/core_logger.c` |
 | Done | `app/src/logger.c` |
 | Done | `app/src/main.c` |
 | Done | `app/src/utils.c` |

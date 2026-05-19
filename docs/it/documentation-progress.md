@@ -16,7 +16,7 @@ Stati usati:
 | Parziale | `03-struttura-cartelle.md` |
 | Completo | `04-livello-applicazione.md` |
 | Completo | `05-modulo-inotify.md` |
-| Da fare | `06-core-engine.md` |
+| Completo | `06-core-engine.md` |
 | Da fare | `07-flusso-eventi.md` |
 | Completo | `08-guida-c-usato-nel-progetto.md` |
 | Completo | `09-makefile-e-build-system.md` |

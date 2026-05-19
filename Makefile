@@ -85,6 +85,7 @@ LDFLAGS     := \
 APP_SRCS := \
 	$(APP_DIR)/src/main.c \
 	$(APP_DIR)/src/app.c \
+	$(APP_DIR)/src/core_logger.c \
 	$(APP_DIR)/src/config.c \
 	$(APP_DIR)/src/logger.c \
 	$(APP_DIR)/src/utils.c

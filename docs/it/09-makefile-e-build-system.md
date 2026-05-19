@@ -286,6 +286,190 @@ SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
 
 Questo rende visibile da dove arriva ogni parte del programma.
 
+## Aggiungere una nuova coppia `.h` e `.c`
+
+Quando aggiungi una nuova funzionalita' in C, spesso crei due file:
+
+```text
+nome_modulo.h
+nome_modulo.c
+```
+
+Il file `.h` contiene l'interfaccia pubblica del modulo: tipi, costanti e
+prototipi delle funzioni che altri file possono chiamare.
+
+Il file `.c` contiene l'implementazione.
+
+### Passo 1: scegliere il livello giusto
+
+Prima domanda:
+
+> Questa funzionalita' appartiene ad `app`, `core` o `modules/inotify`?
+
+Esempi:
+
+| Funzionalita' | Posizione corretta |
+| --- | --- |
+| logging applicativo | `app/` |
+| correlazione eventi raw | `core/` |
+| conversione `struct inotify_event` | `modules/inotify/` |
+| parsing configurazione | `app/` |
+
+### Passo 2: creare l'header
+
+Esempio:
+
+```text
+modules/inotify/include/inotify_adapter.h
+```
+
+L'header deve avere:
+
+- commento iniziale del file
+- include guard
+- include necessari
+- prototipi documentati
+
+Schema:
+
+```c
+#ifndef INOTIFY_ADAPTER_H
+#define INOTIFY_ADAPTER_H
+
+int funzione_pubblica(void);
+
+#endif /* INOTIFY_ADAPTER_H */
+```
+
+### Passo 3: creare il file `.c`
+
+Esempio:
+
+```text
+modules/inotify/src/inotify_adapter.c
+```
+
+Il file `.c` deve includere il suo header:
+
+```c
+#include "inotify_adapter.h"
+```
+
+Questo e' importante: se la dichiarazione nell'header e l'implementazione nel
+`.c` non coincidono, il compilatore puo' segnalarlo.
+
+### Passo 4: aggiungere il `.c` al Makefile
+
+Creare il file non basta. Il Makefile deve sapere che quel `.c` va compilato.
+
+Se il file appartiene ad `app/`, aggiungilo a:
+
+```make
+APP_SRCS := \
+    ...
+    $(APP_DIR)/src/nuovo_file.c
+```
+
+Se appartiene al core:
+
+```make
+CORE_SRCS := \
+    ...
+    $(CORE_DIR)/src/nuovo_file.c
+```
+
+Se appartiene al modulo inotify:
+
+```make
+MODULE_SRCS += \
+    $(MODULE_DIR)/inotify/src/nuovo_file.c
+```
+
+Esempio reale:
+
+```make
+MODULE_SRCS += \
+    $(MODULE_DIR)/inotify/src/inotify_adapter.c \
+    $(MODULE_DIR)/inotify/src/events.c \
+    ...
+```
+
+### Passo 5: controllare gli include path
+
+Il Makefile deve anche sapere dove cercare gli header.
+
+Per `app/include`:
+
+```make
+-I$(APP_INC_DIR)
+```
+
+Per `core/include`:
+
+```make
+-I$(CORE_INC_DIR)
+```
+
+Per `modules/inotify/include`:
+
+```make
+-I$(MODULE_DIR)/inotify/include
+```
+
+Se metti l'header in una directory gia' inclusa, non devi modificare gli include
+path.
+
+### Passo 6: compilare subito
+
+Dopo aver aggiunto i file:
+
+```bash
+make
+```
+
+Se il Makefile e' corretto, dovresti vedere una riga simile:
+
+```text
+[CC] modules/inotify/src/inotify_adapter.c
+```
+
+Se non la vedi, probabilmente hai dimenticato di aggiungere il `.c` alla lista
+giusta nel Makefile.
+
+### Passo 7: aggiornare la documentazione
+
+Ogni nuova coppia `.h/.c` deve aggiornare:
+
+```text
+docs/commenting-progress.md
+```
+
+Se il file introduce un concetto importante per gli studenti, aggiorna anche la
+documentazione italiana in:
+
+```text
+docs/it/
+```
+
+Nel caso dell'adapter inotify abbiamo aggiornato:
+
+```text
+docs/it/05-modulo-inotify.md
+```
+
+### Checklist rapida
+
+Quando aggiungi una coppia `.h/.c`, controlla:
+
+- il file `.h` ha include guard?
+- il file `.c` include il proprio `.h`?
+- le funzioni pubbliche sono dichiarate nell'header?
+- le funzioni private sono `static` nel `.c`?
+- il `.c` e' stato aggiunto al Makefile?
+- `make` compila il nuovo file?
+- hai aggiornato `docs/commenting-progress.md`?
+- serve aggiornare anche `docs/it/`?
+
 ## Regola per gli object file
 
 ```make
