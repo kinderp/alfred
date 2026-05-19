@@ -159,9 +159,63 @@ def scenario_rename_file(root: Path) -> None:
     src.rename(dst)
 
 
+def scenario_create_dir(root: Path) -> None:
+    (root / "new-dir").mkdir()
+
+
+def scenario_delete_dir(root: Path) -> None:
+    path = root / "delete-dir"
+
+    path.mkdir()
+    time.sleep(0.1)
+    path.rmdir()
+
+
+def scenario_rename_dir(root: Path) -> None:
+    src = root / "old-dir"
+    dst = root / "new-dir"
+
+    src.mkdir()
+    time.sleep(0.1)
+    src.rename(dst)
+
+
+def scenario_move_file(root: Path) -> None:
+    src_dir = root / "src"
+    dst_dir = root / "dst"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+
+    src = src_dir / "moved.txt"
+    dst = dst_dir / "moved.txt"
+
+    src.write_text("move\n", encoding="utf-8")
+    time.sleep(0.1)
+    src.rename(dst)
+
+
+def scenario_move_rename_file(root: Path) -> None:
+    src_dir = root / "src"
+    dst_dir = root / "dst"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+
+    src = src_dir / "old.txt"
+    dst = dst_dir / "new.txt"
+
+    src.write_text("move and rename\n", encoding="utf-8")
+    time.sleep(0.1)
+    src.rename(dst)
+
+
 SCENARIOS = {
+    "create_dir": scenario_create_dir,
     "create_file": scenario_create_file,
+    "delete_dir": scenario_delete_dir,
     "delete_file": scenario_delete_file,
+    "move_file": scenario_move_file,
+    "move_rename_file": scenario_move_rename_file,
+    "rename_dir": scenario_rename_dir,
     "rename_file": scenario_rename_file,
 }
 

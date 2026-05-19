@@ -63,11 +63,16 @@ Per vedere gli scenari:
 python3 tests/shadow/compare_shadow_output.py --help
 ```
 
-Scenari iniziali:
+Scenari disponibili:
 
 ```text
+create_dir
 create_file
+delete_dir
 delete_file
+move_file
+move_rename_file
+rename_dir
 rename_file
 ```
 
@@ -197,29 +202,90 @@ Una differenza puo' indicare:
 6. Documenta le differenze ricorrenti.
 7. Solo dopo rendi un confronto `--strict`.
 
-## Risultati iniziali osservati
+## Risultati osservati
 
-I primi scenari minimi coincidono:
+Gli scenari base su file e directory sono quasi tutti allineati:
 
-| Scenario | Stato |
-| --- | --- |
-| `create_file` | legacy e core coincidono |
-| `delete_file` | legacy e core coincidono |
-| `rename_file` | legacy e core coincidono |
+| Scenario | Stato | Note |
+| --- | --- | --- |
+| `create_file` | coincide | Entrambi producono `FILE_CREATED`. |
+| `delete_file` | coincide | Entrambi producono `FILE_CREATED` e `FILE_DELETED`. |
+| `rename_file` | coincide | Entrambi producono `FILE_RENAMED`. |
+| `create_dir` | coincide | Entrambi producono `DIR_CREATED`. |
+| `delete_dir` | differisce | Legacy produce anche `WATCH_REMOVED`; il core no. |
+| `rename_dir` | coincide | Entrambi producono `DIR_RENAMED`. |
+| `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
+| `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
-dispatcher. Significa solo che i casi base sono allineati.
+dispatcher. Significa che molti casi base sono allineati e che le differenze
+rimaste indicano decisioni semantiche da prendere.
+
+### Differenza: delete directory
+
+Nel caso `delete_dir`, legacy produce:
+
+```text
+DIR_CREATED path=$ROOT/delete-dir
+WATCH_REMOVED path=$ROOT/delete-dir
+DIR_DELETED path=$ROOT/delete-dir
+```
+
+Il core produce:
+
+```text
+DIR_CREATED path=$ROOT/delete-dir
+DIR_DELETED path=$ROOT/delete-dir
+```
+
+La differenza e' `WATCH_REMOVED`.
+
+Questo accade perche' `IN_IGNORED` e' un dettaglio specifico di inotify: indica
+che un watch e' stato rimosso. Il core oggi non ha un evento raw dedicato per
+questa informazione.
+
+Decisione futura:
+
+```text
+vogliamo che WATCH_REMOVED sia un evento semantico del core,
+oppure deve restare un dettaglio diagnostico del backend?
+```
+
+### Differenza: move and rename file
+
+Nel caso `move_rename_file`, legacy produce due eventi:
+
+```text
+FILE_MOVED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
+FILE_RENAMED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
+```
+
+Il core produce un evento:
+
+```text
+FILE_RELOCATED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
+```
+
+Qui il core esprime con un solo evento il fatto che il file ha cambiato sia
+directory sia nome.
+
+Decisione futura:
+
+```text
+preferiamo due eventi separati, come legacy,
+o un evento unico FILE_RELOCATED, come core?
+```
+
+Questa e' una decisione di API semantica, non solo una differenza tecnica.
 
 ## Prossimi scenari da aggiungere
 
 Scenari utili:
 
-- create directory
-- delete directory
-- move file
-- move and rename file
-- rename directory
 - recursive create
 - queue overflow, se riproducibile
+- move directory
+- move and rename directory
+- modify file, se vogliamo confrontare debounce e close-write
 
 Ogni scenario dovrebbe essere piccolo e leggibile.

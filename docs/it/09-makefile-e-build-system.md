@@ -150,6 +150,23 @@ CC := gcc
 
 I flag modificano il comportamento del compilatore.
 
+Nel Makefile i flag sono separati per responsabilita':
+
+```make
+C_STANDARD
+WARNINGS
+DEBUG_FLAGS
+RELEASE_FLAGS
+SANITIZERS
+DEPFLAGS
+INCLUDES
+CFLAGS
+LDFLAGS
+```
+
+Questa separazione rende piu' facile capire perche' un flag esiste e quando
+viene usato.
+
 ### Standard C
 
 ```make
@@ -268,6 +285,80 @@ LDFLAGS := ...
 
 I sanitizer devono comparire sia in compilazione sia in linking.
 
+### CFLAGS
+
+`CFLAGS` contiene flag usati quando il compilatore trasforma un `.c` in un
+file `.o`.
+
+Esempio:
+
+```text
+app/src/main.c -> build/obj/app/src/main.o
+```
+
+In questa fase servono:
+
+- standard C
+- warning
+- flag di debug o release
+- sanitizer
+- dependency tracking
+- include path
+
+Nel Makefile:
+
+```make
+CFLAGS = \
+    $(C_STANDARD) \
+    $(WARNINGS) \
+    $(DEBUG_FLAGS) \
+    $(SANITIZERS) \
+    $(DEPFLAGS) \
+    $(INCLUDES)
+```
+
+### LDFLAGS
+
+`LDFLAGS` contiene flag usati durante il linking, cioe' quando tutti i `.o`
+vengono uniti nel binario finale.
+
+Esempio:
+
+```text
+main.o + app.o + core.o -> alfred
+```
+
+Nel Makefile:
+
+```make
+LDFLAGS := \
+    -fsanitize=address \
+    -fsanitize=undefined
+```
+
+I sanitizer devono comparire anche in `LDFLAGS`, perche' il linker deve
+collegare il runtime dei sanitizer al binario finale.
+
+### Perche' `CFLAGS =` e non sempre `CFLAGS :=`
+
+Nel Makefile `CFLAGS` usa `=`:
+
+```make
+CFLAGS = ...
+```
+
+Questo permette di aggiungere include o macro dopo la definizione iniziale.
+
+Esempio:
+
+```make
+INCLUDES += -I$(MODULE_DIR)/inotify/include
+CFLAGS += -DALFRED_ENABLE_INOTIFY
+```
+
+Se `CFLAGS` fosse espanso troppo presto, alcune aggiunte successive potrebbero
+non essere incluse nel comando finale.
+
 ## Dipendenze dagli header
 
 Quando un file `.c` include un header `.h`, una modifica all'header deve far
@@ -315,6 +406,108 @@ la compilazione.
 Questa parte e' importante. Senza dependency tracking, potresti modificare una
 struct in un header e lasciare compilati vecchi `.o` non aggiornati. In C questo
 puo' causare bug difficili da capire.
+
+### Cosa significa `-MMD`
+
+`-MMD` dice a `gcc`:
+
+```text
+mentre compili il file .c, genera anche un file .d con le dipendenze dagli
+header del progetto.
+```
+
+Gli header di sistema, come `<stdio.h>`, normalmente non vengono inclusi nel
+file `.d`. Questo mantiene i file di dipendenza piu' piccoli e leggibili.
+
+### Cosa significa `-MP`
+
+`-MP` aggiunge regole vuote per gli header.
+
+Serve a evitare errori se un header viene rimosso o rinominato. Senza `-MP`,
+Make potrebbe leggere un vecchio `.d` che nomina un header non piu' esistente e
+fermarsi con un errore.
+
+### Cosa contiene un file `.d`
+
+Un file `.d` e' un file Make generato automaticamente.
+
+Esempio semplificato:
+
+```make
+build/obj/app/src/app.o: app/src/app.c app/include/app.h \
+ app/include/config.h app/include/logger.h
+
+app/include/app.h:
+app/include/config.h:
+app/include/logger.h:
+```
+
+La prima riga dice:
+
+```text
+app.o dipende da app.c e dagli header elencati.
+```
+
+Le righe vuote sugli header sono generate da `-MP`.
+
+### Perche' usiamo `-include $(DEPS)`
+
+Alla prima build i file `.d` non esistono ancora. Se scrivessimo:
+
+```make
+include $(DEPS)
+```
+
+Make fallirebbe perche' non trova quei file.
+
+Scrivendo:
+
+```make
+-include $(DEPS)
+```
+
+Make prova a includerli, ma non fallisce se mancano.
+
+Dopo la prima compilazione, i file `.d` esistono e Make li usa per capire cosa
+ricompilare.
+
+### Perche' questo e' importante per gli studenti
+
+Se modifichi una struct in un header:
+
+```c
+typedef struct app {
+    ...
+} app_t;
+```
+
+tutti i `.c` che usano quella struct devono essere ricompilati.
+
+Se non succede, puoi ottenere bug strani: il codice nuovo e il codice vecchio
+possono avere idee diverse sulla dimensione della struct.
+
+Durante lo sviluppo abbiamo visto proprio un caso di questo tipo: dopo aver
+modificato `app_t`, un object file non ricompilato poteva usare una dimensione
+vecchia della struct. I file `.d` evitano questo problema.
+
+### `.o` e `.d` insieme
+
+Per ogni sorgente:
+
+```text
+app/src/app.c
+```
+
+la build produce:
+
+```text
+build/obj/app/src/app.o
+build/obj/app/src/app.d
+```
+
+Il `.o` serve al linker.
+
+Il `.d` serve a Make.
 
 ## Liste dei sorgenti
 
