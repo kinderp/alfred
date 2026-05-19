@@ -1,6 +1,12 @@
 /* ============================================================================
- * app.c
- * Production-grade lifecycle manager for filesystem monitor
+ * app.c - application lifecycle and inotify event loop
+ *
+ * This file owns process-level initialization, signal handling, the current
+ * inotify read loop, and shutdown ordering. It wires subsystems together but
+ * should not contain long-term filesystem event semantics.
+ *
+ * TODO(core-integration): move backend-specific state and raw event reading
+ * into modules/inotify once the backend interface is introduced.
  * ============================================================================
  */
 
@@ -19,7 +25,7 @@
 #include <sys/inotify.h>
 
 /* ============================================================================
- * CONFIG
+ * Configuration Constants
  * ========================================================================== */
 
 #ifndef EVENT_BUFFER_SIZE
@@ -27,26 +33,43 @@
 #endif
 
 /* ============================================================================
- * FORWARD DECLARATIONS
+ * Local Declarations
  * ========================================================================== */
 
 static void setup_signals(void);
 static void handle_signal(int sig);
 
-/* Questo verrà implementato nel modulo event_engine.c */
+/*
+ * TODO(core-integration): this function is implemented by the current inotify
+ * semantic dispatcher. It should disappear from app.c when the backend emits
+ * alfred_raw_event_t records into the core.
+ */
 extern void app_dispatch_raw_event(app_t *app,
                                    const struct inotify_event *ev);
 
 /* ============================================================================
- * GLOBAL CONTROLLED POINTER (used only by signal handler)
+ * Signal State
  * ========================================================================== */
 
+/*
+ * Signal handlers cannot receive user data, so the application context is
+ * exposed through a single file-local pointer. The handler only clears a flag;
+ * all resource cleanup remains in normal process context.
+ */
 static app_t *g_app = NULL;
 
 /* ============================================================================
- * SIGNAL HANDLING
+ * Signal Handling
  * ========================================================================== */
 
+/*
+ * handle_signal - request cooperative shutdown from a signal handler
+ * @sig: received signal number
+ *
+ * The handler intentionally avoids logging, allocation, locking, or closing
+ * descriptors. It only clears app->running so the event loop can terminate
+ * safely in normal execution context.
+ */
 static void handle_signal(int sig)
 {
     (void)sig;
@@ -56,6 +79,12 @@ static void handle_signal(int sig)
     }
 }
 
+/*
+ * setup_signals - install process termination handlers
+ *
+ * SIGINT and SIGTERM are converted into cooperative shutdown requests. The
+ * main event loop observes app->running and exits cleanly.
+ */
 static void setup_signals(void)
 {
     struct sigaction sa;
@@ -70,69 +99,28 @@ static void setup_signals(void)
 }
 
 /* ============================================================================
- * INTERNAL: ADD STARTUP WATCH PATHS
+ * Application Lifecycle
  * ========================================================================== */
 
 /*
-static int add_initial_paths(app_t *app, int argc, char **argv)
-{
-    uint32_t mask =
-        IN_CREATE      |
-        IN_DELETE      |
-        IN_MOVED_FROM  |
-        IN_MOVED_TO    |
-        IN_DELETE_SELF |
-        IN_IGNORED     |
-        IN_Q_OVERFLOW;
-
-    for (int i = 1; i < argc; i++) {
-
-        int wd = inotify_add_watch(app->inotify_fd,
-                                   argv[i],
-                                   mask);
-
-        if (wd < 0) {
-            logger_error(&app->logger,
-                         "cannot watch path=%s errno=%d (%s)",
-                         argv[i],
-                         errno,
-                         strerror(errno));
-            continue;
-        }
-
-        if (watcher_store(&app->watchers,
-                          wd,
-                          argv[i]) != 0) {
-
-            logger_error(&app->logger,
-                         "watcher_store failed path=%s wd=%d",
-                         argv[i],
-                         wd);
-
-            inotify_rm_watch(app->inotify_fd, wd);
-            continue;
-        }
-
-        logger_info(&app->logger,
-                    "watch added wd=%d path=%s",
-                    wd,
-                    argv[i]);
-    }
-
-    return 0;
-}
-*/
-
-/* ============================================================================
- * PUBLIC: APP INIT
- * ========================================================================== */
-
+ * app_init - initialize the application runtime
+ * @app: application context to initialize
+ * @argc: command-line argument count
+ * @argv: command-line argument vector
+ *
+ * Initializes all runtime subsystems in dependency order: configuration,
+ * logging, watcher state, move cache, inotify, signal handling, and startup
+ * watches. A single failure path delegates cleanup to app_shutdown().
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
 int app_init(app_t *app, int argc, char **argv)
 {
     error_t error = ERR_UNKNOWN;
-    if (app == NULL){
+
+    if (app == NULL) {
         error = ERR_INVALID_ARG;
-	goto fail;
+        goto fail;
     }
 
     memset(app, 0, sizeof(*app));
@@ -140,14 +128,16 @@ int app_init(app_t *app, int argc, char **argv)
     app->running    = 1;
     app->inotify_fd = -1;
 
-    /* ------------------------------------------------------------
-     * Load default config
-     * ---------------------------------------------------------- */
+    /*
+     * Defaults are loaded before any subsystem initialization so later steps
+     * can rely on configured paths, capacities, and watch masks.
+     */
     config_defaults(&app->config);
 
-    /* ------------------------------------------------------------
-     * Logger init
-     * ---------------------------------------------------------- */
+    /*
+     * The logger is initialized early because every following subsystem uses
+     * it for diagnostics. Failures before this point must use stderr.
+     */
     if (logger_init(&app->logger,
                     app->config.raw_log,
                     app->config.event_log,
@@ -160,9 +150,10 @@ int app_init(app_t *app, int argc, char **argv)
 
     logger_info(&app->logger, "logger initialized");
 
-    /* ------------------------------------------------------------
-     * Watcher table init
-     * ---------------------------------------------------------- */
+    /*
+     * The watcher table maps inotify watch descriptors back to paths. Event
+     * dispatch depends on this mapping to reconstruct full file names.
+     */
     if (watcher_init(&app->watchers,
                      app->config.watcher_capacity) != 0) {
 
@@ -170,15 +161,16 @@ int app_init(app_t *app, int argc, char **argv)
                      "watcher_init failed");
 
         error = ERR_ALLOC;
-	goto fail;
+        goto fail;
     }
 
     logger_info(&app->logger,
                 "watcher table initialized");
 
-    /* ------------------------------------------------------------
-     * Move cache init
-     * ---------------------------------------------------------- */
+    /*
+     * The current inotify dispatcher correlates MOVED_FROM and MOVED_TO with
+     * this cache. This is temporary until move correlation is owned by core.
+     */
     if (move_cache_init(&app->moves,
                         app->config.move_cache_size) != 0) {
 
@@ -186,15 +178,16 @@ int app_init(app_t *app, int argc, char **argv)
                      "move_cache_init failed");
 
         error = ERR_ALLOC;
-	goto fail;
+        goto fail;
     }
 
     logger_info(&app->logger,
                 "move cache initialized");
 
-    /* ------------------------------------------------------------
-     * Inotify init
-     * ---------------------------------------------------------- */
+    /*
+     * The descriptor is nonblocking so the event loop can poll cooperatively
+     * and react to signal-driven shutdown without blocking indefinitely.
+     */
     app->inotify_fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
@@ -206,32 +199,33 @@ int app_init(app_t *app, int argc, char **argv)
                      strerror(errno));
 
         error = ERR_INOTIFY;
-	goto fail;
+        goto fail;
     }
 
     logger_info(&app->logger,
                 "inotify initialized fd=%d",
                 app->inotify_fd);
 
-    /* ------------------------------------------------------------
-     * Signal handling
-     * ---------------------------------------------------------- */
+    /*
+     * Signal handlers use g_app only to request shutdown. Cleanup is left to
+     * app_shutdown(), which runs after app_run() returns or init fails.
+     */
     g_app = app;
     setup_signals();
 
     logger_info(&app->logger,
                 "signal handlers installed");
 
-    /* ------------------------------------------------------------
-     * CLI paths
-     * ---------------------------------------------------------- */
+    /*
+     * At least one startup path is required. Paths are watched recursively or
+     * non-recursively according to the active configuration.
+     */
     if (argc < 2) {
         logger_error(&app->logger,
                      "no startup paths provided");
         error = ERR_INVALID_ARG;
-	goto fail;
+        goto fail;
     }
-
 
     for (int i = 1; i < argc; i++) {
         if (app->config.recursive) {
@@ -254,10 +248,16 @@ fail:
     return error;
 }
 
-/* ============================================================================
- * PUBLIC: MAIN LOOP
- * ========================================================================== */
-
+/*
+ * app_run - execute the inotify event loop
+ * @app: initialized application context
+ *
+ * Reads packed struct inotify_event records from the nonblocking descriptor,
+ * logs their raw form, and forwards each record to the current dispatcher.
+ *
+ * Return: ERR_OK on normal termination, a negative error_t value on invalid
+ * input.
+ */
 int app_run(app_t *app)
 {
     if (app == NULL)
@@ -276,9 +276,10 @@ int app_run(app_t *app)
                  buffer,
                  sizeof(buffer));
 
-        /* --------------------------------------------------------
-         * Non blocking: no data available
-         * ------------------------------------------------------ */
+        /*
+         * EAGAIN is expected for a nonblocking descriptor when no events are
+         * queued. Sleep briefly to avoid a busy loop, then poll again.
+         */
         if (bytes < 0) {
 
             if (errno == EAGAIN ||
@@ -299,9 +300,10 @@ int app_run(app_t *app)
             break;
         }
 
-        /* --------------------------------------------------------
-         * EOF impossible here but checked
-         * ------------------------------------------------------ */
+        /*
+         * read() returning zero should not happen for an inotify descriptor.
+         * Treat it as an abnormal condition and leave the loop.
+         */
         if (bytes == 0) {
             logger_error(&app->logger,
                          "unexpected EOF on inotify fd");
@@ -312,9 +314,10 @@ int app_run(app_t *app)
                    "read %zd bytes from inotify",
                    bytes);
 
-        /* --------------------------------------------------------
-         * Iterate packed events
-         * ------------------------------------------------------ */
+        /*
+         * inotify returns a byte stream containing one or more variable-sized
+         * records. Each record is followed by ev->len bytes containing name.
+         */
         char *ptr = buffer;
 
         while (ptr < buffer + bytes) {
@@ -324,13 +327,12 @@ int app_run(app_t *app)
 
             raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
             logger_raw(&app->logger,
-                 "%s wd=%d path=%s name=%s",
-                 mask_str,
-                 ev->wd,
-                 watcher_get_path(&app->watchers, ev->wd),
-                 ev->len ? ev->name : ""
+                       "%s wd=%d path=%s name=%s",
+                       mask_str,
+                       ev->wd,
+                       watcher_get_path(&app->watchers, ev->wd),
+                       ev->len ? ev->name : ""
             );
-
 
             app_dispatch_raw_event(app, ev);
 
@@ -345,10 +347,13 @@ int app_run(app_t *app)
     return ERR_OK;
 }
 
-/* ============================================================================
- * PUBLIC: SHUTDOWN
- * ========================================================================== */
-
+/*
+ * app_shutdown - release resources owned by app_t
+ * @app: application context to release
+ *
+ * Releases resources in an order that keeps logging available until the end.
+ * The function accepts NULL for convenience in failure paths.
+ */
 void app_shutdown(app_t *app)
 {
     if (app == NULL)
@@ -357,28 +362,25 @@ void app_shutdown(app_t *app)
     logger_info(&app->logger,
                 "shutdown started");
 
-    /* ------------------------------------------------------------
-     * Close inotify fd
-     * ---------------------------------------------------------- */
+    /*
+     * Closing the descriptor first stops further kernel event delivery before
+     * the watcher table backing those descriptors is destroyed.
+     */
     if (app->inotify_fd >= 0) {
 
         close(app->inotify_fd);
         app->inotify_fd = -1;
     }
 
-    /* ------------------------------------------------------------
-     * Free watcher table
-     * ---------------------------------------------------------- */
+    /* The watcher table owns copied path strings for active descriptors. */
     watcher_destroy(&app->watchers);
 
-    /* ------------------------------------------------------------
-     * Free move cache
-     * ---------------------------------------------------------- */
+    /* The move cache owns pending rename/move source names. */
     move_cache_destroy(&app->moves);
 
-    /* ------------------------------------------------------------
-     * Close logger last
-     * ---------------------------------------------------------- */
+    /*
+     * The logger is closed last so shutdown activity can still be recorded.
+     */
     logger_info(&app->logger,
                 "resources released");
 
