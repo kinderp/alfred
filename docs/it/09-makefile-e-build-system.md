@@ -15,7 +15,7 @@ make
 Il risultato atteso e':
 
 ```text
-fsmon
+alfred
 ```
 
 cioe' il binario eseguibile del progetto.
@@ -63,7 +63,7 @@ Il linker prende tutti i `.o` e li unisce nel binario finale:
 app.o + core.o + inotify.o
         |
         v
-      fsmon
+      alfred
 ```
 
 ## Diagramma della build
@@ -77,7 +77,7 @@ flowchart LR
     O1 --> L[linker]
     O2 --> L
     O3 --> L
-    L --> B[fsmon]
+    L --> B[alfred]
 ```
 
 ## Variabili principali
@@ -85,7 +85,7 @@ flowchart LR
 Nel Makefile una variabile si definisce cosi':
 
 ```make
-TARGET := fsmon
+TARGET := alfred
 ```
 
 e si usa cosi':
@@ -97,7 +97,7 @@ $(TARGET)
 ### TARGET
 
 ```make
-TARGET := fsmon
+TARGET := alfred
 ```
 
 Nome del binario finale.
@@ -320,7 +320,7 @@ Dipende da:
 
 - `banner`
 - `directories`
-- `fsmon`
+- `alfred`
 
 ### directories
 
@@ -374,7 +374,7 @@ Rimuove la directory `build/`.
 make fclean
 ```
 
-Esegue `clean` e rimuove anche il binario `fsmon`.
+Esegue `clean` e rimuove anche il binario `alfred`.
 
 ### re
 
@@ -410,7 +410,7 @@ make run
 Compila e poi esegue:
 
 ```bash
-./fsmon
+./alfred
 ```
 
 Nota: il programma richiede percorsi da monitorare, quindi `make run` potrebbe
@@ -499,7 +499,7 @@ Cause comuni:
 
 ### Errore di linking
 
-Succede dopo la compilazione, quando il linker crea `fsmon`.
+Succede dopo la compilazione, quando il linker crea `alfred`.
 
 Cause comuni:
 

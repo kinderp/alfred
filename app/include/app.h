@@ -1,7 +1,7 @@
 /* ============================================================================
  * app.h - application runtime state and lifecycle API
  *
- * This header defines the process-wide application context used by fsmon.
+ * This header defines the process-wide application context used by alfred.
  * The application layer currently owns configuration, logging, inotify state,
  * watcher tables, and the move cache used by the inotify event dispatcher.
  *

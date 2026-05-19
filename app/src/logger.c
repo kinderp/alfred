@@ -240,7 +240,7 @@ void logger_banner(logger_t *lg)
         "==================================================");
 
     logger_info(lg,
-        "Filesystem Monitor Started");
+        "Alfred Filesystem Event Engine Started");
 
     logger_info(lg,
         "==================================================");

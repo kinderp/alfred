@@ -3,8 +3,8 @@ import subprocess
 import time
 import shutil
 
-ROOT="/tmp/fsmon_stress_move"
-BIN="../../fsmon"
+ROOT="/tmp/alfred_stress_move"
+BIN="../../alfred"
 
 shutil.rmtree(ROOT, ignore_errors=True)
 os.makedirs(ROOT)

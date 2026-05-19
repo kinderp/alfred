@@ -1,5 +1,5 @@
 /* ============================================================================
- * main.c - fsmon process entry point
+ * main.c - alfred process entry point
  *
  * The entry point is intentionally small. All runtime ownership and shutdown
  * ordering live in the application layer so startup failures and normal exits
@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 /*
- * main - initialize, run, and shut down fsmon
+ * main - initialize, run, and shut down alfred
  * @argc: command-line argument count
  * @argv: command-line argument vector
  *
