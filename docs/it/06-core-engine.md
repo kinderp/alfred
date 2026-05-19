@@ -79,6 +79,12 @@ dst_path = /tmp/b.txt
 Il core non scrive direttamente su file. Invece chiama una funzione fornita
 dall'applicazione.
 
+Questa funzione si chiama callback.
+
+Una callback e' una funzione che viene passata a un componente per essere
+chiamata piu' tardi. Nel nostro caso l'applicazione passa una funzione al core.
+Il core la conserva e la chiama ogni volta che produce un evento semantico.
+
 Tipo:
 
 ```c
@@ -91,11 +97,64 @@ typedef void (*alfred_emit_fn)(
 Questo significa:
 
 - il core produce un evento
-- chiama una funzione callback
-- passa l'evento e un puntatore generico `userdata`
+- chiama una funzione con quella firma
+- passa l'evento come `const alfred_event_t *ev`
+- passa un contesto generico come `void *userdata`
+
+La parte piu' difficile e':
+
+```c
+typedef void (*alfred_emit_fn)(...);
+```
+
+Questa e' una `typedef` per un puntatore a funzione.
+
+Vuol dire:
+
+```text
+alfred_emit_fn e' il nome di un tipo.
+Quel tipo rappresenta un puntatore a funzione.
+La funzione puntata riceve ev e userdata.
+La funzione puntata restituisce void.
+```
+
+Quindi il core non riceve direttamente un logger. Riceve una funzione da
+chiamare.
 
 `userdata` serve a dare contesto alla callback. Nel nostro caso useremo un
 puntatore a `logger_t`.
+
+Il tipo di `userdata` e':
+
+```c
+void *userdata
+```
+
+`void *` e' un puntatore generico. Il core non sa cosa contiene. Sa solo che
+deve ripassarlo alla callback.
+
+Questo e' importante per mantenere separati i livelli:
+
+```text
+core conosce alfred_event_t
+core non conosce logger_t
+```
+
+L'applicazione invece sa che, in questo caso, `userdata` contiene un
+`logger_t *`.
+
+Uso previsto:
+
+```c
+alfred_create(&cfg, core_logger_on_event, &app->logger);
+```
+
+Significato:
+
+```text
+quando il core emette un evento,
+chiama core_logger_on_event(ev, &app->logger)
+```
 
 ## core_logger
 
@@ -122,6 +181,24 @@ void core_logger_on_event(const alfred_event_t *ev, void *userdata);
 Quando il core emette un evento, questa callback lo formatta e lo scrive nel log
 degli eventi.
 
+Dentro la callback succede questo:
+
+```c
+logger_t *logger = userdata;
+```
+
+Questa riga converte il puntatore generico `void *` nel tipo concreto
+`logger_t *`.
+
+Da quel momento la callback puo' usare:
+
+```c
+logger_event(logger, ...);
+```
+
+La conversione e' corretta solo se chi ha creato il core ha davvero passato un
+`logger_t *` come `userdata`.
+
 ## Perche' il logger non sta nel core
 
 Il core deve restare riusabile. Se il core chiamasse direttamente `logger_event`,
@@ -137,6 +214,27 @@ flowchart TD
 ```
 
 Il core conosce solo la callback, non il logger concreto.
+
+Questo permette di cambiare destinazione in futuro.
+
+Oggi:
+
+```text
+alfred_event_t -> core_logger_on_event -> events.log
+```
+
+Domani:
+
+```text
+alfred_event_t -> socket_callback -> rete
+alfred_event_t -> sqlite_callback -> database
+alfred_event_t -> ui_callback     -> interfaccia grafica
+alfred_event_t -> test_callback   -> array in memoria
+```
+
+Il core non cambia. Cambia solo la callback passata a `alfred_create()`.
+
+Questo e' uno dei motivi principali per usare callback e `void *userdata`.
 
 ## Flusso desiderato
 

@@ -111,6 +111,331 @@ app_init(&app, argc, argv);
 
 `&app` significa "indirizzo di app".
 
+## Puntatori a `void`
+
+Un puntatore a `void` si scrive:
+
+```c
+void *userdata;
+```
+
+`void *` significa: "puntatore a qualcosa, ma non dico ancora a quale tipo".
+
+E' un puntatore generico. Puo' contenere l'indirizzo di oggetti di tipi diversi:
+
+```c
+logger_t logger;
+config_t config;
+
+void *a = &logger;
+void *b = &config;
+```
+
+Pero' c'e' una regola fondamentale: prima di usare il valore, bisogna sapere che
+tipo reale contiene e convertirlo.
+
+Esempio:
+
+```c
+void callback(void *userdata)
+{
+    logger_t *logger = userdata;
+
+    logger_event(logger, "message");
+}
+```
+
+Qui stiamo dicendo:
+
+```text
+userdata e' generico per chi chiama,
+ma dentro questa callback io so che contiene un logger_t *.
+```
+
+### Perche' usare `void *`
+
+`void *` serve quando vuoi scrivere codice generico.
+
+Nel nostro progetto il core non deve conoscere `logger_t`, perche' `logger_t`
+appartiene al livello `app`. Il core deve poter dire:
+
+```text
+quando produco un evento, chiamo questa funzione e le passo questo contesto
+generico.
+```
+
+Il contesto generico e' `userdata`.
+
+Oggi `userdata` sara' un `logger_t *`.
+
+Domani potrebbe essere:
+
+- una connessione socket
+- un handle a database SQLite
+- una struttura per una UI
+- una coda di messaggi
+- una struttura di test
+
+Il core non cambia, perche' per lui e' sempre solo:
+
+```c
+void *userdata;
+```
+
+### Rischio dei `void *`
+
+`void *` e' potente, ma non e' automaticamente sicuro.
+
+Se passi un tipo e poi lo interpreti come un altro, il programma puo' rompersi.
+
+Esempio sbagliato:
+
+```c
+config_t config;
+
+core_logger_on_event(ev, &config); /* sbagliato */
+```
+
+Dentro `core_logger_on_event()` facciamo:
+
+```c
+logger_t *logger = userdata;
+```
+
+Ma `userdata` in realta' puntava a `config_t`. Il compilatore non puo'
+proteggerti completamente da questo errore, perche' `void *` nasconde il tipo.
+
+Regola pratica:
+
+> Chi passa `userdata` e chi lo usa devono essere d'accordo sul tipo reale.
+
+Nel nostro caso:
+
+```c
+alfred_create(&cfg, core_logger_on_event, &app->logger);
+```
+
+significa:
+
+```text
+core_logger_on_event ricevera' un logger_t * dentro userdata.
+```
+
+## Puntatori a funzione
+
+In C anche una funzione ha un indirizzo. Un puntatore a funzione e' una
+variabile che contiene l'indirizzo di una funzione.
+
+Esempio semplice:
+
+```c
+int add(int a, int b)
+{
+    return a + b;
+}
+
+int (*operation)(int, int);
+
+operation = add;
+```
+
+Ora puoi chiamare:
+
+```c
+int result = operation(2, 3);
+```
+
+e il risultato sara':
+
+```text
+5
+```
+
+La sintassi:
+
+```c
+int (*operation)(int, int);
+```
+
+significa:
+
+```text
+operation e' un puntatore a funzione
+che prende due int
+e restituisce int
+```
+
+Le parentesi intorno a `*operation` sono importanti.
+
+Senza parentesi:
+
+```c
+int *operation(int, int);
+```
+
+significherebbe un'altra cosa: una funzione che restituisce `int *`.
+
+## `typedef` per puntatori a funzione
+
+La sintassi dei puntatori a funzione puo' essere difficile da leggere. Per
+questo spesso si usa `typedef`.
+
+Esempio:
+
+```c
+typedef int (*operation_fn)(int a, int b);
+```
+
+Ora puoi scrivere:
+
+```c
+operation_fn operation = add;
+```
+
+Nel progetto usiamo lo stesso principio:
+
+```c
+typedef void (*alfred_emit_fn)(
+    const alfred_event_t *ev,
+    void *userdata
+);
+```
+
+Questo crea un nome per il tipo:
+
+```text
+alfred_emit_fn
+```
+
+che significa:
+
+```text
+puntatore a funzione che riceve:
+- const alfred_event_t *ev
+- void *userdata
+
+e non restituisce nulla.
+```
+
+## Callback
+
+Una callback e' una funzione che passi a un altro componente affinche' venga
+chiamata piu' tardi.
+
+Invece di fare:
+
+```text
+io chiamo direttamente il logger
+```
+
+il core fa:
+
+```text
+io chiamo la funzione che mi e' stata data
+```
+
+Questo rende il core piu' generico.
+
+Nel nostro progetto:
+
+```c
+void core_logger_on_event(const alfred_event_t *ev, void *userdata);
+```
+
+questa funzione ha la forma richiesta da:
+
+```c
+alfred_emit_fn
+```
+
+Quindi puo' essere passata al core.
+
+Uso previsto:
+
+```c
+alfred_create(&cfg, core_logger_on_event, &app->logger);
+```
+
+Significato:
+
+```text
+crea il core;
+quando il core produce un evento semantico,
+chiama core_logger_on_event();
+passa &app->logger come userdata.
+```
+
+Dentro la callback:
+
+```c
+void core_logger_on_event(const alfred_event_t *ev, void *userdata)
+{
+    logger_t *logger = userdata;
+
+    logger_event(logger, "...", ...);
+}
+```
+
+Il core non sa che `userdata` e' un `logger_t *`. Lo sa solo la callback.
+
+## Perche' le callback sono utili
+
+Le callback separano chi produce un evento da chi decide cosa farne.
+
+Nel nostro caso:
+
+```text
+core produce eventi semantici
+app decide dove mandarli
+```
+
+Oggi possiamo loggare su file:
+
+```text
+alfred_event_t -> core_logger_on_event -> logger_event -> events.log
+```
+
+Domani possiamo cambiare destinazione senza modificare il core:
+
+```text
+alfred_event_t -> socket_callback -> rete
+alfred_event_t -> sqlite_callback -> database
+alfred_event_t -> ui_callback     -> interfaccia grafica
+alfred_event_t -> test_callback   -> array in memoria per test
+```
+
+Questo e' un vantaggio architetturale importante:
+
+- il core resta riusabile
+- il core resta testabile
+- il core non dipende dal logger
+- l'applicazione puo' cambiare output
+- i test possono intercettare eventi senza leggere file di log
+
+## Callback e ownership
+
+Quando il core chiama:
+
+```c
+core_logger_on_event(ev, userdata);
+```
+
+l'evento `ev` e' valido solo durante la callback.
+
+Questo significa:
+
+- puoi leggerlo
+- puoi copiarne i campi
+- non devi salvarne il puntatore per usarlo dopo
+
+Se una callback vuole conservare l'evento, deve copiarlo in una memoria propria.
+
+Questa regola e' scritta anche nell'header del core:
+
+```text
+event memory expires after callback returns
+```
+
 ## `NULL`
 
 `NULL` indica un puntatore che non punta a un oggetto valido.
