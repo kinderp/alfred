@@ -80,6 +80,8 @@ e include:
 ```text
 IN_CREATE
 IN_DELETE
+IN_MODIFY
+IN_CLOSE_WRITE
 IN_MOVED_FROM
 IN_MOVED_TO
 IN_DELETE_SELF
@@ -87,21 +89,23 @@ IN_IGNORED
 IN_Q_OVERFLOW
 ```
 
-Non include ancora:
+Questa maschera passa attraverso `config_t.watch_mask`:
 
 ```text
-IN_MODIFY
-IN_CLOSE_WRITE
+config_defaults()
+    -> cfg->watch_mask = watch_manager_default_mask()
+watch_manager_add()
+    -> inotify_add_watch(..., app->config.watch_mask)
 ```
 
-Questa distinzione e' importante per gli scenari shadow. Il core sa gia'
-trasformare raw event `MODIFY` e `CLOSE_WRITE` in eventi semantici come
-`FILE_MODIFIED` e `FILE_READY`, ma il programma completo non puo' produrli se
-il backend non chiede al kernel di consegnare quegli eventi.
+Quindi `config_t` contiene davvero la maschera usata dal runtime. In questa fase
+la maschera non e' ancora configurabile da file: `config_load()` legge molte
+opzioni, ma non espone una chiave `watch_mask`.
 
-Per questo l'abilitazione di `IN_MODIFY` e `IN_CLOSE_WRITE` sara' un passo
-separato dell'integrazione: aumentera' il volume degli eventi raw e cambiera'
-l'output osservato per molte scritture su file.
+L'aggiunta di `IN_MODIFY` e `IN_CLOSE_WRITE` rende visibili al core gli eventi
+necessari per produrre `FILE_MODIFIED` e `FILE_READY`. Aumenta pero' anche il
+volume degli eventi raw: una semplice scrittura su file puo' generare
+`IN_CREATE`, `IN_MODIFY` e `IN_CLOSE_WRITE`.
 
 ## Watch descriptor
 

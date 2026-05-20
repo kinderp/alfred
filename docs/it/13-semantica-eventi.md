@@ -94,14 +94,15 @@ e aspettare `FILE_READY` prima di leggere il file.
 Stato attuale dell'integrazione:
 
 ```text
-il core supporta FILE_MODIFIED e FILE_READY,
-ma la maschera inotify del programma completo non abilita ancora
-IN_MODIFY e IN_CLOSE_WRITE.
+il core supporta FILE_MODIFIED e FILE_READY;
+il backend inotify ora abilita IN_MODIFY e IN_CLOSE_WRITE nella maschera
+predefinita usata da config_t.watch_mask.
 ```
 
-Quindi, durante lo shadow mode, lo scenario `modify_close_write_file` serve
-prima di tutto a mostrare il confine tra capacita' del core e configurazione del
-backend.
+Quindi, durante lo shadow mode, lo scenario `modify_close_write_file` mostra il
+comportamento completo del core: una prima scrittura puo' produrre
+`FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`; una modifica successiva puo'
+produrre un'altra coppia `FILE_MODIFIED` / `FILE_READY`.
 
 ## Eventi semantici
 

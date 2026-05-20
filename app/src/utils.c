@@ -319,6 +319,10 @@ void raw_event_name_from_mask(uint32_t mask,
         strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
     if (mask & IN_DELETE)
         strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MODIFY)
+        strncat(dest, "IN_MODIFY ", dest_size - strlen(dest) - 1);
+    if (mask & IN_CLOSE_WRITE)
+        strncat(dest, "IN_CLOSE_WRITE ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVED_FROM)
         strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVED_TO)

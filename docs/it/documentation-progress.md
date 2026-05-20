@@ -88,3 +88,11 @@ Stati usati:
 - `15-todo-switch-core.md`: documentata la decisione sul formato dello stream
   eventi post-switch: formato ufficiale `plain`, formato `verbose`
   configurabile con `seq`, e formato shadow temporaneo con prefisso `core`.
+- `modules/inotify/src/watch_manager.c`: abilitati `IN_MODIFY` e
+  `IN_CLOSE_WRITE` nella maschera predefinita usata da `config_t.watch_mask`.
+- `app/src/utils.c`: aggiornata la stampa dei raw log per mostrare `IN_MODIFY`
+  e `IN_CLOSE_WRITE`.
+- `05-modulo-inotify.md`, `12-confronto-shadow-mode.md`,
+  `13-semantica-eventi.md`, `14-scenari-test.md` e `15-todo-switch-core.md`:
+  aggiornato il punto 6 con i risultati osservati per `FILE_MODIFIED` e
+  `FILE_READY`.

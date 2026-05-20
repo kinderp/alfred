@@ -229,8 +229,8 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 
 | Scenario | Stato | Note |
 | --- | --- | --- |
-| `create_file` | coincide | Entrambi producono `FILE_CREATED`. |
-| `delete_file` | coincide | Entrambi producono `FILE_CREATED` e `FILE_DELETED`. |
+| `create_file` | differisce atteso | Legacy produce `FILE_CREATED`; core produce anche `FILE_MODIFIED` e `FILE_READY`. |
+| `delete_file` | differisce atteso | Legacy produce `FILE_CREATED` e `FILE_DELETED`; core produce anche `FILE_MODIFIED` e `FILE_READY`. |
 | `rename_file` | coincide | Entrambi producono `FILE_RENAMED`. |
 | `create_dir` | coincide | Entrambi producono `DIR_CREATED`. |
 | `delete_dir` | differisce | Legacy produce anche `WATCH_REMOVED`; il core no. |
@@ -239,7 +239,7 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 | `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
 | `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_CREATED` per la directory scoperta e poi `DIR_RELOCATED`. |
 | `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
-| `modify_close_write_file` | coincide incompleto | Entrambi vedono solo `FILE_CREATED`, perche' la maschera inotify attuale non sottoscrive ancora `IN_MODIFY` e `IN_CLOSE_WRITE`. |
+| `modify_close_write_file` | differisce atteso | Legacy vede solo `FILE_CREATED`; core vede `FILE_CREATED`, due `FILE_MODIFIED` e due `FILE_READY`. |
 | `recursive_create_nested_dir` | core recupera eventi | Legacy produce solo `DIR_CREATED $ROOT/one`; core produce anche `DIR_CREATED` per `one/two` e `one/two/three`. |
 | `recursive_create_slow_nested_dir` | coincide | Crea le stesse directory con pause; legacy e core producono tre `DIR_CREATED` senza duplicati. |
 
@@ -406,10 +406,10 @@ Questo scenario e' importante perche' separa il caso `DIR_MOVED` dal caso
 `DIR_RELOCATED`: se il nome rimane uguale, il core non deve produrre
 `DIR_RELOCATED`.
 
-### Punto aperto: modify, close-write e file-ready
+### Differenza attesa: modify, close-write e file-ready
 
-Lo scenario `modify_close_write_file` serve a osservare la futura integrazione
-tra eventi di scrittura del backend e semantica del core.
+Lo scenario `modify_close_write_file` osserva l'integrazione tra eventi di
+scrittura del backend e semantica del core.
 
 Scenario:
 
@@ -427,14 +427,14 @@ ALFRED_RAW_MODIFY      -> FILE_MODIFIED
 ALFRED_RAW_CLOSE_WRITE -> FILE_READY
 ```
 
-Il backend inotify, pero', oggi usa una maschera di watch che non include ancora:
+Il backend inotify ora usa una maschera di watch che include:
 
 ```text
 IN_MODIFY
 IN_CLOSE_WRITE
 ```
 
-Per questo il risultato osservato e' ancora:
+Per questo il risultato osservato e':
 
 ```text
 Legacy:
@@ -442,27 +442,37 @@ Legacy:
 
 Core:
   FILE_CREATED path=$ROOT/editable.txt
+  FILE_MODIFIED path=$ROOT/editable.txt
+  FILE_READY path=$ROOT/editable.txt
+  FILE_MODIFIED path=$ROOT/editable.txt
+  FILE_READY path=$ROOT/editable.txt
 ```
 
-Con `--keep-logs`, il `raw.log` conferma che in questa fase arriva solo:
+Con `--keep-logs`, il `raw.log` conferma che arrivano eventi kernel distinti
+per la creazione e per la modifica successiva:
 
 ```text
 IN_CREATE wd=1 path=$ROOT name=editable.txt
+IN_MODIFY wd=1 path=$ROOT name=editable.txt
+IN_CLOSE_WRITE wd=1 path=$ROOT name=editable.txt
+IN_MODIFY wd=1 path=$ROOT name=editable.txt
+IN_CLOSE_WRITE wd=1 path=$ROOT name=editable.txt
 ```
 
-Quindi questo scenario non dimostra un limite del core. Dimostra che il backend
-non sta ancora consegnando al core i raw event necessari per `FILE_MODIFIED` e
-`FILE_READY`.
+Il legacy non cambia perche' `modules/inotify/src/events.c` ignora ancora
+`IN_MODIFY` e `IN_CLOSE_WRITE`. Il core invece riceve quei raw event attraverso
+`inotify_adapter.c` e li trasforma in eventi semantici.
 
-Decisione da discutere:
+Decisione da confermare:
 
 ```text
-quando abilitiamo IN_MODIFY e IN_CLOSE_WRITE nella maschera del backend?
+FILE_READY deve essere considerato evento semantico ufficiale dopo close-write.
 ```
 
-Questa scelta e' delicata perche' aumentera' il numero di eventi raw osservati e
-rendera' diversi molti scenari shadow su file: una semplice scrittura potra'
-produrre `FILE_CREATED`, `FILE_MODIFIED` e/o `FILE_READY`.
+Questa scelta e' delicata perche' rende piu' ricco lo stream degli eventi file:
+una semplice scrittura puo' produrre `FILE_CREATED`, `FILE_MODIFIED` e
+`FILE_READY`. Per applicazioni come indicizzatori o backup questo e' utile,
+perche' `FILE_READY` segnala che lo scrittore ha chiuso il file.
 
 ### Caso delicato: recursive create nested directory
 

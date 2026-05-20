@@ -75,10 +75,11 @@ documentare differenze attese.
 Scenari ancora utili:
 
 - move directory semplice: aggiunto come `move_dir`, allineato tra legacy e core
-- modify file: aggiunto come `modify_close_write_file`, ma oggi osserva solo
-  `FILE_CREATED` perche' la maschera inotify non include `IN_MODIFY`
-- close-write / file ready: scenario predisposto, da rivalutare quando la
-  maschera inotify includera' `IN_CLOSE_WRITE`
+- modify file: aggiunto come `modify_close_write_file`; ora il backend consegna
+  `IN_MODIFY` e il core produce `FILE_MODIFIED`
+- close-write / file ready: il backend consegna `IN_CLOSE_WRITE` e il core
+  produce `FILE_READY`; resta da confermare che questo diventi comportamento
+  ufficiale dopo lo switch
 - overflow, se riproducibile
 
 ### 2. Rendere esplicite le differenze attese

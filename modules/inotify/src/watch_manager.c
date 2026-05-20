@@ -26,6 +26,8 @@ uint32_t watch_manager_default_mask(void)
     return
         IN_CREATE      |
         IN_DELETE      |
+        IN_MODIFY      |
+        IN_CLOSE_WRITE |
         IN_MOVED_FROM  |
         IN_MOVED_TO    |
         IN_DELETE_SELF |

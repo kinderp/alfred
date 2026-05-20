@@ -677,10 +677,10 @@ close $ROOT/editable.txt
 Scopo:
 
 ```text
-osservare se il backend consegna al core IN_MODIFY e IN_CLOSE_WRITE.
+osservare come il core interpreta IN_MODIFY e IN_CLOSE_WRITE.
 ```
 
-Semantica core attesa quando i raw event arriveranno:
+Semantica core:
 
 ```text
 ALFRED_RAW_MODIFY      -> FILE_MODIFIED
@@ -692,18 +692,25 @@ Output normalizzato osservato oggi:
 ```text
 Legacy: FILE_CREATED path=$ROOT/editable.txt
 Core:   FILE_CREATED path=$ROOT/editable.txt
+        FILE_MODIFIED path=$ROOT/editable.txt
+        FILE_READY path=$ROOT/editable.txt
+        FILE_MODIFIED path=$ROOT/editable.txt
+        FILE_READY path=$ROOT/editable.txt
 ```
 
 Raw log osservato oggi con `--keep-logs`:
 
 ```text
 IN_CREATE path=$ROOT name=editable.txt
+IN_MODIFY path=$ROOT name=editable.txt
+IN_CLOSE_WRITE path=$ROOT name=editable.txt
+IN_MODIFY path=$ROOT name=editable.txt
+IN_CLOSE_WRITE path=$ROOT name=editable.txt
 ```
 
-Conclusione: lo scenario e' pronto, ma la maschera inotify attuale non include
-ancora `IN_MODIFY` e `IN_CLOSE_WRITE`. Finche' quei flag non saranno aggiunti al
-watch backend, il core non potra' produrre `FILE_MODIFIED` o `FILE_READY` nel
-programma completo, anche se la logica esiste gia' nel correlator.
+Conclusione: il backend ora consegna al core anche gli eventi di modifica e
+close-write. Il legacy dispatcher resta piu' povero perche' ignora quei flag,
+mentre il core espone la vita del file in modo piu' completo.
 
 ### recursive_create_nested_dir
 
