@@ -151,6 +151,49 @@ I test funzionali verificano il comportamento del programma dall'esterno.
 Per esempio possono creare, spostare o cancellare file e poi controllare che il
 programma abbia registrato gli eventi corretti.
 
+## Test shadow
+
+Durante l'integrazione del core esiste anche un tool diagnostico in:
+
+```text
+tests/shadow/compare_shadow_output.py
+```
+
+Questo tool non sostituisce i test funzionali. Serve a confrontare due percorsi
+interni:
+
+```text
+legacy dispatcher inotify -> events.log
+core in shadow mode       -> events.log con prefisso core
+```
+
+Esempio:
+
+```bash
+python3 tests/shadow/compare_shadow_output.py move_rename_dir
+```
+
+Il tool stampa quattro sezioni:
+
+- `Legacy`: eventi prodotti dal vecchio dispatcher
+- `Core`: eventi prodotti dal core
+- `Only in legacy`: eventi presenti solo nel vecchio percorso
+- `Only in core`: eventi presenti solo nel nuovo percorso
+
+Una differenza non e' automaticamente un bug. Durante shadow mode puo' essere
+una differenza attesa, per esempio quando il legacy emette `DIR_MOVED` piu'
+`DIR_RENAMED` ma il core emette un solo `DIR_RELOCATED`.
+
+Usa `--strict` solo quando una differenza deve davvero far fallire il comando:
+
+```bash
+python3 tests/shadow/compare_shadow_output.py create_file --strict
+```
+
+Per gli scenari in cui stiamo ancora discutendo la semantica, e' meglio partire
+senza `--strict`, leggere l'output e aggiornare la documentazione con la
+decisione presa.
+
 ## Stress test
 
 Gli stress test sono in:

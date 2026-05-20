@@ -71,6 +71,7 @@ create_file
 delete_dir
 delete_file
 move_file
+move_rename_dir
 move_rename_file
 rename_dir
 rename_file
@@ -215,6 +216,7 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 | `delete_dir` | differisce | Legacy produce anche `WATCH_REMOVED`; il core no. |
 | `rename_dir` | coincide | Entrambi producono `DIR_RENAMED`. |
 | `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
+| `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_RELOCATED`. |
 | `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
@@ -284,6 +286,48 @@ Questa e' una decisione di API semantica, non solo una differenza tecnica. Se
 un'applicazione vuole trattare `FILE_RELOCATED` come "move + rename", potra'
 farlo a livello applicativo.
 
+### Differenza attesa: move and rename directory
+
+Lo scenario `move_rename_dir` verifica lo stesso ragionamento, ma applicato a
+una directory.
+
+Scenario:
+
+```text
+mkdir $ROOT/src
+mkdir $ROOT/dst
+mkdir $ROOT/src/before
+mv $ROOT/src/before $ROOT/dst/after
+```
+
+Dal punto di vista del path, cambiano due cose:
+
+- la directory contenitore passa da `$ROOT/src` a `$ROOT/dst`
+- il nome passa da `before` ad `after`
+
+Il legacy puo' produrre due eventi separati:
+
+```text
+DIR_MOVED from=$ROOT/src/before to=$ROOT/dst/after
+DIR_RENAMED from=$ROOT/src/before to=$ROOT/dst/after
+```
+
+Il core produce invece un solo evento semantico:
+
+```text
+DIR_RELOCATED from=$ROOT/src/before to=$ROOT/dst/after
+```
+
+Decisione:
+
+```text
+anche per le directory preferiamo un evento unico DIR_RELOCATED.
+```
+
+Questa differenza non va corretta facendo emettere al core due eventi. Va
+trattata come differenza attesa, perche' conferma che il core sta applicando la
+semantica target descritta in `13-semantica-eventi.md`.
+
 ## Prossimi scenari da aggiungere
 
 Scenari utili:
@@ -291,7 +335,6 @@ Scenari utili:
 - recursive create
 - queue overflow, se riproducibile
 - move directory
-- move and rename directory
 - modify file, se vogliamo confrontare debounce e close-write
 
 Ogni scenario dovrebbe essere piccolo e leggibile.

@@ -247,20 +247,20 @@ DIR_RELOCATED
 | Aggiunta watch | dettaglio backend | dettaglio backend | nessun evento core | nessun evento core |
 | Rimozione watch | dettaglio backend | dettaglio backend | nessun evento core | nessun evento core |
 
-## Perche' FILE_RELOCATED e' un solo evento
+## Perche' RELOCATED e' un solo evento
 
-Il legacy, nello scenario in cui un file cambia sia directory sia nome, puo'
+Il legacy, nello scenario in cui un oggetto cambia sia directory sia nome, puo'
 produrre due eventi:
 
 ```text
-FILE_MOVED
-FILE_RENAMED
+FILE_MOVED oppure DIR_MOVED
+FILE_RENAMED oppure DIR_RENAMED
 ```
 
 Il core produce invece:
 
 ```text
-FILE_RELOCATED
+FILE_RELOCATED oppure DIR_RELOCATED
 ```
 
 Preferiamo il comportamento del core perche' l'operazione osservata e' una sola:
@@ -268,6 +268,34 @@ un oggetto passa da un path sorgente a un path destinazione. Se un'applicazione
 vuole trattare il relocate come "move + rename", potra' farlo lei. Se invece il
 core emettesse sempre due eventi, sarebbe piu' difficile per l'applicazione
 ricostruire che si trattava di una sola operazione logica.
+
+Esempio su directory:
+
+```text
+prima: /tmp/progetto/src/before
+dopo:  /tmp/progetto/dst/after
+```
+
+La directory contenitore cambia:
+
+```text
+/tmp/progetto/src -> /tmp/progetto/dst
+```
+
+Il nome cambia:
+
+```text
+before -> after
+```
+
+Evento core:
+
+```text
+DIR_RELOCATED
+```
+
+Anche se il vecchio dispatcher puo' descrivere questo caso come `DIR_MOVED`
+piu' `DIR_RENAMED`, la semantica target del core resta un evento unico.
 
 ## Overflow
 

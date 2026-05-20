@@ -25,3 +25,12 @@ Stati usati:
 | Completo | `12-confronto-shadow-mode.md` |
 | Completo | `13-semantica-eventi.md` |
 | Parziale | `glossario.md` |
+
+## Aggiornamenti recenti
+
+- `10-debugging-test-e-strumenti.md`: aggiunta spiegazione dei test shadow e
+  dell'uso prudente di `--strict`.
+- `12-confronto-shadow-mode.md`: aggiunto lo scenario `move_rename_dir` e la
+  differenza attesa tra legacy e core.
+- `13-semantica-eventi.md`: chiarito che `RELOCATED` e' un evento unico sia per
+  file sia per directory.
