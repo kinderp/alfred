@@ -243,6 +243,7 @@ Questo semplifica cleanup e ownership.
 - watch ricorsivo attivo
 - capacita' iniziali delle tabelle
 - mask inotify di default
+- motore eventi in `shadow`
 - nomi standard dei log
 
 `config_load()` legge righe semplici:
@@ -256,8 +257,49 @@ Esempio:
 ```text
 recursive=true
 move_cache_size=256
+event_engine=shadow
 raw_log=myraw.log
 ```
+
+La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
+`ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile
+o valori di configurazione non validi.
+
+La chiave `event_engine` accetta:
+
+```text
+shadow
+core
+```
+
+`shadow` e' il default. In questa modalita' Alfred mantiene due stream:
+
+```text
+legacy dispatcher -> evento ufficiale storico
+core              -> evento shadow con prefisso core
+```
+
+`core` rende invece il core la sorgente ufficiale degli eventi semantici:
+
+```text
+core -> evento ufficiale plain
+```
+
+In `core` mode il vecchio dispatcher `events.c` non viene chiamato dal loop
+principale, quindi non produce eventi semantici legacy. Il modulo inotify
+continua comunque a produrre diagnostica backend come `WATCH_ADDED`, perche'
+quella diagnostica nasce dal watch manager, non dal dispatcher semantico legacy.
+
+Nota temporanea dell'integrazione: `config_load()` sa gia' leggere
+`event_engine`, ma l'avvio del programma non espone ancora un'opzione CLI per
+indicare un file di configurazione. Per provare la modalita' core durante lo
+switch si usa l'override d'ambiente:
+
+```bash
+ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare
+```
+
+Senza override, Alfred resta in `shadow`.
 
 ## app/src/logger.c
 

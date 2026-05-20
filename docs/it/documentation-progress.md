@@ -104,3 +104,20 @@ Stati usati:
 - `02-architettura-generale.md`: esteso lo schema `inotify ->
   alfred_raw_event_t -> alfred_event_t` con `IN_MODIFY`, `IN_CLOSE_WRITE`,
   `FILE_MODIFIED` e `FILE_READY`.
+- `02-architettura-generale.md`: corrette le label lunghe del diagramma a tre
+  livelli spezzando flag e path su piu' righe per evitare testo tagliato nei
+  rettangoli Mermaid.
+- `app/include/config.h`, `app/src/config.c`, `app/include/core_logger.h`,
+  `app/src/core_logger.c`, `app/include/app.h` e `app/src/app.c`: aggiunta la
+  modalita' `event_engine=shadow|core`, con `shadow` come default e override
+  temporaneo `ALFRED_EVENT_ENGINE=core` per provare il core come stream
+  ufficiale.
+- `04-livello-applicazione.md`, `07-flusso-eventi.md`,
+  `10-debugging-test-e-strumenti.md`, `12-confronto-shadow-mode.md` e
+  `15-todo-switch-core.md`: documentata la differenza tra shadow mode e core
+  mode, incluso il formato plain ufficiale del core.
+- `app/include/config.h` e `app/src/config.c`: aggiornate le API di
+  configurazione per restituire codici `error_t` invece di `-1` generico.
+- `.gitignore` e `10-debugging-test-e-strumenti.md`: esclusi i log di runtime
+  dai file versionati; i log tracciati in `tests/functional/` sono stati rimossi
+  dall'indice.

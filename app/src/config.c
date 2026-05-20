@@ -40,6 +40,7 @@ void config_defaults(config_t *cfg)
     cfg->watcher_capacity   = 128;
 
     cfg->watch_mask = watch_manager_default_mask();
+    cfg->event_engine_mode = EVENT_ENGINE_SHADOW;
 
     snprintf(cfg->raw_log,
              sizeof(cfg->raw_log),
@@ -104,6 +105,46 @@ static int parse_bool(const char *value)
     return 0;
 }
 
+/*
+ * config_set_event_engine - parse the event engine mode option
+ *
+ * The mode controls which semantic stream is official at runtime. Keeping this
+ * parser centralized lets config files and temporary environment overrides use
+ * exactly the same accepted values.
+ */
+error_t config_set_event_engine(config_t *cfg, const char *value)
+{
+    if (cfg == NULL || value == NULL)
+        return ERR_INVALID_ARG;
+
+    if (strcmp(value, "shadow") == 0) {
+        cfg->event_engine_mode = EVENT_ENGINE_SHADOW;
+        return ERR_OK;
+    }
+
+    if (strcmp(value, "core") == 0) {
+        cfg->event_engine_mode = EVENT_ENGINE_CORE;
+        return ERR_OK;
+    }
+
+    return ERR_CONFIG;
+}
+
+/*
+ * config_event_engine_name - render an event engine mode for diagnostics
+ */
+const char *config_event_engine_name(event_engine_mode_t mode)
+{
+    switch (mode) {
+        case EVENT_ENGINE_SHADOW:
+            return "shadow";
+        case EVENT_ENGINE_CORE:
+            return "core";
+        default:
+            return "unknown";
+    }
+}
+
 /* ============================================================================
  * Config File Loading
  * ========================================================================== */
@@ -122,19 +163,21 @@ static int parse_bool(const char *value)
  *   recursive=true
  *   use_epoll=false
  *   move_cache_size=256
+ *   event_engine=shadow
  *   raw_log=myraw.log
  *
- * Return: 0 on success, -1 on invalid input or file open failure.
+ * Return: ERR_OK on success, ERR_INVALID_ARG for invalid input, or ERR_CONFIG
+ * for file open and parse failures.
  */
-int config_load(config_t *cfg, const char *path)
+error_t config_load(config_t *cfg, const char *path)
 {
     if (cfg == NULL || path == NULL)
-        return -1;
+        return ERR_INVALID_ARG;
 
     FILE *fp = fopen(path, "r");
 
     if (fp == NULL)
-        return -1;
+        return ERR_CONFIG;
 
     char line[512];
 
@@ -190,6 +233,14 @@ int config_load(config_t *cfg, const char *path)
                 atoi(value);
         }
 
+        else if (strcmp(key, "event_engine") == 0) {
+
+            if (config_set_event_engine(cfg, value) != ERR_OK) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+        }
+
         else if (strcmp(key, "raw_log") == 0) {
 
             snprintf(cfg->raw_log,
@@ -217,5 +268,5 @@ int config_load(config_t *cfg, const char *path)
 
     fclose(fp);
 
-    return 0;
+    return ERR_OK;
 }

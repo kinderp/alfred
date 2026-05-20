@@ -163,10 +163,10 @@ flowchart LR
 
     subgraph Raw[alfred_raw_event_t]
         B1["ALFRED_RAW_CREATE<br/>path=$ROOT/file.txt"]
-        B2["ALFRED_RAW_MOVED_FROM<br/>cookie=42 path=$ROOT/old.txt"]
-        B3["ALFRED_RAW_MOVED_TO<br/>cookie=42 path=$ROOT/new.txt"]
-        B4["ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR<br/>path=$ROOT/one"]
-        B5["synthetic ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR<br/>path=$ROOT/one/two"]
+        B2["ALFRED_RAW_MOVED_FROM<br/>cookie=42<br/>path=$ROOT/old.txt"]
+        B3["ALFRED_RAW_MOVED_TO<br/>cookie=42<br/>path=$ROOT/new.txt"]
+        B4["ALFRED_RAW_CREATE<br/>ALFRED_RAW_ISDIR<br/>path=$ROOT/one"]
+        B5["synthetic raw<br/>ALFRED_RAW_CREATE<br/>ALFRED_RAW_ISDIR<br/>path=$ROOT/one/two"]
         B6["ALFRED_RAW_MODIFY<br/>path=$ROOT/file.txt"]
         B7["ALFRED_RAW_CLOSE_WRITE<br/>path=$ROOT/file.txt"]
     end
@@ -190,6 +190,11 @@ flowchart LR
     A5 --> B6 --> C5
     A6 --> B7 --> C6
 ```
+
+Nota di stile per i diagrammi Mermaid: quando un nodo contiene flag lunghi o
+path, spezzare il testo con piu' `<br/>`. In questo modo il rettangolo generato
+da Mermaid resta leggibile anche nei renderer che non allargano abbastanza i
+nodi.
 
 Il primo livello e' specifico del backend. Oggi e' Linux `inotify`, quindi gli
 eventi sono `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`, `IN_MOVED_TO` e cosi'

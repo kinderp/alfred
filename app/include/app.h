@@ -15,6 +15,7 @@
 
 #include "config.h"
 #include "alfred_correlator.h"
+#include "core_logger.h"
 #include "watcher.h"
 #include "logger.h"
 #include "move_cache.h"
@@ -61,6 +62,7 @@ typedef struct app {
      * the same raw events for comparison.
      */
     alfred_config_t core_config;
+    core_logger_context_t core_logger_context;
     alfred_engine_t *core;
 
     /*

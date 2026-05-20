@@ -15,6 +15,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "errors.h"
+
+/*
+ * event_engine_mode_t - semantic event engine selection
+ *
+ * SHADOW keeps the legacy dispatcher as the official event stream and logs the
+ * core output with a `core ...` prefix for comparison. CORE makes the core the
+ * official plain event stream and skips legacy semantic dispatch.
+ */
+typedef enum {
+    EVENT_ENGINE_SHADOW = 0,
+    EVENT_ENGINE_CORE
+} event_engine_mode_t;
+
 /*
  * config_t - runtime configuration values
  *
@@ -42,6 +56,9 @@ typedef struct {
     /* Backend-specific event mask used when adding inotify watches. */
     uint32_t watch_mask;
 
+    /* Selects whether semantic events come from legacy shadow mode or core. */
+    event_engine_mode_t event_engine_mode;
+
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];
     char event_log[PATH_MAX];
@@ -58,9 +75,26 @@ typedef struct {
  * keys are ignored so newer config files remain mostly compatible with older
  * binaries.
  *
- * Return: 0 on success, -1 on invalid input or file open failure.
+ * Return: ERR_OK on success, ERR_INVALID_ARG or ERR_CONFIG on failure.
  */
-int config_load(config_t *cfg, const char *path);
+error_t config_load(config_t *cfg, const char *path);
+
+/*
+ * config_set_event_engine - parse and set the semantic event engine mode
+ * @cfg: configuration object to update
+ * @value: expected value, either "shadow" or "core"
+ *
+ * Return: ERR_OK on success, ERR_INVALID_ARG or ERR_CONFIG on failure.
+ */
+error_t config_set_event_engine(config_t *cfg, const char *value);
+
+/*
+ * config_event_engine_name - render an event engine mode for logs/docs
+ * @mode: event engine mode to render
+ *
+ * Return: stable string name for @mode.
+ */
+const char *config_event_engine_name(event_engine_mode_t mode);
 
 /*
  * config_defaults - initialize configuration with safe defaults

@@ -8,20 +8,13 @@
  */
 
 #include "core_logger.h"
-#include "logger.h"
-
 /* ============================================================================
- * Callback Implementation
+ * Local Formatting Helpers
  * ============================================================================
  */
 
-void core_logger_on_event(const alfred_event_t *ev, void *userdata)
+static void log_shadow_event(logger_t *logger, const alfred_event_t *ev)
 {
-    logger_t *logger = userdata;
-
-    if (ev == NULL || logger == NULL)
-        return;
-
     if (ev->dst_path != NULL) {
         logger_event(logger,
                      "core seq=%llu type=%s from=%s to=%s pid=%d",
@@ -39,4 +32,41 @@ void core_logger_on_event(const alfred_event_t *ev, void *userdata)
                  alfred_event_name(ev->type),
                  ev->src_path ? ev->src_path : "",
                  (int)ev->pid);
+}
+
+static void log_plain_event(logger_t *logger, const alfred_event_t *ev)
+{
+    if (ev->dst_path != NULL) {
+        logger_event(logger,
+                     "%s from=%s to=%s",
+                     alfred_event_name(ev->type),
+                     ev->src_path ? ev->src_path : "",
+                     ev->dst_path);
+        return;
+    }
+
+    logger_event(logger,
+                 "%s path=%s",
+                 alfred_event_name(ev->type),
+                 ev->src_path ? ev->src_path : "");
+}
+
+/* ============================================================================
+ * Callback Implementation
+ * ============================================================================
+ */
+
+void core_logger_on_event(const alfred_event_t *ev, void *userdata)
+{
+    core_logger_context_t *context = userdata;
+
+    if (ev == NULL || context == NULL || context->logger == NULL)
+        return;
+
+    if (context->event_engine_mode == EVENT_ENGINE_CORE) {
+        log_plain_event(context->logger, ev);
+        return;
+    }
+
+    log_shadow_event(context->logger, ev);
 }

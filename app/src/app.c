@@ -220,6 +220,22 @@ int app_init(app_t *app, int argc, char **argv)
     config_defaults(&app->config);
 
     /*
+     * Temporary integration override. config_load() can parse event_engine, but
+     * startup does not yet accept a config file path, so the environment keeps
+     * core-mode testing possible without changing the CLI contract.
+     */
+    const char *event_engine_env = getenv("ALFRED_EVENT_ENGINE");
+    if (event_engine_env != NULL &&
+        config_set_event_engine(&app->config, event_engine_env) != ERR_OK) {
+
+        fprintf(stderr,
+                "invalid ALFRED_EVENT_ENGINE=%s (expected shadow or core)\n",
+                event_engine_env);
+        error = ERR_INVALID_ARG;
+        goto fail;
+    }
+
+    /*
      * The logger is initialized early because every following subsystem uses
      * it for diagnostics. Failures before this point must use stderr.
      */
@@ -241,9 +257,13 @@ int app_init(app_t *app, int argc, char **argv)
      * mode beside the legacy dispatcher.
      */
     alfred_config_default(&app->core_config);
+    app->core_logger_context.logger = &app->logger;
+    app->core_logger_context.event_engine_mode =
+        app->config.event_engine_mode;
+
     app->core = alfred_create(&app->core_config,
                               core_logger_on_event,
-                              &app->logger);
+                              &app->core_logger_context);
 
     if (app->core == NULL) {
         logger_error(&app->logger,
@@ -254,7 +274,8 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     logger_info(&app->logger,
-                "alfred core initialized in shadow mode");
+                "alfred core initialized event_engine=%s",
+                config_event_engine_name(app->config.event_engine_mode));
 
     /*
      * The watcher table maps inotify watch descriptors back to paths. Event
@@ -441,7 +462,9 @@ int app_run(app_t *app)
             );
 
             dispatch_event_to_core(app, ev);
-            app_dispatch_raw_event(app, ev);
+
+            if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
+                app_dispatch_raw_event(app, ev);
 
             ptr += sizeof(struct inotify_event)
                    + ev->len;

@@ -45,6 +45,42 @@ esistente.
 
 Il nuovo percorso core produce output aggiuntivo con prefisso `core`.
 
+## Flusso in core mode
+
+Durante lo switch verso il core possiamo avviare Alfred con:
+
+```bash
+ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare
+```
+
+In questa modalita' lo stesso evento percorre solo il percorso semantico del
+core:
+
+```mermaid
+flowchart TD
+    A[struct inotify_event] --> B[dispatch_event_to_core]
+    B --> C[inotify_adapter_build_raw]
+    C --> D[alfred_raw_event_t]
+    D --> E[alfred_process]
+    E --> F[core_logger_on_event]
+    F --> G[logger_event plain output]
+```
+
+Il vecchio dispatcher `app_dispatch_raw_event()` non viene chiamato. Questo e'
+il punto chiave: `events.c` resta nel codice per il confronto in shadow mode, ma
+non produce lo stream ufficiale quando `event_engine=core`.
+
+Esempio di output in core mode:
+
+```text
+[EVENT] FILE_CREATED path=/tmp/a.txt
+[EVENT] FILE_MODIFIED path=/tmp/a.txt
+[EVENT] FILE_READY path=/tmp/a.txt
+```
+
+Non c'e' prefisso `core` perche' il core non e' piu' un secondo stream di
+confronto: e' la sorgente ufficiale.
+
 ## Perche' usare shadow mode
 
 Shadow mode serve a confrontare due implementazioni:

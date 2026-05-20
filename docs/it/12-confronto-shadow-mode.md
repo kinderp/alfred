@@ -191,6 +191,18 @@ core seq=2 type=FILE_RENAMED from=/tmp/a.txt to=/tmp/b.txt pid=0
 
 Entrambi vengono convertiti in una forma comune.
 
+Questo parser e' pensato per `event_engine=shadow`, cioe' per il formato in cui
+il core usa il prefisso `core`. Quando Alfred viene avviato con
+`ALFRED_EVENT_ENGINE=core`, il core scrive invece lo stream ufficiale plain:
+
+```text
+FILE_CREATED path=/tmp/a.txt
+FILE_RENAMED from=/tmp/a.txt to=/tmp/b.txt
+```
+
+Quella modalita' serve a provare lo switch, non a confrontare legacy e core nello
+stesso `events.log`.
+
 ## Come leggere le differenze
 
 `Only in legacy` significa:

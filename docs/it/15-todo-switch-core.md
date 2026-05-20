@@ -55,7 +55,10 @@ Al momento:
 
 - il core e' inizializzato in `app_t`
 - il runtime manda eventi inotify al core in shadow mode
-- il legacy dispatcher continua a scrivere il comportamento ufficiale
+- `event_engine=shadow` e' il default e mantiene il legacy dispatcher come
+  stream ufficiale storico
+- `ALFRED_EVENT_ENGINE=core` abilita una modalita' di prova in cui il core
+  scrive lo stream ufficiale plain e il legacy dispatcher non viene chiamato
 - `events.c` contiene ancora semantica legacy
 - `move_cache.c` e' ancora usato dal legacy dispatcher
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
@@ -105,7 +108,23 @@ Esempi gia' decisi:
 Quando gli scenari principali sono documentati, l'app dovrebbe usare l'output
 del core come evento ufficiale.
 
-In pratica:
+Stato attuale:
+
+```text
+event_engine=shadow
+    core_logger_on_event -> logger_event con prefisso core
+    legacy events.c      -> logger_event ufficiale storico
+
+ALFRED_EVENT_ENGINE=core
+    core_logger_on_event -> logger_event ufficiale plain
+    legacy events.c      -> non chiamato dal loop
+```
+
+Quindi lo switch e' gia' provabile senza rimuovere subito `events.c`. Questa e'
+una scelta prudente: conserva il confronto shadow e permette di testare il core
+come sorgente ufficiale.
+
+Disegno finale:
 
 ```text
 core_logger_on_event -> logger_event ufficiale

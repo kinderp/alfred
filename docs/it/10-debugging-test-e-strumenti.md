@@ -230,6 +230,28 @@ Questa distinzione aiuta a capire casi come `mkdir -p`: il backend puo' aver
 aggiunto i watch alle sottodirectory anche se non ha ricevuto, e quindi non ha
 potuto inoltrare al core, i relativi eventi `DIR_CREATED`.
 
+## Provare il core come stream ufficiale
+
+Il confronto shadow resta il default. Per provare il core come sorgente
+ufficiale degli eventi semantici, usare l'override d'ambiente:
+
+```bash
+ALFRED_EVENT_ENGINE=core ./alfred /tmp/cartella-da-osservare
+```
+
+In questa modalita' `events.log` usa il formato plain:
+
+```text
+FILE_CREATED path=...
+FILE_MODIFIED path=...
+FILE_READY path=...
+```
+
+Il prefisso `core seq=...` non compare perche' non stiamo piu' scrivendo un
+secondo stream shadow. Il vecchio dispatcher semantico non viene chiamato dal
+loop principale, quindi le differenze rispetto al legacy vanno osservate
+confrontando run separate oppure tornando al tool shadow.
+
 ## Stress test
 
 Gli stress test sono in:
@@ -364,6 +386,10 @@ Controlla:
 - quale output era atteso
 - quale output e' stato prodotto
 - se ci sono log in `raw.log`, `events.log`, `errors.log`
+
+I log sono output di runtime. Non devono essere versionati: `raw.log`,
+`events.log`, `errors.log` e le varianti dentro `tests/functional/` vengono
+riscritti dai test o dalle run manuali e sono ignorati da `.gitignore`.
 
 ## Strategia consigliata per studenti
 
