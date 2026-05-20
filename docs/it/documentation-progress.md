@@ -85,3 +85,6 @@ Stati usati:
   abilita ancora `IN_MODIFY` e `IN_CLOSE_WRITE`.
 - `15-todo-switch-core.md`: aggiornato lo stato dei punti su move directory,
   modify e close-write/file-ready.
+- `15-todo-switch-core.md`: documentata la decisione sul formato dello stream
+  eventi post-switch: formato ufficiale `plain`, formato `verbose`
+  configurabile con `seq`, e formato shadow temporaneo con prefisso `core`.

@@ -112,6 +112,47 @@ legacy events.c      -> solo confronto o rimozione
 Durante questa fase bisogna decidere se mantenere temporaneamente un prefisso
 `core` oppure rimuoverlo quando il core diventa sorgente ufficiale.
 
+Decisione documentata:
+
+```text
+lo stream ufficiale deve restare semantico e leggibile;
+il numero di sequenza resta metadato di debug, non parte della semantica.
+```
+
+Formato ufficiale desiderato:
+
+```text
+FILE_CREATED path=...
+DIR_MOVED from=... to=...
+FILE_READY path=...
+```
+
+Formato verbose/debug configurabile:
+
+```text
+seq=17 FILE_CREATED path=...
+seq=18 DIR_MOVED from=... to=...
+```
+
+Formato shadow temporaneo attuale:
+
+```text
+core seq=17 type=FILE_CREATED path=... pid=...
+```
+
+Il formato shadow attuale serve al confronto legacy/core e puo' restare finche'
+lo shadow mode e' attivo. Quando il core diventera' sorgente ufficiale, conviene
+aggiungere un'opzione di configurazione esplicita, per esempio:
+
+```text
+event_log_format=plain
+event_log_format=verbose
+```
+
+`plain` dovrebbe essere il default. `verbose` potra' includere almeno `seq`,
+perche' aiuta a ricostruire l'ordine degli eventi, diagnosticare duplicati,
+confrontare raw log ed event log, e discutere sequenze complesse nei test.
+
 ### 4. Rimuovere `move_cache` dal modulo inotify
 
 Quando il core gestisce ufficialmente move e rename:
