@@ -15,6 +15,12 @@ Motore centrale che interpreta eventi raw e produce eventi semantici.
 
 Evento vicino al sistema operativo, non ancora interpretato completamente.
 
+## Evento raw sintetico
+
+Evento `alfred_raw_event_t` creato da Alfred invece che ricevuto direttamente
+dal backend. Serve quando il programma scopre un fatto reale tramite scan, per
+esempio una directory creata prima che fosse aggiunto il watch inotify.
+
 ## Evento semantico
 
 Evento gia' interpretato dal core, per esempio `FILE_RENAMED`.
@@ -40,6 +46,12 @@ esempio `/tmp/a.txt -> /var/b.txt` diventa `FILE_RELOCATED`.
 Modalita' temporanea in cui il vecchio dispatcher e il nuovo core ricevono gli
 stessi eventi raw. Il vecchio dispatcher resta il comportamento ufficiale,
 mentre il core viene osservato e confrontato.
+
+## Dedup
+
+Abbreviazione di deduplicazione. Indica la logica che evita di produrre due
+volte lo stesso evento logico, per esempio due `DIR_CREATED` per lo stesso path
+arrivati a causa di un evento sintetico e di un evento reale molto ravvicinati.
 
 ## Linking
 

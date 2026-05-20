@@ -343,11 +343,14 @@ DIR_RENAMED from=$ROOT/src/before to=$ROOT/dst/after
 Event log core target:
 
 ```text
+core ... type=DIR_CREATED path=$ROOT/src/before
 core ... type=DIR_RELOCATED from=$ROOT/src/before to=$ROOT/dst/after
 ```
 
 Questa differenza e' intenzionale: il core considera move+rename come una sola
-operazione semantica `DIR_RELOCATED`.
+operazione semantica `DIR_RELOCATED`. Inoltre il core puo' recuperare
+`DIR_CREATED` per `src/before` tramite raw event sintetico, se quella directory
+e' stata creata prima che il watch su `src` fosse installato.
 
 ### move and rename file
 
@@ -609,10 +612,13 @@ Atteso:
 
 ```text
 Legacy: DIR_MOVED + DIR_RENAMED
-Core:   DIR_RELOCATED
+Core:   DIR_CREATED path=$ROOT/src/before
+        DIR_RELOCATED
 ```
 
-Differenza attesa: il core rappresenta una singola operazione logica.
+Differenza attesa: il core rappresenta move+rename come una singola operazione
+logica `DIR_RELOCATED` e puo' recuperare anche la creazione iniziale della
+directory tramite raw event sintetico.
 
 ### recursive_create_nested_dir
 
@@ -627,6 +633,8 @@ Output normalizzato osservato:
 ```text
 Legacy: DIR_CREATED path=$ROOT/one
 Core:   DIR_CREATED path=$ROOT/one
+        DIR_CREATED path=$ROOT/one/two
+        DIR_CREATED path=$ROOT/one/two/three
 ```
 
 Con `--keep-logs`, `events.log` mostra anche:
@@ -643,8 +651,10 @@ WATCH_ADDED path=$ROOT/one/two/three
 IN_CREATE IN_ISDIR path=$ROOT name=one
 ```
 
-Conclusione: il backend aggiunge i watch correttamente, ma lo stream semantico
-non contiene ancora `DIR_CREATED` per `one/two` e `one/two/three`.
+Conclusione: il backend aggiunge i watch correttamente e il core recupera gli
+eventi semantici mancanti tramite raw event sintetici. Il legacy resta
+incompleto per questo scenario, quindi `Only in core` contiene `one/two` e
+`one/two/three`.
 
 ## Come usare questo capitolo
 

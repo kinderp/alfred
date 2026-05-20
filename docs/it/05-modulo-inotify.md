@@ -199,6 +199,47 @@ flowchart TD
     E --> F[logger/app]
 ```
 
+## Scan ricorsivo e discovery
+
+Quando Alfred monitora in modalita' ricorsiva, una nuova directory deve ricevere
+un watch. Il caso semplice e':
+
+```text
+IN_CREATE IN_ISDIR name=dir
+    -> watch_manager_add_recursive(dir)
+    -> WATCH_ADDED dir
+```
+
+Il caso difficile e':
+
+```text
+mkdir -p one/two/three
+```
+
+`inotify` puo' notificare solo `one`, perche' `two` e `three` vengono create
+prima che Alfred riesca ad aggiungere il watch su `one`.
+
+Per mitigare il problema, il watch manager attraversa ricorsivamente la nuova
+directory e aggiunge watch alle sottodirectory gia' presenti. Ora esiste anche
+una variante con callback di discovery:
+
+```c
+watch_manager_add_recursive_with_discovery(...)
+```
+
+Questa funzione continua ad aggiungere i watch, ma quando scopre una
+sottodirectory gia' esistente chiama una callback. Durante lo shadow mode la
+callback usata dall'app genera un raw event sintetico verso il core, cosi' il
+core puo' emettere il `DIR_CREATED` che inotify non ha potuto consegnare.
+
+Il watch manager non decide direttamente la semantica. Si limita a segnalare:
+
+```text
+ho scoperto questa directory durante lo scan
+```
+
+La trasformazione in `DIR_CREATED` resta responsabilita' del core.
+
 ## Perche' l'adapter non fa semantica
 
 L'adapter deve essere un traduttore, non un interprete.

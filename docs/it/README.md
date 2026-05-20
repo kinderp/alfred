@@ -21,7 +21,8 @@ piu' dettaglio.
 12. [Confronto shadow mode](12-confronto-shadow-mode.md)
 13. [Semantica degli eventi](13-semantica-eventi.md)
 14. [Scenari di test](14-scenari-test.md)
-15. [Glossario](glossario.md)
+15. [TODO switch verso il core](15-todo-switch-core.md)
+16. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

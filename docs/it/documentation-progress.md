@@ -25,6 +25,7 @@ Stati usati:
 | Completo | `12-confronto-shadow-mode.md` |
 | Completo | `13-semantica-eventi.md` |
 | Completo | `14-scenari-test.md` |
+| Parziale | `15-todo-switch-core.md` |
 | Parziale | `glossario.md` |
 
 ## Aggiornamenti recenti
@@ -50,3 +51,21 @@ Stati usati:
 - `14-scenari-test.md`: aggiunto capitolo dedicato agli scenari funzionali e
   shadow, con operazioni filesystem, raw log atteso, event log atteso e note
   sulle differenze semantiche.
+- `02-architettura-generale.md`: aggiunto schema a tre livelli
+  `inotify -> alfred_raw_event_t -> alfred_event_t`.
+- `12-confronto-shadow-mode.md`: documentata la decisione iniziale per il bug
+  `mkdir -p`: scan mirato sincrono, raw event sintetici verso il core e dedup
+  solo se emergeranno duplicati.
+- `13-semantica-eventi.md`: aggiunte sezioni su raw event sintetici, dedup e
+  strategia scelta per il bug delle creazioni ricorsive veloci.
+- `glossario.md`: aggiunte voci per evento raw sintetico e dedup.
+- `15-todo-switch-core.md`: aggiunta roadmap didattica per rimuovere la
+  semantica legacy da `events.c` e portare lo stream ufficiale sul core.
+- `12-confronto-shadow-mode.md` e `14-scenari-test.md`: aggiornati i risultati
+  post-fix per i raw event sintetici nelle creazioni ricorsive veloci.
+- `15-todo-switch-core.md`: annotato che il core recupera i `DIR_CREATED`
+  mancanti mentre il legacy resta incompleto durante shadow mode.
+- `04-livello-applicazione.md`: documentato il dispatch core-before-legacy e la
+  funzione temporanea `app_process_synthetic_dir_create`.
+- `05-modulo-inotify.md`: documentata la callback di discovery del watch manager
+  e il recupero tramite raw event sintetici.

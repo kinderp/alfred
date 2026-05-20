@@ -118,7 +118,10 @@ int watch_manager_remove(app_t *app,
  * ========================================================================== */
 
 static int recursive_walk(app_t *app,
-                          const char *root)
+                          const char *root,
+                          watch_manager_discovered_dir_fn on_discovered,
+                          void *userdata,
+                          int notify_root)
 {
     DIR *dir = opendir(root);
 
@@ -132,6 +135,10 @@ static int recursive_walk(app_t *app,
     }
 
     watch_manager_add(app, root);
+
+    if (notify_root && on_discovered != NULL) {
+        on_discovered(app, root, userdata);
+    }
 
     struct dirent *ent;
 
@@ -156,7 +163,11 @@ static int recursive_walk(app_t *app,
             continue;
         }
 
-        recursive_walk(app, child);
+        recursive_walk(app,
+                       child,
+                       on_discovered,
+                       userdata,
+                       1);
     }
 
     closedir(dir);
@@ -174,5 +185,17 @@ int watch_manager_add_recursive(app_t *app,
     if (app == NULL || root == NULL)
         return -1;
 
-    return recursive_walk(app, root);
+    return recursive_walk(app, root, NULL, NULL, 0);
+}
+
+int watch_manager_add_recursive_with_discovery(
+    app_t *app,
+    const char *root,
+    watch_manager_discovered_dir_fn on_discovered,
+    void *userdata)
+{
+    if (app == NULL || root == NULL)
+        return -1;
+
+    return recursive_walk(app, root, on_discovered, userdata, 0);
 }

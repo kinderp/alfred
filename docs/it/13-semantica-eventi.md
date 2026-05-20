@@ -273,6 +273,93 @@ La strategia tecnica per recuperare gli eventi mancanti va discussa separatament
 dalla semantica. Una possibilita' e' generare eventi raw sintetici quando lo scan
 ricorsivo mirato scopre directory gia' presenti ma non ancora notificate.
 
+### Decisione per il bug `mkdir -p`
+
+Per il bug delle directory annidate create velocemente scegliamo questa
+strategia:
+
+```text
+scan mirato sincrono -> raw event sintetico -> core -> DIR_CREATED
+```
+
+Non introduciamo subito un thread separato. Il problema nasce nel momento in cui
+gestiamo `DIR_CREATED` della prima directory osservata, quindi la soluzione piu'
+semplice e' restare nello stesso flusso:
+
+```text
+IN_CREATE one
+    -> Alfred aggiunge il watch su one
+    -> Alfred attraversa one
+    -> trova one/two gia' esistente
+    -> aggiunge il watch su one/two
+    -> genera un raw event sintetico CREATE|ISDIR per one/two
+    -> il core emette DIR_CREATED one/two
+```
+
+Un thread separato puo' essere utile in futuro per una sincronizzazione
+periodica globale o per recuperare da `OVERFLOW`, ma per questo bug aggiunge
+complessita' non necessaria: gestione del ciclo di vita del thread, locking,
+ordine degli eventi, shutdown e deduplica concorrente.
+
+### Eventi raw sintetici
+
+Un evento raw sintetico e' un `alfred_raw_event_t` creato dal programma, non
+ricevuto direttamente dal kernel.
+
+Esempio:
+
+```text
+source = ALFRED_SRC_INOTIFY
+mask   = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
+path   = /tmp/progetto/one/two
+cookie = 0
+pid    = 0
+```
+
+E' sintetico perche' `inotify` non ha prodotto un `IN_CREATE` per
+`/tmp/progetto/one/two`; Alfred ha scoperto quella directory attraversando il
+filesystem. Pero' il fatto osservato e' reale: la directory esiste ed e' nuova
+rispetto allo stato monitorato.
+
+Il backend puo' creare il raw event sintetico, ma non deve emettere direttamente
+`DIR_CREATED`. Il raw event deve entrare nel core, cosi' la semantica resta
+centralizzata.
+
+### Dedup
+
+`Dedup` significa deduplicazione: evitare di emettere due volte lo stesso evento
+logico.
+
+Il rischio nasce cosi':
+
+```text
+1. lo scan mirato scopre /tmp/progetto/one/two
+2. Alfred genera un raw event sintetico DIR create
+3. subito dopo arriva anche un evento reale IN_CREATE per lo stesso path
+```
+
+Se non facciamo dedup, il core potrebbe emettere:
+
+```text
+DIR_CREATED /tmp/progetto/one/two
+DIR_CREATED /tmp/progetto/one/two
+```
+
+Per il primo passo non aggiungiamo subito una cache di dedup: implementiamo il
+recupero sintetico in shadow mode e osserviamo se compaiono duplicati reali. Se
+servira', la deduplica andra' preferibilmente nel layer backend/app che genera
+gli eventi sintetici, perche' il duplicato nasce dal recupero specifico di
+inotify. Il core potra' restare concentrato sulla semantica comune.
+
+Una possibile dedup futura e':
+
+```text
+quando genero un CREATE sintetico per path X,
+memorizzo X per una piccola finestra temporale;
+se arriva un IN_CREATE reale per X subito dopo,
+non lo inoltro una seconda volta al core.
+```
+
 ## Perche' RELOCATED e' un solo evento
 
 Il legacy, nello scenario in cui un oggetto cambia sia directory sia nome, puo'

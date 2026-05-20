@@ -48,6 +48,10 @@ static void emit_event(app_t *app,
                        const char *src,
                        const char *dst);
 
+static void process_discovered_dir(app_t *app,
+                                   const char *path,
+                                   void *userdata);
+
 /* ============================================================================
  * EVENT TYPE STRING
  * ========================================================================== */
@@ -150,9 +154,21 @@ static void handle_create(app_t *app,
     if (is_dir &&
         app->config.recursive) {
 
-        watch_manager_add_recursive(app,
-                                    full);
+        watch_manager_add_recursive_with_discovery(
+            app,
+            full,
+            process_discovered_dir,
+            NULL);
     }
+}
+
+static void process_discovered_dir(app_t *app,
+                                   const char *path,
+                                   void *userdata)
+{
+    (void)userdata;
+
+    (void)app_process_synthetic_dir_create(app, path);
 }
 
 /* ============================================================================

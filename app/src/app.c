@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/inotify.h>
+#include <time.h>
 
 /* ============================================================================
  * Configuration Constants
@@ -42,6 +43,7 @@ static void setup_signals(void);
 static void handle_signal(int sig);
 static void dispatch_event_to_core(app_t *app,
                                    const struct inotify_event *ev);
+static uint64_t app_now_ns(void);
 
 /*
  * TODO(core-integration): this function is implemented by the current inotify
@@ -150,6 +152,35 @@ static void dispatch_event_to_core(app_t *app,
                      "core failed to process raw event wd=%d",
                      ev->wd);
     }
+}
+
+static uint64_t app_now_ns(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    return ((uint64_t)ts.tv_sec * 1000000000ULL) +
+           (uint64_t)ts.tv_nsec;
+}
+
+int app_process_synthetic_dir_create(app_t *app, const char *path)
+{
+    if (app == NULL || app->core == NULL || path == NULL)
+        return -1;
+
+    alfred_raw_event_t raw;
+
+    memset(&raw, 0, sizeof(raw));
+
+    raw.ts_ns = app_now_ns();
+    raw.source = ALFRED_SRC_INOTIFY;
+    raw.mask = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR;
+    raw.cookie = 0;
+    raw.pid = 0;
+    raw.path = path;
+
+    return alfred_process(app->core, &raw);
 }
 
 /* ============================================================================
@@ -409,8 +440,8 @@ int app_run(app_t *app)
                        ev->len ? ev->name : ""
             );
 
-            app_dispatch_raw_event(app, ev);
             dispatch_event_to_core(app, ev);
+            app_dispatch_raw_event(app, ev);
 
             ptr += sizeof(struct inotify_event)
                    + ev->len;

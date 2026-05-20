@@ -142,8 +142,8 @@ flowchart TD
     B -->|errore reale| D[log errore]
     B -->|ok| E[itera eventi]
     E --> F[log raw event]
-    F --> G[vecchio dispatcher]
-    G --> H[core shadow dispatch]
+    F --> G[core shadow dispatch]
+    G --> H[vecchio dispatcher]
     H --> A
 ```
 
@@ -157,15 +157,15 @@ Durante l'integrazione il ciclo eventi usa due percorsi:
 
 ```text
 struct inotify_event
-    -> app_dispatch_raw_event()
-    -> vecchio logger eventi
-
-struct inotify_event
     -> dispatch_event_to_core()
     -> inotify_adapter_build_raw()
     -> alfred_process()
     -> core_logger_on_event()
     -> logger_event()
+
+struct inotify_event
+    -> app_dispatch_raw_event()
+    -> vecchio logger eventi
 ```
 
 Il vecchio dispatcher resta il comportamento ufficiale. Il core lavora in
@@ -174,6 +174,33 @@ motore con il comportamento esistente.
 
 Questo approccio riduce il rischio: possiamo osservare il core prima di
 rimuovere `events.c` e `move_cache.c` dal modulo inotify.
+
+### Raw event sintetici
+
+Durante la gestione ricorsiva delle directory, il backend puo' scoprire
+sottodirectory gia' presenti ma mai notificate da inotify. Questo accade, per
+esempio, con:
+
+```text
+mkdir -p one/two/three
+```
+
+Per recuperare questi eventi, l'app espone temporaneamente:
+
+```c
+int app_process_synthetic_dir_create(app_t *app, const char *path);
+```
+
+Questa funzione costruisce un `alfred_raw_event_t` sintetico:
+
+```text
+ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
+```
+
+e lo invia al core con `alfred_process()`. La funzione sta nel livello app
+perche' oggi `app_t` possiede l'istanza del core. E' una soluzione di
+integrazione: in un backend finale piu' pulito, il modulo dovrebbe emettere raw
+event attraverso una interfaccia backend comune.
 
 ### app_shutdown()
 

@@ -233,9 +233,9 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 | `delete_dir` | differisce | Legacy produce anche `WATCH_REMOVED`; il core no. |
 | `rename_dir` | coincide | Entrambi producono `DIR_RENAMED`. |
 | `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
-| `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_RELOCATED`. |
+| `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_CREATED` per la directory scoperta e poi `DIR_RELOCATED`. |
 | `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
-| `recursive_create_nested_dir` | coincide ma incompleto | Legacy e core producono solo `DIR_CREATED $ROOT/one`; mancano `one/two` e `one/two/three`. |
+| `recursive_create_nested_dir` | core recupera eventi | Legacy produce solo `DIR_CREATED $ROOT/one`; core produce anche `DIR_CREATED` per `one/two` e `one/two/three`. |
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
 dispatcher. Significa che molti casi base sono allineati e che le differenze
@@ -330,11 +330,21 @@ DIR_MOVED from=$ROOT/src/before to=$ROOT/dst/after
 DIR_RENAMED from=$ROOT/src/before to=$ROOT/dst/after
 ```
 
-Il core produce invece un solo evento semantico:
+Il core produce invece un evento semantico unico per lo spostamento/rinomina:
 
 ```text
 DIR_RELOCATED from=$ROOT/src/before to=$ROOT/dst/after
 ```
+
+In piu', se `src/before` viene creata prima che Alfred riesca ad aggiungere il
+watch su `src`, il core puo' recuperare anche:
+
+```text
+DIR_CREATED path=$ROOT/src/before
+```
+
+Questo `DIR_CREATED` arriva da un raw event sintetico generato durante lo scan
+ricorsivo mirato.
 
 Decisione:
 
@@ -376,7 +386,7 @@ DIR_CREATED one
         -> aggiunge WATCH_ADDED one/two/three
 ```
 
-Risultato osservato:
+Risultato osservato prima del recupero sintetico:
 
 ```text
 Legacy:
@@ -386,7 +396,7 @@ Core:
   DIR_CREATED path=$ROOT/one
 ```
 
-Legacy e core coincidono, ma coincidono su un risultato incompleto. Mancano:
+Legacy e core coincidevano, ma coincidevano su un risultato incompleto. Mancavano:
 
 ```text
 DIR_CREATED path=$ROOT/one/two
@@ -407,15 +417,36 @@ Il `raw.log`, invece, mostra solo l'evento kernel per `one`:
 IN_CREATE IN_ISDIR path=$ROOT name=one
 ```
 
+Dopo l'aggiunta dei raw event sintetici verso il core, il confronto diventa:
+
+```text
+Legacy:
+  DIR_CREATED path=$ROOT/one
+
+Core:
+  DIR_CREATED path=$ROOT/one
+  DIR_CREATED path=$ROOT/one/two
+  DIR_CREATED path=$ROOT/one/two/three
+
+Only in core:
+  DIR_CREATED path=$ROOT/one/two
+  DIR_CREATED path=$ROOT/one/two/three
+```
+
+Questa differenza e' voluta durante lo shadow mode: il core sta diventando piu'
+completo del legacy per questo caso.
+
 Questa e' la distinzione importante:
 
 - lo stato di monitoraggio del backend viene aggiornato correttamente
-- lo stream semantico resta incompleto perche' mancano i `DIR_CREATED` delle
-  directory scoperte dallo scan ricorsivo
+- lo stream semantico legacy resta incompleto perche' mancano i `DIR_CREATED`
+  delle directory scoperte dallo scan ricorsivo
 
-Questa mitigazione permette quindi al backend di monitorare le directory
-scoperte, ma non ricostruisce automaticamente gli eventi semantici `DIR_CREATED`
-mancanti per le directory create prima dell'aggiunta del watch.
+La mitigazione originale permetteva al backend di monitorare le directory
+scoperte, ma non ricostruiva automaticamente gli eventi semantici `DIR_CREATED`
+mancanti. Il recupero sintetico aggiunge il pezzo mancante: quando lo scan
+ricorsivo scopre una directory gia' presente, l'app invia al core un raw event
+sintetico `CREATE | ISDIR`.
 
 Per questo scenario non usiamo `--strict`: prima osserviamo l'output legacy e
 core, poi decidiamo la semantica e la strategia di recupero.
@@ -427,6 +458,22 @@ Domande da discutere dopo l'osservazione:
   o conviene introdurre un thread separato?
 - dove va gestita l'eventuale deduplica se arriva sia l'evento reale sia quello
   sintetico?
+
+Decisione implementata:
+
+```text
+usiamo scan mirato sincrono e raw event sintetici verso il core.
+```
+
+Non introduciamo subito un thread separato. Il thread avrebbe senso per una
+risincronizzazione periodica generale o per recuperare da `OVERFLOW`, ma per
+questo bug lo scan avviene gia' nel punto giusto: subito dopo la scoperta della
+prima directory creata.
+
+Nel primo passo non aggiungiamo una cache di dedup. Osserviamo il comportamento
+in shadow mode. Se compaiono doppi `DIR_CREATED`, aggiungeremo una deduplica
+piccola e localizzata nel layer backend/app, cioe' vicino al codice che genera
+gli eventi sintetici.
 
 ## Prossimi scenari da aggiungere
 

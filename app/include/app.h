@@ -97,6 +97,19 @@ int app_init(app_t *app, int argc, char **argv);
 int app_run(app_t *app);
 
 /*
+ * app_process_synthetic_dir_create - feed a discovered directory to the core
+ * @app: application context owning the core instance
+ * @path: full path of the directory discovered by backend scanning
+ *
+ * During shadow-mode integration this is used by the inotify recursive watch
+ * scan to recover DIR_CREATED events that the kernel could not deliver because
+ * the child directory was created before its parent watch was installed.
+ *
+ * Return: 0 on success, -1 on invalid input or core processing failure.
+ */
+int app_process_synthetic_dir_create(app_t *app, const char *path);
+
+/*
  * app_shutdown - release application resources
  * @app: application context to release
  *
