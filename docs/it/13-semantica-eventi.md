@@ -91,6 +91,58 @@ file-ready  = Alfred considera il file pronto per essere consumato
 Per esempio, un indicizzatore potrebbe ignorare molti `FILE_MODIFIED` intermedi
 e aspettare `FILE_READY` prima di leggere il file.
 
+Decisione semantica:
+
+```text
+FILE_CREATED, FILE_MODIFIED e FILE_READY sono eventi distinti.
+```
+
+Non sono duplicati tra loro. Raccontano fasi diverse della vita di un file:
+
+- `FILE_CREATED`: il path e' comparso nel filesystem
+- `FILE_MODIFIED`: il contenuto e' stato scritto o modificato
+- `FILE_READY`: uno scrittore ha chiuso il file dopo averlo scritto
+
+Questa scelta rende piu' ricco lo stream degli eventi. Una creazione file reale
+puo' quindi produrre:
+
+```text
+FILE_CREATED
+FILE_MODIFIED
+FILE_READY
+```
+
+Una modifica successiva dello stesso file puo' produrre:
+
+```text
+FILE_MODIFIED
+FILE_READY
+```
+
+Il motivo e' pratico. Molte applicazioni non vogliono solo sapere che un path e'
+apparso: vogliono sapere anche quando il contenuto e' cambiato e quando e'
+ragionevole leggerlo. Un backup, un indicizzatore o uno scanner possono usare
+`FILE_MODIFIED` per sapere che un file e' sporco e `FILE_READY` per sapere che
+lo scrittore ha terminato almeno una fase di scrittura.
+
+`FILE_MODIFIED` puo' essere rumoroso durante scritture lunghe o editor che
+salvano in piu' passaggi. Per questo resta valido il debounce del core:
+
+```text
+ALFRED_RAW_MODIFY -> FILE_MODIFIED, con debounce
+```
+
+`FILE_READY`, invece, deriva da un close-write e non va trattato come un
+duplicato di `FILE_MODIFIED`:
+
+```text
+ALFRED_RAW_CLOSE_WRITE -> FILE_READY
+```
+
+Ogni `FILE_READY` rappresenta una chiusura in scrittura osservata dal backend.
+Puo' essercene piu' di uno per lo stesso file se il file viene scritto, chiuso,
+riaperto, scritto di nuovo e richiuso.
+
 Stato attuale dell'integrazione:
 
 ```text

@@ -462,6 +462,40 @@ I log vengono copiati in:
 tests/shadow/last-run/
 ```
 
+## Mappa a tre livelli degli scenari shadow
+
+Questa tabella riassume il percorso piu' importante per l'integrazione:
+
+```text
+evento inotify -> alfred_raw_event_t -> alfred_event_t
+```
+
+La colonna "inotify" descrive gli eventi kernel principali. La colonna "raw
+Alfred" descrive i flag prodotti dall'adapter o dai raw event sintetici. La
+colonna "semantica core" descrive gli eventi `alfred_event_t` che vogliamo
+considerare riferimento finale.
+
+| Scenario shadow | inotify principale | raw Alfred | semantica core target |
+| --- | --- | --- | --- |
+| `create_file` | `IN_CREATE`, `IN_MODIFY`, `IN_CLOSE_WRITE` | `ALFRED_RAW_CREATE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE` | `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY` |
+| `delete_file` | `IN_CREATE`, `IN_MODIFY`, `IN_CLOSE_WRITE`, `IN_DELETE` | `ALFRED_RAW_CREATE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_DELETE` | `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY`, `FILE_DELETED` |
+| `rename_file` | `IN_CREATE`, `IN_MODIFY`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO` | `ALFRED_RAW_CREATE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`, `ALFRED_RAW_MOVED_TO` | `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY`, `FILE_RENAMED` |
+| `create_dir` | `IN_CREATE | IN_ISDIR` | `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` | `DIR_CREATED` |
+| `delete_dir` | `IN_CREATE | IN_ISDIR`, `IN_DELETE | IN_ISDIR`, `IN_IGNORED` | `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`, `ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR` | `DIR_CREATED`, `DIR_DELETED`; `WATCH_REMOVED` resta diagnostica backend |
+| `rename_dir` | `IN_CREATE | IN_ISDIR`, `IN_MOVED_FROM | IN_ISDIR`, `IN_MOVED_TO | IN_ISDIR` | `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`, `ALFRED_RAW_MOVED_FROM | ALFRED_RAW_ISDIR`, `ALFRED_RAW_MOVED_TO | ALFRED_RAW_ISDIR` | `DIR_CREATED`, `DIR_RENAMED` |
+| `move_file` | directory create, file write, `IN_MOVED_FROM`, `IN_MOVED_TO` | create directory raw, file write raw, moved-from/to raw con stesso cookie | `DIR_CREATED`, `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY`, `FILE_MOVED` |
+| `move_dir` | directory create, `IN_MOVED_FROM | IN_ISDIR`, `IN_MOVED_TO | IN_ISDIR` | create directory raw, moved-from/to raw con stesso cookie e `ALFRED_RAW_ISDIR` | `DIR_CREATED`, `DIR_MOVED` |
+| `move_rename_file` | directory create, file write, `IN_MOVED_FROM`, `IN_MOVED_TO` con nome diverso | moved-from/to raw con stesso cookie, directory contenitore diversa e nome diverso | `FILE_RELOCATED` per il file; eventi di creazione/write precedenti restano separati |
+| `move_rename_dir` | directory create, `IN_MOVED_FROM | IN_ISDIR`, `IN_MOVED_TO | IN_ISDIR` con nome diverso | moved-from/to raw con stesso cookie, `ALFRED_RAW_ISDIR`, directory contenitore diversa e nome diverso | `DIR_RELOCATED`; eventuale `DIR_CREATED` sintetico se la directory e' scoperta dallo scan |
+| `recursive_create_nested_dir` | spesso solo `IN_CREATE | IN_ISDIR` per la prima directory osservabile | raw reale per la prima directory, raw sintetici `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` per le directory scoperte | `DIR_CREATED` per ogni directory dell'albero |
+| `recursive_create_slow_nested_dir` | `IN_CREATE | IN_ISDIR` per ogni directory | `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` per ogni directory | `DIR_CREATED` per ogni directory, senza duplicati |
+| `modify_close_write_file` | `IN_CREATE`, `IN_MODIFY`, `IN_CLOSE_WRITE`, poi nuovo `IN_MODIFY`, nuovo `IN_CLOSE_WRITE` | `ALFRED_RAW_CREATE`, due `ALFRED_RAW_MODIFY`, due `ALFRED_RAW_CLOSE_WRITE` | `FILE_CREATED`, due `FILE_MODIFIED`, due `FILE_READY` |
+
+Questa tabella non sostituisce i dettagli degli scenari sotto. Serve come mappa
+veloce per capire dove nasce ogni evento e quale livello del sistema lo deve
+interpretare. I dettagli di path, cookie e watch descriptor restano nei log
+osservati con `--keep-logs`.
+
 ### create_file
 
 Operazioni:
@@ -475,6 +509,8 @@ Risultato osservato:
 ```text
 Legacy: FILE_CREATED path=$ROOT/a.txt
 Core:   FILE_CREATED path=$ROOT/a.txt
+        FILE_MODIFIED path=$ROOT/a.txt
+        FILE_READY path=$ROOT/a.txt
 ```
 
 ### delete_file
@@ -490,7 +526,7 @@ Atteso:
 
 ```text
 Legacy: FILE_CREATED, FILE_DELETED
-Core:   FILE_CREATED, FILE_DELETED
+Core:   FILE_CREATED, FILE_MODIFIED, FILE_READY, FILE_DELETED
 ```
 
 ### rename_file
@@ -506,7 +542,7 @@ Atteso:
 
 ```text
 Legacy: FILE_RENAMED
-Core:   FILE_RENAMED
+Core:   FILE_CREATED, FILE_MODIFIED, FILE_READY, FILE_RENAMED
 ```
 
 ### create_dir

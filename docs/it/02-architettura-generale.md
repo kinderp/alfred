@@ -157,6 +157,8 @@ flowchart LR
         A2["IN_MOVED_FROM<br/>cookie=42 name=old.txt"]
         A3["IN_MOVED_TO<br/>cookie=42 name=new.txt"]
         A4["IN_CREATE IN_ISDIR<br/>name=one"]
+        A5["IN_MODIFY<br/>name=file.txt"]
+        A6["IN_CLOSE_WRITE<br/>name=file.txt"]
     end
 
     subgraph Raw[alfred_raw_event_t]
@@ -165,6 +167,8 @@ flowchart LR
         B3["ALFRED_RAW_MOVED_TO<br/>cookie=42 path=$ROOT/new.txt"]
         B4["ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR<br/>path=$ROOT/one"]
         B5["synthetic ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR<br/>path=$ROOT/one/two"]
+        B6["ALFRED_RAW_MODIFY<br/>path=$ROOT/file.txt"]
+        B7["ALFRED_RAW_CLOSE_WRITE<br/>path=$ROOT/file.txt"]
     end
 
     subgraph Semantic[alfred_event_t]
@@ -172,6 +176,8 @@ flowchart LR
         C2["FILE_RENAMED<br/>old.txt -> new.txt"]
         C3["DIR_CREATED<br/>src=$ROOT/one"]
         C4["DIR_CREATED<br/>src=$ROOT/one/two"]
+        C5["FILE_MODIFIED<br/>src=$ROOT/file.txt"]
+        C6["FILE_READY<br/>src=$ROOT/file.txt"]
     end
 
     A1 --> B1 --> C1
@@ -181,6 +187,8 @@ flowchart LR
     B3 --> C2
     A4 --> B4 --> C3
     B5 --> C4
+    A5 --> B6 --> C5
+    A6 --> B7 --> C6
 ```
 
 Il primo livello e' specifico del backend. Oggi e' Linux `inotify`, quindi gli
@@ -196,6 +204,15 @@ possono diventare un solo evento applicativo. Per esempio:
 
 ```text
 ALFRED_RAW_MOVED_FROM + ALFRED_RAW_MOVED_TO -> FILE_RENAMED
+```
+
+Altri raw event rappresentano fasi della vita di un file e restano eventi
+semantici distinti:
+
+```text
+ALFRED_RAW_CREATE      -> FILE_CREATED
+ALFRED_RAW_MODIFY      -> FILE_MODIFIED
+ALFRED_RAW_CLOSE_WRITE -> FILE_READY
 ```
 
 Nel caso di `mkdir -p`, alcune directory possono essere scoperte dallo scan

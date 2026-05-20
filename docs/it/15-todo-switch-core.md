@@ -78,8 +78,8 @@ Scenari ancora utili:
 - modify file: aggiunto come `modify_close_write_file`; ora il backend consegna
   `IN_MODIFY` e il core produce `FILE_MODIFIED`
 - close-write / file ready: il backend consegna `IN_CLOSE_WRITE` e il core
-  produce `FILE_READY`; resta da confermare che questo diventi comportamento
-  ufficiale dopo lo switch
+  produce `FILE_READY`; `FILE_MODIFIED` e `FILE_READY` sono semantica target
+  ufficiale del core
 - overflow, se riproducibile
 
 ### 2. Rendere esplicite le differenze attese
@@ -97,6 +97,8 @@ Esempi gia' decisi:
 - move+rename diventa `FILE_RELOCATED` o `DIR_RELOCATED`
 - directory create con `mkdir -p` devono diventare `DIR_CREATED` anche se
   recuperate tramite raw event sintetico
+- `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY` sono eventi distinti: non sono
+  duplicati, ma fasi diverse della vita di un file
 
 ### 3. Spostare il logging semantico ufficiale sul core
 

@@ -463,16 +463,21 @@ Il legacy non cambia perche' `modules/inotify/src/events.c` ignora ancora
 `IN_MODIFY` e `IN_CLOSE_WRITE`. Il core invece riceve quei raw event attraverso
 `inotify_adapter.c` e li trasforma in eventi semantici.
 
-Decisione da confermare:
+Decisione semantica:
 
 ```text
-FILE_READY deve essere considerato evento semantico ufficiale dopo close-write.
+FILE_MODIFIED e FILE_READY sono eventi semantici ufficiali del core.
 ```
 
 Questa scelta e' delicata perche' rende piu' ricco lo stream degli eventi file:
 una semplice scrittura puo' produrre `FILE_CREATED`, `FILE_MODIFIED` e
 `FILE_READY`. Per applicazioni come indicizzatori o backup questo e' utile,
-perche' `FILE_READY` segnala che lo scrittore ha chiuso il file.
+perche' `FILE_MODIFIED` segnala che il contenuto e' cambiato e `FILE_READY`
+segnala che lo scrittore ha chiuso il file.
+
+Questi eventi non vanno deduplicati tra loro: rappresentano fasi diverse della
+vita del file. Il debounce del core resta invece utile per ridurre storm di
+`FILE_MODIFIED` durante scritture ripetute o molto ravvicinate.
 
 ### Caso delicato: recursive create nested directory
 

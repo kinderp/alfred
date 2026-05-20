@@ -96,3 +96,11 @@ Stati usati:
   `13-semantica-eventi.md`, `14-scenari-test.md` e `15-todo-switch-core.md`:
   aggiornato il punto 6 con i risultati osservati per `FILE_MODIFIED` e
   `FILE_READY`.
+- `13-semantica-eventi.md`: documentata la decisione semantica per
+  `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`, inclusa la motivazione per
+  considerarli fasi distinte e non duplicati.
+- `14-scenari-test.md`: aggiunta una mappa a tre livelli per gli scenari shadow:
+  eventi inotify, raw event Alfred e eventi semantici core target.
+- `02-architettura-generale.md`: esteso lo schema `inotify ->
+  alfred_raw_event_t -> alfred_event_t` con `IN_MODIFY`, `IN_CLOSE_WRITE`,
+  `FILE_MODIFIED` e `FILE_READY`.
