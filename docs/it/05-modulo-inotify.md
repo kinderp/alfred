@@ -13,6 +13,7 @@ Esempi di eventi Linux:
 - `IN_CREATE`
 - `IN_DELETE`
 - `IN_MODIFY`
+- `IN_CLOSE_WRITE`
 - `IN_MOVED_FROM`
 - `IN_MOVED_TO`
 - `IN_ISDIR`
@@ -61,6 +62,46 @@ modules/inotify/src/inotify_adapter.c
 ```
 
 prepara il passaggio verso il design corretto.
+
+## Maschera di watch attuale
+
+Il backend non riceve automaticamente tutti gli eventi che inotify potrebbe
+produrre. Quando Alfred aggiunge un watch, passa al kernel una maschera, cioe'
+l'elenco dei tipi di evento che vuole osservare.
+
+La maschera predefinita oggi e' definita in:
+
+```text
+modules/inotify/src/watch_manager.c
+```
+
+e include:
+
+```text
+IN_CREATE
+IN_DELETE
+IN_MOVED_FROM
+IN_MOVED_TO
+IN_DELETE_SELF
+IN_IGNORED
+IN_Q_OVERFLOW
+```
+
+Non include ancora:
+
+```text
+IN_MODIFY
+IN_CLOSE_WRITE
+```
+
+Questa distinzione e' importante per gli scenari shadow. Il core sa gia'
+trasformare raw event `MODIFY` e `CLOSE_WRITE` in eventi semantici come
+`FILE_MODIFIED` e `FILE_READY`, ma il programma completo non puo' produrli se
+il backend non chiede al kernel di consegnare quegli eventi.
+
+Per questo l'abilitazione di `IN_MODIFY` e `IN_CLOSE_WRITE` sara' un passo
+separato dell'integrazione: aumentera' il volume degli eventi raw e cambiera'
+l'output osservato per molte scritture su file.
 
 ## Watch descriptor
 

@@ -59,6 +59,50 @@ In futuro potremo spostare o duplicare questi messaggi nel raw/backend log. La
 cosa importante e' che non siano trattati come eventi di dominio allo stesso
 livello di `FILE_CREATED`, `DIR_DELETED` o `FILE_RENAMED`.
 
+## Scrittura file, modify e file-ready
+
+Il core distingue tra tre concetti che spesso, nel filesystem, appaiono vicini
+nel tempo:
+
+```text
+FILE_CREATED
+FILE_MODIFIED
+FILE_READY
+```
+
+`FILE_CREATED` indica che un nuovo path e' apparso.
+
+`FILE_MODIFIED` indica che il contenuto di un file e' stato modificato. Nel
+backend inotify questo deriva da `IN_MODIFY`, che il bridge traduce in
+`ALFRED_RAW_MODIFY`.
+
+`FILE_READY` indica che un processo ha chiuso un file dopo averlo aperto in
+scrittura. Nel backend inotify questo deriva da `IN_CLOSE_WRITE`, che il bridge
+traduce in `ALFRED_RAW_CLOSE_WRITE`.
+
+La differenza didattica e' importante:
+
+```text
+modify      = il contenuto sta cambiando o e' cambiato
+close-write = lo scrittore ha chiuso il file
+file-ready  = Alfred considera il file pronto per essere consumato
+```
+
+Per esempio, un indicizzatore potrebbe ignorare molti `FILE_MODIFIED` intermedi
+e aspettare `FILE_READY` prima di leggere il file.
+
+Stato attuale dell'integrazione:
+
+```text
+il core supporta FILE_MODIFIED e FILE_READY,
+ma la maschera inotify del programma completo non abilita ancora
+IN_MODIFY e IN_CLOSE_WRITE.
+```
+
+Quindi, durante lo shadow mode, lo scenario `modify_close_write_file` serve
+prima di tutto a mostrare il confine tra capacita' del core e configurazione del
+backend.
+
 ## Eventi semantici
 
 Un evento semantico descrive il significato dell'operazione vista da Alfred.
@@ -67,6 +111,8 @@ Esempi:
 
 ```text
 FILE_CREATED
+FILE_READY
+FILE_MODIFIED
 FILE_DELETED
 FILE_RENAMED
 FILE_MOVED

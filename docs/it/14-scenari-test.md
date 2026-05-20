@@ -470,7 +470,7 @@ Operazioni:
 write $ROOT/a.txt
 ```
 
-Atteso:
+Risultato osservato:
 
 ```text
 Legacy: FILE_CREATED path=$ROOT/a.txt
@@ -577,6 +577,47 @@ Legacy: FILE_MOVED
 Core:   FILE_MOVED
 ```
 
+### move_dir
+
+Operazioni:
+
+```text
+mkdir $ROOT/src
+mkdir $ROOT/dst
+sleep
+mkdir $ROOT/src/item
+sleep
+rename $ROOT/src/item -> $ROOT/dst/item
+```
+
+Raw log atteso:
+
+```text
+IN_CREATE IN_ISDIR path=$ROOT name=src
+IN_CREATE IN_ISDIR path=$ROOT name=dst
+IN_CREATE IN_ISDIR path=$ROOT/src name=item
+IN_MOVED_FROM IN_ISDIR path=$ROOT/src name=item
+IN_MOVED_TO IN_ISDIR path=$ROOT/dst name=item
+```
+
+Event log normalizzato osservato:
+
+```text
+Legacy: DIR_CREATED path=$ROOT/src
+        DIR_CREATED path=$ROOT/dst
+        DIR_CREATED path=$ROOT/src/item
+        DIR_MOVED from=$ROOT/src/item to=$ROOT/dst/item
+
+Core:   DIR_CREATED path=$ROOT/src
+        DIR_CREATED path=$ROOT/dst
+        DIR_CREATED path=$ROOT/src/item
+        DIR_MOVED from=$ROOT/src/item to=$ROOT/dst/item
+```
+
+Questo scenario fissa il caso semplice: il nome della directory resta `item`,
+ma cambia la directory contenitore. L'evento semantico corretto e' quindi
+`DIR_MOVED`, non `DIR_RENAMED` e non `DIR_RELOCATED`.
+
 ### move_rename_file
 
 Operazioni:
@@ -620,6 +661,50 @@ Differenza attesa: il core rappresenta move+rename come una singola operazione
 logica `DIR_RELOCATED` e puo' recuperare anche la creazione iniziale della
 directory tramite raw event sintetico.
 
+### modify_close_write_file
+
+Operazioni:
+
+```text
+write $ROOT/editable.txt
+sleep
+append $ROOT/editable.txt
+flush/fsync
+sleep while file is still open
+close $ROOT/editable.txt
+```
+
+Scopo:
+
+```text
+osservare se il backend consegna al core IN_MODIFY e IN_CLOSE_WRITE.
+```
+
+Semantica core attesa quando i raw event arriveranno:
+
+```text
+ALFRED_RAW_MODIFY      -> FILE_MODIFIED
+ALFRED_RAW_CLOSE_WRITE -> FILE_READY
+```
+
+Output normalizzato osservato oggi:
+
+```text
+Legacy: FILE_CREATED path=$ROOT/editable.txt
+Core:   FILE_CREATED path=$ROOT/editable.txt
+```
+
+Raw log osservato oggi con `--keep-logs`:
+
+```text
+IN_CREATE path=$ROOT name=editable.txt
+```
+
+Conclusione: lo scenario e' pronto, ma la maschera inotify attuale non include
+ancora `IN_MODIFY` e `IN_CLOSE_WRITE`. Finche' quei flag non saranno aggiunti al
+watch backend, il core non potra' produrre `FILE_MODIFIED` o `FILE_READY` nel
+programma completo, anche se la logica esiste gia' nel correlator.
+
 ### recursive_create_nested_dir
 
 Operazioni:
@@ -655,6 +740,34 @@ Conclusione: il backend aggiunge i watch correttamente e il core recupera gli
 eventi semantici mancanti tramite raw event sintetici. Il legacy resta
 incompleto per questo scenario, quindi `Only in core` contiene `one/two` e
 `one/two/three`.
+
+### recursive_create_slow_nested_dir
+
+Operazioni:
+
+```text
+mkdir $ROOT/one
+sleep
+mkdir $ROOT/one/two
+sleep
+mkdir $ROOT/one/two/three
+```
+
+Atteso:
+
+```text
+Legacy: DIR_CREATED path=$ROOT/one
+        DIR_CREATED path=$ROOT/one/two
+        DIR_CREATED path=$ROOT/one/two/three
+
+Core:   DIR_CREATED path=$ROOT/one
+        DIR_CREATED path=$ROOT/one/two
+        DIR_CREATED path=$ROOT/one/two/three
+```
+
+Questo scenario serve a controllare la deduplica. Le pause danno tempo ad Alfred
+di aggiungere i watch prima della creazione successiva, quindi inotify consegna
+gli eventi reali. Il core non produce duplicati in questo caso.
 
 ## Come usare questo capitolo
 

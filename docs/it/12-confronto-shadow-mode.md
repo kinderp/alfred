@@ -70,10 +70,13 @@ create_dir
 create_file
 delete_dir
 delete_file
+modify_close_write_file
+move_dir
 move_file
 move_rename_dir
 move_rename_file
 recursive_create_nested_dir
+recursive_create_slow_nested_dir
 rename_dir
 rename_file
 ```
@@ -232,10 +235,13 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 | `create_dir` | coincide | Entrambi producono `DIR_CREATED`. |
 | `delete_dir` | differisce | Legacy produce anche `WATCH_REMOVED`; il core no. |
 | `rename_dir` | coincide | Entrambi producono `DIR_RENAMED`. |
+| `move_dir` | coincide | Entrambi producono `DIR_MOVED` quando cambia solo la directory contenitore. |
 | `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
 | `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_CREATED` per la directory scoperta e poi `DIR_RELOCATED`. |
 | `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
+| `modify_close_write_file` | coincide incompleto | Entrambi vedono solo `FILE_CREATED`, perche' la maschera inotify attuale non sottoscrive ancora `IN_MODIFY` e `IN_CLOSE_WRITE`. |
 | `recursive_create_nested_dir` | core recupera eventi | Legacy produce solo `DIR_CREATED $ROOT/one`; core produce anche `DIR_CREATED` per `one/two` e `one/two/three`. |
+| `recursive_create_slow_nested_dir` | coincide | Crea le stesse directory con pause; legacy e core producono tre `DIR_CREATED` senza duplicati. |
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
 dispatcher. Significa che molti casi base sono allineati e che le differenze
@@ -356,6 +362,108 @@ Questa differenza non va corretta facendo emettere al core due eventi. Va
 trattata come differenza attesa, perche' conferma che il core sta applicando la
 semantica target descritta in `13-semantica-eventi.md`.
 
+### Caso allineato: move directory semplice
+
+Lo scenario `move_dir` isola il caso in cui una directory cambia contenitore ma
+non cambia nome.
+
+Scenario:
+
+```text
+mkdir $ROOT/src
+mkdir $ROOT/dst
+mkdir $ROOT/src/item
+mv $ROOT/src/item $ROOT/dst/item
+```
+
+Le pause inserite nello scenario servono a non mischiare questo caso con il bug
+delle creazioni ricorsive veloci. In questo modo Alfred ha tempo di aggiungere i
+watch su `src` e `dst` prima della creazione e dello spostamento di `item`.
+
+Risultato osservato:
+
+```text
+Legacy:
+  DIR_CREATED path=$ROOT/src
+  DIR_CREATED path=$ROOT/dst
+  DIR_CREATED path=$ROOT/src/item
+  DIR_MOVED from=$ROOT/src/item to=$ROOT/dst/item
+
+Core:
+  DIR_CREATED path=$ROOT/src
+  DIR_CREATED path=$ROOT/dst
+  DIR_CREATED path=$ROOT/src/item
+  DIR_MOVED from=$ROOT/src/item to=$ROOT/dst/item
+```
+
+Conclusione:
+
+```text
+DIR_MOVED resta l'evento corretto quando cambia solo la directory contenitore.
+```
+
+Questo scenario e' importante perche' separa il caso `DIR_MOVED` dal caso
+`DIR_RELOCATED`: se il nome rimane uguale, il core non deve produrre
+`DIR_RELOCATED`.
+
+### Punto aperto: modify, close-write e file-ready
+
+Lo scenario `modify_close_write_file` serve a osservare la futura integrazione
+tra eventi di scrittura del backend e semantica del core.
+
+Scenario:
+
+```text
+write $ROOT/editable.txt
+append $ROOT/editable.txt
+flush/fsync
+close $ROOT/editable.txt
+```
+
+Il core contiene gia' la semantica:
+
+```text
+ALFRED_RAW_MODIFY      -> FILE_MODIFIED
+ALFRED_RAW_CLOSE_WRITE -> FILE_READY
+```
+
+Il backend inotify, pero', oggi usa una maschera di watch che non include ancora:
+
+```text
+IN_MODIFY
+IN_CLOSE_WRITE
+```
+
+Per questo il risultato osservato e' ancora:
+
+```text
+Legacy:
+  FILE_CREATED path=$ROOT/editable.txt
+
+Core:
+  FILE_CREATED path=$ROOT/editable.txt
+```
+
+Con `--keep-logs`, il `raw.log` conferma che in questa fase arriva solo:
+
+```text
+IN_CREATE wd=1 path=$ROOT name=editable.txt
+```
+
+Quindi questo scenario non dimostra un limite del core. Dimostra che il backend
+non sta ancora consegnando al core i raw event necessari per `FILE_MODIFIED` e
+`FILE_READY`.
+
+Decisione da discutere:
+
+```text
+quando abilitiamo IN_MODIFY e IN_CLOSE_WRITE nella maschera del backend?
+```
+
+Questa scelta e' delicata perche' aumentera' il numero di eventi raw osservati e
+rendera' diversi molti scenari shadow su file: una semplice scrittura potra'
+produrre `FILE_CREATED`, `FILE_MODIFIED` e/o `FILE_READY`.
+
 ### Caso delicato: recursive create nested directory
 
 Lo scenario `recursive_create_nested_dir` riproduce il bug documentato in:
@@ -475,12 +583,50 @@ in shadow mode. Se compaiono doppi `DIR_CREATED`, aggiungeremo una deduplica
 piccola e localizzata nel layer backend/app, cioe' vicino al codice che genera
 gli eventi sintetici.
 
+### Controllo dedup: recursive create slow nested directory
+
+Lo scenario `recursive_create_slow_nested_dir` crea lo stesso albero di
+`recursive_create_nested_dir`, ma inserisce pause tra una `mkdir` e la
+successiva:
+
+```text
+mkdir $ROOT/one
+sleep
+mkdir $ROOT/one/two
+sleep
+mkdir $ROOT/one/two/three
+```
+
+Scopo:
+
+```text
+verificare se il recupero sintetico produce doppi DIR_CREATED
+quando inotify ha il tempo di consegnare gli eventi reali.
+```
+
+Risultato osservato:
+
+```text
+Legacy:
+  DIR_CREATED path=$ROOT/one
+  DIR_CREATED path=$ROOT/one/two
+  DIR_CREATED path=$ROOT/one/two/three
+
+Core:
+  DIR_CREATED path=$ROOT/one
+  DIR_CREATED path=$ROOT/one/two
+  DIR_CREATED path=$ROOT/one/two/three
+```
+
+Il core non emette duplicati in questo scenario. Per ora la deduplica resta una
+possibile protezione futura, non un requisito immediato.
+
 ## Prossimi scenari da aggiungere
 
 Scenari utili:
 
 - queue overflow, se riproducibile
-- move directory
-- modify file, se vogliamo confrontare debounce e close-write
+- abilitazione controllata di `IN_MODIFY` e `IN_CLOSE_WRITE`
+- comportamento di `FILE_READY` dopo creazione, modifica e append
 
 Ogni scenario dovrebbe essere piccolo e leggibile.

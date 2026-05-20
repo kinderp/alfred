@@ -74,9 +74,11 @@ documentare differenze attese.
 
 Scenari ancora utili:
 
-- move directory semplice
-- modify file
-- close-write / file ready
+- move directory semplice: aggiunto come `move_dir`, allineato tra legacy e core
+- modify file: aggiunto come `modify_close_write_file`, ma oggi osserva solo
+  `FILE_CREATED` perche' la maschera inotify non include `IN_MODIFY`
+- close-write / file ready: scenario predisposto, da rivalutare quando la
+  maschera inotify includera' `IN_CLOSE_WRITE`
 - overflow, se riproducibile
 
 ### 2. Rendere esplicite le differenze attese

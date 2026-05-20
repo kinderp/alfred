@@ -69,3 +69,19 @@ Stati usati:
   funzione temporanea `app_process_synthetic_dir_create`.
 - `05-modulo-inotify.md`: documentata la callback di discovery del watch manager
   e il recupero tramite raw event sintetici.
+- `tests/shadow/compare_shadow_output.py`: aggiunto lo scenario
+  `recursive_create_slow_nested_dir` per osservare eventuali duplicati.
+- `12-confronto-shadow-mode.md` e `14-scenari-test.md`: documentato lo scenario
+  lento di controllo dedup.
+- `12-confronto-shadow-mode.md` e `14-scenari-test.md`: registrato che
+  `recursive_create_slow_nested_dir` non produce duplicati, quindi la dedup resta
+  una protezione futura.
+- `tests/shadow/compare_shadow_output.py`: aggiunti gli scenari `move_dir` e
+  `modify_close_write_file`.
+- `12-confronto-shadow-mode.md` e `14-scenari-test.md`: documentato che
+  `move_dir` e' allineato tra legacy e core e produce `DIR_MOVED`.
+- `05-modulo-inotify.md` e `13-semantica-eventi.md`: chiarito che il core
+  supporta `FILE_MODIFIED` e `FILE_READY`, ma la maschera inotify attuale non
+  abilita ancora `IN_MODIFY` e `IN_CLOSE_WRITE`.
+- `15-todo-switch-core.md`: aggiornato lo stato dei punti su move directory,
+  modify e close-write/file-ready.

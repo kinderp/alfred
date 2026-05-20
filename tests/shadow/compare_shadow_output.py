@@ -184,6 +184,14 @@ def scenario_recursive_create_nested_dir(root: Path) -> None:
     (root / "one" / "two" / "three").mkdir(parents=True)
 
 
+def scenario_recursive_create_slow_nested_dir(root: Path) -> None:
+    (root / "one").mkdir()
+    time.sleep(0.2)
+    (root / "one" / "two").mkdir()
+    time.sleep(0.2)
+    (root / "one" / "two" / "three").mkdir()
+
+
 def scenario_move_file(root: Path) -> None:
     src_dir = root / "src"
     dst_dir = root / "dst"
@@ -226,15 +234,46 @@ def scenario_move_rename_dir(root: Path) -> None:
     src.rename(dst)
 
 
+def scenario_move_dir(root: Path) -> None:
+    src_dir = root / "src"
+    dst_dir = root / "dst"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    time.sleep(0.2)
+
+    src = src_dir / "item"
+    dst = dst_dir / "item"
+
+    src.mkdir()
+    time.sleep(0.2)
+    src.rename(dst)
+
+
+def scenario_modify_close_write_file(root: Path) -> None:
+    path = root / "editable.txt"
+
+    path.write_text("initial\n", encoding="utf-8")
+    time.sleep(0.2)
+
+    with path.open("a", encoding="utf-8") as fp:
+        fp.write("updated\n")
+        fp.flush()
+        os.fsync(fp.fileno())
+        time.sleep(0.2)
+
+
 SCENARIOS = {
     "create_dir": scenario_create_dir,
     "create_file": scenario_create_file,
     "delete_dir": scenario_delete_dir,
     "delete_file": scenario_delete_file,
+    "modify_close_write_file": scenario_modify_close_write_file,
+    "move_dir": scenario_move_dir,
     "move_file": scenario_move_file,
     "move_rename_dir": scenario_move_rename_dir,
     "move_rename_file": scenario_move_rename_file,
     "recursive_create_nested_dir": scenario_recursive_create_nested_dir,
+    "recursive_create_slow_nested_dir": scenario_recursive_create_slow_nested_dir,
     "rename_dir": scenario_rename_dir,
     "rename_file": scenario_rename_file,
 }
