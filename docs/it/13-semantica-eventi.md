@@ -247,6 +247,32 @@ DIR_RELOCATED
 | Aggiunta watch | dettaglio backend | dettaglio backend | nessun evento core | nessun evento core |
 | Rimozione watch | dettaglio backend | dettaglio backend | nessun evento core | nessun evento core |
 
+## Creazioni ricorsive veloci
+
+Un caso importante e' la creazione ricorsiva di directory, per esempio:
+
+```text
+mkdir -p /tmp/progetto/one/two/three
+```
+
+Dal punto di vista semantico, l'albero osservato ha acquisito tre nuove
+directory:
+
+```text
+DIR_CREATED /tmp/progetto/one
+DIR_CREATED /tmp/progetto/one/two
+DIR_CREATED /tmp/progetto/one/two/three
+```
+
+Il fatto che `inotify` possa notificare solo la prima creazione, perche' le
+sottodirectory nascono prima dell'aggiunta dei watch, e' un limite del backend.
+Non cambia la semantica desiderata: una applicazione che ascolta il core e'
+interessata a sapere che quelle directory esistono.
+
+La strategia tecnica per recuperare gli eventi mancanti va discussa separatamente
+dalla semantica. Una possibilita' e' generare eventi raw sintetici quando lo scan
+ricorsivo mirato scopre directory gia' presenti ma non ancora notificate.
+
 ## Perche' RELOCATED e' un solo evento
 
 Il legacy, nello scenario in cui un oggetto cambia sia directory sia nome, puo'

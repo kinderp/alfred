@@ -151,6 +151,10 @@ I test funzionali verificano il comportamento del programma dall'esterno.
 Per esempio possono creare, spostare o cancellare file e poi controllare che il
 programma abbia registrato gli eventi corretti.
 
+La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
+attesi nei log, e' raccolta in
+[Scenari di test](14-scenari-test.md).
+
 ## Test shadow
 
 Durante l'integrazione del core esiste anche un tool diagnostico in:
@@ -193,6 +197,38 @@ python3 tests/shadow/compare_shadow_output.py create_file --strict
 Per gli scenari in cui stiamo ancora discutendo la semantica, e' meglio partire
 senza `--strict`, leggere l'output e aggiornare la documentazione con la
 decisione presa.
+
+Un esempio di scenario da usare in modo diagnostico e':
+
+```bash
+python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir
+```
+
+Questo scenario riproduce una creazione rapida in stile `mkdir -p`. Serve a
+studiare quali directory vengono notificate come `DIR_CREATED` e quali vengono
+solo scoperte dopo, tramite aggiunta ricorsiva dei watch.
+
+Se devi controllare anche i log completi del backend, usa:
+
+```bash
+python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir --keep-logs
+```
+
+I file vengono conservati in:
+
+```text
+tests/shadow/last-run/
+```
+
+In particolare:
+
+- `events.log` contiene sia eventi semantici sia diagnostica backend come
+  `WATCH_ADDED`
+- `raw.log` contiene gli eventi grezzi arrivati davvero da inotify
+
+Questa distinzione aiuta a capire casi come `mkdir -p`: il backend puo' aver
+aggiunto i watch alle sottodirectory anche se non ha ricevuto, e quindi non ha
+potuto inoltrare al core, i relativi eventi `DIR_CREATED`.
 
 ## Stress test
 

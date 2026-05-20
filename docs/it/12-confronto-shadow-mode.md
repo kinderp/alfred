@@ -73,9 +73,13 @@ delete_file
 move_file
 move_rename_dir
 move_rename_file
+recursive_create_nested_dir
 rename_dir
 rename_file
 ```
+
+La descrizione completa degli scenari funzionali e shadow, compresi raw log ed
+event log attesi, e' raccolta in [Scenari di test](14-scenari-test.md).
 
 ## Esempio di uso
 
@@ -134,6 +138,19 @@ tests/shadow/last-run/
 
 Questa cartella e' utile per ispezionare manualmente `events.log`, `raw.log` ed
 eventuali errori.
+
+`--keep-logs` e' importante quando il confronto normalizzato non basta. Il tool
+mostra solo gli eventi legacy e core riconosciuti dal parser, mentre il file
+`events.log` completo contiene anche diagnostica backend come:
+
+```text
+WATCH_ADDED wd=3 path=...
+WATCH_REMOVED path=...
+```
+
+Per esempio, nello scenario `recursive_create_nested_dir`, `--keep-logs`
+permette di vedere che `one/two` e `one/two/three` non hanno `DIR_CREATED`, ma
+hanno comunque `WATCH_ADDED`.
 
 ## Come il tool normalizza gli eventi
 
@@ -218,6 +235,7 @@ Gli scenari base su file e directory sono quasi tutti allineati:
 | `move_file` | coincide | Entrambi producono `FILE_MOVED`. |
 | `move_rename_dir` | differisce atteso | Legacy produce `DIR_MOVED` + `DIR_RENAMED`; core produce `DIR_RELOCATED`. |
 | `move_rename_file` | differisce | Legacy produce `FILE_MOVED` + `FILE_RENAMED`; core produce `FILE_RELOCATED`. |
+| `recursive_create_nested_dir` | coincide ma incompleto | Legacy e core producono solo `DIR_CREATED $ROOT/one`; mancano `one/two` e `one/two/three`. |
 
 Questo non significa che il core sia gia' pronto a sostituire il vecchio
 dispatcher. Significa che molti casi base sono allineati e che le differenze
@@ -328,11 +346,92 @@ Questa differenza non va corretta facendo emettere al core due eventi. Va
 trattata come differenza attesa, perche' conferma che il core sta applicando la
 semantica target descritta in `13-semantica-eventi.md`.
 
+### Caso delicato: recursive create nested directory
+
+Lo scenario `recursive_create_nested_dir` riproduce il bug documentato in:
+
+```text
+https://github.com/kinderp/alfred/issues/2
+```
+
+Scenario:
+
+```text
+mkdir -p $ROOT/one/two/three
+```
+
+Il punto delicato e' il tempo. Il sistema operativo crea `one`, poi `two`, poi
+`three` molto rapidamente. Alfred riceve l'evento `IN_CREATE | IN_ISDIR` per
+`one`, ma `two` e `three` possono essere gia' state create prima che Alfred
+riesca ad aggiungere il watch su `one` e poi su `one/two`.
+
+Il codice attuale mitiga il problema con un attraversamento ricorsivo:
+
+```text
+DIR_CREATED one
+    -> watch_manager_add_recursive(one)
+        -> trova one/two
+        -> aggiunge WATCH_ADDED one/two
+        -> trova one/two/three
+        -> aggiunge WATCH_ADDED one/two/three
+```
+
+Risultato osservato:
+
+```text
+Legacy:
+  DIR_CREATED path=$ROOT/one
+
+Core:
+  DIR_CREATED path=$ROOT/one
+```
+
+Legacy e core coincidono, ma coincidono su un risultato incompleto. Mancano:
+
+```text
+DIR_CREATED path=$ROOT/one/two
+DIR_CREATED path=$ROOT/one/two/three
+```
+
+Con `--keep-logs`, pero', il file `events.log` completo mostra anche:
+
+```text
+WATCH_ADDED path=$ROOT/one
+WATCH_ADDED path=$ROOT/one/two
+WATCH_ADDED path=$ROOT/one/two/three
+```
+
+Il `raw.log`, invece, mostra solo l'evento kernel per `one`:
+
+```text
+IN_CREATE IN_ISDIR path=$ROOT name=one
+```
+
+Questa e' la distinzione importante:
+
+- lo stato di monitoraggio del backend viene aggiornato correttamente
+- lo stream semantico resta incompleto perche' mancano i `DIR_CREATED` delle
+  directory scoperte dallo scan ricorsivo
+
+Questa mitigazione permette quindi al backend di monitorare le directory
+scoperte, ma non ricostruisce automaticamente gli eventi semantici `DIR_CREATED`
+mancanti per le directory create prima dell'aggiunta del watch.
+
+Per questo scenario non usiamo `--strict`: prima osserviamo l'output legacy e
+core, poi decidiamo la semantica e la strategia di recupero.
+
+Domande da discutere dopo l'osservazione:
+
+- il core deve ricevere eventi raw sintetici per `one/two` e `one/two/three`?
+- lo scan mirato deve restare sincrono nel percorso di gestione di `DIR_CREATED`
+  o conviene introdurre un thread separato?
+- dove va gestita l'eventuale deduplica se arriva sia l'evento reale sia quello
+  sintetico?
+
 ## Prossimi scenari da aggiungere
 
 Scenari utili:
 
-- recursive create
 - queue overflow, se riproducibile
 - move directory
 - modify file, se vogliamo confrontare debounce e close-write

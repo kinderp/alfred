@@ -180,6 +180,10 @@ def scenario_rename_dir(root: Path) -> None:
     src.rename(dst)
 
 
+def scenario_recursive_create_nested_dir(root: Path) -> None:
+    (root / "one" / "two" / "three").mkdir(parents=True)
+
+
 def scenario_move_file(root: Path) -> None:
     src_dir = root / "src"
     dst_dir = root / "dst"
@@ -230,6 +234,7 @@ SCENARIOS = {
     "move_file": scenario_move_file,
     "move_rename_dir": scenario_move_rename_dir,
     "move_rename_file": scenario_move_rename_file,
+    "recursive_create_nested_dir": scenario_recursive_create_nested_dir,
     "rename_dir": scenario_rename_dir,
     "rename_file": scenario_rename_file,
 }
@@ -338,7 +343,14 @@ def run_scenario(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compare legacy and core shadow-mode event output."
+        description="Compare legacy and core shadow-mode event output.",
+        epilog=(
+            "Default mode is diagnostic: differences are printed but the "
+            "command exits with status 0. Use --strict only when a difference "
+            "must fail the command. Use --keep-logs to preserve events.log, "
+            "raw.log, and the watched tree under tests/shadow/last-run for "
+            "manual inspection of backend diagnostics such as WATCH_ADDED."
+        ),
     )
     parser.add_argument(
         "scenario",

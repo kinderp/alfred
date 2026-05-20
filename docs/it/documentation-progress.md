@@ -24,6 +24,7 @@ Stati usati:
 | Parziale | `11-come-contribuire.md` |
 | Completo | `12-confronto-shadow-mode.md` |
 | Completo | `13-semantica-eventi.md` |
+| Completo | `14-scenari-test.md` |
 | Parziale | `glossario.md` |
 
 ## Aggiornamenti recenti
@@ -34,3 +35,18 @@ Stati usati:
   differenza attesa tra legacy e core.
 - `13-semantica-eventi.md`: chiarito che `RELOCATED` e' un evento unico sia per
   file sia per directory.
+- `10-debugging-test-e-strumenti.md`: aggiunto riferimento allo scenario
+  diagnostico `recursive_create_nested_dir`.
+- `12-confronto-shadow-mode.md`: aggiunto lo scenario
+  `recursive_create_nested_dir` per osservare il bug delle directory create
+  prima dell'aggiunta dei watch ricorsivi.
+- `12-confronto-shadow-mode.md`: documentato l'uso di `--keep-logs` per
+  distinguere eventi semantici, raw log e diagnostica backend come
+  `WATCH_ADDED`.
+- `13-semantica-eventi.md`: documentata la semantica desiderata per creazioni
+  ricorsive veloci come `mkdir -p`.
+- `tests/shadow/compare_shadow_output.py`: ampliato l'help del comando con note
+  su modalita' diagnostica, `--strict` e `--keep-logs`.
+- `14-scenari-test.md`: aggiunto capitolo dedicato agli scenari funzionali e
+  shadow, con operazioni filesystem, raw log atteso, event log atteso e note
+  sulle differenze semantiche.
