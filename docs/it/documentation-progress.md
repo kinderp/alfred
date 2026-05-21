@@ -31,6 +31,9 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `14-scenari-test.md`: aggiunta una mappa rapida tra scenari di test e
+  scenari animabili della lettura guidata, distinguendo contratto osservabile
+  dei test e percorso interno nel codice.
 - `glossario.md`: aggiornato `Shadow mode` per riflettere il default core e
   aggiunte voci per frame animabile, documentazione dinamica, artefatto
   generato, Mermaid e SVG.

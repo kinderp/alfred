@@ -111,6 +111,30 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
+## Collegamento con la lettura guidata del codice
+
+Questo capitolo dice quali scenari esistono e quali eventi ci aspettiamo nei
+log. Per capire come quegli eventi attraversano funzioni e strutture dati, usa
+anche [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md).
+
+Mappa rapida:
+
+| Scenario | Lettura guidata utile |
+| --- | --- |
+| create file | `Scenario animabile: create file` |
+| close-write / file ready | `Scenario animabile: close-write / file ready` |
+| modify file | `Scenario animabile: modify debounced` |
+| move and rename file/directory | `Scenario animabile: move + rename nel core` |
+| recursive create nested directory | `Scenario animabile: recursive mkdir veloce` |
+| delete directory con rimozione watch | `Scenario animabile: rimozione watch` |
+| startup watch | `Scenario animabile: aggiunta watch iniziale` |
+
+La differenza e' questa:
+
+- qui fissiamo il contratto osservabile dei test
+- nella lettura guidata seguiamo il percorso interno: funzioni, campi delle
+  strutture dati e frame animabili
+
 ### Core: create file
 
 File:
