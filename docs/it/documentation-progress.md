@@ -31,6 +31,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `core/examples/main_demo.c`: aggiunti commenti strutturati per chiarire che il
+  file e' una dimostrazione isolata del core, non il percorso runtime
+  produttivo, e che parte gia' da `alfred_raw_event_t`.
+- `docs/commenting-progress.md`: completata anche la revisione del demo core,
+  rimuovendo l'ultimo file `Pending` dalla passata corrente.
 - `core/src/alfred_tables.h`, `core/src/alfred_tables.c`,
   `core/src/alfred_utils.h` e `core/src/alfred_utils.c`: aggiunti commenti
   strutturati sulle tabelle interne del core, sugli helper di tempo/hash/path e

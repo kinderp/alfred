@@ -1,26 +1,17 @@
-/*======================================================================
+/* ============================================================================
+ * main_demo.c - standalone core correlator demonstration
  *
- * FILE: examples/main_demo.c
+ * This example feeds synthetic alfred_raw_event_t records directly into the
+ * core without using the inotify backend. It is useful for reading and
+ * experimenting with the core API in isolation, but it is not the production
+ * runtime path.
  *
- * PURPOSE:
- *   Demonstration program for Alfred correlator engine.
+ * The real application flow is:
  *
- * WHAT IT DOES:
- *   Feeds synthetic raw filesystem events into the engine:
+ *   inotify_backend.c -> alfred_raw_event_t -> alfred_process()
  *
- *     - file creation
- *     - modify storms
- *     - rename/move sequences
- *     - delete events
- *
- *   Then prints the resulting high-level semantic events.
- *
- * WHY THIS EXISTS:
- *   - validate correctness
- *   - debug correlation logic
- *   - simulate real filesystem behavior without kernel
- *
- *======================================================================*/
+ * This example starts at the alfred_raw_event_t step.
+ * ========================================================================== */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,18 +19,17 @@
 
 #include "alfred_correlator.h"
 
-/*======================================================================
+/* ============================================================================
  * SIMPLE PRINT CALLBACK
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * This callback is invoked by the engine for each
- * high-level event.
+ * on_event - print one semantic event emitted by the demo engine
+ * @ev: semantic event emitted by the core
+ * @userdata: unused demo context
  *
- * In production this could be:
- *   - indexer
- *   - database writer
- *   - network stream
+ * Real applications would usually replace this with a logger, indexer,
+ * database writer, network stream, or test collector.
  */
 static void on_event(
     const alfred_event_t *ev,
@@ -57,10 +47,23 @@ static void on_event(
     );
 }
 
-/*======================================================================
+/* ============================================================================
  * HELPERS TO CREATE RAW EVENTS
- *======================================================================*/
+ * ========================================================================== */
 
+/*
+ * mk_event - build a synthetic raw event for the demo
+ * @mask: ALFRED_RAW_* flags
+ * @path: event path
+ * @cookie: move correlation cookie, or 0
+ * @pid: synthetic process id
+ *
+ * The timestamp is intentionally fixed. That keeps the example deterministic,
+ * but it also means the demo is not a realistic timing test for debounce or
+ * move timeout behavior.
+ *
+ * Return: initialized raw event value.
+ */
 static alfred_raw_event_t mk_event(
     uint32_t mask,
     const char *path,
@@ -81,18 +84,23 @@ static alfred_raw_event_t mk_event(
     return e;
 }
 
-/*======================================================================
+/* ============================================================================
  * MAIN DEMO
- *======================================================================*/
+ * ========================================================================== */
 
+/*
+ * main - run the standalone core demonstration
+ *
+ * Return: 0 on success, 1 when the engine cannot be created.
+ */
 int main(void)
 {
     alfred_config_t cfg;
     alfred_engine_t *eng;
 
-    /*==============================================================
+    /* ========================================================================
      * CONFIGURATION
-     *==============================================================*/
+     * ====================================================================== */
 
     alfred_config_default(&cfg);
 
@@ -100,9 +108,9 @@ int main(void)
     cfg.modify_debounce_ms = 100;
     cfg.create_ready_ms = 300;
 
-    /*==============================================================
+    /* ========================================================================
      * ENGINE INIT
-     *==============================================================*/
+     * ====================================================================== */
 
     eng = alfred_create(&cfg, on_event, NULL);
 
@@ -111,9 +119,9 @@ int main(void)
         return 1;
     }
 
-    /*==============================================================
+    /* ========================================================================
      * 1. FILE CREATE + READY SEQUENCE
-     *==============================================================*/
+     * ====================================================================== */
 
     alfred_process(eng,
         &mk_event(ALFRED_RAW_CREATE, "/tmp/a.txt", 0, 100));
@@ -121,18 +129,18 @@ int main(void)
     alfred_process(eng,
         &mk_event(ALFRED_RAW_CLOSE_WRITE, "/tmp/a.txt", 0, 100));
 
-    /*==============================================================
+    /* ========================================================================
      * 2. MODIFY STORM (should be debounced)
-     *==============================================================*/
+     * ====================================================================== */
 
     for (int i = 0; i < 5; i++) {
         alfred_process(eng,
             &mk_event(ALFRED_RAW_MODIFY, "/tmp/a.txt", 0, 100));
     }
 
-    /*==============================================================
+    /* ========================================================================
      * 3. RENAME SEQUENCE (MOVE_FROM + MOVE_TO)
-     *==============================================================*/
+     * ====================================================================== */
 
     alfred_process(eng,
         &mk_event(ALFRED_RAW_MOVED_FROM, "/tmp/a.txt", 55, 100));
@@ -140,16 +148,16 @@ int main(void)
     alfred_process(eng,
         &mk_event(ALFRED_RAW_MOVED_TO, "/home/a.txt", 55, 100));
 
-    /*==============================================================
+    /* ========================================================================
      * 4. DELETE EVENT
-     *==============================================================*/
+     * ====================================================================== */
 
     alfred_process(eng,
         &mk_event(ALFRED_RAW_DELETE, "/home/a.txt", 0, 100));
 
-    /*==============================================================
+    /* ========================================================================
      * FLUSH + CLEANUP
-     *==============================================================*/
+     * ====================================================================== */
 
     alfred_flush(eng);
     alfred_destroy(eng);

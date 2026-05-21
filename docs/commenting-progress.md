@@ -34,6 +34,7 @@ Completed in the first heavy pass:
 - `core/src/alfred_tables.h`
 - `core/src/alfred_utils.c`
 - `core/src/alfred_utils.h`
+- `core/examples/main_demo.c`
 - `app/src/app.c` comment refresh only
 - `modules/inotify/src/watch_manager.c`
 - `modules/inotify/include/watch_manager.h`
@@ -68,7 +69,7 @@ Completed in the first heavy pass:
 
 | Status | File |
 | --- | --- |
-| Pending | `core/examples/main_demo.c` |
+| Done | `core/examples/main_demo.c` |
 | Done | `core/include/alfred_correlator.h` |
 | Done | `core/src/alfred_correlator.c` |
 | Done | `core/src/alfred_tables.c` |
