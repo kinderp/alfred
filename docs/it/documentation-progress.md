@@ -31,6 +31,9 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `04-livello-applicazione.md`: corrette ulteriori sezioni obsolete su
+  `app_t`, shadow mode ed `event_engine`, chiarendo che il core e' il percorso
+  ufficiale di default e che il legacy e' solo confronto esplicito.
 - `01-panoramica-progetto.md`: aggiornato lo stato corrente per indicare che il
   core e' lo stream semantico ufficiale di default, mentre `events.c` e
   `move_cache.c` restano supporto legacy per shadow mode; aggiunto rimando alla

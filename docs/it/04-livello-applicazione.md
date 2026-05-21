@@ -82,8 +82,8 @@ autonomo. La cache move del legacy non e' piu' dentro `app_t`: appartiene a
 `events.c` e viene inizializzata solo in shadow mode.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
-In questa fase pero' lavora in shadow mode: riceve gli stessi eventi del vecchio
-dispatcher, ma non sostituisce ancora il comportamento ufficiale.
+Oggi e' lo stream semantico ufficiale di default. Lo shadow mode puo' ancora
+attivare il vecchio dispatcher per confronto, ma non e' il percorso ordinario.
 
 ## app/src/main.c
 
@@ -154,7 +154,8 @@ eventi raw tramite callback e li inoltra al core.
 
 ### Shadow mode
 
-Durante l'integrazione il ciclo eventi usa due percorsi:
+Quando si abilita esplicitamente lo shadow mode, lo stesso evento inotify viene
+osservato da due percorsi:
 
 ```text
 struct inotify_event
@@ -171,12 +172,13 @@ struct inotify_event
     -> vecchio logger eventi
 ```
 
-Il vecchio dispatcher resta il comportamento ufficiale. Il core lavora in
-parallelo e produce righe con prefisso `core`, utili per confrontare il nuovo
-motore con il comportamento esistente.
+Il runtime normale usa il core. In shadow mode, invece, il vecchio dispatcher
+produce lo stream legacy e il core produce righe con prefisso `core`, utili per
+confrontare il nuovo motore con il comportamento storico.
 
-Questo approccio riduce il rischio: possiamo osservare il core prima di
-renderlo ufficiale.
+Questo approccio riduce il rischio quando si modificano regole semantiche:
+possiamo osservare differenze tra core e legacy senza confondere il percorso
+ufficiale `event_engine=core`.
 
 ### Aggiornamento watch backend
 
@@ -319,12 +321,14 @@ core
 plain dal core e non chiama il dispatcher legacy. Per riattivare il confronto si
 usa `ALFRED_EVENT_ENGINE=shadow`.
 
+In shadow mode:
+
 ```text
 legacy dispatcher -> evento ufficiale storico
 core              -> evento shadow con prefisso core
 ```
 
-`core` rende invece il core la sorgente ufficiale degli eventi semantici:
+In core mode:
 
 ```text
 core -> evento ufficiale plain
