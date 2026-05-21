@@ -30,6 +30,19 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/src/inotify_backend.c`, `core/include/alfred_correlator.h`,
+  `core/src/alfred_correlator.c` e `app/src/app.c`: avviata la passata pesante
+  sui commenti del codice, chiarendo contratti, proprieta' dello stato,
+  confini backend/core/app, raw event sintetici e ruolo temporaneo dello shadow
+  legacy.
+- `05-modulo-inotify.md` e `06-core-engine.md`: aggiornata la spiegazione
+  didattica delle funzioni principali commentate nel codice e corretto lo stato
+  corrente: il core e' lo stream ufficiale di default, mentre lo shadow mode e'
+  un confronto esplicito.
+- `docs/commenting-progress.md`: segnato il completamento della prima passata
+  pesante su backend inotify e correlatore core; aggiornata la lista dei file
+  successivi da commentare.
 - `15-todo-switch-core.md`: aggiunta roadmap orientativa allo switch definitivo
   con effort stimato, motivazione del rinvio overflow, piano della fase A per
   la documentazione pesante del codice e proposta per una futura mappa

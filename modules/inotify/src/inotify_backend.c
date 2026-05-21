@@ -4,6 +4,12 @@
  * This file owns the current inotify polling boundary. It keeps the descriptor
  * and watcher table in app->inotify while app.c remains responsible for
  * high-level orchestration.
+ *
+ * The backend must stop at raw facts. It may know how to read inotify records,
+ * map watch descriptors to paths, keep recursive watches alive, and synthesize
+ * raw directory-create facts discovered during a recursive scan. It must not
+ * decide final FILE_* or DIR_* semantics; that belongs to the core. The only
+ * exception is the temporary legacy dispatcher used by shadow mode.
  * ========================================================================== */
 
 #include "inotify_backend.h"
@@ -67,6 +73,17 @@ static int backend_emit_synthetic_dir_create(
  * Lifecycle
  * ========================================================================== */
 
+/*
+ * inotify_backend_init - initialize the inotify backend runtime
+ * @app: application context containing config, logger, and backend storage
+ *
+ * Initializes the watcher table first, then opens a nonblocking inotify file
+ * descriptor. In shadow mode it also initializes the legacy semantic
+ * dispatcher so the backend can produce both the official core stream and the
+ * comparison legacy stream.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
 int inotify_backend_init(app_t *app)
 {
     if (app == NULL)
@@ -121,6 +138,18 @@ int inotify_backend_init(app_t *app)
     return ERR_OK;
 }
 
+/*
+ * inotify_backend_add_startup_watch - add one startup path to the backend
+ * @app: initialized application context
+ * @path: path supplied on the command line
+ *
+ * Startup watch installation is backend state, not semantic event processing.
+ * Recursive mode installs watches for the existing tree before the event loop
+ * starts; later recursive updates are handled when directory-create raw facts
+ * arrive from inotify.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
 int inotify_backend_add_startup_watch(app_t *app,
                                       const char *path)
 {
@@ -139,6 +168,14 @@ int inotify_backend_add_startup_watch(app_t *app,
     return ERR_OK;
 }
 
+/*
+ * inotify_backend_shutdown - release backend runtime resources
+ * @app: application context containing the backend state
+ *
+ * The function is safe for partial initialization paths. The legacy dispatcher
+ * shutdown is kept here because the backend owns the temporary shadow-mode
+ * bridge to events.c.
+ */
 void inotify_backend_shutdown(app_t *app)
 {
     if (app == NULL)
@@ -157,6 +194,25 @@ void inotify_backend_shutdown(app_t *app)
  * Polling
  * ========================================================================== */
 
+/*
+ * inotify_backend_poll - process one nonblocking inotify read
+ * @app: initialized application context
+ * @on_event: callback used to deliver raw events to the application/core layer
+ * @userdata: opaque callback context passed through unchanged
+ *
+ * The processing order is deliberate:
+ *
+ * 1. log the kernel raw event for diagnostics
+ * 2. convert the inotify record into alfred_raw_event_t when possible
+ * 3. deliver the raw event to the core through @on_event
+ * 4. optionally run the legacy dispatcher for shadow comparison
+ * 5. update recursive watches and emit synthetic raw directory creates
+ *
+ * This keeps the core as the official semantic path while preserving the
+ * legacy stream only as a comparison tool.
+ *
+ * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
+ */
 int inotify_backend_poll(app_t *app,
                          inotify_backend_event_fn on_event,
                          void *userdata)
@@ -260,6 +316,19 @@ int inotify_backend_poll(app_t *app,
  * Recursive Discovery
  * ========================================================================== */
 
+/*
+ * backend_handle_dir_create - maintain recursive watches after a new directory
+ * @app: initialized application context
+ * @ev: raw inotify event currently being processed
+ * @on_event: callback used for synthetic raw events
+ * @userdata: callback context passed through unchanged
+ *
+ * A fast `mkdir -p one/two/three` can create children before the backend has a
+ * watch on each new parent. The recursive scan repairs backend state by adding
+ * watches below the created directory. When it discovers directories whose
+ * kernel create event could not have been observed, it emits synthetic raw
+ * CREATE|ISDIR facts so the core can still produce DIR_CREATED.
+ */
 static void backend_handle_dir_create(app_t *app,
                                       const struct inotify_event *ev,
                                       inotify_backend_event_fn on_event,
@@ -299,6 +368,16 @@ static void backend_handle_dir_create(app_t *app,
         &context);
 }
 
+/*
+ * backend_process_discovered_dir - convert recursive discovery into raw input
+ * @app: initialized application context
+ * @path: discovered directory path
+ * @userdata: backend_emit_context_t supplied by backend_handle_dir_create()
+ *
+ * Discovery callbacks run while watch_manager.c walks the filesystem. This
+ * helper adapts that backend-state notification into the same raw event
+ * callback used for real inotify events.
+ */
 static void backend_process_discovered_dir(app_t *app,
                                            const char *path,
                                            void *userdata)
@@ -315,6 +394,14 @@ static void backend_process_discovered_dir(app_t *app,
                                             context->userdata);
 }
 
+/*
+ * backend_now_ns - return monotonic time for synthetic raw events
+ *
+ * Synthetic raw events need the same time base as normal core input so move
+ * timeouts and debounce windows remain comparable.
+ *
+ * Return: monotonic timestamp in nanoseconds.
+ */
 static uint64_t backend_now_ns(void)
 {
     struct timespec ts;
@@ -325,6 +412,21 @@ static uint64_t backend_now_ns(void)
            (uint64_t)ts.tv_nsec;
 }
 
+/*
+ * backend_emit_synthetic_dir_create - emit a synthetic raw directory create
+ * @app: initialized application context
+ * @path: directory discovered by recursive scanning
+ * @on_event: callback used to deliver raw events to the core path
+ * @userdata: callback context passed through unchanged
+ *
+ * The event is synthetic only in the backend sense: the directory really
+ * exists, but the kernel create notification was missed because the needed
+ * watch did not exist yet. The core receives a normal ALFRED_RAW_CREATE |
+ * ALFRED_RAW_ISDIR fact and does not need to know whether it came from an
+ * inotify record or recursive discovery.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
 static int backend_emit_synthetic_dir_create(
     app_t *app,
     const char *path,

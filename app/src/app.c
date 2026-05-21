@@ -183,8 +183,9 @@ int app_init(app_t *app, int argc, char **argv)
 
     /*
      * The core is initialized after the logger because its emit callback writes
-     * semantic events through logger_event(). For now the core runs in shadow
-     * mode beside the legacy dispatcher.
+     * semantic events through logger_event(). In core mode this is the official
+     * stream. In shadow mode the backend also runs the legacy dispatcher so the
+     * two streams can be compared.
      */
     alfred_config_default(&app->core_config);
     app->core_logger_context.logger = &app->logger;

@@ -1,41 +1,15 @@
-/*======================================================================
+/* ============================================================================
+ * alfred_correlator.h - public API for the semantic event core
  *
- * FILE: include/alfred_correlator.h
+ * The core accepts low-level Alfred raw events and emits high-level semantic
+ * events. Backends such as inotify and future fanotify adapters are responsible
+ * for translating their native kernel records into alfred_raw_event_t. The core
+ * is responsible for correlation, debounce, move classification, and stable
+ * application-facing event names.
  *
- * PUBLIC API HEADER
- *
- * This file exposes the stable public interface of the Alfred
- * filesystem event correlation engine.
- *
- * PURPOSE:
- *   Convert noisy low-level raw watcher events into clean,
- *   semantic high-level events.
- *
- * INPUT EXAMPLES:
- *   RAW_CREATE
- *   RAW_MODIFY
- *   RAW_MOVED_FROM
- *   RAW_MOVED_TO
- *
- * OUTPUT EXAMPLES:
- *   FILE_CREATED
- *   FILE_READY
- *   FILE_MODIFIED
- *   FILE_RENAMED
- *   FILE_MOVED
- *
- * DESIGN GOALS:
- *   - portable C (POSIX)
- *   - no external dependencies
- *   - deterministic behavior
- *   - embeddable library
- *   - stable ABI-friendly structures
- *
- * NOTE:
- *   This header contains only declarations.
- *   Implementation lives in core source files.
- *
- *======================================================================*/
+ * This header is intentionally backend-neutral. It must not expose inotify
+ * watch descriptors, Linux masks, or module-specific state.
+ * ========================================================================== */
 
 #ifndef ALFRED_CORRELATOR_H
 #define ALFRED_CORRELATOR_H
@@ -47,9 +21,9 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 
-/*======================================================================
+/* ============================================================================
  * VERSION
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Public semantic version of the engine.
@@ -69,9 +43,9 @@ extern "C" {
 #define ALFRED_VERSION_MINOR 0
 #define ALFRED_VERSION_PATCH 0
 
-/*======================================================================
+/* ============================================================================
  * FORWARD DECLARATION
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Opaque engine instance.
@@ -84,9 +58,9 @@ extern "C" {
  */
 typedef struct alfred_engine alfred_engine_t;
 
-/*======================================================================
+/* ============================================================================
  * RAW INPUT EVENT SOURCE
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Identifies where raw event originated.
@@ -110,9 +84,9 @@ typedef enum {
 
 } alfred_source_t;
 
-/*======================================================================
+/* ============================================================================
  * RAW INPUT MASK FLAGS
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Raw masks represent low-level watcher facts.
@@ -121,6 +95,11 @@ typedef enum {
  *
  * Example:
  *   CREATE + ISDIR
+ *
+ * These flags are not semantic events. ALFRED_RAW_MOVED_FROM and
+ * ALFRED_RAW_MOVED_TO are two raw facts; the core may combine them into one
+ * FILE_MOVED, FILE_RENAMED, FILE_RELOCATED, DIR_MOVED, DIR_RENAMED, or
+ * DIR_RELOCATED event.
  */
 typedef enum {
 
@@ -136,9 +115,9 @@ typedef enum {
 
 } alfred_raw_mask_t;
 
-/*======================================================================
+/* ============================================================================
  * RAW INPUT EVENT
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * This structure is fed INTO the engine.
@@ -148,8 +127,9 @@ typedef enum {
  *   inotify adapter  -> fills this struct
  *   fanotify adapter -> fills this struct
  *
- * Engine does NOT own string memory permanently.
- * Path only needs to remain valid during process() call.
+ * Engine does NOT own string memory permanently. Path only needs to remain
+ * valid during alfred_process(), except when the core stores a pending
+ * MOVED_FROM path internally for later MOVED_TO correlation.
  */
 typedef struct {
 
@@ -210,9 +190,9 @@ typedef struct {
 
 } alfred_raw_event_t;
 
-/*======================================================================
+/* ============================================================================
  * HIGH LEVEL OUTPUT EVENT TYPES
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * These are semantic events emitted by Alfred.
@@ -224,6 +204,12 @@ typedef struct {
  *   Backup daemons
  *   Security sensors
  *   Desktop UI refreshers
+ *
+ * Rename, move, and relocated are distinct semantic outcomes:
+ *
+ *   - RENAMED: same parent directory, different basename
+ *   - MOVED: different parent directory, same basename
+ *   - RELOCATED: both parent directory and basename changed
  */
 typedef enum {
 
@@ -252,9 +238,9 @@ typedef enum {
 
 } alfred_event_type_t;
 
-/*======================================================================
+/* ============================================================================
  * HIGH LEVEL OUTPUT EVENT
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * This structure is emitted TO user callback.
@@ -306,9 +292,9 @@ typedef struct {
 
 } alfred_event_t;
 
-/*======================================================================
+/* ============================================================================
  * USER CALLBACK
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Called whenever engine emits high-level event.
@@ -327,9 +313,9 @@ typedef void (*alfred_emit_fn)(
     void *userdata
 );
 
-/*======================================================================
+/* ============================================================================
  * CONFIGURATION
- *======================================================================*/
+ * ========================================================================== */
 
 /*
  * Tunable runtime parameters.
@@ -365,23 +351,25 @@ typedef struct {
 
 } alfred_config_t;
 
-/*======================================================================
+/* ============================================================================
  * API
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * Fill config with sane defaults.
+ * alfred_config_default - fill config with sane defaults
+ * @cfg: configuration object to initialize
  *
  * Safe to modify afterward.
  */
 void alfred_config_default(alfred_config_t *cfg);
 
 /*
- * Create new engine instance.
+ * alfred_create - create a new semantic event engine
+ * @cfg: runtime configuration copied into the engine
+ * @emit_cb: callback invoked for each semantic event
+ * @userdata: opaque pointer passed to @emit_cb
  *
- * Returns:
- *   pointer on success
- *   NULL on failure
+ * Return: pointer on success, NULL on failure.
  */
 alfred_engine_t *alfred_create(
     const alfred_config_t *cfg,
@@ -390,17 +378,22 @@ alfred_engine_t *alfred_create(
 );
 
 /*
- * Destroy engine and free all memory.
+ * alfred_destroy - destroy an engine and free all internal state
+ * @engine: engine returned by alfred_create()
  *
  * Safe with NULL.
  */
 void alfred_destroy(alfred_engine_t *engine);
 
 /*
- * Feed one raw event into engine.
+ * alfred_process - feed one raw event into the engine
+ * @engine: engine returned by alfred_create()
+ * @raw: raw event produced by a backend or test harness
  *
- * Deterministic:
- *   same ordered input -> same output
+ * The core is deterministic for an ordered raw input stream: the same raw
+ * sequence produces the same semantic sequence.
+ *
+ * Return: 0 on success, -1 on invalid arguments.
  */
 int alfred_process(
     alfred_engine_t *engine,
@@ -408,34 +401,45 @@ int alfred_process(
 );
 
 /*
- * Periodic maintenance tick.
+ * alfred_tick - run periodic maintenance for time-based state
+ * @engine: engine returned by alfred_create()
  *
  * Call regularly (example every 100 ms)
  * if your loop may become idle.
  *
  * Needed for move timeout expiration.
+ *
+ * Return: 0 on success, -1 on invalid arguments.
  */
 int alfred_tick(alfred_engine_t *engine);
 
 /*
- * Flush pending states immediately.
+ * alfred_flush - flush pending states immediately
+ * @engine: engine returned by alfred_create()
  *
  * Example:
  *   before shutdown
  *   before snapshot
+ *
+ * Return: 0 on success, -1 on invalid arguments.
  */
 int alfred_flush(alfred_engine_t *engine);
 
 /*
- * Human readable event type string.
+ * alfred_event_name - return a human-readable semantic event name
+ * @type: ALFRED_EV_* value
  *
  * Example:
  *   FILE_CREATED
+ *
+ * Return: static string for @type, or "UNKNOWN".
  */
 const char *alfred_event_name(uint32_t type);
 
 /*
- * Library version string.
+ * alfred_version_string - return the public core version string
+ *
+ * Return: static semantic version string.
  *
  * Example:
  *   1.0.0

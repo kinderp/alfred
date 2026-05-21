@@ -259,12 +259,49 @@ Al momento:
 - l'adapter inotify compila
 - la callback `core_logger_on_event()` compila
 - il core e' inizializzato dentro `app_t`
-- il runtime invia eventi al core in shadow mode
-- il vecchio dispatcher in `events.c` resta ancora attivo
+- il runtime di default invia eventi al core come stream ufficiale
+- lo shadow mode puo' ancora attivare il vecchio dispatcher in `events.c` per
+  confronto
 
-Shadow mode significa che il core riceve gli eventi, produce output e lo scrive
-nel log, ma non e' ancora l'unica fonte ufficiale di eventi semantici.
+Shadow mode oggi significa: il core resta attivo, ma il backend esegue anche il
+dispatcher legacy per confrontare i due comportamenti. Non e' il percorso
+ordinario del runtime.
 
-Il prossimo passo sara' confrontare il vecchio output con quello del core e poi
-decidere quando rimuovere gradualmente la vecchia logica semantica da
-`modules/inotify/src/events.c`.
+## Funzioni principali del core
+
+La prima passata pesante sui commenti ha chiarito il contratto delle funzioni
+pubbliche in:
+
+```text
+core/include/alfred_correlator.h
+core/src/alfred_correlator.c
+```
+
+`alfred_process()` e' l'ingresso principale. Riceve un solo
+`alfred_raw_event_t` e puo' produrre zero o un evento semantico. Produce zero
+eventi quando, per esempio, un `ALFRED_RAW_MODIFY` viene soppresso dal debounce
+oppure quando un `ALFRED_RAW_MOVED_FROM` viene salvato in attesa del
+`ALFRED_RAW_MOVED_TO` corrispondente.
+
+`classify_move()` e' la funzione che decide la semantica finale di una coppia
+move correlata:
+
+- stesso parent, nome diverso: `RENAMED`
+- parent diverso, stesso nome: `MOVED`
+- parent diverso e nome diverso: `RELOCATED`
+
+Questa decisione e' una differenza importante rispetto al legacy: il core emette
+un solo evento `RELOCATED` quando cambiano sia directory sia nome, invece di
+emettere una coppia `MOVED` + `RENAMED`.
+
+`alfred_tick()` esegue manutenzione temporale, soprattutto lo sweep dei move
+rimasti in sospeso. Serve per mantenere coerenti i timeout anche quando il loop
+riceve pochi eventi.
+
+`alfred_flush()` per ora delega a `alfred_tick()`. In futuro potrebbe diventare
+il punto in cui svuotare anche debounce o altri stati pendenti prima dello
+shutdown.
+
+Il prossimo passo resta rimuovere gradualmente la vecchia logica semantica da
+`modules/inotify/src/events.c`, dopo aver reso il percorso legacy chiaramente
+opzionale o confinato.

@@ -307,9 +307,16 @@ watch_manager_add_recursive_with_discovery(...)
 ```
 
 Questa funzione continua ad aggiungere i watch, ma quando scopre una
-sottodirectory gia' esistente chiama una callback. Durante lo shadow mode la
-callback usata dall'app genera un raw event sintetico verso il core, cosi' il
-core puo' emettere il `DIR_CREATED` che inotify non ha potuto consegnare.
+sottodirectory gia' esistente chiama una callback. Oggi la callback e' gestita
+dal backend inotify in:
+
+```text
+modules/inotify/src/inotify_backend.c
+```
+
+Il backend genera un raw event sintetico verso lo stesso percorso usato dagli
+eventi reali, cosi' il core puo' emettere il `DIR_CREATED` che inotify non ha
+potuto consegnare.
 
 Il watch manager non decide direttamente la semantica. Si limita a segnalare:
 
@@ -318,6 +325,30 @@ ho scoperto questa directory durante lo scan
 ```
 
 La trasformazione in `DIR_CREATED` resta responsabilita' del core.
+
+## Funzioni principali del backend
+
+La prima passata pesante sui commenti ha documentato il contratto delle funzioni
+principali del backend inotify.
+
+`inotify_backend_init()` inizializza la tabella dei watch, apre il file
+descriptor inotify non bloccante e, solo in shadow mode, inizializza anche il
+dispatcher legacy. Questo e' importante: il legacy non e' piu' il percorso
+ordinario, ma uno strumento di confronto.
+
+`inotify_backend_poll()` e' il punto centrale del flusso runtime. L'ordine e':
+
+1. leggere dal file descriptor inotify
+2. scrivere il raw log diagnostico
+3. convertire `struct inotify_event` in `alfred_raw_event_t`
+4. consegnare il raw event alla callback dell'app, che lo inoltra al core
+5. eseguire il dispatcher legacy solo se `event_engine=shadow`
+6. aggiornare i watch ricorsivi e generare raw event sintetici se lo scan scopre
+   directory create prima dell'aggiunta del watch
+
+Questa sequenza fissa un confine importante: il backend puo' scoprire fatti e
+mantenere lo stato dei watch, ma non deve decidere la semantica finale degli
+eventi.
 
 ## Perche' l'adapter non fa semantica
 
@@ -340,11 +371,11 @@ stare nel core.
 
 ## Prossimo passo tecnico
 
-Ora che l'adapter esiste e compila, il prossimo passo sara':
+Il core e' ormai il runtime di default. Il prossimo passo tecnico non e' piu'
+"collegare" il core, ma rendere piu' pulito il confine:
 
-1. inizializzare un `alfred_engine_t` dentro l'applicazione
-2. aggiungere una callback core -> logger
-3. usare `inotify_adapter_build_raw()` nel punto in cui oggi arriva
-   `struct inotify_event`
-4. chiamare `alfred_process()`
-5. rimuovere gradualmente la vecchia logica semantica da `events.c`
+1. documentare in modo completo backend, core e app
+2. rendere il legacy shadow opzionale a livello build
+3. ridurre o quarantinare `events.c` e `move_cache.c`
+4. mantenere nel backend solo lettura inotify, watch e raw event
+5. lasciare al core tutta la semantica finale
