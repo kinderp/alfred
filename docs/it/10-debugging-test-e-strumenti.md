@@ -252,6 +252,21 @@ secondo stream shadow. Il vecchio dispatcher semantico non viene chiamato dal
 loop principale, quindi le differenze rispetto al legacy vanno osservate
 confrontando run separate oppure tornando al tool shadow.
 
+Lo stesso runner diagnostico degli scenari puo' avviare Alfred in core mode:
+
+```bash
+python3 tests/shadow/compare_shadow_output.py create_file --event-engine core
+```
+
+In questo caso il tool stampa una sola sezione:
+
+```text
+Core official
+```
+
+perche' `events.log` contiene lo stream plain del core e non contiene lo stream
+legacy da confrontare.
+
 ## Stress test
 
 Gli stress test sono in:

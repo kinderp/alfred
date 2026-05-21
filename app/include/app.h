@@ -57,9 +57,9 @@ typedef struct app {
     /*
      * Core correlator configuration and engine.
      *
-     * During integration the engine runs in shadow mode: the legacy inotify
-     * dispatcher still produces the official event log, while the core receives
-     * the same raw events for comparison.
+     * During integration the engine can run in shadow mode or official core
+     * mode. In both cases the core receives raw events; the selected event
+     * engine mode decides how core_logger_context formats them.
      */
     alfred_config_t core_config;
     core_logger_context_t core_logger_context;
@@ -103,9 +103,9 @@ int app_run(app_t *app);
  * @app: application context owning the core instance
  * @path: full path of the directory discovered by backend scanning
  *
- * During shadow-mode integration this is used by the inotify recursive watch
- * scan to recover DIR_CREATED events that the kernel could not deliver because
- * the child directory was created before its parent watch was installed.
+ * Used by recursive watch discovery to recover DIR_CREATED events that the
+ * kernel could not deliver because a child directory was created before its
+ * parent watch was installed.
  *
  * Return: 0 on success, -1 on invalid input or core processing failure.
  */

@@ -203,6 +203,17 @@ FILE_RENAMED from=/tmp/a.txt to=/tmp/b.txt
 Quella modalita' serve a provare lo switch, non a confrontare legacy e core nello
 stesso `events.log`.
 
+Il runner supporta entrambe le modalita':
+
+```bash
+python3 tests/shadow/compare_shadow_output.py create_file
+python3 tests/shadow/compare_shadow_output.py create_file --event-engine core
+```
+
+La prima forma usa `event_engine=shadow` e mostra `Legacy`, `Core`,
+`Only in legacy` e `Only in core`. La seconda forma usa
+`ALFRED_EVENT_ENGINE=core` e mostra solo `Core official`.
+
 ## Come leggere le differenze
 
 `Only in legacy` significa:
@@ -653,7 +664,7 @@ possibile protezione futura, non un requisito immediato.
 Scenari utili:
 
 - queue overflow, se riproducibile
-- abilitazione controllata di `IN_MODIFY` e `IN_CLOSE_WRITE`
-- comportamento di `FILE_READY` dopo creazione, modifica e append
+- run core-mode sistematiche per tutti gli scenari shadow
+- confronto tra suite funzionale storica e futura suite core-only
 
 Ogni scenario dovrebbe essere piccolo e leggibile.

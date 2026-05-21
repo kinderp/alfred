@@ -9,6 +9,10 @@ prints the differences.
 This is a diagnostic tool for the integration phase. By default it exits with
 status 0 even when differences are found. Use --strict when a non-empty diff
 should fail the command.
+
+Use --event-engine core to run the same scenario with the core as the official
+plain event stream. In that mode the tool prints the core output only instead
+of comparing legacy and shadow streams.
 """
 
 from __future__ import annotations
@@ -61,10 +65,38 @@ def normalize_path(path: str, watched_root: Path) -> str:
     return path
 
 
-def parse_event_log(log_path: Path, watched_root: Path) -> tuple[list[NormalizedEvent], list[NormalizedEvent]]:
-    """Parse events.log and return legacy and core event lists."""
+def parse_event_message(message: str, watched_root: Path) -> NormalizedEvent | None:
+    """Parse one plain semantic event message."""
+    move = LEGACY_MOVE_RE.match(message)
+    if move is not None:
+        return (
+            move.group("type"),
+            normalize_path(move.group("src"), watched_root),
+            normalize_path(move.group("dst"), watched_root),
+            "move",
+        )
+
+    path = LEGACY_PATH_RE.match(message)
+    if path is not None:
+        return (
+            path.group("type"),
+            normalize_path(path.group("path"), watched_root),
+            "",
+            "path",
+        )
+
+    return None
+
+
+def parse_event_log(
+    log_path: Path,
+    watched_root: Path,
+    event_engine: str,
+) -> tuple[list[NormalizedEvent], list[NormalizedEvent], list[NormalizedEvent]]:
+    """Parse events.log and return legacy, shadow-core, and official-core lists."""
     legacy: list[NormalizedEvent] = []
-    core: list[NormalizedEvent] = []
+    shadow_core: list[NormalizedEvent] = []
+    official_core: list[NormalizedEvent] = []
 
     if not log_path.exists():
         raise FileNotFoundError(f"missing log file: {log_path}")
@@ -76,10 +108,16 @@ def parse_event_log(log_path: Path, watched_root: Path) -> tuple[list[Normalized
 
         message = match.group("message")
 
+        if event_engine == "core":
+            event = parse_event_message(message, watched_root)
+            if event is not None:
+                official_core.append(event)
+            continue
+
         if message.startswith("core "):
             move = CORE_MOVE_RE.match(message)
             if move is not None:
-                core.append(
+                shadow_core.append(
                     (
                         move.group("type"),
                         normalize_path(move.group("src"), watched_root),
@@ -91,7 +129,7 @@ def parse_event_log(log_path: Path, watched_root: Path) -> tuple[list[Normalized
 
             path = CORE_PATH_RE.match(message)
             if path is not None:
-                core.append(
+                shadow_core.append(
                     (
                         path.group("type"),
                         normalize_path(path.group("path"), watched_root),
@@ -103,30 +141,11 @@ def parse_event_log(log_path: Path, watched_root: Path) -> tuple[list[Normalized
 
             continue
 
-        move = LEGACY_MOVE_RE.match(message)
-        if move is not None:
-            legacy.append(
-                (
-                    move.group("type"),
-                    normalize_path(move.group("src"), watched_root),
-                    normalize_path(move.group("dst"), watched_root),
-                    "move",
-                )
-            )
-            continue
+        event = parse_event_message(message, watched_root)
+        if event is not None:
+            legacy.append(event)
 
-        path = LEGACY_PATH_RE.match(message)
-        if path is not None:
-            legacy.append(
-                (
-                    path.group("type"),
-                    normalize_path(path.group("path"), watched_root),
-                    "",
-                    "path",
-                )
-            )
-
-    return legacy, core
+    return legacy, shadow_core, official_core
 
 
 def event_to_text(event: NormalizedEvent) -> str:
@@ -279,13 +298,25 @@ SCENARIOS = {
 }
 
 
-def run_alfred(binary: Path, workdir: Path, watched_root: Path) -> subprocess.Popen:
+def run_alfred(
+    binary: Path,
+    workdir: Path,
+    watched_root: Path,
+    event_engine: str,
+) -> subprocess.Popen:
     """Start alfred with logs written inside workdir."""
+    env = os.environ.copy()
+    if event_engine == "core":
+        env["ALFRED_EVENT_ENGINE"] = "core"
+    else:
+        env.pop("ALFRED_EVENT_ENGINE", None)
+
     return subprocess.Popen(
         [str(binary), str(watched_root)],
         cwd=str(workdir),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=env,
     )
 
 
@@ -343,7 +374,7 @@ def run_scenario(args: argparse.Namespace) -> int:
         watched_root = workdir / "watched"
         watched_root.mkdir()
 
-        proc = run_alfred(binary, workdir, watched_root)
+        proc = run_alfred(binary, workdir, watched_root, args.event_engine)
 
         try:
             time.sleep(args.startup_delay)
@@ -352,19 +383,28 @@ def run_scenario(args: argparse.Namespace) -> int:
         finally:
             stop_alfred(proc)
 
-        legacy, core = parse_event_log(workdir / "events.log", watched_root)
+        legacy, core, official_core = parse_event_log(
+            workdir / "events.log",
+            watched_root,
+            args.event_engine,
+        )
         only_legacy, only_core = diff_events(legacy, core)
 
         print(f"Scenario: {args.scenario}")
+        print(f"Event engine: {args.event_engine}")
         print(f"Temporary root: {watched_root}")
         print()
-        print_event_list("Legacy", legacy)
-        print()
-        print_event_list("Core", core)
-        print()
-        print_event_list("Only in legacy", only_legacy)
-        print()
-        print_event_list("Only in core", only_core)
+
+        if args.event_engine == "core":
+            print_event_list("Core official", official_core)
+        else:
+            print_event_list("Legacy", legacy)
+            print()
+            print_event_list("Core", core)
+            print()
+            print_event_list("Only in legacy", only_legacy)
+            print()
+            print_event_list("Only in core", only_core)
 
         if args.keep_logs:
             keep_dir = REPO_ROOT / "tests" / "shadow" / "last-run"
@@ -374,7 +414,7 @@ def run_scenario(args: argparse.Namespace) -> int:
             print()
             print(f"Logs copied to: {keep_dir}")
 
-        if args.strict and (only_legacy or only_core):
+        if args.strict and args.event_engine == "shadow" and (only_legacy or only_core):
             return 1
 
         return 0
@@ -382,13 +422,14 @@ def run_scenario(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compare legacy and core shadow-mode event output.",
+        description="Run Alfred filesystem scenarios in shadow or core event mode.",
         epilog=(
-            "Default mode is diagnostic: differences are printed but the "
-            "command exits with status 0. Use --strict only when a difference "
-            "must fail the command. Use --keep-logs to preserve events.log, "
-            "raw.log, and the watched tree under tests/shadow/last-run for "
-            "manual inspection of backend diagnostics such as WATCH_ADDED."
+            "Default event engine is shadow: legacy and prefixed core output "
+            "are compared and differences are printed without failing unless "
+            "--strict is used. With --event-engine core, Alfred runs with "
+            "ALFRED_EVENT_ENGINE=core and the tool prints the official plain "
+            "core stream. Use --keep-logs to preserve events.log, raw.log, "
+            "and the watched tree under tests/shadow/last-run."
         ),
     )
     parser.add_argument(
@@ -416,7 +457,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit with status 1 when legacy/core output differs",
+        help="in shadow mode, exit with status 1 when legacy/core output differs",
+    )
+    parser.add_argument(
+        "--event-engine",
+        choices=("shadow", "core"),
+        default="shadow",
+        help="run the scenario in shadow comparison mode or core official mode",
     )
     parser.add_argument(
         "--keep-logs",

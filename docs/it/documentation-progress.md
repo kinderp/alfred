@@ -121,3 +121,17 @@ Stati usati:
 - `.gitignore` e `10-debugging-test-e-strumenti.md`: esclusi i log di runtime
   dai file versionati; i log tracciati in `tests/functional/` sono stati rimossi
   dall'indice.
+- `tests/shadow/compare_shadow_output.py`: aggiunta l'opzione
+  `--event-engine core` per eseguire gli stessi scenari con il core come stream
+  ufficiale plain.
+- `app/src/app.c` e `modules/inotify/src/events.c`: spostato l'aggiornamento
+  ricorsivo dei watch per directory create fuori dal dispatcher semantico
+  legacy, cosi' core mode continua a monitorare nuove directory.
+- `15-todo-switch-core.md`: chiarito che la manutenzione dei watch in `app.c`
+  e' una collocazione temporanea dello switch; la destinazione finale e' il
+  backend inotify o una futura interfaccia backend.
+- `04-livello-applicazione.md`, `07-flusso-eventi.md`,
+  `10-debugging-test-e-strumenti.md`, `12-confronto-shadow-mode.md`,
+  `14-scenari-test.md` e `15-todo-switch-core.md`: documentato il runner
+  core-mode e il motivo per cui la manutenzione dei watch e' backend state, non
+  semantica legacy.

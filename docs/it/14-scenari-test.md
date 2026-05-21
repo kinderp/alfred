@@ -462,6 +462,28 @@ I log vengono copiati in:
 tests/shadow/last-run/
 ```
 
+Per provare il core come stream ufficiale plain, usare:
+
+```bash
+python3 tests/shadow/compare_shadow_output.py <scenario> --event-engine core
+```
+
+In questa modalita' il tool avvia Alfred con `ALFRED_EVENT_ENGINE=core` e
+stampa:
+
+```text
+Core official
+```
+
+Non c'e' confronto con il legacy nella stessa run, perche' il vecchio dispatcher
+non viene chiamato.
+
+Nota importante: anche in core mode l'app continua ad aggiornare i watch del
+backend quando vede `IN_CREATE | IN_ISDIR`. Questa logica non appartiene a
+`events.c`: serve al backend per continuare a monitorare nuove directory. Senza
+questo aggiornamento, scenari come `move_dir` o `recursive_create_nested_dir`
+perderebbero eventi dentro directory create da poco.
+
 ## Mappa a tre livelli degli scenari shadow
 
 Questa tabella riassume il percorso piu' importante per l'integrazione:

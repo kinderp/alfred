@@ -64,11 +64,19 @@ flowchart TD
     D --> E[alfred_process]
     E --> F[core_logger_on_event]
     F --> G[logger_event plain output]
+    A --> H{IN_CREATE IN_ISDIR?}
+    H -->|si| I[watch_manager_add_recursive]
+    I --> J[WATCH_ADDED / synthetic raw]
 ```
 
 Il vecchio dispatcher `app_dispatch_raw_event()` non viene chiamato. Questo e'
 il punto chiave: `events.c` resta nel codice per il confronto in shadow mode, ma
 non produce lo stream ufficiale quando `event_engine=core`.
+
+L'aggiornamento dei watch resta invece attivo. Non e' semantica legacy: e'
+manutenzione dello stato del backend. Senza questo passaggio, in core mode
+Alfred vedrebbe la creazione della directory nuova ma perderebbe gli eventi
+successivi dentro quella directory.
 
 Esempio di output in core mode:
 

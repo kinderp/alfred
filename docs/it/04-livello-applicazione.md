@@ -117,7 +117,7 @@ Questo stile e' utile perche':
 1. reset della struct `app_t`
 2. configurazione di default
 3. logger
-4. core in shadow mode
+4. core nella modalita' scelta da `event_engine`
 5. tabella watcher
 6. move cache
 7. inotify
@@ -142,9 +142,13 @@ flowchart TD
     B -->|errore reale| D[log errore]
     B -->|ok| E[itera eventi]
     E --> F[log raw event]
-    F --> G[core shadow dispatch]
-    G --> H[vecchio dispatcher]
-    H --> A
+    F --> G[dispatch al core]
+    G --> H{event_engine shadow?}
+    H -->|si| I[vecchio dispatcher]
+    H -->|no| J[skip legacy]
+    I --> K[backend watch update]
+    J --> K
+    K --> A
 ```
 
 Il file descriptor e' non bloccante. Questo significa che `read()` puo'
@@ -173,6 +177,27 @@ parallelo e produce righe con prefisso `core`, utili per confrontare il nuovo
 motore con il comportamento esistente.
 
 Questo approccio riduce il rischio: possiamo osservare il core prima di
+renderlo ufficiale.
+
+### Aggiornamento watch backend
+
+Il ciclo principale gestisce anche un dettaglio backend importante: quando arriva
+un evento `IN_CREATE | IN_ISDIR`, Alfred deve aggiungere watch ricorsivi alla
+nuova directory.
+
+Questa operazione non deve dipendere da `events.c`, perche' `events.c` viene
+saltato in `event_engine=core`. Per questo l'app esegue sempre:
+
+```text
+IN_CREATE | IN_ISDIR
+    -> watch_manager_add_recursive_with_discovery()
+    -> WATCH_ADDED
+    -> eventuali raw event sintetici verso il core
+```
+
+In questo modo sia shadow mode sia core mode continuano a monitorare le nuove
+directory e il core puo' recuperare i `DIR_CREATED` mancanti negli scenari tipo
+`mkdir -p`.
 rimuovere `events.c` e `move_cache.c` dal modulo inotify.
 
 ### Raw event sintetici

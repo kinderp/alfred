@@ -43,6 +43,11 @@ static void setup_signals(void);
 static void handle_signal(int sig);
 static void dispatch_event_to_core(app_t *app,
                                    const struct inotify_event *ev);
+static void handle_backend_dir_create(app_t *app,
+                                      const struct inotify_event *ev);
+static void process_discovered_dir(app_t *app,
+                                   const char *path,
+                                   void *userdata);
 static uint64_t app_now_ns(void);
 
 /*
@@ -105,17 +110,17 @@ static void setup_signals(void)
 }
 
 /* ============================================================================
- * Core Shadow Dispatch
+ * Core Dispatch
  * ========================================================================== */
 
 /*
- * dispatch_event_to_core - feed one inotify event to the core in shadow mode
+ * dispatch_event_to_core - feed one inotify event to the core
  * @app: initialized application context
  * @ev: inotify event read from the kernel
  *
  * Converts the backend-specific event into alfred_raw_event_t and sends it to
- * the core. The legacy dispatcher still handles the official runtime behavior;
- * this path exists so both outputs can be compared during integration.
+ * the core. The selected event engine mode decides whether the core output is
+ * shadow comparison data or the official semantic event stream.
  */
 static void dispatch_event_to_core(app_t *app,
                                    const struct inotify_event *ev)
@@ -152,6 +157,56 @@ static void dispatch_event_to_core(app_t *app,
                      "core failed to process raw event wd=%d",
                      ev->wd);
     }
+}
+
+/*
+ * handle_backend_dir_create - maintain recursive watches after directory create
+ * @app: initialized application context
+ * @ev: inotify create event
+ *
+ * Recursive watch maintenance is backend state, not legacy event semantics.
+ * Keeping it in the app loop lets both shadow mode and core mode discover new
+ * directories even when the legacy dispatcher is skipped.
+ */
+static void handle_backend_dir_create(app_t *app,
+                                      const struct inotify_event *ev)
+{
+    if (app == NULL || ev == NULL)
+        return;
+
+    if (!app->config.recursive)
+        return;
+
+    if ((ev->mask & IN_CREATE) == 0 ||
+        (ev->mask & IN_ISDIR) == 0) {
+        return;
+    }
+
+    const char *base =
+        watcher_get_path(&app->watchers, ev->wd);
+
+    if (base == NULL)
+        return;
+
+    char full[PATH_MAX];
+
+    if (path_join(full, sizeof(full), base, ev->name) != 0)
+        return;
+
+    watch_manager_add_recursive_with_discovery(
+        app,
+        full,
+        process_discovered_dir,
+        NULL);
+}
+
+static void process_discovered_dir(app_t *app,
+                                   const char *path,
+                                   void *userdata)
+{
+    (void)userdata;
+
+    (void)app_process_synthetic_dir_create(app, path);
 }
 
 static uint64_t app_now_ns(void)
@@ -465,6 +520,8 @@ int app_run(app_t *app)
 
             if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
                 app_dispatch_raw_event(app, ev);
+
+            handle_backend_dir_create(app, ev);
 
             ptr += sizeof(struct inotify_event)
                    + ev->len;

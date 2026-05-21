@@ -59,6 +59,11 @@ Al momento:
   stream ufficiale storico
 - `ALFRED_EVENT_ENGINE=core` abilita una modalita' di prova in cui il core
   scrive lo stream ufficiale plain e il legacy dispatcher non viene chiamato
+- l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato nel
+  loop applicativo, quindi funziona anche quando `events.c` viene saltato
+- questa collocazione in `app.c` e' temporanea: quando il legacy non servira'
+  piu', la manutenzione dei watch dovra' stare nel backend inotify o in una
+  futura interfaccia backend, non nel core semantico
 - `events.c` contiene ancora semantica legacy
 - `move_cache.c` e' ancora usato dal legacy dispatcher
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
