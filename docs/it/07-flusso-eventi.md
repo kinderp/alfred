@@ -19,9 +19,10 @@ flowchart TD
 Il modulo inotify produce eventi raw. Il core produce eventi semantici. Il
 livello app decide cosa farne.
 
-## Flusso attuale in shadow mode
+## Flusso diagnostico in shadow mode
 
-Durante l'integrazione stiamo usando shadow mode.
+Durante l'integrazione lo shadow mode resta disponibile come modalita'
+diagnostica esplicita.
 
 Significa che lo stesso evento inotify percorre due strade:
 
@@ -40,10 +41,11 @@ flowchart TD
     I --> J[logger_event core output]
 ```
 
-Il vecchio percorso resta attivo per non rompere subito il comportamento
-esistente.
+Il vecchio percorso resta attivo solo in questa modalita', cosi' si possono
+confrontare legacy e core senza far dipendere il runtime normale dal dispatcher
+storico.
 
-Il nuovo percorso core produce output aggiuntivo con prefisso `core`.
+In shadow mode il percorso core produce output aggiuntivo con prefisso `core`.
 
 ## Flusso di default in core mode
 
@@ -105,13 +107,13 @@ Vantaggi:
 
 - riduce il rischio di regressioni
 - permette di confrontare gli eventi prodotti
-- evita di rompere subito i test
+- permette ai test funzionali storici di restare osservabili in legacy mode
 - rende visibili differenze tra vecchia e nuova logica
-- consente di spegnere il vecchio dispatcher solo quando il core e' affidabile
+- mantiene disponibile il vecchio dispatcher finche' serve come riferimento
 
 ## Esempio di output
 
-Un evento di creazione potrebbe produrre temporaneamente due righe:
+In shadow mode, un evento di creazione potrebbe produrre due righe:
 
 ```text
 [EVENT] FILE_CREATED path=/tmp/a.txt
@@ -124,22 +126,24 @@ La seconda riga viene dal core.
 
 ## Limiti attuali
 
-Non tutti gli eventi sono ancora perfetti nel percorso core.
+Non tutte le politiche di recovery sono ancora definitive nel percorso core.
 
 Esempi:
 
 - `IN_Q_OVERFLOW` puo' non avere un path associato
-- `IN_IGNORED` non ha ancora un raw flag dedicato nel core
-- il vecchio `move_cache` esiste ancora nel modulo inotify
+- `IN_IGNORED` resta diagnostica/backend state, non semantica core
+- il vecchio `move_cache` esiste ancora nel modulo inotify per shadow mode
 
-Per questo il vecchio dispatcher resta attivo.
+Per questo il vecchio dispatcher resta disponibile come confronto, ma non e' il
+percorso ufficiale in `event_engine=core`.
 
 ## Prossimo obiettivo
 
-Il prossimo obiettivo non e' rimuovere subito il vecchio codice. Prima bisogna:
+Il prossimo obiettivo non e' rimuovere alla cieca il vecchio codice. Prima
+bisogna:
 
-1. confrontare output legacy e output core
-2. capire quali eventi il core gestisce diversamente
-3. aggiungere eventuali raw flag mancanti
-4. spostare gradualmente la semantica da `events.c` al core
-5. eliminare `move_cache` dal modulo inotify quando non serve piu'
+1. mantenere documentata la differenza tra stream core e stream legacy
+2. rendere il legacy shadow opzionale a livello build
+3. decidere quali test funzionali storici migrare al core
+4. confinare o rimuovere `events.c` e `move_cache.c`
+5. progettare overflow/resync come passo separato

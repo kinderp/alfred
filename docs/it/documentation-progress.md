@@ -31,6 +31,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `04-livello-applicazione.md`, `07-flusso-eventi.md` e
+  `12-confronto-shadow-mode.md`: corrette frasi obsolete che descrivevano il
+  core come solo shadow o il legacy come comportamento ufficiale; ora la
+  documentazione distingue default `event_engine=core` e shadow mode
+  diagnostico esplicito.
 - `core/examples/main_demo.c`: aggiunti commenti strutturati per chiarire che il
   file e' una dimostrazione isolata del core, non il percorso runtime
   produttivo, e che parte gia' da `alfred_raw_event_t`.

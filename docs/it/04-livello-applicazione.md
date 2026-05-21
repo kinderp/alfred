@@ -412,7 +412,8 @@ un valore che il chiamante deve controllare.
 - `app_init()` costruisce le risorse.
 - `app_run()` legge e dispatcha eventi.
 - `app_shutdown()` libera le risorse.
-- Il core oggi gira in shadow mode.
+- Il core e' lo stream semantico ufficiale di default.
+- Lo shadow mode resta disponibile solo come confronto esplicito con il legacy.
 - La configurazione non possiede memoria dinamica.
 - Il logger possiede i suoi `FILE *`.
 - Alcune responsabilita' sono temporanee e verranno spostate nel core o nel

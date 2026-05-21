@@ -1,7 +1,7 @@
 # Confronto shadow mode
 
 Questo capitolo spiega come confrontare l'output del vecchio dispatcher inotify
-con l'output del nuovo core mentre il progetto e' in shadow mode.
+con l'output del core quando si abilita esplicitamente lo shadow mode.
 
 ## Perche' confrontare i due output
 
@@ -16,8 +16,9 @@ struct inotify_event -> inotify_adapter -> alfred_process()
                     -> core_logger_on_event() -> logger_event()
 ```
 
-Il vecchio path resta il comportamento ufficiale. Il nuovo path serve a capire
-se il core interpreta gli eventi nello stesso modo, meglio o peggio.
+Il core e' il comportamento ufficiale di default. Lo shadow mode serve a
+osservare anche il vecchio path, cosi' possiamo capire se il core interpreta gli
+eventi nello stesso modo, meglio o peggio rispetto al legacy.
 
 ## Tool diagnostico
 
