@@ -31,6 +31,9 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `glossario.md`: aggiornato `Shadow mode` per riflettere il default core e
+  aggiunte voci per frame animabile, documentazione dinamica, artefatto
+  generato, Mermaid e SVG.
 - `09-makefile-e-build-system.md` e `10-debugging-test-e-strumenti.md`:
   documentato che `make docs-animations` e `docs/generated/animations/` sono
   una direzione futura, non target gia' disponibili, e che il Markdown resta la

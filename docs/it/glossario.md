@@ -43,9 +43,9 @@ esempio `/tmp/a.txt -> /var/b.txt` diventa `FILE_RELOCATED`.
 
 ## Shadow mode
 
-Modalita' temporanea in cui il vecchio dispatcher e il nuovo core ricevono gli
-stessi eventi raw. Il vecchio dispatcher resta il comportamento ufficiale,
-mentre il core viene osservato e confrontato.
+Modalita' diagnostica in cui il vecchio dispatcher legacy e il core vengono
+eseguiti sugli stessi eventi per confrontare gli output. Il runtime normale usa
+`event_engine=core`; lo shadow mode resta uno strumento esplicito di confronto.
 
 ## Dedup
 
@@ -61,3 +61,34 @@ Fase in cui i file oggetto `.o` vengono uniti per produrre il binario finale.
 
 Controllo runtime aggiunto dal compilatore per trovare errori di memoria o
 comportamenti indefiniti.
+
+## Frame animabile
+
+Singolo passo di uno scenario descritto in forma testuale. Un frame indica cosa
+succede, quali funzioni vengono chiamate, quali campi delle strutture dati
+cambiano e quale output viene prodotto. Piu' frame ordinati possono diventare
+una GIF, un video o una vista HTML interattiva.
+
+## Documentazione dinamica
+
+Documentazione che mostra l'evoluzione di un processo nel tempo, per esempio
+l'inserimento di un watch nella tabella o la correlazione `MOVED_FROM` /
+`MOVED_TO` nel core. Nel progetto la base resta il Markdown; eventuali
+animazioni saranno derivate dagli scenari descritti nei documenti.
+
+## Artefatto generato
+
+File prodotto automaticamente a partire da una sorgente, per esempio un SVG o
+una GIF generati dagli scenari Markdown. Gli artefatti generati non dovrebbero
+diventare la fonte principale delle spiegazioni: se cambia il comportamento,
+prima si aggiorna il Markdown e poi si rigenera l'output.
+
+## Mermaid
+
+Linguaggio testuale per scrivere diagrammi dentro Markdown. E' utile per
+flowchart e sequence diagram statici, ma non produce direttamente GIF animate.
+
+## SVG
+
+Formato vettoriale per immagini. E' adatto a diagrammi generati perche' resta
+leggibile anche quando viene ingrandito e puo' essere prodotto da script.
