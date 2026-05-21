@@ -66,7 +66,8 @@ Al momento:
 - l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato dal
   loop applicativo al backend inotify
 - `events.c` contiene ancora semantica legacy
-- `move_cache.c` e' ancora usato dal legacy dispatcher
+- `move_cache.c` e' ancora usato dal legacy dispatcher, ma la cache e'
+  posseduta da `events.c` e viene inizializzata solo in `event_engine=shadow`
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -123,7 +124,8 @@ e' ancora nella forma finale.
 
 Responsabilita' attuali:
 
-- inizializza configurazione, logger, core, backend inotify e move cache legacy
+- inizializza configurazione, logger, core, eventuale dispatcher legacy e
+  backend inotify
 - inizializza il backend inotify
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve eventi reali e sintetici tramite callback
@@ -208,8 +210,9 @@ generare raw event sintetici verso il core.
 - `inotify`
 - `moves`
 
-`inotify` e' il backend runtime. `moves` scompare dal runtime legacy quando la
-correlazione move sara' solo nel core.
+`inotify` e' il backend runtime. `moves` resta nel contesto applicativo solo per
+il dispatcher legacy in shadow mode; in `event_engine=core` non viene
+inizializzato.
 
 ## Ordine consigliato per lo switch
 
@@ -223,7 +226,8 @@ L'ordine piu' pulito e':
    sintetici per directory scoperte dallo scan
 4. lasciare al core tutta la semantica: create, delete, modify, close-write,
    move, rename, relocated
-5. rimuovere `move_cache` da `app_t` e dal percorso runtime
+5. rimuovere `move_cache` dal percorso runtime core: fatto; resta confinata al
+   dispatcher legacy
 6. rimuovere `events.c` dal percorso ufficiale, conservandolo solo se serve
    ancora come strumento temporaneo di confronto
 7. solo dopo progettare overflow/resync come feature separata
@@ -371,12 +375,16 @@ confrontare raw log ed event log, e discutere sequenze complesse nei test.
 
 Quando il core gestisce ufficialmente move e rename:
 
-- `modules/inotify/src/move_cache.c` non deve piu' servire al runtime
+- `modules/inotify/src/move_cache.c` non deve piu' servire al runtime core
 - `modules/inotify/include/move_cache.h` puo' essere rimosso dal modulo runtime
-- `app_t.moves` puo' essere eliminato
+- `app_t.moves` puo' essere eliminato: fatto
 - `move_cache_size` puo' essere rimosso dalla configurazione
 
 La correlazione move deve restare nel core.
+
+Stato attuale: `move_cache` e' gia' esclusa da `event_engine=core` ed e'
+posseduta da `events.c`, non da `app_t`. Resta solo per `event_engine=shadow`,
+dove `events.c` produce ancora il confronto legacy.
 
 ### 5. Ridurre o rimuovere `events.c`
 

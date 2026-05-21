@@ -204,3 +204,13 @@ Stati usati:
 - `04-livello-applicazione.md`, `05-modulo-inotify.md` e
   `15-todo-switch-core.md`: aggiornata la documentazione per chiarire che
   `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`.
+- `app/src/app.c`: `move_cache` viene inizializzata solo in
+  `event_engine=shadow`; in core mode la correlazione move resta solo nel core.
+- `04-livello-applicazione.md` e `15-todo-switch-core.md`: documentato che
+  `move_cache` e' ormai stato legacy escluso dal runtime core.
+- `modules/inotify/src/events.c`, `modules/inotify/include/events.h`,
+  `app/include/app.h` e `app/src/app.c`: spostata la proprieta' di `move_cache`
+  dentro il dispatcher legacy, eliminando `app_t.moves`.
+- `04-livello-applicazione.md` e `15-todo-switch-core.md`: documentato che la
+  cache move e' confinata a `events.c` e non appartiene piu' al contesto
+  applicativo.

@@ -60,7 +60,6 @@ typedef struct app {
     logger_t logger;
     alfred_config_t core_config;
     alfred_engine_t *core;
-    move_cache_t moves;
 } app_t;
 ```
 
@@ -75,13 +74,12 @@ Campi importanti:
 - `logger`: gestore dei file di log
 - `core_config`: configurazione del core semantico
 - `core`: istanza del motore semantico Alfred
-- `moves`: cache temporanea per correlare eventi move
 
 Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
 `app_t`; sono incapsulati in `inotify_backend_t`. Il backend riceve ancora
 `app_t *` per usare configurazione e logger, quindi non e' ancora del tutto
-autonomo. `moves` resta invece fuori dal backend perche' appartiene solo al
-dispatcher semantico legacy in shadow mode.
+autonomo. La cache move del legacy non e' piu' dentro `app_t`: appartiene a
+`events.c` e viene inizializzata solo in shadow mode.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
 In questa fase pero' lavora in shadow mode: riceve gli stessi eventi del vecchio
@@ -119,9 +117,8 @@ Questo stile e' utile perche':
 2. configurazione di default
 3. logger
 4. core nella modalita' scelta da `event_engine`
-5. tabella watcher
-6. move cache
-7. backend inotify
+5. eventuale dispatcher legacy in shadow mode
+6. backend inotify
 8. signal handler
 9. watch sui percorsi passati da riga di comando
 
@@ -231,7 +228,7 @@ logger.
 
 1. file descriptor inotify
 2. tabella watcher
-3. move cache
+3. eventuale dispatcher legacy
 4. core
 5. logger
 

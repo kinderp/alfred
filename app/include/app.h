@@ -2,8 +2,8 @@
  * app.h - application runtime state and lifecycle API
  *
  * This header defines the process-wide application context used by alfred.
- * The application layer currently owns configuration, logging, inotify state,
- * watcher tables, and the move cache used by the inotify event dispatcher.
+ * The application layer currently owns configuration, logging, core state, and
+ * a transitional inotify backend context.
  *
  * TODO(core-integration): move semantic event state out of app_t once the
  * inotify module emits raw events directly into the core correlator.
@@ -18,7 +18,6 @@
 #include "core_logger.h"
 #include "inotify_backend.h"
 #include "logger.h"
-#include "move_cache.h"
 
 /*
  * app_t - process-wide runtime context
@@ -27,9 +26,9 @@
  * each subsystem into this object, app_run() uses it while polling inotify,
  * and app_shutdown() releases resources in the reverse direction.
  *
- * The current design still stores inotify-specific state here. That is a
- * temporary integration boundary: a future backend interface should hide
- * backend state behind a module-owned context.
+ * The current design still embeds inotify_backend_t here. That is a temporary
+ * integration boundary while the backend still needs app-level configuration
+ * and logging.
  */
 typedef struct app {
 
@@ -63,12 +62,6 @@ typedef struct app {
     core_logger_context_t core_logger_context;
     alfred_engine_t *core;
 
-    /*
-     * Temporary move correlation cache used by the current inotify dispatcher.
-     * TODO(core-integration): this belongs in the core correlator.
-     */
-    move_cache_t moves;
-
 } app_t;
 
 /*
@@ -77,7 +70,7 @@ typedef struct app {
  * @argc: command-line argument count
  * @argv: command-line argument vector
  *
- * Initializes configuration, logging, watcher state, move cache, inotify, and
+ * Initializes configuration, logging, core state, the inotify backend, and
  * signal handling. Startup watch paths are read from @argv.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
@@ -88,8 +81,8 @@ int app_init(app_t *app, int argc, char **argv);
  * app_run - execute the main event loop
  * @app: initialized application context
  *
- * Reads packed inotify events from the nonblocking descriptor and dispatches
- * them to the current inotify event handler.
+ * Polls the active inotify backend and dispatches resulting raw events to the
+ * core and, in shadow mode, the legacy dispatcher.
  *
  * Return: ERR_OK on normal termination, a negative error_t value on invalid
  * input.

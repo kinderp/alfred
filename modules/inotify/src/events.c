@@ -15,12 +15,20 @@
 
 #include "app.h"
 #include "events.h"
+#include "move_cache.h"
 #include "utils.h"
 #include "watch_manager.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/inotify.h>
+
+/* ============================================================================
+ * Legacy State
+ * ========================================================================== */
+
+static move_cache_t g_moves;
+static int g_moves_initialized = 0;
 
 /* ============================================================================
  * FORWARD DECLARATIONS
@@ -71,6 +79,28 @@ const char* event_type_str(event_type_t type)
 
         default:                 return "UNKNOWN";
     }
+}
+
+/* ============================================================================
+ * LEGACY LIFECYCLE
+ * ========================================================================== */
+
+int legacy_events_init(size_t move_cache_size)
+{
+    if (move_cache_init(&g_moves, move_cache_size) != 0)
+        return -1;
+
+    g_moves_initialized = 1;
+    return 0;
+}
+
+void legacy_events_shutdown(void)
+{
+    if (!g_moves_initialized)
+        return;
+
+    move_cache_destroy(&g_moves);
+    g_moves_initialized = 0;
 }
 
 /* ============================================================================
@@ -184,7 +214,12 @@ static void handle_delete(app_t *app,
 static void handle_move_from(app_t *app,
                              const struct inotify_event *ev)
 {
-    move_cache_store(&app->moves,
+    (void)app;
+
+    if (!g_moves_initialized)
+        return;
+
+    move_cache_store(&g_moves,
                      ev->cookie,
                      ev->wd,
                      ev->name);
@@ -198,9 +233,10 @@ static void handle_move_from(app_t *app,
 static void handle_move_to(app_t *app,
                            const struct inotify_event *ev)
 {
-    move_slot_t *slot =
-        move_cache_find(&app->moves,
-                        ev->cookie);
+    move_slot_t *slot = NULL;
+
+    if (g_moves_initialized)
+        slot = move_cache_find(&g_moves, ev->cookie);
 
     const char *dst_base =
         watcher_get_path(&app->inotify.watchers,
@@ -290,8 +326,10 @@ static void handle_move_to(app_t *app,
         }
     }
 
-    move_cache_clear(&app->moves,
-                     ev->cookie);
+    if (g_moves_initialized) {
+        move_cache_clear(&g_moves,
+                         ev->cookie);
+    }
 }
 
 /* ============================================================================

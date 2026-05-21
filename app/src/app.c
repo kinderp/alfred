@@ -13,6 +13,7 @@
 #include "app.h"
 #include "core_logger.h"
 #include "errors.h"
+#include "events.h"
 #include "inotify_backend.h"
 
 #include <stdio.h>
@@ -30,14 +31,6 @@ static int handle_backend_event(app_t *app,
                                 const struct inotify_event *ev,
                                 const alfred_raw_event_t *raw,
                                 void *userdata);
-
-/*
- * TODO(core-integration): this function is implemented by the current inotify
- * semantic dispatcher. It should disappear from app.c when the backend emits
- * alfred_raw_event_t records into the core.
- */
-extern void app_dispatch_raw_event(app_t *app,
-                                   const struct inotify_event *ev);
 
 /* ============================================================================
  * Signal State
@@ -141,8 +134,9 @@ static int handle_backend_event(app_t *app,
  * @argv: command-line argument vector
  *
  * Initializes all runtime subsystems in dependency order: configuration,
- * logging, watcher state, move cache, inotify, signal handling, and startup
- * watches. A single failure path delegates cleanup to app_shutdown().
+ * logging, core state, optional legacy dispatcher state, inotify backend,
+ * signal handling, and startup watches. A single failure path delegates cleanup
+ * to app_shutdown().
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -225,21 +219,23 @@ int app_init(app_t *app, int argc, char **argv)
                 config_event_engine_name(app->config.event_engine_mode));
 
     /*
-     * The current inotify dispatcher correlates MOVED_FROM and MOVED_TO with
-     * this cache. This is temporary until move correlation is owned by core.
+     * Only the legacy shadow dispatcher needs its move cache. Core mode
+     * correlates MOVED_FROM/MOVED_TO inside the core engine, so it must not
+     * carry legacy semantic state at runtime.
      */
-    if (move_cache_init(&app->moves,
-                        app->config.move_cache_size) != 0) {
+    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+        if (legacy_events_init(app->config.move_cache_size) != 0) {
 
-        logger_error(&app->logger,
-                     "move_cache_init failed");
+            logger_error(&app->logger,
+                         "legacy_events_init failed");
 
-        error = ERR_ALLOC;
-        goto fail;
+            error = ERR_ALLOC;
+            goto fail;
+        }
+
+        logger_info(&app->logger,
+                    "legacy event dispatcher initialized");
     }
-
-    logger_info(&app->logger,
-                "move cache initialized");
 
     error = inotify_backend_init(app);
     if (error != ERR_OK)
@@ -332,8 +328,7 @@ void app_shutdown(app_t *app)
 
     inotify_backend_shutdown(app);
 
-    /* The move cache owns pending rename/move source names. */
-    move_cache_destroy(&app->moves);
+    legacy_events_shutdown();
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may
