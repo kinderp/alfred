@@ -1,8 +1,9 @@
 /* ============================================================================
- * events.c
- * Professional semantic event engine
+ * events.c - legacy inotify semantic dispatcher
  *
- * Converts raw inotify events into high-level events:
+ * This file is retained only for shadow-mode comparison while Alfred switches
+ * to the core event engine. It converts struct inotify_event records directly
+ * into the historical event log format:
  *
  *   IN_CREATE      -> FILE_CREATED / DIR_CREATED
  *   IN_DELETE      -> FILE_DELETED / DIR_DELETED
@@ -10,7 +11,13 @@
  *   IN_IGNORED     -> WATCH_REMOVED
  *   IN_Q_OVERFLOW  -> QUEUE_OVERFLOW
  *
- * This is the real business brain of the project.
+ * This is no longer the target architecture. The official default path is:
+ *
+ *   inotify_backend.c -> alfred_raw_event_t -> core/src/alfred_correlator.c
+ *
+ * Important semantic difference: when both parent directory and basename
+ * change, this legacy dispatcher emits MOVED and then RENAMED. The core emits
+ * one RELOCATED event.
  * ========================================================================== */
 
 #include "app.h"
@@ -27,6 +34,11 @@
  * Legacy State
  * ========================================================================== */
 
+/*
+ * The legacy dispatcher keeps move correlation state as file-local globals
+ * because it is no longer part of app_t. This limits the lifetime and ownership
+ * of the old path while shadow mode remains available.
+ */
 static move_cache_t g_moves;
 static int g_moves_initialized = 0;
 
@@ -60,6 +72,12 @@ static void emit_event(app_t *app,
  * EVENT TYPE STRING
  * ========================================================================== */
 
+/*
+ * event_type_str - render a legacy event type for the historical event log
+ * @type: legacy EVT_* value
+ *
+ * Return: static event name string.
+ */
 const char* event_type_str(event_type_t type)
 {
     switch (type) {
@@ -85,6 +103,12 @@ const char* event_type_str(event_type_t type)
  * LEGACY LIFECYCLE
  * ========================================================================== */
 
+/*
+ * legacy_events_init - initialize legacy move correlation state
+ * @move_cache_size: number of legacy move slots to allocate
+ *
+ * Return: 0 on success, -1 on allocation failure.
+ */
 int legacy_events_init(size_t move_cache_size)
 {
     if (move_cache_init(&g_moves, move_cache_size) != 0)
@@ -94,6 +118,9 @@ int legacy_events_init(size_t move_cache_size)
     return 0;
 }
 
+/*
+ * legacy_events_shutdown - release legacy move correlation state
+ */
 void legacy_events_shutdown(void)
 {
     if (!g_moves_initialized)
@@ -105,9 +132,17 @@ void legacy_events_shutdown(void)
 
 /* ============================================================================
  * MAIN ENTRY POINT
- * Called by app.c
  * ========================================================================== */
 
+/*
+ * legacy_events_dispatch - classify one inotify event using legacy semantics
+ * @app: application context used for watcher lookup and logging
+ * @ev: inotify event read by the backend
+ *
+ * Shadow mode calls this after the same kernel event has already been offered
+ * to the core path as alfred_raw_event_t. This function is kept to compare old
+ * and new behavior, not to define the future event model.
+ */
 void legacy_events_dispatch(app_t *app,
                             const struct inotify_event *ev)
 {
@@ -149,6 +184,11 @@ void legacy_events_dispatch(app_t *app,
  * CREATE
  * ========================================================================== */
 
+/*
+ * handle_create - emit a legacy create event
+ * @app: application context used for watcher lookup and logging
+ * @ev: inotify create event
+ */
 static void handle_create(app_t *app,
                           const struct inotify_event *ev)
 {
@@ -180,6 +220,11 @@ static void handle_create(app_t *app,
  * DELETE
  * ========================================================================== */
 
+/*
+ * handle_delete - emit a legacy delete event
+ * @app: application context used for watcher lookup and logging
+ * @ev: inotify delete event
+ */
 static void handle_delete(app_t *app,
                           const struct inotify_event *ev)
 {
@@ -211,6 +256,14 @@ static void handle_delete(app_t *app,
  * Save first half
  * ========================================================================== */
 
+/*
+ * handle_move_from - store the first half of a legacy move pair
+ * @app: unused application context
+ * @ev: inotify MOVED_FROM event containing cookie and source name
+ *
+ * The source watch descriptor and basename are stored in move_cache. The core
+ * has its own correlation state and does not use this cache.
+ */
 static void handle_move_from(app_t *app,
                              const struct inotify_event *ev)
 {
@@ -230,6 +283,15 @@ static void handle_move_from(app_t *app,
  * Correlate with previous cookie
  * ========================================================================== */
 
+/*
+ * handle_move_to - correlate MOVED_TO with a cached MOVED_FROM
+ * @app: application context used for watcher lookup and logging
+ * @ev: inotify MOVED_TO event containing cookie and destination name
+ *
+ * This legacy implementation distinguishes rename and move by watch descriptor
+ * and basename. If both directory and name changed, it emits two events. The
+ * core intentionally maps that same raw pair to one RELOCATED event.
+ */
 static void handle_move_to(app_t *app,
                            const struct inotify_event *ev)
 {
@@ -336,6 +398,13 @@ static void handle_move_to(app_t *app,
  * WATCH REMOVED
  * ========================================================================== */
 
+/*
+ * handle_ignored - emit legacy WATCH_REMOVED and clear the watcher table
+ * @app: application context containing backend watcher state
+ * @ev: IN_IGNORED event
+ *
+ * WATCH_REMOVED is backend diagnostic output. It is not a core semantic event.
+ */
 static void handle_ignored(app_t *app,
                            const struct inotify_event *ev)
 {
@@ -356,6 +425,10 @@ static void handle_ignored(app_t *app,
  * QUEUE OVERFLOW
  * ========================================================================== */
 
+/*
+ * handle_overflow - emit legacy queue overflow diagnostic
+ * @app: application context used for logging
+ */
 static void handle_overflow(app_t *app)
 {
     emit_event(app,
@@ -368,6 +441,13 @@ static void handle_overflow(app_t *app)
  * CENTRALIZED EMITTER
  * ========================================================================== */
 
+/*
+ * emit_event - write one legacy event log record
+ * @app: application context used for logging
+ * @type: legacy event type
+ * @src: source path, or NULL
+ * @dst: destination path for move-style events, or NULL
+ */
 static void emit_event(app_t *app,
                        event_type_t type,
                        const char *src,

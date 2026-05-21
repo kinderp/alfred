@@ -56,6 +56,12 @@ Modified files:
   - quali effetti ha sui test e sul comportamento osservabile
 - Scrivere pensando a studenti con poca esperienza: evitare salti logici e
   spiegare i concetti teorici quando servono.
+- La guida sul codice deve essere impostata come una lettura guidata della
+  codebase: non solo elenco di API, ma percorso ragionato in cui un lettore meno
+  esperto viene accompagnato da flusso runtime, funzioni, responsabilita',
+  strutture dati, campi modificati e motivazioni. Quando emergono concetti C,
+  Linux, inotify, callback, puntatori a funzione o strutture dati, rimandare ai
+  capitoli dedicati come glossario, guida C o documenti architetturali.
 - Aggiornare `docs/it/documentation-progress.md` quando cambiano codice, test o
   documentazione rilevante.
 - Aggiornare i file di scenario quando cambiano eventi attesi o semantica.

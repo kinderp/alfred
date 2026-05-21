@@ -1,52 +1,43 @@
 /* ============================================================================
- * move_cache.c
- * Professional move / rename correlation cache
+ * move_cache.c - legacy move correlation cache
  *
- * Purpose:
- *   inotify emits:
+ * This cache supports the legacy shadow dispatcher in events.c. It stores the
+ * first half of an inotify move pair:
  *
- *      IN_MOVED_FROM   + cookie
- *      IN_MOVED_TO     + same cookie
+ *   IN_MOVED_FROM + cookie + source wd/name
  *
- * We temporarily store MOVED_FROM and later correlate MOVED_TO.
+ * and later lets events.c correlate it with:
  *
- * Used by:
- *   event_engine.c
+ *   IN_MOVED_TO + same cookie + destination wd/name
  *
- * Design goals:
- *   - fast lookup
- *   - overwrite stale entries
- *   - bounded memory
- *   - production readable
+ * The default core runtime does not use this file. The core has its own move
+ * table and emits RELOCATED for the mixed move+rename case, while legacy events
+ * emit MOVED and then RENAMED.
  * ========================================================================== */
 
 #include "move_cache.h"
 
-#include <stdio.h>	// snprintf()
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-/* ============================================================================
- * INTERNAL STRUCTURE NOTE
+/*
+ * slot_meta_t - side metadata for legacy move slots
+ * @created_at: wall-clock insertion time used for stale cleanup
  *
- * move_slot_t already declared in header:
- *
- * typedef struct {
- *      uint32_t cookie;
- *      int src_wd;
- *      char src_name[NAME_MAX];
- *      int used;
- * } move_slot_t;
- *
- * We extend freshness using parallel timestamps here.
- * ========================================================================== */
-
+ * Metadata is kept parallel to move_cache_t.slots so the public legacy struct
+ * remains small. This design is acceptable for temporary shadow support but is
+ * not the architecture used by the core.
+ */
 typedef struct {
     time_t created_at;
 } slot_meta_t;
 
-/* private side metadata */
+/*
+ * File-local metadata for the single legacy dispatcher cache. This is another
+ * reason the cache should stay confined to shadow mode.
+ */
 static slot_meta_t *g_meta = NULL;
 
 /* ============================================================================
@@ -54,7 +45,10 @@ static slot_meta_t *g_meta = NULL;
  * ========================================================================== */
 
 /*
- * Find free slot.
+ * cache_find_free - find an unused legacy move slot
+ * @mc: initialized cache
+ *
+ * Return: slot index on success, -1 when full.
  */
 static int cache_find_free(move_cache_t *mc)
 {
@@ -67,7 +61,10 @@ static int cache_find_free(move_cache_t *mc)
 }
 
 /*
- * Find oldest slot for replacement.
+ * cache_find_oldest - choose the oldest slot for bounded replacement
+ * @mc: initialized cache
+ *
+ * Return: slot index on success, -1 when the cache has no slots.
  */
 static int cache_find_oldest(move_cache_t *mc)
 {
@@ -88,7 +85,11 @@ static int cache_find_oldest(move_cache_t *mc)
 }
 
 /*
- * Find exact cookie.
+ * cache_find_cookie - find a slot by inotify move cookie
+ * @mc: initialized cache
+ * @cookie: inotify move cookie to search
+ *
+ * Return: slot index on success, -1 when absent.
  */
 static int cache_find_cookie(move_cache_t *mc,
                              uint32_t cookie)
@@ -110,7 +111,11 @@ static int cache_find_cookie(move_cache_t *mc,
  * ========================================================================== */
 
 /*
- * Allocate cache.
+ * move_cache_init - allocate a bounded legacy move cache
+ * @mc: cache to initialize
+ * @size: requested slot count, or 0 for default
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
  */
 int move_cache_init(move_cache_t *mc,
                     size_t size)
@@ -144,7 +149,8 @@ int move_cache_init(move_cache_t *mc,
 }
 
 /*
- * Free cache.
+ * move_cache_destroy - release memory owned by a legacy move cache
+ * @mc: cache to destroy
  */
 void move_cache_destroy(move_cache_t *mc)
 {
@@ -161,10 +167,16 @@ void move_cache_destroy(move_cache_t *mc)
 }
 
 /*
- * Store MOVED_FROM piece.
+ * move_cache_store - store or replace one MOVED_FROM half
+ * @mc: initialized cache
+ * @cookie: inotify move cookie
+ * @src_wd: source watch descriptor
+ * @src_name: source basename
  *
- * If full:
- *   oldest entry overwritten.
+ * If the cache is full, the oldest slot is overwritten. This bounded behavior
+ * prevents unbounded memory growth in the legacy path.
+ *
+ * Return: 0 on success, -1 on invalid input.
  */
 int move_cache_store(move_cache_t *mc,
                      uint32_t cookie,
@@ -179,11 +191,11 @@ int move_cache_store(move_cache_t *mc,
 
     int idx = cache_find_cookie(mc, cookie);
 
-    /* update existing cookie */
+    /* Prefer updating an existing cookie before allocating a new slot. */
     if (idx < 0)
         idx = cache_find_free(mc);
 
-    /* replace oldest if full */
+    /* Bounded cache: replace the oldest pending source if every slot is used. */
     if (idx < 0)
         idx = cache_find_oldest(mc);
 
@@ -207,9 +219,11 @@ int move_cache_store(move_cache_t *mc,
 }
 
 /*
- * Return matching slot pointer.
+ * move_cache_find - return a cached MOVED_FROM slot by cookie
+ * @mc: initialized cache
+ * @cookie: inotify move cookie
  *
- * NULL if not found.
+ * Return: slot pointer on success, NULL when absent.
  */
 move_slot_t* move_cache_find(move_cache_t *mc,
                              uint32_t cookie)
@@ -229,7 +243,9 @@ move_slot_t* move_cache_find(move_cache_t *mc,
 }
 
 /*
- * Clear consumed cookie.
+ * move_cache_clear - clear one cached move slot
+ * @mc: initialized cache
+ * @cookie: inotify move cookie
  */
 void move_cache_clear(move_cache_t *mc,
                       uint32_t cookie)
@@ -250,10 +266,12 @@ void move_cache_clear(move_cache_t *mc,
 }
 
 /*
- * Remove stale entries older than ttl_seconds.
+ * move_cache_cleanup - remove stale MOVED_FROM halves
+ * @mc: initialized cache
+ * @ttl_seconds: maximum age before removal
  *
- * Useful for:
- *   MOVED_FROM without MOVED_TO
+ * This helper is legacy support for MOVED_FROM events that never receive a
+ * matching MOVED_TO.
  */
 void move_cache_cleanup(move_cache_t *mc,
                         int ttl_seconds)
@@ -284,7 +302,10 @@ void move_cache_cleanup(move_cache_t *mc,
 }
 
 /*
- * Debug helper.
+ * move_cache_count - count active legacy move slots
+ * @mc: initialized cache
+ *
+ * Return: active slot count, or 0 for NULL.
  */
 size_t move_cache_count(move_cache_t *mc)
 {

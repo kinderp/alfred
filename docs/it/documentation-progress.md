@@ -31,6 +31,21 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md` e `16-mappa-codice-e-strutture.md`: impostata la
+  mappa del codice come lettura guidata della codebase, pensata per accompagnare
+  studenti poco esperti attraverso funzioni, responsabilita', strutture dati,
+  eventi trigger e rimandi ai capitoli teorici o tecnici gia' presenti.
+- `modules/inotify/include/events.h`, `modules/inotify/src/events.c`,
+  `modules/inotify/include/move_cache.h` e `modules/inotify/src/move_cache.c`:
+  aggiunti commenti che marcano esplicitamente il dispatcher e la cache move
+  come percorso legacy/shadow-only, distinguendoli dalla semantica target del
+  core.
+- `16-mappa-codice-e-strutture.md`: aggiunta la sezione sulle strutture legacy
+  shadow, con schema chiamate di `legacy_events_dispatch()`, tabelle per
+  `move_cache_t` e `move_slot_t`, e differenza fra doppio evento legacy e
+  singolo `RELOCATED` del core.
+- `docs/commenting-progress.md`: completata la passata pesante corrente sui
+  principali file C/H coinvolti nello switch core.
 - `modules/inotify/src/inotify_adapter.c`, `app/include/config.h` e
   `app/src/config.c`: rafforzati i commenti sul ruolo conversion-only
   dell'adapter, sulla lifetime del buffer `raw.path`, sul default `core`, sullo

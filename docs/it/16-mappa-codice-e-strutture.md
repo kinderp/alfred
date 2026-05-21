@@ -1,5 +1,11 @@
 # Mappa del codice e strutture dati
 
+Questo capitolo e' una lettura guidata della codebase. Va letto come se una
+persona esperta accompagnasse uno studente dentro Alfred, mostrando non solo
+"quale funzione chiama quale", ma anche perche' quella chiamata esiste, quale
+responsabilita' separa, quale struttura dati viene modificata e quale evento del
+filesystem ha fatto partire il cambiamento.
+
 Questo capitolo collega tre viste dello stesso sistema:
 
 - quali funzioni chiamano quali altre funzioni
@@ -8,6 +14,14 @@ Questo capitolo collega tre viste dello stesso sistema:
 
 L'obiettivo e' aiutare chi studia il progetto a vedere il programma come un
 insieme di stati che cambiano nel tempo, non solo come una lista di funzioni.
+Quando un passaggio richiede concetti teorici o tecnici gia' spiegati altrove,
+questa guida deve rimandare agli altri capitoli, per esempio:
+
+- [Guida C usato nel progetto](08-guida-c-usato-nel-progetto.md)
+- [Architettura generale](02-architettura-generale.md)
+- [Flusso eventi](07-flusso-eventi.md)
+- [Semantica degli eventi](13-semantica-eventi.md)
+- [Glossario](glossario.md)
 
 ## Vista generale runtime
 
@@ -414,3 +428,93 @@ docs/generated/animations/
 Gli stessi dati potrebbero generare sia una GIF sia una pagina HTML
 interattiva. Prima pero' conviene stabilizzare le tabelle e gli schemi statici,
 perche' saranno la base dei frame animati.
+
+## Strutture legacy shadow
+
+Il percorso legacy e' ancora presente per confronto, ma non e' l'architettura
+target. I file principali sono:
+
+```text
+modules/inotify/src/events.c
+modules/inotify/src/move_cache.c
+```
+
+`events.c` riceve direttamente `struct inotify_event` e produce eventi
+semantici legacy. Questo era il vecchio centro della semantica, ma oggi deve
+essere letto come codice storico/shadow-only.
+
+```mermaid
+flowchart TD
+    A["struct inotify_event"] --> B["legacy_events_dispatch()"]
+    B --> C["handle_create() / handle_delete()"]
+    B --> D["handle_move_from()"]
+    B --> E["handle_move_to()"]
+    D --> F["move_cache_store()"]
+    E --> G["move_cache_find()"]
+    E --> H["emit_event()"]
+    C --> H
+    H --> I["logger_event() legacy stream"]
+```
+
+### `move_cache_t`
+
+Definizione:
+
+```c
+typedef struct {
+    move_slot_t *slots;
+    size_t size;
+} move_cache_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `slots` | array dei `MOVED_FROM` legacy pendenti | `move_cache_init()`, `move_cache_destroy()` | `move_cache_store()`, `move_cache_find()`, `move_cache_clear()` |
+| `size` | numero massimo di slot | `move_cache_init()`, `move_cache_destroy()` | helper interni di ricerca |
+
+### `move_slot_t`
+
+Definizione:
+
+```c
+typedef struct {
+    uint32_t cookie;
+    int src_wd;
+    char src_name[NAME_MAX];
+    int used;
+} move_slot_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `cookie` | cookie inotify della coppia move | `move_cache_store()`, `move_cache_clear()` | `move_cache_find()`, `handle_move_to()` |
+| `src_wd` | watch descriptor sorgente | `move_cache_store()` | `handle_move_to()` |
+| `src_name` | basename sorgente | `move_cache_store()` | `handle_move_to()` |
+| `used` | slot occupato/libero | `move_cache_store()`, `move_cache_clear()` | helper interni e conteggi |
+
+Sequenza legacy move:
+
+```mermaid
+sequenceDiagram
+    participant Kernel as inotify
+    participant Legacy as legacy_events_dispatch()
+    participant Cache as move_cache_t
+    participant Logger as logger_event()
+
+    Kernel-->>Legacy: IN_MOVED_FROM cookie=10 src=a.txt
+    Legacy->>Cache: move_cache_store(cookie=10, src_wd, a.txt)
+    Kernel-->>Legacy: IN_MOVED_TO cookie=10 dst=b.txt
+    Legacy->>Cache: move_cache_find(cookie=10)
+    Cache-->>Legacy: src_wd + src_name
+    Legacy->>Logger: FILE_RENAMED or FILE_MOVED
+    Legacy->>Cache: move_cache_clear(cookie=10)
+```
+
+Differenza importante rispetto al core: se cambiano sia directory sia nome, il
+legacy puo' emettere due eventi (`MOVED` e poi `RENAMED`). Il core invece emette
+un solo evento `RELOCATED`. Per questo `move_cache_t` serve solo come confronto
+storico e non deve guidare la semantica futura.

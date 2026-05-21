@@ -17,8 +17,9 @@ temporary legacy paths, and the raw-to-semantic event flow.
 
 Recommended order:
 
-1. `modules/inotify/src/events.c`
-2. `modules/inotify/src/move_cache.c`
+The current heavy pass has covered the main integration files. Future passes
+should revisit any file touched by structural changes and keep comments aligned
+with the final core-only architecture.
 
 Legacy files should be commented as legacy/shadow support, not as the future
 runtime architecture.
@@ -37,6 +38,10 @@ Completed in the first heavy pass:
 - `modules/inotify/src/inotify_adapter.c` comment refresh only
 - `app/src/config.c` comment refresh only
 - `app/include/config.h` comment refresh only
+- `modules/inotify/src/events.c`
+- `modules/inotify/include/events.h`
+- `modules/inotify/src/move_cache.c`
+- `modules/inotify/include/move_cache.h`
 
 ## App
 
@@ -71,15 +76,15 @@ Completed in the first heavy pass:
 
 | Status | File |
 | --- | --- |
-| Pending | `modules/inotify/include/events.h` |
+| Done | `modules/inotify/include/events.h` |
 | Done | `modules/inotify/include/inotify_adapter.h` |
 | Done | `modules/inotify/include/inotify_backend.h` |
-| Pending | `modules/inotify/include/move_cache.h` |
+| Done | `modules/inotify/include/move_cache.h` |
 | Done | `modules/inotify/include/watch_manager.h` |
 | Done | `modules/inotify/include/watcher.h` |
-| Pending | `modules/inotify/src/events.c` |
+| Done | `modules/inotify/src/events.c` |
 | Done | `modules/inotify/src/inotify_adapter.c` |
 | Done | `modules/inotify/src/inotify_backend.c` |
-| Pending | `modules/inotify/src/move_cache.c` |
+| Done | `modules/inotify/src/move_cache.c` |
 | Done | `modules/inotify/src/watch_manager.c` |
 | Done | `modules/inotify/src/watcher.c` |
