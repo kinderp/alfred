@@ -587,6 +587,321 @@ Gli stessi dati potrebbero generare sia una GIF sia una pagina HTML
 interattiva. Prima pero' conviene stabilizzare le tabelle e gli schemi statici,
 perche' saranno la base dei frame animati.
 
+## Scenari animabili
+
+Questa sezione raccoglie scenari gia' scritti come sequenze di frame. Ogni frame
+descrive:
+
+- l'evento o la chiamata che fa avanzare il processo
+- quali funzioni entrano in gioco
+- quali campi delle strutture dati cambiano
+- quale output diagnostico o semantico viene prodotto
+
+Questi frame sono volutamente testuali. In una fase successiva potranno essere
+letti da uno script o trasformati manualmente in SVG, GIF, video o pagine HTML
+interattive.
+
+### Scenario animabile: aggiunta watch iniziale
+
+Trigger:
+
+```text
+./alfred /tmp/progetto
+```
+
+Frame:
+
+```text
+frame 1 - configurazione pronta:
+  config.recursive = 1
+  config.watch_mask = IN_CREATE | IN_DELETE | IN_MODIFY | ...
+  config.watcher_capacity = 128
+
+frame 2 - backend inizializzato:
+  inotify_backend_init()
+  app.inotify.fd = <fd inotify>
+  watcher_init(&app.inotify.watchers, 128)
+  watchers.count = 0
+
+frame 3 - richiesta watch:
+  inotify_backend_add_startup_watch(app, "/tmp/progetto")
+  watch_manager_add_recursive() oppure watch_manager_add()
+
+frame 4 - chiamata kernel:
+  watch_manager_add()
+  inotify_add_watch(fd, "/tmp/progetto", config.watch_mask)
+  kernel restituisce wd=3
+
+frame 5 - aggiornamento watcher table:
+  watcher_store(wd=3, path="/tmp/progetto")
+  watchers.items[3].wd = 3
+  watchers.items[3].active = 1
+  watchers.items[3].path = "/tmp/progetto"
+  watchers.count = 1
+
+frame 6 - output diagnostico:
+  logger_event("WATCH_ADDED wd=3 path=/tmp/progetto")
+```
+
+Messaggio didattico: il watch e' stato aggiunto al backend, non al core. Il core
+non conosce `wd=3`; ricevera' solo raw event con path gia' ricostruito.
+
+### Scenario animabile: create file
+
+Trigger:
+
+```bash
+touch /tmp/progetto/a.txt
+```
+
+Frame:
+
+```text
+frame 1 - evento kernel:
+  struct inotify_event:
+    wd = 3
+    mask = IN_CREATE
+    name = "a.txt"
+
+frame 2 - lookup path parent:
+  inotify_backend_poll()
+  watcher_get_path(&watchers, 3) -> "/tmp/progetto"
+
+frame 3 - conversione raw:
+  inotify_adapter_build_path("/tmp/progetto", "a.txt")
+  full_path = "/tmp/progetto/a.txt"
+  inotify_adapter_mask_to_alfred(IN_CREATE)
+  raw.mask = ALFRED_RAW_CREATE
+  raw.path = full_path
+
+frame 4 - ingresso nel core:
+  handle_backend_event(app, &raw, NULL)
+  alfred_process(app->core, &raw)
+
+frame 5 - evento semantico:
+  alfred_process()
+  raw.mask contiene ALFRED_RAW_CREATE
+  emit(ALFRED_EV_FILE_CREATED, "/tmp/progetto/a.txt", NULL)
+
+frame 6 - log ufficiale:
+  core_logger_on_event()
+  logger_event("FILE_CREATED path=/tmp/progetto/a.txt")
+```
+
+Messaggio didattico: il backend ricostruisce il fatto tecnico, il core decide il
+nome semantico `FILE_CREATED`.
+
+### Scenario animabile: close-write / file ready
+
+Trigger:
+
+```bash
+printf "hello" > /tmp/progetto/a.txt
+```
+
+Frame:
+
+```text
+frame 1 - evento tecnico:
+  kernel invia IN_CLOSE_WRITE per a.txt
+
+frame 2 - raw event:
+  inotify_adapter_mask_to_alfred(IN_CLOSE_WRITE)
+  raw.mask = ALFRED_RAW_CLOSE_WRITE
+  raw.path = "/tmp/progetto/a.txt"
+
+frame 3 - core:
+  alfred_process()
+  raw.mask contiene ALFRED_RAW_CLOSE_WRITE
+
+frame 4 - semantica:
+  emit(ALFRED_EV_FILE_READY, "/tmp/progetto/a.txt", NULL)
+
+frame 5 - log:
+  FILE_READY path=/tmp/progetto/a.txt
+```
+
+Messaggio didattico: `FILE_READY` non e' un duplicato di `FILE_CREATED`; indica
+che una scrittura e' stata chiusa e il file e' pronto per lettura o indicizzazione.
+
+### Scenario animabile: modify debounced
+
+Trigger:
+
+```bash
+printf "x" >> /tmp/progetto/a.txt
+printf "y" >> /tmp/progetto/a.txt
+```
+
+Frame:
+
+```text
+frame 1 - primo MODIFY:
+  raw.mask = ALFRED_RAW_MODIFY
+  raw.path = "/tmp/progetto/a.txt"
+
+frame 2 - creazione stato debounce:
+  alfred_debounce_get(path)
+  bucket = path_index("/tmp/progetto/a.txt")
+  nuova alfred_debounce_entry_t:
+    path = copy("/tmp/progetto/a.txt")
+    last_emit_ns = 0
+
+frame 3 - prima emissione:
+  alfred_debounce_should_emit(now)
+  now - last_emit_ns >= modify_debounce_ms
+  last_emit_ns = now
+  emit(FILE_MODIFIED)
+
+frame 4 - secondo MODIFY ravvicinato:
+  alfred_debounce_get(path) trova la stessa entry
+  alfred_debounce_should_emit(now2)
+
+frame 5 - soppressione:
+  now2 - last_emit_ns < modify_debounce_ms
+  nessun evento semantico emesso
+```
+
+Messaggio didattico: il raw event arriva comunque al core. La soppressione
+avviene solo nello stream semantico, per evitare rumore applicativo.
+
+### Scenario animabile: move + rename nel core
+
+Trigger:
+
+```bash
+mv /tmp/progetto/a.txt /tmp/altro/b.txt
+```
+
+Frame:
+
+```text
+frame 1 - prima meta':
+  raw MOVED_FROM:
+    cookie = 10
+    path = "/tmp/progetto/a.txt"
+
+frame 2 - salvataggio nel core:
+  alfred_move_insert()
+  bucket = move_index(10)
+  entry.cookie = 10
+  entry.src_path = copy("/tmp/progetto/a.txt")
+  entry.next = moves[bucket]
+  moves[bucket] = entry
+
+frame 3 - seconda meta':
+  raw MOVED_TO:
+    cookie = 10
+    path = "/tmp/altro/b.txt"
+
+frame 4 - recupero:
+  alfred_move_take(cookie=10)
+  rimuove entry da moves[bucket]
+  restituisce src_path="/tmp/progetto/a.txt"
+
+frame 5 - classificazione:
+  parent sorgente = "/tmp/progetto"
+  parent destinazione = "/tmp/altro"
+  basename sorgente = "a.txt"
+  basename destinazione = "b.txt"
+  parent diverso e nome diverso -> FILE_RELOCATED
+
+frame 6 - output:
+  emit(FILE_RELOCATED, src="/tmp/progetto/a.txt", dst="/tmp/altro/b.txt")
+```
+
+Messaggio didattico: il core produce un solo evento `RELOCATED`, mentre il
+legacy storico puo' produrre due eventi (`MOVED` e `RENAMED`).
+
+### Scenario animabile: recursive mkdir veloce
+
+Trigger:
+
+```bash
+mkdir -p /tmp/progetto/one/two/three
+```
+
+Frame:
+
+```text
+frame 1 - evento osservabile:
+  il kernel invia IN_CREATE|IN_ISDIR per "one"
+  non invia create affidabili per "two" e "three" perche' i watch non esistono ancora
+
+frame 2 - backend gestisce one:
+  inotify_backend_poll()
+  raw reale:
+    ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
+    path="/tmp/progetto/one"
+  core emette DIR_CREATED one
+
+frame 3 - discovery ricorsiva:
+  backend_handle_dir_create()
+  watch_manager_add_recursive_with_discovery("/tmp/progetto/one")
+
+frame 4 - watch su one:
+  watch_manager_add("/tmp/progetto/one")
+  watcher_store(wd=4, path="/tmp/progetto/one")
+  WATCH_ADDED wd=4 path=/tmp/progetto/one
+
+frame 5 - scoperta two:
+  recursive_walk() vede "/tmp/progetto/one/two"
+  watch_manager_add()
+  watcher_store(wd=5, path="/tmp/progetto/one/two")
+  backend_process_discovered_dir(path="/tmp/progetto/one/two")
+
+frame 6 - raw sintetico two:
+  backend_emit_synthetic_dir_create()
+  raw.mask = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
+  raw.path = "/tmp/progetto/one/two"
+  core emette DIR_CREATED one/two
+
+frame 7 - scoperta three:
+  stesso schema:
+    watcher_store(wd=6, path="/tmp/progetto/one/two/three")
+    raw sintetico CREATE|ISDIR
+    core emette DIR_CREATED one/two/three
+```
+
+Messaggio didattico: il raw sintetico non inventa una directory; rappresenta una
+directory reale scoperta troppo tardi per ricevere l'evento kernel originale.
+
+### Scenario animabile: rimozione watch
+
+Trigger:
+
+```text
+il backend riceve IN_IGNORED oppure decide di rimuovere un watch
+```
+
+Frame:
+
+```text
+frame 1 - stato iniziale:
+  watchers.items[3].active = 1
+  watchers.items[3].path = "/tmp/progetto"
+
+frame 2 - lookup per log:
+  watch_manager_remove(app, wd=3)
+  watcher_get_path(wd=3) -> "/tmp/progetto"
+
+frame 3 - rimozione kernel:
+  inotify_rm_watch(app.inotify.fd, 3)
+
+frame 4 - rimozione tabella:
+  watcher_remove(wd=3)
+  watchers.items[3].active = 0
+  watchers.items[3].wd = -1
+  watchers.items[3].path = ""
+  watchers.count = watchers.count - 1
+
+frame 5 - output diagnostico:
+  WATCH_REMOVED wd=3 path=/tmp/progetto
+```
+
+Messaggio didattico: `WATCH_REMOVED` descrive stato del backend. Non e' un
+evento semantico del filesystem come `DIR_DELETED`.
+
 ## Strutture legacy shadow
 
 Il percorso legacy e' ancora presente per confronto, ma non e' l'architettura

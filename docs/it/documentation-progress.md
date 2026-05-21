@@ -31,6 +31,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `16-mappa-codice-e-strutture.md`: aggiunta una sezione di scenari animabili
+  con frame testuali per aggiunta watch, create file, close-write/file-ready,
+  modify debounced, move+rename nel core, `mkdir -p` ricorsivo veloce e
+  rimozione watch. Questi frame preparano una futura generazione di GIF, video o
+  viste HTML interattive.
 - `README.md`, `03-struttura-cartelle.md` e `11-come-contribuire.md`: aggiunti
   rimandi alla nuova lettura guidata della codebase, chiarendo che il capitolo
   sulle strutture dati va aggiornato quando cambiano funzioni centrali, campi o
