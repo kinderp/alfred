@@ -133,6 +133,104 @@ FILE_MODIFIED path=$ROOT/a.txt
 FILE_READY path=$ROOT/a.txt
 ```
 
+### Core: delete file
+
+File:
+
+```text
+tests/core/test_delete_file.sh
+```
+
+Operazioni:
+
+```bash
+printf "temporary\n" > "$TEST_ROOT/delete-me.txt"
+rm "$TEST_ROOT/delete-me.txt"
+```
+
+Event log core atteso:
+
+```text
+FILE_CREATED path=$ROOT/delete-me.txt
+FILE_MODIFIED path=$ROOT/delete-me.txt
+FILE_READY path=$ROOT/delete-me.txt
+FILE_DELETED path=$ROOT/delete-me.txt
+```
+
+Questo test conferma che una cancellazione file conserva la storia precedente
+del file: prima il path viene creato e scritto, poi viene eliminato.
+
+### Core: rename file
+
+File:
+
+```text
+tests/core/test_rename_file.sh
+```
+
+Operazioni:
+
+```bash
+printf "rename\n" > "$TEST_ROOT/old.txt"
+mv "$TEST_ROOT/old.txt" "$TEST_ROOT/new.txt"
+```
+
+Event log core atteso:
+
+```text
+FILE_CREATED path=$ROOT/old.txt
+FILE_MODIFIED path=$ROOT/old.txt
+FILE_READY path=$ROOT/old.txt
+FILE_RENAMED from=$ROOT/old.txt to=$ROOT/new.txt
+```
+
+`FILE_RENAMED` e' corretto perche' cambia solo il nome nello stesso contenitore.
+
+### Core: create directory
+
+File:
+
+```text
+tests/core/test_create_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/new-dir"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/new-dir
+```
+
+### Core: delete directory
+
+File:
+
+```text
+tests/core/test_delete_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/delete-dir"
+rmdir "$TEST_ROOT/delete-dir"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/delete-dir
+DIR_DELETED path=$ROOT/delete-dir
+```
+
+Il test controlla anche che `WATCH_REMOVED` non compaia come evento semantico
+core. La rimozione del watch resta diagnostica backend.
+
 ### Core: move and rename file
 
 File:

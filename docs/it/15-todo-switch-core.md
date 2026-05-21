@@ -97,15 +97,17 @@ stream ufficiale plain, senza sostituire subito i test funzionali storici.
 
 Copertura iniziale:
 
+- create directory
 - create file
+- delete directory
+- delete file
 - move and rename file
 - recursive create nested directory
+- rename file
 
 Scenari ancora da aggiungere:
 
-- delete file
-- rename file
-- create/delete/rename directory
+- rename directory
 - move file
 - move directory
 - move and rename directory

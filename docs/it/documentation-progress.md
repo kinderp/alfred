@@ -144,3 +144,8 @@ Stati usati:
   `15-todo-switch-core.md`: documentata la suite core-only e chiarito che i test
   end-to-end del core fissano lo stream semantico, mentre raw inotify e
   `alfred_raw_event_t` sono piu' adatti a diagnostica o test unitari mirati.
+- `tests/core/`: estesa la suite core-only con delete file, rename file, create
+  directory e delete directory.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: aggiunti gli scenari core appena coperti, con
+  operazioni filesystem ed eventi semantici attesi.
