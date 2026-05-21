@@ -45,7 +45,8 @@ Contiene il motore semantico.
 ```text
 core/
 ├── include/
-└── src/
+├── src/
+└── examples/
 ```
 
 Responsabilita':
@@ -55,6 +56,19 @@ Responsabilita':
 - produrre eventi semantici
 
 Il core non dovrebbe dipendere da `inotify`.
+
+File principali:
+
+```text
+core/include/alfred_correlator.h
+core/src/alfred_correlator.c
+core/src/alfred_tables.c
+core/src/alfred_utils.c
+core/examples/main_demo.c
+```
+
+`core/examples/main_demo.c` e' una dimostrazione isolata: parte gia' da eventi
+raw sintetici e non rappresenta il runtime reale con backend inotify.
 
 ## modules/
 
@@ -74,6 +88,18 @@ Responsabilita':
 - gestire watch descriptor
 - osservare directory e file
 - trasformare eventi Linux in eventi raw comuni
+
+File principali:
+
+```text
+modules/inotify/src/inotify_backend.c
+modules/inotify/src/inotify_adapter.c
+modules/inotify/src/watch_manager.c
+modules/inotify/src/watcher.c
+```
+
+I file `events.c` e `move_cache.c` esistono ancora per lo shadow mode legacy:
+sono utili per confronto storico, ma non rappresentano il percorso target.
 
 ## tests/
 
@@ -98,6 +124,9 @@ docs/
 ```
 
 `docs/it/` contiene la documentazione didattica in italiano.
+
+Il capitolo `docs/it/16-mappa-codice-e-strutture.md` e' la lettura guidata piu'
+vicina al codice: collega funzioni, strutture dati e diagrammi.
 
 ## Makefile
 

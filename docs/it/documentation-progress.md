@@ -31,6 +31,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `README.md`, `03-struttura-cartelle.md` e `11-come-contribuire.md`: aggiunti
+  rimandi alla nuova lettura guidata della codebase, chiarendo che il capitolo
+  sulle strutture dati va aggiornato quando cambiano funzioni centrali, campi o
+  flussi eventi.
 - `04-livello-applicazione.md`, `07-flusso-eventi.md` e
   `12-confronto-shadow-mode.md`: corrette frasi obsolete che descrivevano il
   core come solo shadow o il legacy come comportamento ufficiale; ora la

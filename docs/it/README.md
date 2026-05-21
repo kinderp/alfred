@@ -30,6 +30,12 @@ piu' dettaglio.
 Leggi i capitoli in ordine se parti da zero. Se invece stai lavorando su una
 parte specifica della codebase, usa l'indice come riferimento rapido.
 
+Per capire il codice in modo guidato, dopo aver letto architettura, app, modulo
+inotify e core, passa a [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md).
+Quel capitolo collega funzioni, strutture dati, campi modificati, eventi trigger
+e diagrammi. Va usato come percorso di lettura della codebase, non solo come
+appendice.
+
 Ogni capitolo dovrebbe contenere:
 
 - contesto generale
