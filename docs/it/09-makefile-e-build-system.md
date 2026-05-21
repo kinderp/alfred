@@ -80,6 +80,30 @@ flowchart LR
     L --> B[alfred]
 ```
 
+## Target futuri per la documentazione
+
+Al momento il Makefile non genera ancora diagrammi o animazioni della
+documentazione. Nei capitoli didattici si cita un possibile target futuro:
+
+```bash
+make docs-animations
+```
+
+Questo comando non e' ancora implementato. L'idea e' usarlo in futuro per
+trasformare gli scenari animabili descritti in
+`docs/it/16-mappa-codice-e-strutture.md` in file generati, per esempio SVG,
+GIF, video o pagine HTML.
+
+Una possibile struttura di output sara':
+
+```text
+docs/generated/animations/
+```
+
+Regola importante: il Markdown in `docs/it` deve restare la sorgente didattica
+principale. I file in `docs/generated/` dovrebbero essere derivati e
+rigenerabili, non scritti a mano come documentazione primaria.
+
 ## Variabili principali
 
 Nel Makefile una variabile si definisce cosi':

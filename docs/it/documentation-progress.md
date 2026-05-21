@@ -31,6 +31,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `09-makefile-e-build-system.md` e `10-debugging-test-e-strumenti.md`:
+  documentato che `make docs-animations` e `docs/generated/animations/` sono
+  una direzione futura, non target gia' disponibili, e che il Markdown resta la
+  sorgente didattica primaria.
 - `16-mappa-codice-e-strutture.md`: aggiunte convenzioni per scrivere frame
   animabili futuri e una pipeline ipotetica
   `Markdown -> JSON -> SVG -> GIF/video/HTML`, mantenendo il Markdown come

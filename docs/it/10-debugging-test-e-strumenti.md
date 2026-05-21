@@ -339,6 +339,28 @@ Per riattivare il confronto shadow legacy/core si usa invece:
 ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
 
+## Strumenti futuri per la documentazione dinamica
+
+La guida [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md)
+contiene scenari scritti come frame testuali. Questi frame servono gia' come
+lettura guidata, ma sono anche preparazione per strumenti futuri.
+
+Possibile comando futuro:
+
+```bash
+make docs-animations
+```
+
+Questo comando non esiste ancora. Quando verra' aggiunto, dovrebbe leggere gli
+scenari animabili, produrre frame intermedi e generare output didattici come:
+
+- SVG per singoli frame
+- GIF o video per lezioni
+- pagine HTML interattive
+
+Fino a quel momento, gli scenari nel Markdown sono lo strumento ufficiale: vanno
+aggiornati ogni volta che cambiano funzioni, strutture dati o flussi eventi.
+
 In questa modalita' `events.log` usa il formato plain:
 
 ```text
