@@ -61,6 +61,13 @@ Modified files:
 - Aggiornare i file di scenario quando cambiano eventi attesi o semantica.
 - Aggiornare `docs/commenting-style.md` e `docs/commenting-progress.md` se il
   passo riguarda commenti nel codice o stile dei commenti.
+- Quando si documentano flussi complessi, strutture dati o responsabilita' tra
+  moduli, aggiungere anche una vista grafica quando aiuta: diagrammi Mermaid,
+  tabelle `campo -> scritto da -> letto da`, sequence diagram e schemi
+  statici. Se il processo e' naturalmente dinamico, descrivere anche i frame
+  logici che in futuro potrebbero generare GIF, video o viste interattive.
+  Mermaid resta la scelta semplice per gli `.md`; animazioni reali vanno
+  progettate come passo successivo con strumenti dedicati.
 
 ## Verifiche
 

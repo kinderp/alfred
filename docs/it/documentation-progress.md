@@ -26,10 +26,27 @@ Stati usati:
 | Completo | `13-semantica-eventi.md` |
 | Completo | `14-scenari-test.md` |
 | Parziale | `15-todo-switch-core.md` |
+| Parziale | `16-mappa-codice-e-strutture.md` |
 | Parziale | `glossario.md` |
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md`: aggiunta la regola di metodo per documentare flussi
+  complessi e strutture dati con diagrammi, tabelle campo/funzione, sequence
+  diagram e frame logici preparatori per future animazioni o GIF didattiche.
+- `modules/inotify/include/watch_manager.h`,
+  `modules/inotify/src/watch_manager.c`, `modules/inotify/include/watcher.h` e
+  `modules/inotify/src/watcher.c`: aggiunti commenti strutturati su gestione
+  dei watch, tabella `wd -> path`, discovery ricorsiva e separazione tra
+  diagnostica backend e semantica core.
+- `16-mappa-codice-e-strutture.md`: aggiunto nuovo capitolo didattico con
+  call graph runtime, strutture dati backend, tabelle campo/funzione, sequenze
+  di inserimento/rimozione watch, scenario `mkdir -p` e proposta per future GIF
+  o animazioni generate.
+- `README.md`: aggiunto il nuovo capitolo sulla mappa del codice e strutture
+  dati al percorso consigliato.
+- `docs/commenting-progress.md`: aggiornata la passata pesante indicando come
+  completati `watch_manager` e `watcher`.
 - `modules/inotify/include/inotify_backend.h`,
   `modules/inotify/src/inotify_backend.c`, `core/include/alfred_correlator.h`,
   `core/src/alfred_correlator.c` e `app/src/app.c`: avviata la passata pesante

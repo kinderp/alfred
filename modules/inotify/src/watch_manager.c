@@ -1,5 +1,15 @@
 /* ============================================================================
- * src/watch_manager.c
+ * watch_manager.c - inotify watch installation and recursive discovery
+ *
+ * This file owns the operations that mutate the backend watcher table:
+ *
+ *   inotify_add_watch() -> watcher_store()
+ *   inotify_rm_watch()  -> watcher_remove()
+ *
+ * It deliberately does not classify filesystem events. WATCH_ADDED and
+ * WATCH_REMOVED are backend diagnostics. Recursive discovery reports directory
+ * facts to the backend through a callback; the core later decides whether those
+ * facts become DIR_CREATED events.
  * ========================================================================== */
 
 #include "watch_manager.h"
@@ -21,6 +31,15 @@
  * DEFAULT WATCH MASK
  * ========================================================================== */
 
+/*
+ * watch_manager_default_mask - return the default inotify subscription mask
+ *
+ * The mask includes creation/deletion, modify/close-write, move pairs, watch
+ * removal diagnostics, and queue overflow. It is stored in config_t so future
+ * configuration can override it without changing watch_manager_add().
+ *
+ * Return: OR-ed IN_* mask flags.
+ */
 uint32_t watch_manager_default_mask(void)
 {
     return
@@ -39,6 +58,17 @@ uint32_t watch_manager_default_mask(void)
  * ADD SINGLE WATCH
  * ========================================================================== */
 
+/*
+ * watch_manager_add - add one kernel watch and store its path mapping
+ * @app: application context containing inotify backend state
+ * @path: filesystem path to watch
+ *
+ * On success the kernel returns a watch descriptor. The descriptor is then used
+ * as an index into watcher_table_t, where watcher_store() saves the path needed
+ * later to reconstruct full event paths from inotify records.
+ *
+ * Return: watch descriptor on success, -1 on failure.
+ */
 int watch_manager_add(app_t *app,
                       const char *path)
 {
@@ -88,6 +118,16 @@ int watch_manager_add(app_t *app,
  * REMOVE WATCH
  * ========================================================================== */
 
+/*
+ * watch_manager_remove - remove one kernel watch and clear its table slot
+ * @app: application context containing inotify backend state
+ * @wd: watch descriptor to remove
+ *
+ * The path is looked up before table removal so the diagnostic log can still
+ * identify which watched directory disappeared.
+ *
+ * Return: 0 on success, -1 when @wd is not known.
+ */
 int watch_manager_remove(app_t *app,
                          int wd)
 {
@@ -119,6 +159,22 @@ int watch_manager_remove(app_t *app,
  * INTERNAL RECURSIVE WALK
  * ========================================================================== */
 
+/*
+ * recursive_walk - add watches for a directory tree
+ * @app: application context containing backend state
+ * @root: directory currently being scanned
+ * @on_discovered: optional callback for discovered directories
+ * @userdata: opaque callback data
+ * @notify_root: nonzero to report @root through @on_discovered
+ *
+ * The root passed by the public entry point is not reported because its real
+ * inotify create event is already being processed by the backend. Nested
+ * directories are reported because they may have been created before a watch
+ * existed on their parent, which means the kernel could not deliver their
+ * create event to Alfred.
+ *
+ * Return: 0 on success, -1 on opendir failure.
+ */
 static int recursive_walk(app_t *app,
                           const char *root,
                           watch_manager_discovered_dir_fn on_discovered,
@@ -136,6 +192,11 @@ static int recursive_walk(app_t *app,
         return -1;
     }
 
+    /*
+     * Add the watch before reporting discovery. This ordering means a synthetic
+     * raw create emitted by the backend describes a directory that is already
+     * watched for subsequent changes.
+     */
     watch_manager_add(app, root);
 
     if (notify_root && on_discovered != NULL) {
@@ -181,6 +242,16 @@ static int recursive_walk(app_t *app,
  * ADD RECURSIVE
  * ========================================================================== */
 
+/*
+ * watch_manager_add_recursive - add watches below a root directory
+ * @app: application context containing backend state
+ * @root: root directory to scan
+ *
+ * Used for startup recursive watching, where discovered children already exist
+ * before Alfred starts and should not be emitted as create events.
+ *
+ * Return: 0 on success, -1 on failure.
+ */
 int watch_manager_add_recursive(app_t *app,
                                 const char *root)
 {
@@ -190,6 +261,20 @@ int watch_manager_add_recursive(app_t *app,
     return recursive_walk(app, root, NULL, NULL, 0);
 }
 
+/*
+ * watch_manager_add_recursive_with_discovery - add watches and report children
+ * @app: application context containing backend state
+ * @root: newly created directory to scan
+ * @on_discovered: callback for nested directories found during scanning
+ * @userdata: opaque callback data
+ *
+ * Used after an inotify IN_CREATE|IN_ISDIR event while recursive mode is active.
+ * The backend already has the real create event for @root. The discovery
+ * callback reports nested directories that may have been missed in fast
+ * recursive creation scenarios such as `mkdir -p one/two/three`.
+ *
+ * Return: 0 on success, -1 on failure.
+ */
 int watch_manager_add_recursive_with_discovery(
     app_t *app,
     const char *root,

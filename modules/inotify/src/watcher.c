@@ -1,21 +1,14 @@
 /* ============================================================================
- * watcher.c
- * Professional watcher table manager
+ * watcher.c - dynamic wd -> path table
  *
- * Responsibility:
- *   Maintain mapping:
+ * The inotify backend needs to reconstruct full paths from kernel events.
+ * Kernel records contain a watch descriptor and an optional name; they do not
+ * repeat the watched directory path. This table stores that missing directory
+ * path and lets the backend perform direct lookup by wd.
  *
- *      watch descriptor (wd)  <-> absolute path
- *
- * Used by:
- *   app.c
- *   event_engine.c
- *
- * Design goals:
- *   - O(1) direct access by wd
- *   - dynamic resize
- *   - safe memory management
- *   - clean API
+ * The table may be sparse because inotify watch descriptors are kernel-assigned
+ * integers. watcher_expand() grows the array until the descriptor can be used
+ * as an index.
  * ========================================================================== */
 
 #include "watcher.h"
@@ -30,10 +23,11 @@
  * ========================================================================== */
 
 /*
- * Ensure table can contain given wd index.
+ * watcher_expand - ensure the table can address a watch descriptor
+ * @wt: table to grow
+ * @required_wd: watch descriptor that must fit as an index
  *
- * Since inotify watch descriptors are integers that may grow,
- * we expand array when needed.
+ * Return: 0 on success, -1 on invalid input or allocation failure.
  */
 static int watcher_expand(watcher_table_t *wt, int required_wd)
 {
@@ -61,7 +55,10 @@ static int watcher_expand(watcher_table_t *wt, int required_wd)
     if (tmp == NULL)
         return -1;
 
-    /* zero initialize new area */
+    /*
+     * New slots must start inactive so later lookup can distinguish allocated
+     * but unused wd values from real watcher entries.
+     */
     memset(tmp + wt->capacity,
            0,
            (new_capacity - wt->capacity)
@@ -78,7 +75,11 @@ static int watcher_expand(watcher_table_t *wt, int required_wd)
  * ========================================================================== */
 
 /*
- * Initialize watcher table.
+ * watcher_init - initialize an empty watcher table
+ * @wt: table to initialize
+ * @capacity: initial slot count, or 0 for the default
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
  */
 int watcher_init(watcher_table_t *wt, size_t capacity)
 {
@@ -103,7 +104,8 @@ int watcher_init(watcher_table_t *wt, size_t capacity)
 }
 
 /*
- * Free all memory.
+ * watcher_destroy - free memory owned by a watcher table
+ * @wt: table to destroy
  */
 void watcher_destroy(watcher_table_t *wt)
 {
@@ -118,9 +120,12 @@ void watcher_destroy(watcher_table_t *wt)
 }
 
 /*
- * Store or replace mapping:
+ * watcher_store - store or replace one wd -> path mapping
+ * @wt: table to update
+ * @wd: inotify watch descriptor
+ * @path: watched path to copy into the table
  *
- *   wd -> path
+ * Return: 0 on success, -1 on invalid input or allocation failure.
  */
 int watcher_store(watcher_table_t *wt,
                   int wd,
@@ -137,7 +142,10 @@ int watcher_store(watcher_table_t *wt,
 
     watcher_entry_t *slot = &wt->items[wd];
 
-    /* count only if new active entry */
+    /*
+     * Replacing an active slot updates its path but does not create another
+     * active watcher.
+     */
     if (!slot->active)
         wt->count++;
 
@@ -153,10 +161,12 @@ int watcher_store(watcher_table_t *wt,
 }
 
 /*
- * Remove watcher entry.
+ * watcher_remove - clear one wd -> path mapping
+ * @wt: table to update
+ * @wd: inotify watch descriptor to clear
  *
- * Does NOT call inotify_rm_watch().
- * Only internal table cleanup.
+ * This function only mutates the in-memory table. Kernel watch removal is owned
+ * by watch_manager_remove().
  */
 void watcher_remove(watcher_table_t *wt, int wd)
 {
@@ -183,9 +193,11 @@ void watcher_remove(watcher_table_t *wt, int wd)
 }
 
 /*
- * Return path for wd.
+ * watcher_get_path - look up the path associated with a watch descriptor
+ * @wt: table to read
+ * @wd: inotify watch descriptor
  *
- * NULL if invalid.
+ * Return: stored path pointer, or NULL when @wd is invalid or inactive.
  */
 const char* watcher_get_path(const watcher_table_t *wt,
                              int wd)
@@ -209,7 +221,11 @@ const char* watcher_get_path(const watcher_table_t *wt,
 }
 
 /*
- * Check if watcher exists.
+ * watcher_exists - test whether a watch descriptor has an active mapping
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ *
+ * Return: 1 when active, 0 otherwise.
  */
 int watcher_exists(const watcher_table_t *wt,
                    int wd)
@@ -227,8 +243,10 @@ int watcher_exists(const watcher_table_t *wt,
 }
 
 /*
- * Optional helper:
- * number of active watchers
+ * watcher_count - return the number of active watcher mappings
+ * @wt: table to inspect
+ *
+ * Return: active entry count, or 0 for NULL.
  */
 size_t watcher_count(const watcher_table_t *wt)
 {
@@ -239,8 +257,8 @@ size_t watcher_count(const watcher_table_t *wt)
 }
 
 /*
- * Optional helper:
- * print debugging table
+ * watcher_dump - print the table to stdout for manual debugging
+ * @wt: table to inspect
  */
 void watcher_dump(const watcher_table_t *wt)
 {

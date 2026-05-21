@@ -17,11 +17,10 @@ temporary legacy paths, and the raw-to-semantic event flow.
 
 Recommended order:
 
-1. `modules/inotify/src/watch_manager.c`
-2. `modules/inotify/src/inotify_adapter.c`
-3. `app/src/config.c`
-4. `modules/inotify/src/events.c`
-5. `modules/inotify/src/move_cache.c`
+1. `modules/inotify/src/inotify_adapter.c`
+2. `app/src/config.c`
+3. `modules/inotify/src/events.c`
+4. `modules/inotify/src/move_cache.c`
 
 Legacy files should be commented as legacy/shadow support, not as the future
 runtime architecture.
@@ -33,6 +32,10 @@ Completed in the first heavy pass:
 - `core/src/alfred_correlator.c`
 - `core/include/alfred_correlator.h`
 - `app/src/app.c` comment refresh only
+- `modules/inotify/src/watch_manager.c`
+- `modules/inotify/include/watch_manager.h`
+- `modules/inotify/src/watcher.c`
+- `modules/inotify/include/watcher.h`
 
 ## App
 
@@ -71,11 +74,11 @@ Completed in the first heavy pass:
 | Done | `modules/inotify/include/inotify_adapter.h` |
 | Done | `modules/inotify/include/inotify_backend.h` |
 | Pending | `modules/inotify/include/move_cache.h` |
-| Pending | `modules/inotify/include/watch_manager.h` |
-| Pending | `modules/inotify/include/watcher.h` |
+| Done | `modules/inotify/include/watch_manager.h` |
+| Done | `modules/inotify/include/watcher.h` |
 | Pending | `modules/inotify/src/events.c` |
 | Done | `modules/inotify/src/inotify_adapter.c` |
 | Done | `modules/inotify/src/inotify_backend.c` |
 | Pending | `modules/inotify/src/move_cache.c` |
-| Pending | `modules/inotify/src/watch_manager.c` |
-| Pending | `modules/inotify/src/watcher.c` |
+| Done | `modules/inotify/src/watch_manager.c` |
+| Done | `modules/inotify/src/watcher.c` |
