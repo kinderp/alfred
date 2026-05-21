@@ -236,3 +236,6 @@ Stati usati:
 - `app/src/config.c` e `04-livello-applicazione.md`: aggiunta spiegazione del
   rischio `atoi()` verso `size_t` e rifiuto esplicito dei valori negativi come
   `-1`.
+- `00-regole-operative.md`: aggiunta memoria operativa della sessione con
+  regole per commit, documentazione, verifiche, stato semantico corrente e
+  commit chiave recenti.
