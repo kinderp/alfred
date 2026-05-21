@@ -167,7 +167,7 @@ struct inotify_event
 
 struct inotify_event
     -> callback app
-    -> app_dispatch_raw_event()
+    -> legacy_events_dispatch()
     -> vecchio logger eventi
 ```
 

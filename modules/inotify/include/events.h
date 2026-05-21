@@ -42,7 +42,7 @@ const char* event_type_str(event_type_t type);
 
 int legacy_events_init(size_t move_cache_size);
 void legacy_events_shutdown(void);
-void app_dispatch_raw_event(struct app *app,
+void legacy_events_dispatch(struct app *app,
                             const struct inotify_event *ev);
 
 #endif

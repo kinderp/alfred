@@ -236,7 +236,7 @@ Attualmente il progetto non e' ancora arrivato al disegno finale.
 Oggi `app/src/app.c` legge direttamente dal file descriptor `inotify` e chiama:
 
 ```c
-app_dispatch_raw_event(app, ev);
+legacy_events_dispatch(app, ev);
 ```
 
 Questa funzione e' implementata nel modulo inotify, ma produce gia' eventi

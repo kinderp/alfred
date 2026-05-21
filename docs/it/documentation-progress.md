@@ -214,3 +214,8 @@ Stati usati:
 - `04-livello-applicazione.md` e `15-todo-switch-core.md`: documentato che la
   cache move e' confinata a `events.c` e non appartiene piu' al contesto
   applicativo.
+- `modules/inotify/include/events.h`, `modules/inotify/src/events.c`,
+  `app/src/app.c`, `02-architettura-generale.md`, `04-livello-applicazione.md`,
+  `07-flusso-eventi.md` e `15-todo-switch-core.md`: rinominato l'entry point
+  legacy da `app_dispatch_raw_event()` a `legacy_events_dispatch()` per chiarire
+  che non e' piu' una responsabilita' dell'app.

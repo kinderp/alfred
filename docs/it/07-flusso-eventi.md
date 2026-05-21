@@ -72,7 +72,7 @@ flowchart TD
     K --> E
 ```
 
-Il vecchio dispatcher `app_dispatch_raw_event()` non viene chiamato. Questo e'
+Il vecchio dispatcher `legacy_events_dispatch()` non viene chiamato. Questo e'
 il punto chiave: `events.c` resta nel codice per il confronto in shadow mode, ma
 non produce lo stream ufficiale quando `event_engine=core`.
 

@@ -108,7 +108,7 @@ void legacy_events_shutdown(void)
  * Called by app.c
  * ========================================================================== */
 
-void app_dispatch_raw_event(app_t *app,
+void legacy_events_dispatch(app_t *app,
                             const struct inotify_event *ev)
 {
     if (app == NULL || ev == NULL)

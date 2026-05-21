@@ -117,7 +117,7 @@ static int handle_backend_event(app_t *app,
 
     if (ev != NULL &&
         app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
-        app_dispatch_raw_event(app, ev);
+        legacy_events_dispatch(app, ev);
     }
 
     return ERR_OK;

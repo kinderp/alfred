@@ -91,7 +91,7 @@ loop applicativo.
 
 Responsabilita' ancora presenti:
 
-- `app_dispatch_raw_event()`: riceve direttamente `struct inotify_event` e
+- `legacy_events_dispatch()`: riceve direttamente `struct inotify_event` e
   decide quale handler legacy chiamare
 - `handle_create()`: trasforma `IN_CREATE` in `FILE_CREATED` o `DIR_CREATED`
 - `handle_delete()`: trasforma `IN_DELETE` in `FILE_DELETED` o `DIR_DELETED`
@@ -130,7 +130,7 @@ Responsabilita' attuali:
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve eventi reali e sintetici tramite callback
 - inoltra gli `alfred_raw_event_t` al core
-- in shadow mode chiama ancora `app_dispatch_raw_event()` del legacy quando il
+- in shadow mode chiama ancora `legacy_events_dispatch()` del legacy quando il
   backend fornisce anche il `struct inotify_event` originale
 
 La catena ricorsiva non parte piu' da `app.c`. Ora e':
