@@ -30,6 +30,10 @@ Completed in the first heavy pass:
 - `modules/inotify/include/inotify_backend.h`
 - `core/src/alfred_correlator.c`
 - `core/include/alfred_correlator.h`
+- `core/src/alfred_tables.c`
+- `core/src/alfred_tables.h`
+- `core/src/alfred_utils.c`
+- `core/src/alfred_utils.h`
 - `app/src/app.c` comment refresh only
 - `modules/inotify/src/watch_manager.c`
 - `modules/inotify/include/watch_manager.h`
@@ -67,10 +71,10 @@ Completed in the first heavy pass:
 | Pending | `core/examples/main_demo.c` |
 | Done | `core/include/alfred_correlator.h` |
 | Done | `core/src/alfred_correlator.c` |
-| Pending | `core/src/alfred_tables.c` |
-| Pending | `core/src/alfred_tables.h` |
-| Pending | `core/src/alfred_utils.c` |
-| Pending | `core/src/alfred_utils.h` |
+| Done | `core/src/alfred_tables.c` |
+| Done | `core/src/alfred_tables.h` |
+| Done | `core/src/alfred_utils.c` |
+| Done | `core/src/alfred_utils.h` |
 
 ## Modules
 

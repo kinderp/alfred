@@ -31,6 +31,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `core/src/alfred_tables.h`, `core/src/alfred_tables.c`,
+  `core/src/alfred_utils.h` e `core/src/alfred_utils.c`: aggiunti commenti
+  strutturati sulle tabelle interne del core, sugli helper di tempo/hash/path e
+  sulla proprieta' dei path copiati per la correlazione move.
+- `16-mappa-codice-e-strutture.md`: aggiunta la sezione sulle strutture dati
+  del core, con schema `alfred_engine`, tabelle per `alfred_move_entry_t` e
+  `alfred_debounce_entry_t`, sequence diagram per move/debounce e frame logici
+  preparatori per future animazioni; riordinato il capitolo in modo che prima
+  completi il ciclo backend e poi passi al core.
+- `docs/commenting-progress.md`: segnati come completati i file interni del
+  core `alfred_tables.*` e `alfred_utils.*`.
 - `00-regole-operative.md` e `16-mappa-codice-e-strutture.md`: impostata la
   mappa del codice come lettura guidata della codebase, pensata per accompagnare
   studenti poco esperti attraverso funzioni, responsabilita', strutture dati,

@@ -1,30 +1,14 @@
-/*======================================================================
+/* ============================================================================
+ * alfred_tables.c - internal hash tables for core correlation state
  *
- * FILE: src/alfred_tables.c
+ * The core needs memory between raw events. MOVED_FROM must wait for a matching
+ * MOVED_TO, and MODIFY events must remember the last emitted timestamp for each
+ * path. This file owns those two internal tables.
  *
- * INTERNAL STATE TABLES
- *
- * PURPOSE:
- *   This file implements all in-memory state required to:
- *
- *     - correlate MOVED_FROM / MOVED_TO (rename/move)
- *     - debounce MODIFY storms
- *     - track pending CREATE events
- *
- * DESIGN PHILOSOPHY:
- *
- *   We prefer:
- *     - simple hash tables
- *     - deterministic behavior
- *     - O(1) average operations
- *     - no external dependencies
- *
- *   We avoid:
- *     - complex balanced trees
- *     - malloc-heavy structures
- *     - recursive algorithms
- *
- *======================================================================*/
+ * The tables are deliberately simple fixed-bucket hash tables with linked-list
+ * buckets. They keep the code easy to inspect for students and avoid external
+ * dependencies while still providing O(1) average lookup for the project scale.
+ * ========================================================================== */
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -36,28 +20,48 @@
 
 #include "alfred_tables.h"
 
-/*======================================================================
+/* ============================================================================
  * MOVE HASH INDEX
- *======================================================================*/
+ * ========================================================================== */
+
+/*
+ * move_index - map an inotify move cookie to a bucket index
+ * @cookie: raw move cookie
+ *
+ * Return: bucket index in the fixed moves table.
+ */
 static inline uint32_t move_index(uint32_t cookie)
 {
     return alfred_hash_u32(cookie) & 1023;
 }
 
-/*======================================================================
+/* ============================================================================
  * PATH HASH INDEX
- *======================================================================*/
+ * ========================================================================== */
+
+/*
+ * path_index - map a filesystem path to a debounce bucket index
+ * @path: path key
+ *
+ * Return: bucket index in the fixed debounce table.
+ */
 static inline uint32_t path_index(const char *path)
 {
     return alfred_hash_str(path) & 1023;
 }
 
-/*======================================================================
+/* ============================================================================
  * MOVE TABLE INSERT
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * Store MOVED_FROM event until MOVED_TO arrives.
+ * alfred_move_insert - store MOVED_FROM until MOVED_TO arrives
+ * @e: core engine
+ * @r: raw MOVED_FROM event
+ *
+ * The entry copies r->path because the raw event path buffer is usually owned
+ * by the backend stack frame and becomes invalid after alfred_process()
+ * returns.
  */
 void alfred_move_insert(
     alfred_engine_t *e,
@@ -84,16 +88,19 @@ void alfred_move_insert(
     e->moves[idx] = n;
 }
 
-/*======================================================================
+/* ============================================================================
  * MOVE TABLE TAKE
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * Retrieve and remove MOVE entry by cookie.
+ * alfred_move_take - retrieve and remove a pending move by cookie
+ * @e: core engine
+ * @cookie: raw move cookie
  *
- * RETURNS:
- *   pointer if found
- *   NULL otherwise
+ * Ownership of the returned entry moves to the caller, which must free
+ * src_path and the entry after semantic classification.
+ *
+ * Return: removed entry on success, NULL otherwise.
  */
 alfred_move_entry_t *alfred_move_take(
     alfred_engine_t *e,
@@ -129,12 +136,18 @@ alfred_move_entry_t *alfred_move_take(
     return NULL;
 }
 
-/*======================================================================
+/* ============================================================================
  * MOVE TABLE SWEEP (TIMEOUT CLEANUP)
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * If MOVED_TO never arrives, we must resolve pending entry.
+ * alfred_move_sweep - remove stale pending move entries
+ * @e: core engine
+ * @now_ns: current monotonic timestamp
+ *
+ * If MOVED_TO never arrives, the current implementation drops the stale
+ * MOVED_FROM entry. A future policy may emit a moved-out/delete-style event,
+ * but that decision belongs in the semantic layer, not in table mechanics.
  */
 void alfred_move_sweep(
     alfred_engine_t *e,
@@ -158,12 +171,6 @@ void alfred_move_sweep(
             {
                 *pp = cur->next;
 
-                /*
-                 * NOTE:
-                 * In real engine we emit "DELETE or MOVED_OUT"
-                 * here. Kept minimal in tables layer.
-                 */
-
                 free(cur->src_path);
                 free(cur);
 
@@ -175,10 +182,17 @@ void alfred_move_sweep(
     }
 }
 
-/*======================================================================
+/* ============================================================================
  * DEBOUNCE GET OR CREATE
- *======================================================================*/
+ * ========================================================================== */
 
+/*
+ * alfred_debounce_get - find or create debounce state for a path
+ * @e: core engine
+ * @path: path used as debounce key
+ *
+ * Return: debounce entry on success, NULL on invalid input.
+ */
 alfred_debounce_entry_t *alfred_debounce_get(
     alfred_engine_t *e,
     const char *path)
@@ -199,9 +213,7 @@ alfred_debounce_entry_t *alfred_debounce_get(
         n = n->next;
     }
 
-    /*
-     * Create new entry if not found.
-     */
+    /* Create a new entry if the path has not been seen before. */
     n = calloc(1, sizeof(*n));
     n->path = alfred_strdup(path);
 
@@ -211,12 +223,17 @@ alfred_debounce_entry_t *alfred_debounce_get(
     return n;
 }
 
-/*======================================================================
+/* ============================================================================
  * DEBOUNCE SHOULD EMIT
- *======================================================================*/
+ * ========================================================================== */
 
 /*
- * Decide whether MODIFY should be emitted or suppressed.
+ * alfred_debounce_should_emit - apply the MODIFY debounce window
+ * @e: core engine
+ * @d: debounce state for the path
+ * @now_ns: current monotonic timestamp
+ *
+ * Return: 1 when FILE_MODIFIED should be emitted, 0 when suppressed.
  */
 int alfred_debounce_should_emit(
     alfred_engine_t *e,
@@ -236,10 +253,14 @@ int alfred_debounce_should_emit(
     return 1;
 }
 
-/*======================================================================
+/* ============================================================================
  * CLEANUP HELPERS (optional future use)
- *======================================================================*/
+ * ========================================================================== */
 
+/*
+ * alfred_tables_destroy - release all move and debounce table entries
+ * @e: core engine to clean up
+ */
 void alfred_tables_destroy(alfred_engine_t *e)
 {
     int i;

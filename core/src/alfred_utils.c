@@ -1,22 +1,10 @@
-/*======================================================================
+/* ============================================================================
+ * alfred_utils.c - internal utility helpers for the core
  *
- * FILE: src/alfred_utils.c
- *
- * INTERNAL UTILITY FUNCTIONS
- *
- * This file contains small reusable helpers used by the engine.
- *
- * Why isolate utilities:
- *   - cleaner core logic
- *   - easier testing
- *   - easier portability
- *   - lower cognitive load
- *
- * NOTE:
- *   These are INTERNAL functions.
- *   They are not exposed in the public API.
- *
- *======================================================================*/
+ * This file keeps small reusable operations out of the correlator: monotonic
+ * time, millisecond conversion, hashing, safe string duplication, and path
+ * component comparisons. They are internal helpers, not public API.
+ * ========================================================================== */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,87 +12,50 @@
 #include <string.h>
 #include <time.h>
 
-/*======================================================================
- * alfred_now_ns()
+/*
+ * alfred_now_ns - return monotonic timestamp in nanoseconds
  *
- * PURPOSE:
- *   Return monotonic timestamp in nanoseconds.
+ * Monotonic time is used for move timeouts, debounce windows, and event
+ * ordering because wall-clock time can jump due to NTP, manual changes, DST, or
+ * virtualization corrections.
  *
- * WHY MONOTONIC CLOCK:
- *
- *   Wrong:
- *      wall clock time
- *
- *   Because wall clock may jump due to:
- *      - NTP sync
- *      - manual user clock change
- *      - DST changes
- *      - virtualization drift correction
- *
- *   Correct:
- *      monotonic time only increases.
- *
- * USED FOR:
- *   - move timeout logic
- *   - debounce timing
- *   - event ordering
- *
- * RETURNS:
- *   nanoseconds since unspecified boot-relative epoch
- *
- *======================================================================*/
+ * Return: nanoseconds from an unspecified monotonic epoch.
+ */
 uint64_t alfred_now_ns(void)
 {
     struct timespec ts;
 
-    /*
-     * CLOCK_MONOTONIC:
-     *   stable increasing timer.
-     */
     clock_gettime(CLOCK_MONOTONIC, &ts);
 
     return ((uint64_t)ts.tv_sec * 1000000000ULL) +
            (uint64_t)ts.tv_nsec;
 }
 
-/*======================================================================
- * alfred_ms_to_ns()
+/*
+ * alfred_ms_to_ns - convert milliseconds to nanoseconds
+ * @ms: millisecond value
  *
- * PURPOSE:
- *   Convert milliseconds to nanoseconds.
+ * Configuration uses milliseconds because they are human-readable. Internal
+ * timing uses nanoseconds so all timeout math shares the same unit.
  *
- * WHY:
- *   Human config uses ms.
- *   Internal engine uses ns.
- *
- * EXAMPLE:
- *   250 ms -> 250000000 ns
- *
- *======================================================================*/
+ * Return: @ms expressed in nanoseconds.
+ */
 uint64_t alfred_ms_to_ns(uint64_t ms)
 {
     return ms * 1000000ULL;
 }
 
-/*======================================================================
- * alfred_strdup()
+/*
+ * alfred_strdup - duplicate a string for core-owned state
+ * @src: string to duplicate
  *
- * PURPOSE:
- *   Safe strdup wrapper.
+ * The core uses this when it must retain a path after the backend's raw event
+ * buffer goes out of scope. Allocation failure currently aborts the process;
+ * production daemon policy could later return errors or drop events with
+ * metrics instead.
  *
- * WHY:
- *   strdup() may return NULL on OOM.
- *   Many projects forget checking.
- *
- * DESIGN CHOICE HERE:
- *   Fail-fast process termination.
- *
- * In daemon products you may instead:
- *   - return error codes
- *   - trigger degraded mode
- *   - drop event with metric
- *
- *======================================================================*/
+ * Return: allocated copy, or NULL when @src is NULL.
+ */
 char *alfred_strdup(const char *src)
 {
     char *p;
@@ -122,21 +73,15 @@ char *alfred_strdup(const char *src)
     return p;
 }
 
-/*======================================================================
- * alfred_hash_u32()
+/*
+ * alfred_hash_u32 - mix a 32-bit integer for hash table indexing
+ * @x: integer key
  *
- * PURPOSE:
- *   Fast integer hash mixer.
+ * Raw modulo on sequential cookies can cluster badly. This small mixer improves
+ * distribution before the bucket mask is applied.
  *
- * USED FOR:
- *   cookie hash tables
- *
- * WHY NOT raw modulo(cookie)?
- *   Sequential values cluster badly.
- *
- * This bit-mixing improves distribution.
- *
- *======================================================================*/
+ * Return: mixed hash value.
+ */
 uint32_t alfred_hash_u32(uint32_t x)
 {
     x ^= x >> 16;
@@ -148,22 +93,14 @@ uint32_t alfred_hash_u32(uint32_t x)
     return x;
 }
 
-/*======================================================================
- * alfred_hash_str()
+/*
+ * alfred_hash_str - hash a string path for debounce table indexing
+ * @s: null-terminated string
  *
- * PURPOSE:
- *   Hash string path quickly.
+ * Uses an FNV-1a style hash as a simple speed/readability tradeoff.
  *
- * USED FOR:
- *   debounce table keyed by path
- *
- * ALGORITHM:
- *   FNV-1a style hash
- *
- * Good tradeoff:
- *   speed / simplicity / decent distribution
- *
- *======================================================================*/
+ * Return: hash value.
+ */
 uint32_t alfred_hash_str(const char *s)
 {
     uint32_t h = 2166136261U;
@@ -176,24 +113,14 @@ uint32_t alfred_hash_str(const char *s)
     return h;
 }
 
-/*======================================================================
- * alfred_basename_ptr()
+/*
+ * alfred_basename_ptr - return a pointer to the basename portion of a path
+ * @path: filesystem path
  *
- * PURPOSE:
- *   Return pointer to basename portion of path.
+ * No memory is allocated. The returned pointer refers to storage inside @path.
  *
- * INPUT:
- *   /tmp/a.txt
- *
- * OUTPUT:
- *   a.txt
- *
- * NO MEMORY ALLOCATION.
- *
- * IMPORTANT:
- *   Returned pointer points inside original string.
- *
- *======================================================================*/
+ * Return: basename pointer, @path itself when no slash exists, or "" for NULL.
+ */
 const char *alfred_basename_ptr(const char *path)
 {
     const char *p;
@@ -209,36 +136,16 @@ const char *alfred_basename_ptr(const char *path)
     return p + 1;
 }
 
-/*======================================================================
- * alfred_parent_dir()
+/*
+ * alfred_parent_dir - copy the parent directory of a path
+ * @path: filesystem path
+ * @out: destination buffer
+ * @out_sz: size of @out
  *
- * PURPOSE:
- *   Copy parent directory of path into output buffer.
- *
- * INPUT:
- *   /tmp/a.txt
- *
- * OUTPUT:
- *   /tmp
- *
- * INPUT:
- *   /a.txt
- *
- * OUTPUT:
- *   /
- *
- * WHY USED:
- *   classify rename vs move
- *
- * EXAMPLE:
- *
- *   /tmp/a.txt -> /tmp/b.txt
- *      same parent => rename
- *
- *   /tmp/a.txt -> /home/a.txt
- *      different parent => move
- *
- *======================================================================*/
+ * Used by move classification: same parent plus different basename means
+ * rename, different parent plus same basename means move, and both different
+ * means relocated.
+ */
 void alfred_parent_dir(
     const char *path,
     char *out,
@@ -280,17 +187,13 @@ void alfred_parent_dir(
     *slash = '\0';
 }
 
-/*======================================================================
- * alfred_same_parent()
+/*
+ * alfred_same_parent - compare the parent directories of two paths
+ * @a: first path
+ * @b: second path
  *
- * PURPOSE:
- *   Compare whether two paths share same parent dir.
- *
- * RETURNS:
- *   1 true
- *   0 false
- *
- *======================================================================*/
+ * Return: 1 when parents match, 0 otherwise.
+ */
 int alfred_same_parent(
     const char *a,
     const char *b)
@@ -304,20 +207,13 @@ int alfred_same_parent(
     return strcmp(pa, pb) == 0;
 }
 
-/*======================================================================
- * alfred_same_basename()
+/*
+ * alfred_same_basename - compare only leaf names of two paths
+ * @a: first path
+ * @b: second path
  *
- * PURPOSE:
- *   Compare leaf names only.
- *
- * INPUT:
- *   /tmp/a.txt
- *   /home/a.txt
- *
- * RESULT:
- *   same filename => true
- *
- *======================================================================*/
+ * Return: 1 when basenames match, 0 otherwise.
+ */
 int alfred_same_basename(
     const char *a,
     const char *b)
@@ -328,13 +224,13 @@ int alfred_same_basename(
     ) == 0;
 }
 
-/*======================================================================
- * alfred_streq()
+/*
+ * alfred_streq - compare two possibly NULL strings
+ * @a: first string
+ * @b: second string
  *
- * PURPOSE:
- *   NULL-safe string equality helper.
- *
- *======================================================================*/
+ * Return: 1 when both strings are equal or both NULL, 0 otherwise.
+ */
 int alfred_streq(
     const char *a,
     const char *b)
@@ -348,14 +244,11 @@ int alfred_streq(
     return strcmp(a, b) == 0;
 }
 
-/*======================================================================
- * alfred_version_string_impl()
+/*
+ * alfred_version_string_impl - return the internal core version string
  *
- * Internal helper.
- *
- * Public wrapper may call this.
- *
- *======================================================================*/
+ * Return: static semantic version string.
+ */
 const char *alfred_version_string_impl(void)
 {
     return "1.0.0";

@@ -368,6 +368,164 @@ ho scoperto una directory che esiste gia' durante lo scan
 Il backend trasforma questa scoperta in un raw event sintetico. Il core decide
 la semantica e produce `DIR_CREATED`.
 
+## Strutture dati del core
+
+Arrivati a questo punto della lettura guidata, il backend ha gia' trasformato
+gli eventi del kernel in `alfred_raw_event_t`. Ora entra in gioco il core, che
+ha bisogno di memoria interna per trasformare eventi raw isolati in eventi
+semantici coerenti.
+
+Le due situazioni principali sono:
+
+- `MOVED_FROM` e `MOVED_TO` arrivano come due raw event separati, ma devono
+  diventare un solo evento semantico
+- molti `MODIFY` ravvicinati sullo stesso file devono essere ridotti con debounce
+
+Le strutture vivono in:
+
+```text
+core/src/alfred_tables.h
+core/src/alfred_tables.c
+```
+
+Schema generale:
+
+```mermaid
+flowchart TD
+    A["alfred_engine"] --> B["cfg"]
+    A --> C["emit callback"]
+    A --> D["userdata"]
+    A --> E["seq"]
+    A --> F["moves[1024]"]
+    A --> G["debounce[1024]"]
+
+    F --> H["alfred_move_entry_t chain"]
+    H --> I["cookie"]
+    H --> J["ts_ns"]
+    H --> K["is_dir"]
+    H --> L["src_path"]
+
+    G --> M["alfred_debounce_entry_t chain"]
+    M --> N["path"]
+    M --> O["last_emit_ns"]
+    M --> P["create_ns"]
+```
+
+### `alfred_engine`
+
+Campi principali:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `cfg` | configurazione interna del core | `alfred_create()` | correlatore, debounce, sweep move |
+| `emit` | callback per emettere eventi semantici | `alfred_create()` | `emit()` |
+| `userdata` | contesto passato alla callback | `alfred_create()` | `emit()` |
+| `seq` | numero progressivo degli eventi semantici | `alfred_create()`, `emit()` | `core_logger_on_event()` tramite evento emesso |
+| `moves[1024]` | tabella hash dei move pendenti | `alfred_move_insert()`, `alfred_move_take()`, `alfred_move_sweep()` | `alfred_process()` |
+| `debounce[1024]` | tabella hash per debounce MODIFY | `alfred_debounce_get()`, `alfred_debounce_should_emit()` | `alfred_process()` |
+
+### `alfred_move_entry_t`
+
+Questa struttura salva un `MOVED_FROM` finche' arriva il `MOVED_TO` con lo
+stesso cookie.
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `cookie` | cookie raw che collega `MOVED_FROM` e `MOVED_TO` | `alfred_move_insert()` | `alfred_move_take()` |
+| `ts_ns` | timestamp raw del `MOVED_FROM` | `alfred_move_insert()` | `alfred_move_sweep()` |
+| `pid` | pid se noto | `alfred_move_insert()` | uso futuro |
+| `is_dir` | indica se l'oggetto e' directory | `alfred_move_insert()` | `classify_move()` tramite `alfred_process()` |
+| `src_path` | path sorgente copiato e posseduto dal core | `alfred_move_insert()` | `alfred_process()` |
+| `next` | prossimo elemento nello stesso bucket hash | `alfred_move_insert()`, `alfred_move_take()` | funzioni tabella |
+
+Perche' `src_path` viene copiato? Perche' il raw event ricevuto dal backend
+punta spesso a un buffer locale valido solo durante la chiamata. Il core deve
+conservare il path sorgente fino all'arrivo del `MOVED_TO`, quindi ne prende una
+copia.
+
+Sequenza move nel core:
+
+```mermaid
+sequenceDiagram
+    participant Backend as backend raw event
+    participant Core as alfred_process()
+    participant Moves as moves hash table
+    participant Classifier as classify_move()
+    participant Emit as emit()
+
+    Backend-->>Core: ALFRED_RAW_MOVED_FROM cookie=10 src=/a/x
+    Core->>Moves: alfred_move_insert(cookie=10, src=/a/x)
+    Backend-->>Core: ALFRED_RAW_MOVED_TO cookie=10 dst=/b/y
+    Core->>Moves: alfred_move_take(cookie=10)
+    Moves-->>Core: src=/a/x is_dir=...
+    Core->>Classifier: src=/a/x dst=/b/y
+    Classifier-->>Core: FILE_RELOCATED or DIR_RELOCATED
+    Core->>Emit: semantic event
+```
+
+Frame logici per una futura animazione:
+
+```text
+frame 1:
+  moves[bucket].head = NULL
+
+frame 2:
+  raw MOVED_FROM cookie=10 path=/a/x
+
+frame 3:
+  alfred_move_insert():
+    entry.cookie = 10
+    entry.src_path = copy("/a/x")
+    entry.next = old bucket head
+    moves[bucket] = entry
+
+frame 4:
+  raw MOVED_TO cookie=10 path=/b/y
+
+frame 5:
+  alfred_move_take():
+    remove entry from bucket
+    return src_path=/a/x
+
+frame 6:
+  classify_move(/a/x, /b/y)
+  emit FILE_RELOCATED or DIR_RELOCATED
+```
+
+### `alfred_debounce_entry_t`
+
+Questa struttura riduce i `MODIFY` ripetuti sullo stesso path.
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `path` | path usato come chiave debounce | `alfred_debounce_get()` | `alfred_debounce_get()` |
+| `last_emit_ns` | ultimo timestamp in cui e' stato emesso `FILE_MODIFIED` | `alfred_debounce_should_emit()` | `alfred_debounce_should_emit()` |
+| `create_ns` | riservato per futura correlazione create-ready | non ancora usato in modo completo | uso futuro |
+| `next` | prossimo elemento nello stesso bucket hash | `alfred_debounce_get()` | funzioni tabella |
+
+Sequenza debounce:
+
+```mermaid
+sequenceDiagram
+    participant Backend as backend raw event
+    participant Core as alfred_process()
+    participant Debounce as debounce hash table
+    participant Emit as emit()
+
+    Backend-->>Core: ALFRED_RAW_MODIFY path=/tmp/a.txt
+    Core->>Debounce: alfred_debounce_get(path)
+    Core->>Debounce: alfred_debounce_should_emit(now)
+    Debounce-->>Core: yes
+    Core->>Emit: FILE_MODIFIED
+    Backend-->>Core: ALFRED_RAW_MODIFY path=/tmp/a.txt ravvicinato
+    Core->>Debounce: alfred_debounce_should_emit(now)
+    Debounce-->>Core: no, dentro finestra debounce
+```
+
+Qui il fatto raw non viene perso: il backend lo ha osservato. Il core decide
+pero' che non tutti i `MODIFY` ravvicinati devono diventare eventi semantici,
+perche' molti programmi salvano file generando raffiche di modifiche tecniche.
+
 ## Vista dinamica futura
 
 Questa pagina e' pensata per essere trasformata in una vista dinamica in una
