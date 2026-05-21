@@ -157,8 +157,8 @@ int app_init(app_t *app, int argc, char **argv)
 
     memset(app, 0, sizeof(*app));
 
-    app->running    = 1;
-    app->inotify_fd = -1;
+    app->running = 1;
+    app->inotify.fd = -1;
 
     /*
      * Defaults are loaded before any subsystem initialization so later steps
@@ -223,23 +223,6 @@ int app_init(app_t *app, int argc, char **argv)
     logger_info(&app->logger,
                 "alfred core initialized event_engine=%s",
                 config_event_engine_name(app->config.event_engine_mode));
-
-    /*
-     * The watcher table maps inotify watch descriptors back to paths. Event
-     * dispatch depends on this mapping to reconstruct full file names.
-     */
-    if (watcher_init(&app->watchers,
-                     app->config.watcher_capacity) != 0) {
-
-        logger_error(&app->logger,
-                     "watcher_init failed");
-
-        error = ERR_ALLOC;
-        goto fail;
-    }
-
-    logger_info(&app->logger,
-                "watcher table initialized");
 
     /*
      * The current inotify dispatcher correlates MOVED_FROM and MOVED_TO with
@@ -348,9 +331,6 @@ void app_shutdown(app_t *app)
                 "shutdown started");
 
     inotify_backend_shutdown(app);
-
-    /* The watcher table owns copied path strings for active descriptors. */
-    watcher_destroy(&app->watchers);
 
     /* The move cache owns pending rename/move source names. */
     move_cache_destroy(&app->moves);

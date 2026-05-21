@@ -1,9 +1,9 @@
 /* ============================================================================
  * inotify_backend.c - inotify runtime backend
  *
- * This file owns the current inotify polling boundary. During the transition it
- * still stores descriptor and watcher state in app_t, but app.c no longer reads
- * struct inotify_event buffers directly or performs recursive discovery.
+ * This file owns the current inotify polling boundary. It keeps the descriptor
+ * and watcher table in app->inotify while app.c remains responsible for
+ * high-level orchestration.
  * ========================================================================== */
 
 #include "inotify_backend.h"
@@ -71,21 +71,36 @@ int inotify_backend_init(app_t *app)
     if (app == NULL)
         return ERR_INVALID_ARG;
 
-    app->inotify_fd =
+    app->inotify.fd = -1;
+
+    if (watcher_init(&app->inotify.watchers,
+                     app->config.watcher_capacity) != 0) {
+
+        logger_error(&app->logger,
+                     "watcher_init failed");
+
+        return ERR_ALLOC;
+    }
+
+    logger_info(&app->logger,
+                "watcher table initialized");
+
+    app->inotify.fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
-    if (app->inotify_fd < 0) {
+    if (app->inotify.fd < 0) {
         logger_error(&app->logger,
                      "inotify_init1 failed errno=%d (%s)",
                      errno,
                      strerror(errno));
 
+        watcher_destroy(&app->inotify.watchers);
         return ERR_INOTIFY;
     }
 
     logger_info(&app->logger,
                 "inotify backend initialized fd=%d",
-                app->inotify_fd);
+                app->inotify.fd);
 
     return ERR_OK;
 }
@@ -113,10 +128,12 @@ void inotify_backend_shutdown(app_t *app)
     if (app == NULL)
         return;
 
-    if (app->inotify_fd >= 0) {
-        close(app->inotify_fd);
-        app->inotify_fd = -1;
+    if (app->inotify.fd >= 0) {
+        close(app->inotify.fd);
+        app->inotify.fd = -1;
     }
+
+    watcher_destroy(&app->inotify.watchers);
 }
 
 /* ============================================================================
@@ -133,7 +150,7 @@ int inotify_backend_poll(app_t *app,
     char buffer[EVENT_BUFFER_SIZE];
 
     ssize_t bytes =
-        read(app->inotify_fd,
+        read(app->inotify.fd,
              buffer,
              sizeof(buffer));
 
@@ -176,7 +193,7 @@ int inotify_backend_poll(app_t *app,
             (struct inotify_event *)ptr;
 
         const char *parent =
-            watcher_get_path(&app->watchers, ev->wd);
+            watcher_get_path(&app->inotify.watchers, ev->wd);
 
         raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
         logger_raw(&app->logger,
@@ -240,7 +257,7 @@ static void backend_handle_dir_create(app_t *app,
     }
 
     const char *base =
-        watcher_get_path(&app->watchers, ev->wd);
+        watcher_get_path(&app->inotify.watchers, ev->wd);
 
     if (base == NULL)
         return;

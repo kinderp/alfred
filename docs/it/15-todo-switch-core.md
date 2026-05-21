@@ -72,8 +72,10 @@ Al momento:
 - il backend trasforma directory scoperte in raw event sintetici per il core
 - il core recupera `DIR_CREATED` mancanti in scenari tipo
   `recursive_create_nested_dir`, mentre il legacy resta incompleto
-- `inotify_fd` e `watchers` vivono ancora in `app_t`, quindi il backend e'
-  esplicito ma non possiede ancora una struttura dati autonoma
+- `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`: vivono in
+  `inotify_backend_t`, contenuto nel campo `app_t.inotify`
+- il backend riceve ancora `app_t *` per usare configurazione, logger e callback
+  verso il core
 
 ## Mappa della logica legacy rimasta
 
@@ -121,7 +123,7 @@ e' ancora nella forma finale.
 
 Responsabilita' attuali:
 
-- inizializza configurazione, logger, core, watcher table e move cache legacy
+- inizializza configurazione, logger, core, backend inotify e move cache legacy
 - inizializza il backend inotify
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve eventi reali e sintetici tramite callback
@@ -142,7 +144,8 @@ inotify_backend.c -> backend_handle_dir_create()
 Questa catena serve a non perdere le directory create rapidamente prima che il
 watch del padre sia installato. E' un miglioramento perche' la manutenzione dei
 watch sta nel backend, non nell'app. Resta da migliorare il fatto che il backend
-usa ancora `app_t` per raggiungere fd, watcher table, configurazione e logger.
+usa ancora `app_t` per raggiungere configurazione, logger e callback verso il
+core.
 
 ### `modules/inotify/src/inotify_backend.c`
 
@@ -160,9 +163,14 @@ Responsabilita' attuali:
 - `backend_emit_synthetic_dir_create()`: emette raw create sintetici per le
   directory scoperte dallo scan
 
-Limite intenzionale: il backend riceve ancora `app_t *`. Questo evita un grande
-refactor immediato, ma il target resta introdurre una struttura backend autonoma
-che possieda `inotify_fd` e `watchers`.
+`inotify_backend_t` possiede:
+
+- `fd`: file descriptor inotify non bloccante
+- `watchers`: tabella `wd -> path`
+
+Limite intenzionale: le funzioni del backend ricevono ancora `app_t *`. Questo
+evita un grande refactor immediato, ma il target resta separare in modo piu'
+netto configurazione, logger e callback dal contesto applicativo completo.
 
 ### `modules/inotify/src/inotify_adapter.c`
 
@@ -195,16 +203,13 @@ generare raw event sintetici verso il core.
 
 ### `app_t`
 
-`app_t` contiene ancora stato specifico inotify:
+`app_t` contiene ancora un campo specifico inotify:
 
-- `inotify_fd`
-- `watchers`
+- `inotify`
 - `moves`
 
-Nel design finale `moves` scompare dal runtime legacy perche' la correlazione
-vive nel core. `inotify_fd` e `watchers` dovrebbero essere incapsulati in un
-backend inotify, non esposti direttamente come campi principali
-dell'applicazione.
+`inotify` e' il backend runtime. `moves` scompare dal runtime legacy quando la
+correlazione move sara' solo nel core.
 
 ## Ordine consigliato per lo switch
 
@@ -213,8 +218,7 @@ L'ordine piu' pulito e':
 1. mantenere `event_engine=shadow` e `ALFRED_EVENT_ENGINE=core` finche' servono
    per confronto e prove manuali
 2. spostare il codice di lettura inotify e manutenzione watch fuori da `app.c`
-   verso un backend inotify esplicito: fatto in forma iniziale, con stato ancora
-   dentro `app_t`
+   verso un backend inotify esplicito: fatto
 3. far emettere al backend solo `alfred_raw_event_t`, includendo eventuali raw
    sintetici per directory scoperte dallo scan
 4. lasciare al core tutta la semantica: create, delete, modify, close-write,

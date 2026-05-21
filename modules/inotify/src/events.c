@@ -123,7 +123,7 @@ static void handle_create(app_t *app,
                           const struct inotify_event *ev)
 {
     const char *base =
-        watcher_get_path(&app->watchers, ev->wd);
+        watcher_get_path(&app->inotify.watchers, ev->wd);
 
     if (base == NULL)
         return;
@@ -154,7 +154,7 @@ static void handle_delete(app_t *app,
                           const struct inotify_event *ev)
 {
     const char *base =
-        watcher_get_path(&app->watchers, ev->wd);
+        watcher_get_path(&app->inotify.watchers, ev->wd);
 
     if (base == NULL)
         return;
@@ -203,7 +203,7 @@ static void handle_move_to(app_t *app,
                         ev->cookie);
 
     const char *dst_base =
-        watcher_get_path(&app->watchers,
+        watcher_get_path(&app->inotify.watchers,
                          ev->wd);
 
     if (dst_base == NULL)
@@ -233,7 +233,7 @@ static void handle_move_to(app_t *app,
     }
 
     const char *src_base =
-        watcher_get_path(&app->watchers,
+        watcher_get_path(&app->inotify.watchers,
                          slot->src_wd);
 
     if (src_base == NULL)
@@ -302,7 +302,7 @@ static void handle_ignored(app_t *app,
                            const struct inotify_event *ev)
 {
     const char *path =
-        watcher_get_path(&app->watchers,
+        watcher_get_path(&app->inotify.watchers,
                          ev->wd);
 
     emit_event(app,
@@ -310,7 +310,7 @@ static void handle_ignored(app_t *app,
                path ? path : "",
                NULL);
 
-    watcher_remove(&app->watchers,
+    watcher_remove(&app->inotify.watchers,
                    ev->wd);
 }
 

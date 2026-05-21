@@ -54,10 +54,9 @@ livello applicazione.
 ```c
 typedef struct app {
     int running;
-    int inotify_fd;
 
     config_t config;
-    watcher_table_t watchers;
+    inotify_backend_t inotify;
     logger_t logger;
     alfred_config_t core_config;
     alfred_engine_t *core;
@@ -70,17 +69,19 @@ Questa struct e' il "contenitore" dello stato runtime.
 Campi importanti:
 
 - `running`: indica se il ciclo principale deve continuare
-- `inotify_fd`: file descriptor di inotify
 - `config`: configurazione runtime
-- `watchers`: tabella watch descriptor -> path
+- `inotify`: stato del backend inotify, cioe' file descriptor e tabella watch
+  descriptor -> path
 - `logger`: gestore dei file di log
 - `core_config`: configurazione del core semantico
 - `core`: istanza del motore semantico Alfred
 - `moves`: cache temporanea per correlare eventi move
 
-Nota architetturale: oggi `app_t` contiene ancora stato specifico di inotify.
-In futuro una parte di questo stato dovrebbe spostarsi dentro il backend
-`modules/inotify`.
+Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
+`app_t`; sono incapsulati in `inotify_backend_t`. Il backend riceve ancora
+`app_t *` per usare configurazione e logger, quindi non e' ancora del tutto
+autonomo. `moves` resta invece fuori dal backend perche' appartiene solo al
+dispatcher semantico legacy in shadow mode.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
 In questa fase pero' lavora in shadow mode: riceve gli stessi eventi del vecchio
@@ -220,8 +221,9 @@ ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
 e lo consegna alla stessa callback usata per gli eventi reali. La callback in
 `app.c` lo inoltra al core. Questo e' un miglioramento rispetto alla fase
 precedente: lo scan ricorsivo non nasce piu' in `app.c`, ma nel backend
-inotify. Rimane ancora temporaneo il fatto che il backend usi `app_t` per
-raggiungere `inotify_fd`, `watchers`, configurazione e logger.
+inotify. Anche fd e watcher table sono campi del backend; rimane ancora
+temporaneo il fatto che il backend usi `app_t` per raggiungere configurazione e
+logger.
 
 ### app_shutdown()
 

@@ -196,3 +196,11 @@ Stati usati:
   `07-flusso-eventi.md` e `15-todo-switch-core.md`: documentato il nuovo
   confine backend e il fatto che `inotify_fd` e `watchers` restano ancora in
   `app_t` come stato di transizione.
+- `modules/inotify/include/inotify_backend.h`, `app/include/app.h`,
+  `modules/inotify/src/inotify_backend.c`, `modules/inotify/src/watch_manager.c`
+  e `modules/inotify/src/events.c`: incapsulati `fd` e watcher table in
+  `inotify_backend_t`, mantenendo `moves` come stato temporaneo del legacy
+  shadow.
+- `04-livello-applicazione.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md`: aggiornata la documentazione per chiarire che
+  `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`.

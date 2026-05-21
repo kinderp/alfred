@@ -16,7 +16,7 @@
 #include "config.h"
 #include "alfred_correlator.h"
 #include "core_logger.h"
-#include "watcher.h"
+#include "inotify_backend.h"
 #include "logger.h"
 #include "move_cache.h"
 
@@ -39,17 +39,15 @@ typedef struct app {
      */
     int running;
 
-    /*
-     * Nonblocking inotify descriptor owned by app_t. It is initialized in
-     * app_init(), consumed by app_run(), and closed by app_shutdown().
-     */
-    int inotify_fd;
-
     /* Application configuration loaded before subsystem initialization. */
     config_t config;
 
-    /* inotify watch descriptor to path mapping. */
-    watcher_table_t watchers;
+    /*
+     * inotify backend state. This now owns the nonblocking descriptor and the
+     * watch descriptor table, though the backend still receives app_t during
+     * the transition so it can use config and logger.
+     */
+    inotify_backend_t inotify;
 
     /* Raw, semantic, and error log sink. */
     logger_t logger;

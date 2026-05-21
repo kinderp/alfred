@@ -80,9 +80,18 @@ Questo backend iniziale:
 - consegna eventi reali e sintetici all'app tramite callback
 - mantiene i watch ricorsivi quando viene creata una nuova directory
 
-E' ancora un backend di transizione: usa `app_t` come contenitore temporaneo per
-`inotify_fd`, `watchers`, configurazione e logger. Il passo successivo sara'
-incapsulare questi campi in una struttura backend dedicata.
+E' ancora un backend di transizione, ma ora possiede una struttura dedicata:
+
+```c
+typedef struct inotify_backend {
+    int fd;
+    watcher_table_t watchers;
+} inotify_backend_t;
+```
+
+Questa struttura e' contenuta in `app_t` come campo `inotify`. Il backend usa
+ancora `app_t` per accedere a configurazione e logger, ma `fd` e tabella dei
+watch non sono piu' campi diretti dell'applicazione.
 
 ## Maschera di watch attuale
 
@@ -148,9 +157,9 @@ wd -> path osservato
 
 Questa e' la responsabilita' di `watcher_table_t`.
 
-Per ora `watcher_table_t` vive ancora dentro `app_t`, ma viene usata dal backend
-inotify. Questo e' un passaggio intermedio: architetturalmente la tabella dei
-watch appartiene al backend, non al core e non alla semantica degli eventi.
+`watcher_table_t` vive dentro `inotify_backend_t`. Questo chiarisce il confine:
+la tabella dei watch appartiene al backend, non al core e non alla semantica
+degli eventi.
 
 ## Mask
 

@@ -46,7 +46,7 @@ int watch_manager_add(app_t *app,
         return -1;
 
     int wd =
-        inotify_add_watch(app->inotify_fd,
+        inotify_add_watch(app->inotify.fd,
                           path,
                           app->config.watch_mask);
 
@@ -61,7 +61,7 @@ int watch_manager_add(app_t *app,
         return -1;
     }
 
-    if (watcher_store(&app->watchers,
+    if (watcher_store(&app->inotify.watchers,
                       wd,
                       path) != 0) {
 
@@ -70,7 +70,7 @@ int watch_manager_add(app_t *app,
                      wd,
                      path);
 
-        inotify_rm_watch(app->inotify_fd,
+        inotify_rm_watch(app->inotify.fd,
                          wd);
 
         return -1;
@@ -95,16 +95,16 @@ int watch_manager_remove(app_t *app,
         return -1;
 
     const char *path =
-        watcher_get_path(&app->watchers,
+        watcher_get_path(&app->inotify.watchers,
                          wd);
 
     if (path == NULL)
         return -1;
 
-    inotify_rm_watch(app->inotify_fd,
+    inotify_rm_watch(app->inotify.fd,
                      wd);
 
-    watcher_remove(&app->watchers,
+    watcher_remove(&app->inotify.watchers,
                    wd);
 
     logger_event(&app->logger,

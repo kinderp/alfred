@@ -10,10 +10,16 @@
 #define INOTIFY_BACKEND_H
 
 #include "alfred_correlator.h"
+#include "watcher.h"
 
 #include <sys/inotify.h>
 
 struct app;
+
+typedef struct inotify_backend {
+    int fd;
+    watcher_table_t watchers;
+} inotify_backend_t;
 
 typedef int (*inotify_backend_event_fn)(
     struct app *app,
