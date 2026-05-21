@@ -587,6 +587,81 @@ Gli stessi dati potrebbero generare sia una GIF sia una pagina HTML
 interattiva. Prima pero' conviene stabilizzare le tabelle e gli schemi statici,
 perche' saranno la base dei frame animati.
 
+### Formato consigliato per i frame
+
+Per rendere generabile la documentazione dinamica, ogni scenario dovrebbe
+seguire sempre questa struttura:
+
+````text
+### Scenario animabile: nome scenario
+
+Trigger:
+
+```text
+comando o evento che fa partire lo scenario
+```
+
+Frame:
+
+```text
+frame N - titolo breve:
+  evento:
+    cosa e' appena successo
+  funzioni:
+    funzione_a()
+    funzione_b()
+  strutture:
+    struttura.campo = valore
+  output:
+    log o evento semantico prodotto
+```
+````
+
+Non tutti i frame devono avere tutte le sottosezioni. Pero' quando un frame
+modifica una struttura dati, la modifica deve essere esplicita. Questo e' il
+punto che rende lo scenario animabile: uno script futuro puo' evidenziare il
+campo modificato, mentre uno studente puo' seguire manualmente l'evoluzione
+dello stato.
+
+### Convenzioni per scenari futuri
+
+- Usare nomi di funzioni reali, non pseudonimi generici.
+- Usare nomi di campi reali quando il codice li espone.
+- Separare eventi raw, eventi diagnostici backend ed eventi semantici core.
+- Specificare quando un path e' copiato e quando invece e' solo preso in
+  prestito da un buffer temporaneo.
+- Evidenziare sempre se un comportamento appartiene al runtime core o al
+  percorso legacy shadow.
+- Se una scelta dipende da una regola teorica, aggiungere un rimando ai capitoli
+  pertinenti: guida C, flusso eventi, semantica eventi o glossario.
+
+### Possibile pipeline futura
+
+Una pipeline leggera potrebbe essere:
+
+```text
+docs/it/16-mappa-codice-e-strutture.md
+    -> parser scenari
+    -> frame JSON intermedi
+    -> renderer SVG
+    -> GIF/video/HTML
+```
+
+Output ipotetico:
+
+```text
+docs/generated/animations/watch-add/
+├── frames.json
+├── frame-001.svg
+├── frame-002.svg
+├── watch-add.gif
+└── index.html
+```
+
+Il file Markdown deve restare la sorgente didattica principale. I file generati
+devono essere considerati derivati: utili per le lezioni, ma non il posto dove
+scrivere le spiegazioni.
+
 ## Scenari animabili
 
 Questa sezione raccoglie scenari gia' scritti come sequenze di frame. Ogni frame

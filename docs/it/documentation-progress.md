@@ -31,6 +31,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `16-mappa-codice-e-strutture.md`: aggiunte convenzioni per scrivere frame
+  animabili futuri e una pipeline ipotetica
+  `Markdown -> JSON -> SVG -> GIF/video/HTML`, mantenendo il Markdown come
+  sorgente didattica principale.
 - `16-mappa-codice-e-strutture.md`: aggiunta una sezione di scenari animabili
   con frame testuali per aggiunta watch, create file, close-write/file-ready,
   modify debounced, move+rename nel core, `mkdir -p` ricorsivo veloce e
