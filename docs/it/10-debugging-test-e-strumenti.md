@@ -187,15 +187,31 @@ La copertura iniziale include scenari base e alcuni casi semantici critici:
   promuovere `WATCH_REMOVED` a evento semantico
 - `test_delete_file.sh`: verifica `FILE_CREATED`, `FILE_MODIFIED`,
   `FILE_READY` e `FILE_DELETED`
+- `test_modify_file.sh`: verifica che una seconda scrittura produca una nuova
+  coppia `FILE_MODIFIED` / `FILE_READY` senza un secondo `FILE_CREATED`
+- `test_move_dir.sh`: verifica `DIR_MOVED` quando cambia il contenitore ma il
+  nome della directory resta lo stesso
+- `test_move_file.sh`: verifica `FILE_MOVED` quando cambia la directory ma il
+  nome del file resta lo stesso
+- `test_move_rename_dir.sh`: verifica `DIR_RELOCATED` invece di `DIR_MOVED` +
+  `DIR_RENAMED`
 - `test_move_rename_file.sh`: verifica `FILE_RELOCATED` invece di
   `FILE_MOVED` + `FILE_RENAMED`
 - `test_recursive_create_nested_dir.sh`: verifica il recupero dei
   `DIR_CREATED` in una creazione rapida stile `mkdir -p`
+- `test_rename_dir.sh`: verifica `DIR_RENAMED` quando cambia solo il nome della
+  directory nello stesso contenitore
 - `test_rename_file.sh`: verifica `FILE_RENAMED` dopo la fase
   `CREATED/MODIFIED/READY`
 
 Questa suite fissa il contratto futuro del core senza cambiare subito i test
 funzionali storici.
+
+La libreria `tests/core/test_lib.sh` include anche `assert_count`, usato quando
+uno scenario deve fissare quante volte un evento puo' comparire. Per esempio,
+nel test `modify_file` `FILE_CREATED` deve comparire una sola volta, mentre
+`FILE_MODIFIED` e `FILE_READY` devono comparire due volte: una per la creazione
+con scrittura iniziale e una per la modifica successiva.
 
 ## Test shadow
 

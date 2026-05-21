@@ -63,6 +63,18 @@ assert_not_contains() {
     fi
 }
 
+assert_count() {
+    local pattern="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(grep -Ec "$pattern" "$LOG_FILE" || true)
+
+    if [[ "$actual" != "$expected" ]]; then
+        fail_with_log "wrong count for pattern: $pattern (expected $expected, got $actual)"
+    fi
+}
+
 assert_order() {
     local first="$1"
     local second="$2"

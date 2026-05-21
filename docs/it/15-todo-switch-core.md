@@ -101,17 +101,18 @@ Copertura iniziale:
 - create file
 - delete directory
 - delete file
+- modify / close-write file
+- move directory
+- move file
+- move and rename directory
 - move and rename file
 - recursive create nested directory
+- rename directory
 - rename file
 
 Scenari ancora da aggiungere:
 
-- rename directory
-- move file
-- move directory
-- move and rename directory
-- modify / close-write file
+- overflow, se si decide di renderlo riproducibile in modo stabile
 
 ### 2. Rendere esplicite le differenze attese
 

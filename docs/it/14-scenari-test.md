@@ -231,6 +231,124 @@ DIR_DELETED path=$ROOT/delete-dir
 Il test controlla anche che `WATCH_REMOVED` non compaia come evento semantico
 core. La rimozione del watch resta diagnostica backend.
 
+### Core: rename directory
+
+File:
+
+```text
+tests/core/test_rename_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/old-dir"
+mv "$TEST_ROOT/old-dir" "$TEST_ROOT/new-dir"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/old-dir
+DIR_RENAMED from=$ROOT/old-dir to=$ROOT/new-dir
+```
+
+`DIR_RENAMED` e' corretto perche' la directory resta nello stesso contenitore e
+cambia solo il nome. Il test controlla anche che lo stesso evento non venga
+classificato come `DIR_MOVED` o `DIR_RELOCATED`.
+
+### Core: move file
+
+File:
+
+```text
+tests/core/test_move_file.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+printf "move\n" > "$TEST_ROOT/src/moved.txt"
+mv "$TEST_ROOT/src/moved.txt" "$TEST_ROOT/dst/moved.txt"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/src
+DIR_CREATED path=$ROOT/dst
+FILE_CREATED path=$ROOT/src/moved.txt
+FILE_MODIFIED path=$ROOT/src/moved.txt
+FILE_READY path=$ROOT/src/moved.txt
+FILE_MOVED from=$ROOT/src/moved.txt to=$ROOT/dst/moved.txt
+```
+
+`FILE_MOVED` e' corretto perche' cambia il contenitore ma il basename resta lo
+stesso. Il test controlla anche che lo stesso evento non venga classificato come
+`FILE_RENAMED` o `FILE_RELOCATED`.
+
+### Core: move directory
+
+File:
+
+```text
+tests/core/test_move_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+mkdir "$TEST_ROOT/src/item"
+mv "$TEST_ROOT/src/item" "$TEST_ROOT/dst/item"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/src
+DIR_CREATED path=$ROOT/dst
+DIR_CREATED path=$ROOT/src/item
+DIR_MOVED from=$ROOT/src/item to=$ROOT/dst/item
+```
+
+`DIR_MOVED` e' corretto perche' cambia il contenitore ma il nome della directory
+resta lo stesso. Il test controlla anche che lo stesso evento non venga
+classificato come `DIR_RENAMED` o `DIR_RELOCATED`.
+
+### Core: move and rename directory
+
+File:
+
+```text
+tests/core/test_move_rename_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+mkdir "$TEST_ROOT/src/before"
+mv "$TEST_ROOT/src/before" "$TEST_ROOT/dst/after"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/src
+DIR_CREATED path=$ROOT/dst
+DIR_CREATED path=$ROOT/src/before
+DIR_RELOCATED from=$ROOT/src/before to=$ROOT/dst/after
+```
+
+`DIR_RELOCATED` e' corretto perche' cambiano sia il contenitore sia il nome
+della directory. Il core deve emettere un solo evento semantico, non la coppia
+`DIR_MOVED` + `DIR_RENAMED` usata dal percorso legacy.
+
 ### Core: move and rename file
 
 File:
@@ -285,6 +403,38 @@ DIR_CREATED path=$ROOT/one/two/three
 Questo test verifica che il core recuperi anche le directory create prima che il
 watch del padre fosse installato. Il recupero passa da scan ricorsivo backend e
 raw event sintetici verso il core.
+
+### Core: modify file / close-write
+
+File:
+
+```text
+tests/core/test_modify_file.sh
+```
+
+Operazioni:
+
+```bash
+printf "initial\n" > "$TEST_ROOT/editable.txt"
+printf "second\n" >> "$TEST_ROOT/editable.txt"
+```
+
+Event log core atteso:
+
+```text
+FILE_CREATED path=$ROOT/editable.txt
+FILE_MODIFIED path=$ROOT/editable.txt
+FILE_READY path=$ROOT/editable.txt
+FILE_MODIFIED path=$ROOT/editable.txt
+FILE_READY path=$ROOT/editable.txt
+```
+
+Il primo `printf` crea il file e quindi produce anche `FILE_CREATED`. Entrambe
+le scritture producono invece una fase `FILE_MODIFIED` seguita da
+`FILE_READY`, perche' `FILE_MODIFIED` rappresenta la modifica dei contenuti e
+`FILE_READY` rappresenta la chiusura in scrittura (`close-write`). Il test usa
+un controllo di conteggio: `FILE_CREATED` deve comparire una sola volta,
+`FILE_MODIFIED` e `FILE_READY` due volte.
 
 ### create file
 

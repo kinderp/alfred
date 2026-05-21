@@ -149,3 +149,31 @@ Stati usati:
 - `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
   `15-todo-switch-core.md`: aggiunti gli scenari core appena coperti, con
   operazioni filesystem ed eventi semantici attesi.
+- `tests/core/test_rename_dir.sh`: aggiunto lo scenario core-only per fissare
+  `DIR_RENAMED` quando una directory cambia nome nello stesso contenitore.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentato il test core `rename directory` e
+  rimosso lo scenario dalla lista dei test ancora da aggiungere.
+- `tests/core/test_move_file.sh`: aggiunto lo scenario core-only per fissare
+  `FILE_MOVED` quando un file cambia directory mantenendo lo stesso nome.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentato il test core `move file` e chiarita la
+  distinzione fra `FILE_MOVED`, `FILE_RENAMED` e `FILE_RELOCATED`.
+- `tests/core/test_move_dir.sh`: aggiunto lo scenario core-only per fissare
+  `DIR_MOVED` quando una directory cambia contenitore mantenendo lo stesso nome.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentato il test core `move directory` e chiarita
+  la distinzione fra `DIR_MOVED`, `DIR_RENAMED` e `DIR_RELOCATED`.
+- `tests/core/test_move_rename_dir.sh`: aggiunto lo scenario core-only per
+  fissare `DIR_RELOCATED` quando una directory cambia sia contenitore sia nome.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentato il test core `move and rename directory`
+  e la differenza intenzionale rispetto al legacy, che produceva due eventi.
+- `tests/core/test_lib.sh`: aggiunto `assert_count` per gli scenari in cui il
+  numero di eventi e' parte del contratto semantico.
+- `tests/core/test_modify_file.sh`: aggiunto lo scenario core-only per fissare
+  la sequenza `FILE_MODIFIED` / `FILE_READY` su una seconda scrittura senza
+  emettere un secondo `FILE_CREATED`.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentato il test core `modify / close-write` e
+  aggiornato il TODO degli scenari core rimanenti.
