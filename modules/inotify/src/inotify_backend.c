@@ -10,6 +10,7 @@
 
 #include "app.h"
 #include "errors.h"
+#include "events.h"
 #include "inotify_adapter.h"
 #include "logger.h"
 #include "utils.h"
@@ -102,6 +103,21 @@ int inotify_backend_init(app_t *app)
                 "inotify backend initialized fd=%d",
                 app->inotify.fd);
 
+    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+        if (legacy_events_init(app->config.move_cache_size) != 0) {
+            logger_error(&app->logger,
+                         "legacy_events_init failed");
+
+            close(app->inotify.fd);
+            app->inotify.fd = -1;
+            watcher_destroy(&app->inotify.watchers);
+            return ERR_ALLOC;
+        }
+
+        logger_info(&app->logger,
+                    "legacy event dispatcher initialized");
+    }
+
     return ERR_OK;
 }
 
@@ -133,6 +149,7 @@ void inotify_backend_shutdown(app_t *app)
         app->inotify.fd = -1;
     }
 
+    legacy_events_shutdown();
     watcher_destroy(&app->inotify.watchers);
 }
 
@@ -223,10 +240,13 @@ int inotify_backend_poll(app_t *app,
         }
 
         int callback_status =
-            on_event(app, ev, raw_ptr, userdata);
+            on_event(app, raw_ptr, userdata);
 
         if (callback_status != ERR_OK)
             return callback_status;
+
+        if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
+            legacy_events_dispatch(app, ev);
 
         backend_handle_dir_create(app, ev, on_event, userdata);
 
@@ -326,5 +346,5 @@ static int backend_emit_synthetic_dir_create(
     raw.pid = 0;
     raw.path = path;
 
-    return on_event(app, NULL, &raw, userdata);
+    return on_event(app, &raw, userdata);
 }

@@ -23,7 +23,6 @@ typedef struct inotify_backend {
 
 typedef int (*inotify_backend_event_fn)(
     struct app *app,
-    const struct inotify_event *ev,
     const alfred_raw_event_t *raw,
     void *userdata
 );

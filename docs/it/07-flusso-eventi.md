@@ -31,10 +31,9 @@ flowchart TD
     B --> C[inotify_adapter_build_raw]
     C --> D[alfred_raw_event_t]
     D --> E[app callback]
-    B --> E
+    B --> F
 
-    E --> F[events.c semantic logic]
-    F --> G[logger_event legacy output]
+    F[events.c semantic logic] --> G[logger_event legacy output]
 
     E --> H[alfred_process]
     H --> I[core_logger_on_event]

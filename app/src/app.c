@@ -13,7 +13,6 @@
 #include "app.h"
 #include "core_logger.h"
 #include "errors.h"
-#include "events.h"
 #include "inotify_backend.h"
 
 #include <stdio.h>
@@ -28,7 +27,6 @@
 static void setup_signals(void);
 static void handle_signal(int sig);
 static int handle_backend_event(app_t *app,
-                                const struct inotify_event *ev,
                                 const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -90,16 +88,13 @@ static void setup_signals(void)
 /*
  * handle_backend_event - consume one backend event
  * @app: initialized application context
- * @ev: optional original inotify event for legacy shadow dispatch
  * @raw: optional raw event for the core
  * @userdata: unused callback context
  *
- * The backend owns inotify parsing and raw conversion. The app only forwards
- * raw events to the core and keeps the legacy dispatcher alive in shadow mode
- * while events.c is still available for comparison.
+ * The backend owns inotify parsing, raw conversion, and legacy shadow dispatch.
+ * The app callback only forwards raw events to the core.
  */
 static int handle_backend_event(app_t *app,
-                                const struct inotify_event *ev,
                                 const alfred_raw_event_t *raw,
                                 void *userdata)
 {
@@ -113,11 +108,6 @@ static int handle_backend_event(app_t *app,
             logger_error(&app->logger,
                          "core failed to process raw event");
         }
-    }
-
-    if (ev != NULL &&
-        app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
-        legacy_events_dispatch(app, ev);
     }
 
     return ERR_OK;
@@ -134,9 +124,8 @@ static int handle_backend_event(app_t *app,
  * @argv: command-line argument vector
  *
  * Initializes all runtime subsystems in dependency order: configuration,
- * logging, core state, optional legacy dispatcher state, inotify backend,
- * signal handling, and startup watches. A single failure path delegates cleanup
- * to app_shutdown().
+ * logging, core state, inotify backend, signal handling, and startup watches.
+ * A single failure path delegates cleanup to app_shutdown().
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -217,25 +206,6 @@ int app_init(app_t *app, int argc, char **argv)
     logger_info(&app->logger,
                 "alfred core initialized event_engine=%s",
                 config_event_engine_name(app->config.event_engine_mode));
-
-    /*
-     * Only the legacy shadow dispatcher needs its move cache. Core mode
-     * correlates MOVED_FROM/MOVED_TO inside the core engine, so it must not
-     * carry legacy semantic state at runtime.
-     */
-    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
-        if (legacy_events_init(app->config.move_cache_size) != 0) {
-
-            logger_error(&app->logger,
-                         "legacy_events_init failed");
-
-            error = ERR_ALLOC;
-            goto fail;
-        }
-
-        logger_info(&app->logger,
-                    "legacy event dispatcher initialized");
-    }
 
     error = inotify_backend_init(app);
     if (error != ERR_OK)
@@ -327,8 +297,6 @@ void app_shutdown(app_t *app)
                 "shutdown started");
 
     inotify_backend_shutdown(app);
-
-    legacy_events_shutdown();
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may

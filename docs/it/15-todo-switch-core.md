@@ -124,14 +124,13 @@ e' ancora nella forma finale.
 
 Responsabilita' attuali:
 
-- inizializza configurazione, logger, core, eventuale dispatcher legacy e
-  backend inotify
+- inizializza configurazione, logger, core e backend inotify
 - inizializza il backend inotify
 - chiama `inotify_backend_poll()` nel loop principale
-- riceve eventi reali e sintetici tramite callback
+- riceve raw event reali e sintetici tramite callback
 - inoltra gli `alfred_raw_event_t` al core
-- in shadow mode chiama ancora `legacy_events_dispatch()` del legacy quando il
-  backend fornisce anche il `struct inotify_event` originale
+- non include piu' `events.h`: in shadow mode il backend inizializza, chiama e
+  spegne il dispatcher legacy
 
 La catena ricorsiva non parte piu' da `app.c`. Ora e':
 

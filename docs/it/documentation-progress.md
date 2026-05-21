@@ -219,3 +219,11 @@ Stati usati:
   `07-flusso-eventi.md` e `15-todo-switch-core.md`: rinominato l'entry point
   legacy da `app_dispatch_raw_event()` a `legacy_events_dispatch()` per chiarire
   che non e' piu' una responsabilita' dell'app.
+- `modules/inotify/src/inotify_backend.c`, `modules/inotify/include/inotify_backend.h`,
+  `app/src/app.c`, `04-livello-applicazione.md`, `07-flusso-eventi.md` e
+  `15-todo-switch-core.md`: spostata la chiamata al dispatcher legacy dentro il
+  backend inotify; la callback app riceve solo `alfred_raw_event_t` da inoltrare
+  al core.
+- `modules/inotify/src/inotify_backend.c`, `app/src/app.c` e
+  `15-todo-switch-core.md`: spostato nel backend anche il ciclo di vita del
+  dispatcher legacy, cosi' `app.c` non dipende piu' da `events.h`.
