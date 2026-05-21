@@ -120,7 +120,7 @@ Questo stile e' utile perche':
 4. core nella modalita' scelta da `event_engine`
 5. tabella watcher
 6. move cache
-7. inotify
+7. backend inotify
 8. signal handler
 9. watch sui percorsi passati da riga di comando
 
@@ -136,24 +136,23 @@ gli eventi semantici attraverso `logger_event()`.
 
 ```mermaid
 flowchart TD
-    A[read inotify fd] --> B{bytes < 0?}
-    B -->|EAGAIN| C[sleep breve]
-    C --> A
-    B -->|errore reale| D[log errore]
-    B -->|ok| E[itera eventi]
-    E --> F[log raw event]
-    F --> G[dispatch al core]
-    G --> H{event_engine shadow?}
-    H -->|si| I[vecchio dispatcher]
+    A[app_run] --> B[inotify_backend_poll]
+    B --> C[backend legge fd inotify]
+    C --> D[backend log raw]
+    D --> E[backend costruisce alfred_raw_event_t]
+    E --> F[callback app]
+    F --> G[alfred_process core]
+    F --> H{event_engine shadow?}
+    H -->|si| I[vecchio dispatcher events.c]
     H -->|no| J[skip legacy]
-    I --> K[backend watch update]
-    J --> K
+    B --> K[backend aggiorna watch ricorsivi]
     K --> A
 ```
 
-Il file descriptor e' non bloccante. Questo significa che `read()` puo'
-restituire `EAGAIN` quando non ci sono eventi. Non e' un errore: il programma
-aspetta pochi millisecondi e riprova.
+Il file descriptor e' non bloccante, ma `app.c` non chiama piu' direttamente
+`read()`. La lettura e il parsing di `struct inotify_event` sono stati spostati
+nel backend inotify. `app.c` resta il coordinatore: chiama il backend, riceve
+eventi raw tramite callback e li inoltra al core.
 
 ### Shadow mode
 
@@ -161,13 +160,15 @@ Durante l'integrazione il ciclo eventi usa due percorsi:
 
 ```text
 struct inotify_event
-    -> dispatch_event_to_core()
+    -> inotify_backend_poll()
     -> inotify_adapter_build_raw()
+    -> callback app
     -> alfred_process()
     -> core_logger_on_event()
     -> logger_event()
 
 struct inotify_event
+    -> callback app
     -> app_dispatch_raw_event()
     -> vecchio logger eventi
 ```
@@ -181,12 +182,12 @@ renderlo ufficiale.
 
 ### Aggiornamento watch backend
 
-Il ciclo principale gestisce anche un dettaglio backend importante: quando arriva
-un evento `IN_CREATE | IN_ISDIR`, Alfred deve aggiungere watch ricorsivi alla
-nuova directory.
+Il backend inotify gestisce anche un dettaglio importante: quando arriva un
+evento `IN_CREATE | IN_ISDIR`, Alfred deve aggiungere watch ricorsivi alla nuova
+directory.
 
 Questa operazione non deve dipendere da `events.c`, perche' `events.c` viene
-saltato in `event_engine=core`. Per questo l'app esegue sempre:
+saltato in `event_engine=core`. Per questo il backend esegue sempre:
 
 ```text
 IN_CREATE | IN_ISDIR
@@ -198,7 +199,6 @@ IN_CREATE | IN_ISDIR
 In questo modo sia shadow mode sia core mode continuano a monitorare le nuove
 directory e il core puo' recuperare i `DIR_CREATED` mancanti negli scenari tipo
 `mkdir -p`.
-rimuovere `events.c` e `move_cache.c` dal modulo inotify.
 
 ### Raw event sintetici
 
@@ -210,22 +210,18 @@ esempio, con:
 mkdir -p one/two/three
 ```
 
-Per recuperare questi eventi, l'app espone temporaneamente:
-
-```c
-int app_process_synthetic_dir_create(app_t *app, const char *path);
-```
-
-Questa funzione costruisce un `alfred_raw_event_t` sintetico:
+Per recuperare questi eventi, il backend costruisce un `alfred_raw_event_t`
+sintetico:
 
 ```text
 ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
 ```
 
-e lo invia al core con `alfred_process()`. La funzione sta nel livello app
-perche' oggi `app_t` possiede l'istanza del core. E' una soluzione di
-integrazione: in un backend finale piu' pulito, il modulo dovrebbe emettere raw
-event attraverso una interfaccia backend comune.
+e lo consegna alla stessa callback usata per gli eventi reali. La callback in
+`app.c` lo inoltra al core. Questo e' un miglioramento rispetto alla fase
+precedente: lo scan ricorsivo non nasce piu' in `app.c`, ma nel backend
+inotify. Rimane ancora temporaneo il fatto che il backend usi `app_t` per
+raggiungere `inotify_fd`, `watchers`, configurazione e logger.
 
 ### app_shutdown()
 

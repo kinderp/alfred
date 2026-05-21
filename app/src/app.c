@@ -1,39 +1,24 @@
 /* ============================================================================
  * app.c - application lifecycle and inotify event loop
  *
- * This file owns process-level initialization, signal handling, the current
- * inotify read loop, and shutdown ordering. It wires subsystems together but
- * should not contain long-term filesystem event semantics.
+ * This file owns process-level initialization, signal handling, backend
+ * polling orchestration, and shutdown ordering. Backend-specific inotify reads
+ * are delegated to modules/inotify.
  *
- * TODO(core-integration): move backend-specific state and raw event reading
- * into modules/inotify once the backend interface is introduced.
+ * TODO(core-integration): move remaining inotify-specific state out of app_t
+ * once the backend owns a dedicated runtime context.
  * ============================================================================
  */
 
 #include "app.h"
 #include "core_logger.h"
 #include "errors.h"
-#include "inotify_adapter.h"
-#include "utils.h"
-#include "watch_manager.h"
+#include "inotify_backend.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
 #include <signal.h>
-#include <fcntl.h>
-#include <sys/inotify.h>
-#include <time.h>
-
-/* ============================================================================
- * Configuration Constants
- * ========================================================================== */
-
-#ifndef EVENT_BUFFER_SIZE
-#define EVENT_BUFFER_SIZE 65536
-#endif
 
 /* ============================================================================
  * Local Declarations
@@ -41,14 +26,10 @@
 
 static void setup_signals(void);
 static void handle_signal(int sig);
-static void dispatch_event_to_core(app_t *app,
-                                   const struct inotify_event *ev);
-static void handle_backend_dir_create(app_t *app,
-                                      const struct inotify_event *ev);
-static void process_discovered_dir(app_t *app,
-                                   const char *path,
-                                   void *userdata);
-static uint64_t app_now_ns(void);
+static int handle_backend_event(app_t *app,
+                                const struct inotify_event *ev,
+                                const alfred_raw_event_t *raw,
+                                void *userdata);
 
 /*
  * TODO(core-integration): this function is implemented by the current inotify
@@ -114,128 +95,39 @@ static void setup_signals(void)
  * ========================================================================== */
 
 /*
- * dispatch_event_to_core - feed one inotify event to the core
+ * handle_backend_event - consume one backend event
  * @app: initialized application context
- * @ev: inotify event read from the kernel
+ * @ev: optional original inotify event for legacy shadow dispatch
+ * @raw: optional raw event for the core
+ * @userdata: unused callback context
  *
- * Converts the backend-specific event into alfred_raw_event_t and sends it to
- * the core. The selected event engine mode decides whether the core output is
- * shadow comparison data or the official semantic event stream.
+ * The backend owns inotify parsing and raw conversion. The app only forwards
+ * raw events to the core and keeps the legacy dispatcher alive in shadow mode
+ * while events.c is still available for comparison.
  */
-static void dispatch_event_to_core(app_t *app,
-                                   const struct inotify_event *ev)
-{
-    if (app == NULL || app->core == NULL || ev == NULL)
-        return;
-
-    const char *parent =
-        watcher_get_path(&app->watchers, ev->wd);
-
-    /*
-     * Some inotify records, such as queue overflow, may not map to a watched
-     * path. The legacy dispatcher still handles those cases for now.
-     */
-    if (parent == NULL)
-        return;
-
-    char full_path[PATH_MAX];
-    alfred_raw_event_t raw;
-
-    if (inotify_adapter_build_raw(ev,
-                                  parent,
-                                  full_path,
-                                  sizeof(full_path),
-                                  &raw) != 0) {
-        logger_error(&app->logger,
-                     "failed to build core raw event wd=%d",
-                     ev->wd);
-        return;
-    }
-
-    if (alfred_process(app->core, &raw) != 0) {
-        logger_error(&app->logger,
-                     "core failed to process raw event wd=%d",
-                     ev->wd);
-    }
-}
-
-/*
- * handle_backend_dir_create - maintain recursive watches after directory create
- * @app: initialized application context
- * @ev: inotify create event
- *
- * Recursive watch maintenance is backend state, not legacy event semantics.
- * Keeping it in the app loop lets both shadow mode and core mode discover new
- * directories even when the legacy dispatcher is skipped.
- */
-static void handle_backend_dir_create(app_t *app,
-                                      const struct inotify_event *ev)
-{
-    if (app == NULL || ev == NULL)
-        return;
-
-    if (!app->config.recursive)
-        return;
-
-    if ((ev->mask & IN_CREATE) == 0 ||
-        (ev->mask & IN_ISDIR) == 0) {
-        return;
-    }
-
-    const char *base =
-        watcher_get_path(&app->watchers, ev->wd);
-
-    if (base == NULL)
-        return;
-
-    char full[PATH_MAX];
-
-    if (path_join(full, sizeof(full), base, ev->name) != 0)
-        return;
-
-    watch_manager_add_recursive_with_discovery(
-        app,
-        full,
-        process_discovered_dir,
-        NULL);
-}
-
-static void process_discovered_dir(app_t *app,
-                                   const char *path,
-                                   void *userdata)
+static int handle_backend_event(app_t *app,
+                                const struct inotify_event *ev,
+                                const alfred_raw_event_t *raw,
+                                void *userdata)
 {
     (void)userdata;
 
-    (void)app_process_synthetic_dir_create(app, path);
-}
+    if (app == NULL)
+        return ERR_INVALID_ARG;
 
-static uint64_t app_now_ns(void)
-{
-    struct timespec ts;
+    if (raw != NULL && app->core != NULL) {
+        if (alfred_process(app->core, raw) != 0) {
+            logger_error(&app->logger,
+                         "core failed to process raw event");
+        }
+    }
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (ev != NULL &&
+        app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+        app_dispatch_raw_event(app, ev);
+    }
 
-    return ((uint64_t)ts.tv_sec * 1000000000ULL) +
-           (uint64_t)ts.tv_nsec;
-}
-
-int app_process_synthetic_dir_create(app_t *app, const char *path)
-{
-    if (app == NULL || app->core == NULL || path == NULL)
-        return -1;
-
-    alfred_raw_event_t raw;
-
-    memset(&raw, 0, sizeof(raw));
-
-    raw.ts_ns = app_now_ns();
-    raw.source = ALFRED_SRC_INOTIFY;
-    raw.mask = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR;
-    raw.cookie = 0;
-    raw.pid = 0;
-    raw.path = path;
-
-    return alfred_process(app->core, &raw);
+    return ERR_OK;
 }
 
 /* ============================================================================
@@ -366,27 +258,9 @@ int app_init(app_t *app, int argc, char **argv)
     logger_info(&app->logger,
                 "move cache initialized");
 
-    /*
-     * The descriptor is nonblocking so the event loop can poll cooperatively
-     * and react to signal-driven shutdown without blocking indefinitely.
-     */
-    app->inotify_fd =
-        inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-
-    if (app->inotify_fd < 0) {
-
-        logger_error(&app->logger,
-                     "inotify_init1 failed errno=%d (%s)",
-                     errno,
-                     strerror(errno));
-
-        error = ERR_INOTIFY;
+    error = inotify_backend_init(app);
+    if (error != ERR_OK)
         goto fail;
-    }
-
-    logger_info(&app->logger,
-                "inotify initialized fd=%d",
-                app->inotify_fd);
 
     /*
      * Signal handlers use g_app only to request shutdown. Cleanup is left to
@@ -410,14 +284,9 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     for (int i = 1; i < argc; i++) {
-        if (app->config.recursive) {
-            watch_manager_add_recursive(app,
-                                        argv[i]);
-        }
-        else {
-            watch_manager_add(app,
-                              argv[i]);
-        }
+        error = inotify_backend_add_startup_watch(app, argv[i]);
+        if (error != ERR_OK)
+            goto fail;
     }
 
     logger_info(&app->logger,
@@ -434,8 +303,8 @@ fail:
  * app_run - execute the inotify event loop
  * @app: initialized application context
  *
- * Reads packed struct inotify_event records from the nonblocking descriptor,
- * logs their raw form, and forwards each record to the current dispatcher.
+ * Polls the active inotify backend. The backend reads and converts raw records;
+ * app_run() only drives the loop and stops on fatal backend errors.
  *
  * Return: ERR_OK on normal termination, a negative error_t value on invalid
  * input.
@@ -445,86 +314,15 @@ int app_run(app_t *app)
     if (app == NULL)
         return ERR_INVALID_ARG;
 
-    char buffer[EVENT_BUFFER_SIZE];
-
     logger_info(&app->logger,
                 "event loop started");
 
-    char mask_str[256];
     while (app->running) {
 
-        ssize_t bytes =
-            read(app->inotify_fd,
-                 buffer,
-                 sizeof(buffer));
-
-        /*
-         * EAGAIN is expected for a nonblocking descriptor when no events are
-         * queued. Sleep briefly to avoid a busy loop, then poll again.
-         */
-        if (bytes < 0) {
-
-            if (errno == EAGAIN ||
-                errno == EWOULDBLOCK) {
-
-                usleep(10000); /* 10ms */
-                continue;
-            }
-
-            if (errno == EINTR)
-                continue;
-
-            logger_error(&app->logger,
-                         "read failed errno=%d (%s)",
-                         errno,
-                         strerror(errno));
-
+        if (inotify_backend_poll(app,
+                                 handle_backend_event,
+                                 NULL) != ERR_OK) {
             break;
-        }
-
-        /*
-         * read() returning zero should not happen for an inotify descriptor.
-         * Treat it as an abnormal condition and leave the loop.
-         */
-        if (bytes == 0) {
-            logger_error(&app->logger,
-                         "unexpected EOF on inotify fd");
-            break;
-        }
-
-        logger_raw(&app->logger,
-                   "read %zd bytes from inotify",
-                   bytes);
-
-        /*
-         * inotify returns a byte stream containing one or more variable-sized
-         * records. Each record is followed by ev->len bytes containing name.
-         */
-        char *ptr = buffer;
-
-        while (ptr < buffer + bytes) {
-
-            struct inotify_event *ev =
-                (struct inotify_event *)ptr;
-
-            raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
-            logger_raw(&app->logger,
-                       "%s wd=%d path=%s name=%s",
-                       mask_str,
-                       ev->wd,
-                       watcher_get_path(&app->watchers, ev->wd),
-                       ev->len ? ev->name : ""
-            );
-
-            dispatch_event_to_core(app, ev);
-
-            if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
-                app_dispatch_raw_event(app, ev);
-
-            handle_backend_dir_create(app, ev);
-
-            ptr += sizeof(struct inotify_event)
-                   + ev->len;
         }
     }
 
@@ -549,15 +347,7 @@ void app_shutdown(app_t *app)
     logger_info(&app->logger,
                 "shutdown started");
 
-    /*
-     * Closing the descriptor first stops further kernel event delivery before
-     * the watcher table backing those descriptors is destroyed.
-     */
-    if (app->inotify_fd >= 0) {
-
-        close(app->inotify_fd);
-        app->inotify_fd = -1;
-    }
+    inotify_backend_shutdown(app);
 
     /* The watcher table owns copied path strings for active descriptors. */
     watcher_destroy(&app->watchers);

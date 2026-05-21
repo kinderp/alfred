@@ -63,6 +63,27 @@ modules/inotify/src/inotify_adapter.c
 
 prepara il passaggio verso il design corretto.
 
+Il primo confine backend esplicito e' ora:
+
+```text
+modules/inotify/include/inotify_backend.h
+modules/inotify/src/inotify_backend.c
+```
+
+Questo backend iniziale:
+
+- inizializza il file descriptor inotify
+- aggiunge i watch iniziali, ricorsivi o non ricorsivi
+- legge il buffer di `struct inotify_event`
+- scrive il raw log diagnostico
+- usa `inotify_adapter.c` per costruire `alfred_raw_event_t`
+- consegna eventi reali e sintetici all'app tramite callback
+- mantiene i watch ricorsivi quando viene creata una nuova directory
+
+E' ancora un backend di transizione: usa `app_t` come contenitore temporaneo per
+`inotify_fd`, `watchers`, configurazione e logger. Il passo successivo sara'
+incapsulare questi campi in una struttura backend dedicata.
+
 ## Maschera di watch attuale
 
 Il backend non riceve automaticamente tutti gli eventi che inotify potrebbe
@@ -126,6 +147,10 @@ wd -> path osservato
 ```
 
 Questa e' la responsabilita' di `watcher_table_t`.
+
+Per ora `watcher_table_t` vive ancora dentro `app_t`, ma viene usata dal backend
+inotify. Questo e' un passaggio intermedio: architetturalmente la tabella dei
+watch appartiene al backend, non al core e non alla semantica degli eventi.
 
 ## Mask
 

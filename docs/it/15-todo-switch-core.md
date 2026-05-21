@@ -59,19 +59,21 @@ Al momento:
   stream ufficiale storico
 - `ALFRED_EVENT_ENGINE=core` abilita una modalita' di prova in cui il core
   scrive lo stream ufficiale plain e il legacy dispatcher non viene chiamato
-- l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato nel
-  loop applicativo, quindi funziona anche quando `events.c` viene saltato
-- questa collocazione in `app.c` e' temporanea: quando il legacy non servira'
-  piu', la manutenzione dei watch dovra' stare nel backend inotify o in una
-  futura interfaccia backend, non nel core semantico
+- esiste un primo backend inotify esplicito in
+  `modules/inotify/src/inotify_backend.c`
+- il backend legge il fd inotify, logga gli eventi raw, costruisce
+  `alfred_raw_event_t` e li consegna all'app tramite callback
+- l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato dal
+  loop applicativo al backend inotify
 - `events.c` contiene ancora semantica legacy
 - `move_cache.c` e' ancora usato dal legacy dispatcher
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
-- `app_process_synthetic_dir_create()` trasforma directory scoperte in raw event
-  sintetici per il core
+- il backend trasforma directory scoperte in raw event sintetici per il core
 - il core recupera `DIR_CREATED` mancanti in scenari tipo
   `recursive_create_nested_dir`, mentre il legacy resta incompleto
+- `inotify_fd` e `watchers` vivono ancora in `app_t`, quindi il backend e'
+  esplicito ma non possiede ancora una struttura dati autonoma
 
 ## Mappa della logica legacy rimasta
 
@@ -114,35 +116,53 @@ eventi (`MOVED` + `RENAMED`). Il core invece deve emettere un solo evento
 
 ### `app/src/app.c`
 
-`app.c` e' ancora troppo legato al backend inotify. Questo e' accettabile nella
-fase di integrazione, ma non e' la forma finale.
+`app.c` e' meno legato al backend inotify rispetto alla fase precedente, ma non
+e' ancora nella forma finale.
 
 Responsabilita' attuali:
 
-- apre direttamente il file descriptor con `inotify_init1()`
-- legge direttamente `struct inotify_event` dal file descriptor
-- scrive il raw log usando `raw_event_name_from_mask()`
-- chiama `dispatch_event_to_core()` per convertire l'evento in
-  `alfred_raw_event_t` e passarlo al core
-- in shadow mode chiama ancora `app_dispatch_raw_event()` del legacy
-- chiama `handle_backend_dir_create()` per mantenere i watch ricorsivi
-- contiene `app_process_synthetic_dir_create()`, che crea raw event sintetici
-  `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` per le directory scoperte dallo scan
+- inizializza configurazione, logger, core, watcher table e move cache legacy
+- inizializza il backend inotify
+- chiama `inotify_backend_poll()` nel loop principale
+- riceve eventi reali e sintetici tramite callback
+- inoltra gli `alfred_raw_event_t` al core
+- in shadow mode chiama ancora `app_dispatch_raw_event()` del legacy quando il
+  backend fornisce anche il `struct inotify_event` originale
 
-Il punto piu' brutto, ma intenzionale e temporaneo, e':
+La catena ricorsiva non parte piu' da `app.c`. Ora e':
 
 ```text
-app.c -> handle_backend_dir_create()
-      -> watch_manager_add_recursive_with_discovery()
-      -> app_process_synthetic_dir_create()
-      -> core
+inotify_backend.c -> backend_handle_dir_create()
+                  -> watch_manager_add_recursive_with_discovery()
+                  -> backend_emit_synthetic_dir_create()
+                  -> callback app
+                  -> core
 ```
 
 Questa catena serve a non perdere le directory create rapidamente prima che il
-watch del padre sia installato. Dal punto di vista architetturale, pero',
-`app.c` non dovrebbe conoscere questo dettaglio: e' manutenzione dello stato del
-backend inotify e dovrebbe stare nel backend o in una futura interfaccia
-backend.
+watch del padre sia installato. E' un miglioramento perche' la manutenzione dei
+watch sta nel backend, non nell'app. Resta da migliorare il fatto che il backend
+usa ancora `app_t` per raggiungere fd, watcher table, configurazione e logger.
+
+### `modules/inotify/src/inotify_backend.c`
+
+Questo file e' il primo confine esplicito del backend inotify.
+
+Responsabilita' attuali:
+
+- `inotify_backend_init()`: apre il file descriptor inotify non bloccante
+- `inotify_backend_add_startup_watch()`: aggiunge i watch iniziali
+- `inotify_backend_poll()`: legge il buffer inotify, logga il raw event,
+  costruisce `alfred_raw_event_t` e chiama la callback app
+- `inotify_backend_shutdown()`: chiude il file descriptor
+- `backend_handle_dir_create()`: mantiene i watch ricorsivi sulle directory
+  create
+- `backend_emit_synthetic_dir_create()`: emette raw create sintetici per le
+  directory scoperte dallo scan
+
+Limite intenzionale: il backend riceve ancora `app_t *`. Questo evita un grande
+refactor immediato, ma il target resta introdurre una struttura backend autonoma
+che possieda `inotify_fd` e `watchers`.
 
 ### `modules/inotify/src/inotify_adapter.c`
 
@@ -193,7 +213,8 @@ L'ordine piu' pulito e':
 1. mantenere `event_engine=shadow` e `ALFRED_EVENT_ENGINE=core` finche' servono
    per confronto e prove manuali
 2. spostare il codice di lettura inotify e manutenzione watch fuori da `app.c`
-   verso un backend inotify esplicito
+   verso un backend inotify esplicito: fatto in forma iniziale, con stato ancora
+   dentro `app_t`
 3. far emettere al backend solo `alfred_raw_event_t`, includendo eventuali raw
    sintetici per directory scoperte dallo scan
 4. lasciare al core tutta la semantica: create, delete, modify, close-write,

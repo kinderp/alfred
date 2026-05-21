@@ -185,3 +185,14 @@ Stati usati:
   rimasta, distinguendo semantica ancora in `events.c`, stato backend ancora in
   `app.c`, adapter inotify gia' corretto, watch manager e campi temporanei in
   `app_t`.
+- `modules/inotify/include/inotify_backend.h` e
+  `modules/inotify/src/inotify_backend.c`: introdotto il primo confine backend
+  inotify, che legge il fd, costruisce raw event, mantiene watch ricorsivi e
+  genera raw sintetici per directory scoperte.
+- `app/src/app.c` e `app/include/app.h`: spostata fuori dall'app la lettura
+  diretta di `struct inotify_event` e rimossa la funzione temporanea
+  `app_process_synthetic_dir_create()`.
+- `04-livello-applicazione.md`, `05-modulo-inotify.md`,
+  `07-flusso-eventi.md` e `15-todo-switch-core.md`: documentato il nuovo
+  confine backend e il fatto che `inotify_fd` e `watchers` restano ancora in
+  `app_t` come stato di transizione.

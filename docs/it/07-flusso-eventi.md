@@ -27,15 +27,16 @@ Significa che lo stesso evento inotify percorre due strade:
 
 ```mermaid
 flowchart TD
-    A[struct inotify_event] --> B[legacy app_dispatch_raw_event]
-    A --> C[dispatch_event_to_core]
+    A[inotify_backend_poll] --> B[struct inotify_event]
+    B --> C[inotify_adapter_build_raw]
+    C --> D[alfred_raw_event_t]
+    D --> E[app callback]
+    B --> E
 
-    B --> D[events.c semantic logic]
-    D --> E[logger_event legacy output]
+    E --> F[events.c semantic logic]
+    F --> G[logger_event legacy output]
 
-    C --> F[inotify_adapter_build_raw]
-    F --> G[alfred_raw_event_t]
-    G --> H[alfred_process]
+    E --> H[alfred_process]
     H --> I[core_logger_on_event]
     I --> J[logger_event core output]
 ```
@@ -58,25 +59,27 @@ core:
 
 ```mermaid
 flowchart TD
-    A[struct inotify_event] --> B[dispatch_event_to_core]
+    A[inotify_backend_poll] --> B[struct inotify_event]
     B --> C[inotify_adapter_build_raw]
     C --> D[alfred_raw_event_t]
-    D --> E[alfred_process]
-    E --> F[core_logger_on_event]
-    F --> G[logger_event plain output]
-    A --> H{IN_CREATE IN_ISDIR?}
-    H -->|si| I[watch_manager_add_recursive]
-    I --> J[WATCH_ADDED / synthetic raw]
+    D --> E[app callback]
+    E --> F[alfred_process]
+    F --> G[core_logger_on_event]
+    G --> H[logger_event plain output]
+    B --> I{IN_CREATE IN_ISDIR?}
+    I -->|si| J[backend recursive discovery]
+    J --> K[WATCH_ADDED / synthetic raw]
+    K --> E
 ```
 
 Il vecchio dispatcher `app_dispatch_raw_event()` non viene chiamato. Questo e'
 il punto chiave: `events.c` resta nel codice per il confronto in shadow mode, ma
 non produce lo stream ufficiale quando `event_engine=core`.
 
-L'aggiornamento dei watch resta invece attivo. Non e' semantica legacy: e'
-manutenzione dello stato del backend. Senza questo passaggio, in core mode
-Alfred vedrebbe la creazione della directory nuova ma perderebbe gli eventi
-successivi dentro quella directory.
+L'aggiornamento dei watch resta invece attivo nel backend inotify. Non e'
+semantica legacy: e' manutenzione dello stato del backend. Senza questo
+passaggio, in core mode Alfred vedrebbe la creazione della directory nuova ma
+perderebbe gli eventi successivi dentro quella directory.
 
 Esempio di output in core mode:
 
