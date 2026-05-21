@@ -31,6 +31,9 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `16-mappa-codice-e-strutture.md`: chiarito anche nel capitolo della lettura
+  guidata che `make docs-animations` e' un nome ipotetico futuro e non un target
+  gia' presente nel Makefile.
 - `14-scenari-test.md`: aggiunta una mappa rapida tra scenari di test e
   scenari animabili della lettura guidata, distinguendo contratto osservabile
   dei test e percorso interno nel codice.

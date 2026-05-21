@@ -577,6 +577,9 @@ La direzione consigliata e' partire da SVG generati da uno script, per esempio:
 make docs-animations
 ```
 
+Questo target non esiste ancora nel Makefile. Qui e' indicato come nome
+probabile per una futura automazione.
+
 con output in:
 
 ```text
