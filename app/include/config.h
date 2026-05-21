@@ -20,9 +20,10 @@
 /*
  * event_engine_mode_t - semantic event engine selection
  *
- * SHADOW keeps the legacy dispatcher as the official event stream and logs the
- * core output with a `core ...` prefix for comparison. CORE makes the core the
- * official plain event stream and skips legacy semantic dispatch.
+ * CORE is the normal runtime: backend raw events are processed by the core and
+ * logged as the official plain semantic stream. SHADOW is a temporary
+ * integration mode that also runs the legacy dispatcher so differences can be
+ * inspected while the old code is being phased out.
  */
 typedef enum {
     EVENT_ENGINE_SHADOW = 0,
@@ -47,13 +48,22 @@ typedef struct {
     /* Flush log streams after each write for better crash visibility. */
     int flush_immediately;
 
-    /* Capacity of the temporary inotify move cache. */
+    /*
+     * Capacity of the temporary inotify move cache used only by the legacy
+     * shadow dispatcher. The core has its own move correlation state.
+     */
     size_t move_cache_size;
 
-    /* Initial capacity of the watch descriptor table. */
+    /*
+     * Initial capacity of the backend watcher table. The table can grow when
+     * inotify returns a watch descriptor beyond the current capacity.
+     */
     size_t watcher_capacity;
 
-    /* Backend-specific event mask used when adding inotify watches. */
+    /*
+     * Backend-specific inotify event mask used by watch_manager_add(). It is
+     * stored in config_t even though it is not yet configurable from the file.
+     */
     uint32_t watch_mask;
 
     /* Selects whether semantic events come from legacy shadow mode or core. */

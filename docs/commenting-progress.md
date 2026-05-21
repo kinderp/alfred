@@ -17,10 +17,8 @@ temporary legacy paths, and the raw-to-semantic event flow.
 
 Recommended order:
 
-1. `modules/inotify/src/inotify_adapter.c`
-2. `app/src/config.c`
-3. `modules/inotify/src/events.c`
-4. `modules/inotify/src/move_cache.c`
+1. `modules/inotify/src/events.c`
+2. `modules/inotify/src/move_cache.c`
 
 Legacy files should be commented as legacy/shadow support, not as the future
 runtime architecture.
@@ -36,6 +34,9 @@ Completed in the first heavy pass:
 - `modules/inotify/include/watch_manager.h`
 - `modules/inotify/src/watcher.c`
 - `modules/inotify/include/watcher.h`
+- `modules/inotify/src/inotify_adapter.c` comment refresh only
+- `app/src/config.c` comment refresh only
+- `app/include/config.h` comment refresh only
 
 ## App
 

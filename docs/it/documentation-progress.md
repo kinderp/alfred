@@ -31,6 +31,16 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_adapter.c`, `app/include/config.h` e
+  `app/src/config.c`: rafforzati i commenti sul ruolo conversion-only
+  dell'adapter, sulla lifetime del buffer `raw.path`, sul default `core`, sullo
+  shadow mode temporaneo e sui campi di configurazione che guidano watcher
+  table e mask inotify.
+- `16-mappa-codice-e-strutture.md`: estesa la mappa con `config_t`,
+  `watch_mask`, `event_engine_mode`, parsing sicuro delle capacita' e ruolo
+  stateless dell'adapter inotify.
+- `docs/commenting-progress.md`: aggiornata la lista dei prossimi file da
+  commentare; restano in priorita' i file legacy `events.c` e `move_cache.c`.
 - `00-regole-operative.md`: aggiunta la regola di metodo per documentare flussi
   complessi e strutture dati con diagrammi, tabelle campo/funzione, sequence
   diagram e frame logici preparatori per future animazioni o GIF didattiche.

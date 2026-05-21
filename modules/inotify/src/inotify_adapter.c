@@ -49,6 +49,10 @@ uint32_t inotify_adapter_mask_to_alfred(uint32_t mask)
 {
     uint32_t out = 0;
 
+    /*
+     * Keep this mapping mechanical. If a future semantic rule needs a
+     * combination of raw facts, add it to the core instead of hiding it here.
+     */
     if (mask & IN_CREATE)
         out |= ALFRED_RAW_CREATE;
     if (mask & IN_DELETE)
@@ -85,6 +89,11 @@ int inotify_adapter_build_path(const char *parent,
         return -1;
 
     if (name == NULL || name[0] == '\0') {
+        /*
+         * Some inotify records refer to the watched directory itself and do
+         * not carry a child name. In that case the parent path is already the
+         * full event path expected by the core.
+         */
         int written = snprintf(dst, dst_size, "%s", parent);
 
         if (written < 0 || (size_t)written >= dst_size)
@@ -112,6 +121,10 @@ int inotify_adapter_build_raw(const struct inotify_event *ev,
 
     const char *name = ev->len > 0 ? ev->name : "";
 
+    /*
+     * full_path is caller-owned storage. The raw event below only borrows it
+     * until alfred_process() returns.
+     */
     if (inotify_adapter_build_path(parent_path,
                                    name,
                                    full_path,

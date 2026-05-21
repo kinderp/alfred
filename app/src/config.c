@@ -136,10 +136,15 @@ static size_t parse_size_or_default(const char *value, size_t fallback)
 
 /*
  * config_set_event_engine - parse the event engine mode option
+ * @cfg: configuration object to update
+ * @value: expected value, either "shadow" or "core"
  *
- * The mode controls which semantic stream is official at runtime. Keeping this
- * parser centralized lets config files and temporary environment overrides use
- * exactly the same accepted values.
+ * The mode controls whether the runtime uses only the core semantic stream or
+ * also runs the legacy dispatcher for comparison. Keeping this parser
+ * centralized lets config files and temporary environment overrides use exactly
+ * the same accepted values.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
  */
 error_t config_set_event_engine(config_t *cfg, const char *value)
 {
@@ -161,6 +166,9 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
 
 /*
  * config_event_engine_name - render an event engine mode for diagnostics
+ * @mode: event engine mode to render
+ *
+ * Return: stable static string for @mode.
  */
 const char *config_event_engine_name(event_engine_mode_t mode)
 {

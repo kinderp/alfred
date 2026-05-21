@@ -47,6 +47,60 @@ integrazione. La direzione finale e' avere un backend sempre piu' autonomo, ma
 oggi il campo `app_t.inotify` rende esplicito dove vivono `fd` e tabella dei
 watch.
 
+## Struttura dati di configurazione
+
+`config_t` guida molte decisioni prese durante l'inizializzazione. Non e' una
+struttura dati del backend in senso stretto, ma il backend legge alcuni suoi
+campi per sapere come comportarsi.
+
+```mermaid
+flowchart TD
+    A["config_t"] --> B["recursive"]
+    A --> C["move_cache_size"]
+    A --> D["watcher_capacity"]
+    A --> E["watch_mask"]
+    A --> F["event_engine_mode"]
+    A --> G["raw_log / event_log / error_log"]
+
+    D --> H["watcher_init(capacity)"]
+    E --> I["inotify_add_watch(mask)"]
+    F --> L["core oppure shadow legacy"]
+```
+
+Campi rilevanti:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
+| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | `legacy_events_init()` |
+| `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
+| `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
+| `event_engine_mode` | sceglie core o shadow | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `inotify_backend_init()`, `inotify_backend_poll()`, `core_logger_on_event()` |
+
+`watch_mask` e' un buon esempio di confine fra configurazione e backend:
+`config_defaults()` prende il valore da `watch_manager_default_mask()`, poi
+`watch_manager_add()` usa quel valore quando chiama `inotify_add_watch()`.
+
+```mermaid
+sequenceDiagram
+    participant Config as config_defaults()
+    participant Mask as watch_manager_default_mask()
+    participant App as inotify_backend_init()
+    participant Watch as watch_manager_add()
+    participant Kernel as inotify_add_watch()
+
+    Config->>Mask: richiede maschera predefinita
+    Mask-->>Config: IN_CREATE | IN_DELETE | IN_MODIFY | ...
+    App->>Watch: aggiungi path
+    Watch->>Kernel: fd, path, config.watch_mask
+```
+
+Il parsing delle capacita' usa una funzione dedicata invece di `atoi()`. Il
+motivo e' che campi come `move_cache_size` e `watcher_capacity` sono `size_t`:
+accettare per errore valori negativi o stringhe non numeriche potrebbe produrre
+valori enormi o ambigui. La funzione di parsing mantiene il valore precedente
+quando l'input non e' valido.
+
 ### `inotify_backend_t`
 
 Definizione:
@@ -182,6 +236,38 @@ sequenceDiagram
 La tabella dei watch serve per ricostruire il path completo. Senza
 `watcher_get_path()`, il backend conoscerebbe solo `file.txt`, non
 `/tmp/progetto/file.txt`.
+
+## Adapter inotify e raw event
+
+`inotify_adapter.c` e' intenzionalmente stateless. Non possiede strutture dati
+persistenti: riceve una `struct inotify_event`, il path parent recuperato dalla
+watcher table e un buffer temporaneo per costruire il path completo.
+
+```mermaid
+flowchart LR
+    A["struct inotify_event"] --> B["inotify_adapter_mask_to_alfred()"]
+    C["parent path da watcher_table_t"] --> D["inotify_adapter_build_path()"]
+    A --> D
+    B --> E["alfred_raw_event_t.mask"]
+    D --> F["alfred_raw_event_t.path"]
+    E --> G["alfred_raw_event_t"]
+    F --> G
+```
+
+La funzione `inotify_adapter_build_raw()` non alloca memoria per il path. Il
+campo `raw.path` punta al buffer `full_path` passato dal chiamante:
+
+```text
+inotify_backend_poll()
+    char full_path[PATH_MAX]
+    alfred_raw_event_t raw
+    inotify_adapter_build_raw(..., full_path, ..., &raw)
+    handle_backend_event(..., &raw, ...)
+    alfred_process(core, &raw)
+```
+
+Questo significa che il core deve consumare il raw event subito. Se un livello
+volesse conservare l'evento oltre la chiamata, dovrebbe copiare il path.
 
 ## Rimozione di un watch
 
