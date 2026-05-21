@@ -155,6 +155,41 @@ La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
 attesi nei log, e' raccolta in
 [Scenari di test](14-scenari-test.md).
 
+## Test core
+
+La suite core-only si trova in:
+
+```text
+tests/core/
+```
+
+Si esegue con:
+
+```bash
+make test-core
+```
+
+Questi test avviano Alfred con:
+
+```text
+ALFRED_EVENT_ENGINE=core
+```
+
+e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
+righe `core seq=...`, perche' quelle appartengono allo shadow mode.
+
+La prima copertura e' intenzionalmente piccola:
+
+- `test_create_file.sh`: verifica `FILE_CREATED`, `FILE_MODIFIED` e
+  `FILE_READY`
+- `test_move_rename_file.sh`: verifica `FILE_RELOCATED` invece di
+  `FILE_MOVED` + `FILE_RENAMED`
+- `test_recursive_create_nested_dir.sh`: verifica il recupero dei
+  `DIR_CREATED` in una creazione rapida stile `mkdir -p`
+
+Questa suite fissa il contratto futuro del core senza cambiare subito i test
+funzionali storici.
+
 ## Test shadow
 
 Durante l'integrazione del core esiste anche un tool diagnostico in:

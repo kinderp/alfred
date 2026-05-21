@@ -135,3 +135,12 @@ Stati usati:
   `14-scenari-test.md` e `15-todo-switch-core.md`: documentato il runner
   core-mode e il motivo per cui la manutenzione dei watch e' backend state, non
   semantica legacy.
+- `tests/core/`: aggiunta suite parallela core-only con runner, libreria shell e
+  primi tre scenari: create file, move+rename file e recursive create nested
+  directory.
+- `Makefile`: aggiunto target `test-core` per eseguire la suite core-only senza
+  modificare `make test`.
+- `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: documentata la suite core-only e chiarito che i test
+  end-to-end del core fissano lo stream semantico, mentre raw inotify e
+  `alfred_raw_event_t` sono piu' adatti a diagnostica o test unitari mirati.

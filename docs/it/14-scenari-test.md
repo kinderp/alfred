@@ -8,6 +8,7 @@ I test sono divisi in due famiglie:
 
 - test funzionali: verificano il comportamento esterno del programma
 - test shadow: confrontano il vecchio dispatcher inotify con il nuovo core
+- test core: verificano il core come stream semantico ufficiale plain
 
 ## File di log
 
@@ -74,6 +75,118 @@ temporanea e cercano pattern nell'output.
 Importante: i test funzionali storici controllano soprattutto il comportamento
 legacy visibile in `events.log`. Durante l'integrazione core/shadow mode, lo
 stesso file puo' contenere anche righe `core ...`.
+
+## Test core-only
+
+I test core si trovano in:
+
+```text
+tests/core/
+```
+
+Si eseguono con:
+
+```bash
+make test-core
+```
+
+Questa suite avvia Alfred con `ALFRED_EVENT_ENGINE=core` e controlla solo lo
+stream semantico ufficiale prodotto dal core:
+
+```text
+FILE_CREATED path=...
+FILE_MODIFIED path=...
+FILE_READY path=...
+```
+
+Non controlla `raw.log` come contratto stabile. `raw.log` e' importante per
+diagnosi backend e per capire cosa arriva da inotify, ma eventi grezzi come
+`IN_MODIFY`, `IN_CLOSE_WRITE`, `wd` e ordine di consegna possono essere piu'
+sensibili al kernel, al filesystem e al timing. Per questo i test core fissano
+il contratto semantico di Alfred.
+
+Gli eventi raw Alfred (`alfred_raw_event_t`) hanno valore di test, ma sono piu'
+adatti a test unitari dell'adapter o del core, dove possiamo costruire input
+controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
+`tests/core/` verificano invece il risultato finale che useranno le
+applicazioni.
+
+### Core: create file
+
+File:
+
+```text
+tests/core/test_create_file.sh
+```
+
+Operazioni:
+
+```bash
+printf "hello\n" > "$TEST_ROOT/a.txt"
+```
+
+Event log core atteso:
+
+```text
+FILE_CREATED path=$ROOT/a.txt
+FILE_MODIFIED path=$ROOT/a.txt
+FILE_READY path=$ROOT/a.txt
+```
+
+### Core: move and rename file
+
+File:
+
+```text
+tests/core/test_move_rename_file.sh
+```
+
+Operazioni:
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+printf "move and rename\n" > "$TEST_ROOT/src/old.txt"
+mv "$TEST_ROOT/src/old.txt" "$TEST_ROOT/dst/new.txt"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/src
+DIR_CREATED path=$ROOT/dst
+FILE_RELOCATED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
+```
+
+Il test controlla anche che non compaiano `FILE_MOVED` e `FILE_RENAMED` per lo
+stesso spostamento: nel core lo spostamento con cambio nome e' un solo
+`FILE_RELOCATED`.
+
+### Core: recursive create nested directory
+
+File:
+
+```text
+tests/core/test_recursive_create_nested_dir.sh
+```
+
+Operazioni:
+
+```bash
+mkdir -p "$TEST_ROOT/one/two/three"
+```
+
+Event log core atteso:
+
+```text
+DIR_CREATED path=$ROOT/one
+DIR_CREATED path=$ROOT/one/two
+DIR_CREATED path=$ROOT/one/two/three
+```
+
+Questo test verifica che il core recuperi anche le directory create prima che il
+watch del padre fosse installato. Il recupero passa da scan ricorsivo backend e
+raw event sintetici verso il core.
 
 ### create file
 

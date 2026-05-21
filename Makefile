@@ -208,6 +208,9 @@ run: all
 test:
 	cd tests/functional && bash run_all.sh
 
+test-core:
+	cd tests/core && bash run_all.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -284,6 +287,7 @@ banner:
 	release \
 	run \
 	test \
+	test-core \
 	valgrind \
 	gdb \
 	format \

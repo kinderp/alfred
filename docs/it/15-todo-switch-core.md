@@ -90,6 +90,27 @@ Scenari ancora utili:
   ufficiale del core
 - overflow, se riproducibile
 
+### 1b. Stabilizzare la suite core-only
+
+La suite parallela `tests/core/` fissa il comportamento futuro del core come
+stream ufficiale plain, senza sostituire subito i test funzionali storici.
+
+Copertura iniziale:
+
+- create file
+- move and rename file
+- recursive create nested directory
+
+Scenari ancora da aggiungere:
+
+- delete file
+- rename file
+- create/delete/rename directory
+- move file
+- move directory
+- move and rename directory
+- modify / close-write file
+
 ### 2. Rendere esplicite le differenze attese
 
 Ogni differenza deve essere classificata:
