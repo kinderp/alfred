@@ -53,6 +53,9 @@ modules/inotify/src/move_cache.c
 ```
 
 che fanno logica semantica. Questa e' una responsabilita' temporanea.
+Nella build normale core-only questi file non vengono compilati: servono solo
+quando si costruisce Alfred con `ENABLE_LEGACY_SHADOW=1` per confrontare core e
+legacy.
 
 Il nuovo adapter:
 
@@ -331,10 +334,11 @@ La trasformazione in `DIR_CREATED` resta responsabilita' del core.
 La prima passata pesante sui commenti ha documentato il contratto delle funzioni
 principali del backend inotify.
 
-`inotify_backend_init()` inizializza la tabella dei watch, apre il file
-descriptor inotify non bloccante e, solo in shadow mode, inizializza anche il
-dispatcher legacy. Questo e' importante: il legacy non e' piu' il percorso
-ordinario, ma uno strumento di confronto.
+`inotify_backend_init()` inizializza la tabella dei watch e apre il file
+descriptor inotify non bloccante. Se il binario e' stato compilato con
+`ENABLE_LEGACY_SHADOW=1` e la configurazione chiede `event_engine=shadow`,
+inizializza anche il dispatcher legacy. Questo e' importante: il legacy non e'
+piu' il percorso ordinario, ma uno strumento di confronto.
 
 `inotify_backend_poll()` e' il punto centrale del flusso runtime. L'ordine e':
 
@@ -342,7 +346,7 @@ ordinario, ma uno strumento di confronto.
 2. scrivere il raw log diagnostico
 3. convertire `struct inotify_event` in `alfred_raw_event_t`
 4. consegnare il raw event alla callback dell'app, che lo inoltra al core
-5. eseguire il dispatcher legacy solo se `event_engine=shadow`
+5. eseguire il dispatcher legacy solo se e' compilato e `event_engine=shadow`
 6. aggiornare i watch ricorsivi e generare raw event sintetici se lo scan scopre
    directory create prima dell'aggiunta del watch
 
@@ -374,8 +378,8 @@ stare nel core.
 Il core e' ormai il runtime di default. Il prossimo passo tecnico non e' piu'
 "collegare" il core, ma rendere piu' pulito il confine:
 
-1. documentare in modo completo backend, core e app
-2. rendere il legacy shadow opzionale a livello build
-3. ridurre o quarantinare `events.c` e `move_cache.c`
-4. mantenere nel backend solo lettura inotify, watch e raw event
-5. lasciare al core tutta la semantica finale
+1. mantenere aggiornata la lettura guidata di backend, core e app
+2. ridurre o quarantinare ulteriormente `events.c` e `move_cache.c`
+3. mantenere nel backend solo lettura inotify, watch e raw event
+4. lasciare al core tutta la semantica finale
+5. progettare overflow/resync come passo separato

@@ -8,15 +8,18 @@
  * The backend must stop at raw facts. It may know how to read inotify records,
  * map watch descriptors to paths, keep recursive watches alive, and synthesize
  * raw directory-create facts discovered during a recursive scan. It must not
- * decide final FILE_* or DIR_* semantics; that belongs to the core. The only
- * exception is the temporary legacy dispatcher used by shadow mode.
+ * decide final FILE_* or DIR_* semantics; that belongs to the core. When the
+ * binary is built with ALFRED_ENABLE_LEGACY_SHADOW, it can also run the
+ * temporary legacy dispatcher for shadow comparison.
  * ========================================================================== */
 
 #include "inotify_backend.h"
 
 #include "app.h"
 #include "errors.h"
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
 #include "events.h"
+#endif
 #include "inotify_adapter.h"
 #include "logger.h"
 #include "utils.h"
@@ -78,9 +81,11 @@ static int backend_emit_synthetic_dir_create(
  * @app: application context containing config, logger, and backend storage
  *
  * Initializes the watcher table first, then opens a nonblocking inotify file
- * descriptor. In shadow mode it also initializes the legacy semantic
- * dispatcher so the backend can produce both the official core stream and the
- * comparison legacy stream.
+ * descriptor. If the binary was built with ALFRED_ENABLE_LEGACY_SHADOW,
+ * shadow mode also initializes the legacy semantic dispatcher so the backend
+ * can produce both the official core stream and the comparison legacy stream.
+ * Without that build flag, requesting event_engine=shadow fails clearly instead
+ * of silently falling back to core mode.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -121,6 +126,7 @@ int inotify_backend_init(app_t *app)
                 app->inotify.fd);
 
     if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
         if (legacy_events_init(app->config.move_cache_size) != 0) {
             logger_error(&app->logger,
                          "legacy_events_init failed");
@@ -133,6 +139,16 @@ int inotify_backend_init(app_t *app)
 
         logger_info(&app->logger,
                     "legacy event dispatcher initialized");
+#else
+        logger_error(&app->logger,
+                     "shadow event engine requires build with "
+                     "ENABLE_LEGACY_SHADOW=1");
+
+        close(app->inotify.fd);
+        app->inotify.fd = -1;
+        watcher_destroy(&app->inotify.watchers);
+        return ERR_CONFIG;
+#endif
     }
 
     return ERR_OK;
@@ -172,8 +188,8 @@ int inotify_backend_add_startup_watch(app_t *app,
  * inotify_backend_shutdown - release backend runtime resources
  * @app: application context containing the backend state
  *
- * The function is safe for partial initialization paths. The legacy dispatcher
- * shutdown is kept here because the backend owns the temporary shadow-mode
+ * The function is safe for partial initialization paths. When legacy shadow is
+ * compiled in, its shutdown stays here because the backend owns the temporary
  * bridge to events.c.
  */
 void inotify_backend_shutdown(app_t *app)
@@ -186,7 +202,9 @@ void inotify_backend_shutdown(app_t *app)
         app->inotify.fd = -1;
     }
 
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
     legacy_events_shutdown();
+#endif
     watcher_destroy(&app->inotify.watchers);
 }
 
@@ -205,7 +223,7 @@ void inotify_backend_shutdown(app_t *app)
  * 1. log the kernel raw event for diagnostics
  * 2. convert the inotify record into alfred_raw_event_t when possible
  * 3. deliver the raw event to the core through @on_event
- * 4. optionally run the legacy dispatcher for shadow comparison
+ * 4. optionally run the compiled-in legacy dispatcher for shadow comparison
  * 5. update recursive watches and emit synthetic raw directory creates
  *
  * This keeps the core as the official semantic path while preserving the
@@ -301,8 +319,16 @@ int inotify_backend_poll(app_t *app,
         if (callback_status != ERR_OK)
             return callback_status;
 
-        if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
+        if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
             legacy_events_dispatch(app, ev);
+#else
+            logger_error(&app->logger,
+                         "shadow event engine reached poll without "
+                         "legacy shadow support");
+            return ERR_CONFIG;
+#endif
+        }
 
         backend_handle_dir_create(app, ev, on_event, userdata);
 

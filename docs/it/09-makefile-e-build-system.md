@@ -150,6 +150,58 @@ make MODULES=fanotify
 make MODULES="inotify replay"
 ```
 
+### ENABLE_LEGACY_SHADOW
+
+```make
+ENABLE_LEGACY_SHADOW ?= 0
+```
+
+Controlla se il dispatcher legacy di shadow mode viene compilato.
+
+Default:
+
+```bash
+make
+```
+
+compila il binario normale core-only. In questa build `events.c` e
+`move_cache.c` non vengono inclusi.
+
+Per costruire un binario che supporta il confronto legacy/core:
+
+```bash
+make ENABLE_LEGACY_SHADOW=1
+```
+
+In questa variante il Makefile:
+
+- aggiunge `-DALFRED_ENABLE_LEGACY_SHADOW`
+- compila `modules/inotify/src/events.c`
+- compila `modules/inotify/src/move_cache.c`
+
+Se un binario core-only viene avviato con:
+
+```bash
+ALFRED_EVENT_ENGINE=shadow ./alfred /path
+```
+
+Alfred deve fallire in modo esplicito, perche' lo shadow mode richiede il
+dispatcher legacy compilato. Non sarebbe corretto fare fallback silenzioso al
+core: chi chiede shadow vuole un confronto reale.
+
+Il Makefile usa directory oggetto separate per le varianti di build:
+
+```text
+build/obj/core/
+build/obj/legacy-shadow/
+```
+
+Questo evita di riusare per errore `.o` compilati con flag diversi.
+
+Le macro `-D...` sono raccolte nella variabile `DEFINES`, usata sia dalla build
+di sviluppo sia dalla build `release`. Questo evita che una variante release
+perda per errore macro importanti come `ALFRED_ENABLE_LEGACY_SHADOW`.
+
 ### Directory
 
 ```make
@@ -655,9 +707,13 @@ Esempio reale:
 ```make
 MODULE_SRCS += \
     $(MODULE_DIR)/inotify/src/inotify_adapter.c \
-    $(MODULE_DIR)/inotify/src/events.c \
+    $(MODULE_DIR)/inotify/src/inotify_backend.c \
     ...
 ```
+
+Nota: `events.c` e `move_cache.c` non vanno aggiunti al percorso normale. Sono
+compilati solo dentro il blocco `ENABLE_LEGACY_SHADOW=1`, perche' servono al
+confronto legacy e non al runtime core-only.
 
 ### Passo 5: controllare gli include path
 
@@ -877,6 +933,23 @@ Esegue gli script in:
 tests/functional/
 ```
 
+Questi test funzionali storici usano ancora lo shadow legacy. Per questo il
+target `make test` costruisce prima il binario con:
+
+```bash
+ENABLE_LEGACY_SHADOW=1
+```
+
+La suite core-only resta separata:
+
+```bash
+make test-core
+```
+
+Il target `make test-core` ricostruisce esplicitamente il binario nella variante
+core-only prima di lanciare `tests/core/`, cosi' non dipende da un eventuale
+binario legacy-shadow prodotto da un test precedente.
+
 ### valgrind
 
 ```bash
@@ -926,7 +999,9 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Pulire tutto | `make fclean` |
 | Ricompilare da zero | `make re` |
 | Build ottimizzata | `make release` |
-| Eseguire test | `make test` |
+| Eseguire test funzionali legacy/shadow | `make test` |
+| Eseguire test core-only | `make test-core` |
+| Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
 | Formattare codice | `make format` |

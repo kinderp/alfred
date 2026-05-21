@@ -56,17 +56,19 @@ Al momento:
 - il core e' inizializzato in `app_t`
 - il runtime manda eventi inotify al core
 - `event_engine=core` e' il default e usa il core come stream ufficiale plain
-- `ALFRED_EVENT_ENGINE=shadow` abilita ancora il confronto legacy/core quando
-  serve osservare le differenze
+- `ALFRED_EVENT_ENGINE=shadow` abilita il confronto legacy/core solo se il
+  binario e' stato compilato con `ENABLE_LEGACY_SHADOW=1`
 - esiste un primo backend inotify esplicito in
   `modules/inotify/src/inotify_backend.c`
 - il backend legge il fd inotify, logga gli eventi raw, costruisce
   `alfred_raw_event_t` e li consegna all'app tramite callback
 - l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato dal
   loop applicativo al backend inotify
-- `events.c` contiene ancora semantica legacy
-- `move_cache.c` e' ancora usato dal legacy dispatcher, ma la cache e'
-  posseduta da `events.c` e viene inizializzata solo in `event_engine=shadow`
+- `events.c` contiene ancora semantica legacy, ma non viene compilato nella
+  build core-only normale
+- `move_cache.c` e' ancora usato dal legacy dispatcher quando
+  `ENABLE_LEGACY_SHADOW=1`; la cache e' posseduta da `events.c` e viene
+  inizializzata solo in `event_engine=shadow`
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -84,9 +86,10 @@ finire dopo lo switch completo al core.
 
 ### `modules/inotify/src/events.c`
 
-Questo file e' ancora il dispatcher semantico legacy. Viene chiamato solo in
-`event_engine=shadow`, mentre nel default `event_engine=core` viene saltato dal
-backend.
+Questo file e' ancora il dispatcher semantico legacy. Viene compilato solo con
+`ENABLE_LEGACY_SHADOW=1` e viene chiamato solo in `event_engine=shadow`; nel
+default `event_engine=core` e nella build core-only normale non partecipa al
+runtime.
 
 Responsabilita' ancora presenti:
 
@@ -381,8 +384,9 @@ Quando il core gestisce ufficialmente move e rename:
 La correlazione move deve restare nel core.
 
 Stato attuale: `move_cache` e' gia' esclusa da `event_engine=core` ed e'
-posseduta da `events.c`, non da `app_t`. Resta solo per `event_engine=shadow`,
-dove `events.c` produce ancora il confronto legacy.
+posseduta da `events.c`, non da `app_t`. Inoltre non viene compilata nella
+build core-only normale: resta solo nella variante
+`ENABLE_LEGACY_SHADOW=1`, dove `events.c` produce ancora il confronto legacy.
 
 ### 5. Ridurre o rimuovere `events.c`
 
@@ -427,7 +431,7 @@ verifica e documentazione piu' estesa.
 
 | Passo | Effort | Perche' serve |
 | --- | --- | --- |
-| Rendere legacy shadow opzionale a livello build | Medio | `events.c` e `move_cache.c` devono restare disponibili per confronto, ma non devono essere parte necessaria del binario core normale. |
+| Rendere legacy shadow opzionale a livello build | Fatto | `events.c` e `move_cache.c` restano disponibili con `ENABLE_LEGACY_SHADOW=1`, ma non fanno parte del binario core normale. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core-only | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
@@ -527,6 +531,39 @@ Il capitolo italiano dovrebbe avere sezioni come:
 Questa mappa va progettata dopo la fase A, perche' i commenti strutturati nel
 codice renderanno piu' facile generare o collegare un indice affidabile delle
 funzioni.
+
+## Stato build legacy shadow
+
+Il legacy shadow e' ora una variante di build esplicita:
+
+```bash
+make ENABLE_LEGACY_SHADOW=1
+```
+
+La build normale:
+
+```bash
+make
+```
+
+non compila `events.c` e `move_cache.c`. Se un binario core-only riceve
+`ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con un errore esplicito invece di
+fare fallback silenzioso a core mode.
+
+I target di test sono separati:
+
+```bash
+make test-core
+```
+
+ricostruisce il binario core-only ed esegue la suite `tests/core/`.
+
+```bash
+make test
+```
+
+ricostruisce il binario con `ENABLE_LEGACY_SHADOW=1` ed esegue i test
+funzionali storici, che usano ancora il confronto shadow/legacy.
 
 ## Regola di avanzamento
 

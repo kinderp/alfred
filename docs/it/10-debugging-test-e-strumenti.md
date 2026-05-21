@@ -151,6 +151,11 @@ I test funzionali verificano il comportamento del programma dall'esterno.
 Per esempio possono creare, spostare o cancellare file e poi controllare che il
 programma abbia registrato gli eventi corretti.
 
+Nota importante: i test funzionali storici richiedono ancora il confronto
+legacy/shadow. Il target `make test` costruisce quindi il binario con
+`ENABLE_LEGACY_SHADOW=1` prima di eseguire gli script. La build normale ottenuta
+con `make` resta invece core-only.
+
 La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
 attesi nei log, e' raccolta in
 [Scenari di test](14-scenari-test.md).
@@ -174,6 +179,10 @@ Questi test avviano Alfred con:
 ```text
 ALFRED_EVENT_ENGINE=core
 ```
+
+Il target `make test-core` ricostruisce prima il binario core-only. Questo e'
+importante dopo aver eseguito `make test`, perche' i test funzionali storici
+costruiscono invece la variante con `ENABLE_LEGACY_SHADOW=1`.
 
 e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
 righe `core seq=...`, perche' quelle appartengono allo shadow mode.
@@ -336,8 +345,14 @@ ALFRED_EVENT_ENGINE=core ./alfred /tmp/cartella-da-osservare
 Per riattivare il confronto shadow legacy/core si usa invece:
 
 ```bash
+make ENABLE_LEGACY_SHADOW=1
 ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
+
+Se si prova a usare `ALFRED_EVENT_ENGINE=shadow` con un binario compilato senza
+`ENABLE_LEGACY_SHADOW=1`, Alfred fallisce con un errore esplicito. Questo evita
+un confronto finto: shadow mode ha senso solo se il dispatcher legacy e' davvero
+presente nel binario.
 
 ## Strumenti futuri per la documentazione dinamica
 

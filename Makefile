@@ -9,6 +9,7 @@
 
 TARGET      := alfred
 MODULES     ?= inotify
+ENABLE_LEGACY_SHADOW ?= 0
 
 # -----------------------------------------------------------------------------
 # DIRECTORIES
@@ -18,7 +19,13 @@ APP_DIR     := app
 CORE_DIR    := core
 MODULE_DIR  := modules
 BUILD_DIR   := build
-OBJ_DIR     := $(BUILD_DIR)/obj
+
+BUILD_VARIANT := core
+ifeq ($(ENABLE_LEGACY_SHADOW),1)
+BUILD_VARIANT := legacy-shadow
+endif
+
+OBJ_DIR     := $(BUILD_DIR)/obj/$(BUILD_VARIANT)
 
 APP_INC_DIR := $(APP_DIR)/include
 CORE_INC_DIR := $(CORE_DIR)/include
@@ -63,6 +70,7 @@ SANITIZERS  := \
 	-fsanitize=undefined
 
 DEPFLAGS    := -MMD -MP
+DEFINES     :=
 
 INCLUDES    := \
 	-I$(APP_INC_DIR) \
@@ -75,6 +83,7 @@ CFLAGS      = \
 	$(DEBUG_FLAGS) \
 	$(SANITIZERS) \
 	$(DEPFLAGS) \
+	$(DEFINES) \
 	$(INCLUDES)
 
 LDFLAGS     := \
@@ -102,14 +111,19 @@ MODULE_SRCS :=
 
 ifneq ($(filter inotify,$(MODULES)),)
 INCLUDES += -I$(MODULE_DIR)/inotify/include
-CFLAGS += -DALFRED_ENABLE_INOTIFY
+DEFINES += -DALFRED_ENABLE_INOTIFY
 MODULE_SRCS += \
 	$(MODULE_DIR)/inotify/src/inotify_adapter.c \
 	$(MODULE_DIR)/inotify/src/inotify_backend.c \
-	$(MODULE_DIR)/inotify/src/events.c \
-	$(MODULE_DIR)/inotify/src/move_cache.c \
 	$(MODULE_DIR)/inotify/src/watch_manager.c \
 	$(MODULE_DIR)/inotify/src/watcher.c
+
+ifeq ($(ENABLE_LEGACY_SHADOW),1)
+DEFINES += -DALFRED_ENABLE_LEGACY_SHADOW
+MODULE_SRCS += \
+	$(MODULE_DIR)/inotify/src/events.c \
+	$(MODULE_DIR)/inotify/src/move_cache.c
+endif
 endif
 
 SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
@@ -142,10 +156,12 @@ all: banner directories $(TARGET)
 # LINK
 # -----------------------------------------------------------------------------
 
-$(TARGET): $(OBJS)
+$(TARGET): FORCE $(OBJS)
 	@printf "$(BLUE)[LINK]$(RESET) %s\n" "$(TARGET)"
 	@$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
 	@printf "$(GREEN)[OK]$(RESET) build completed\n"
+
+FORCE:
 
 # -----------------------------------------------------------------------------
 # COMPILE
@@ -186,6 +202,7 @@ release: CFLAGS = \
 	$(WARNINGS) \
 	$(RELEASE_FLAGS) \
 	$(DEPFLAGS) \
+	$(DEFINES) \
 	$(INCLUDES)
 
 release: LDFLAGS :=
@@ -207,9 +224,11 @@ run: all
 # -----------------------------------------------------------------------------
 
 test:
+	$(MAKE) ENABLE_LEGACY_SHADOW=1 all
 	cd tests/functional && bash run_all.sh
 
 test-core:
+	$(MAKE) ENABLE_LEGACY_SHADOW=0 all
 	cd tests/core && bash run_all.sh
 
 # -----------------------------------------------------------------------------

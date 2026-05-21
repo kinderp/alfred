@@ -31,6 +31,16 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile` e `modules/inotify/src/inotify_backend.c`: reso il legacy shadow
+  opzionale a livello build con `ENABLE_LEGACY_SHADOW=1`; la build normale non
+  compila piu' `events.c` e `move_cache.c`, mentre shadow mode fallisce con
+  errore esplicito se il binario non contiene il legacy.
+- `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
+  `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  flag `ENABLE_LEGACY_SHADOW`, la separazione fra build core-only e build
+  legacy-shadow, il comportamento di `make test` e il vincolo di
+  `ALFRED_EVENT_ENGINE=shadow`; chiarito anche che `make test-core` ricostruisce
+  esplicitamente la variante core-only.
 - `04-livello-applicazione.md`: corrette ulteriori sezioni obsolete su
   `app_t`, shadow mode ed `event_engine`, chiarendo che il core e' il percorso
   ufficiale di default e che il legacy e' solo confronto esplicito.

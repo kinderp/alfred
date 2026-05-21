@@ -115,6 +115,11 @@ accettare per errore valori negativi o stringhe non numeriche potrebbe produrre
 valori enormi o ambigui. La funzione di parsing mantiene il valore precedente
 quando l'input non e' valido.
 
+`event_engine_mode=shadow` ha anche un vincolo di build: funziona solo se il
+binario e' stato compilato con `ENABLE_LEGACY_SHADOW=1`. Nella build normale
+core-only, chiedere shadow e' un errore esplicito, perche' non esiste un
+dispatcher legacy compilato con cui confrontare il core.
+
 ### `inotify_backend_t`
 
 Definizione:
@@ -993,6 +998,15 @@ modules/inotify/src/move_cache.c
 `events.c` riceve direttamente `struct inotify_event` e produce eventi
 semantici legacy. Questo era il vecchio centro della semantica, ma oggi deve
 essere letto come codice storico/shadow-only.
+
+Questi file non fanno parte della build normale. Vengono compilati solo con:
+
+```bash
+make ENABLE_LEGACY_SHADOW=1
+```
+
+Senza quel flag, il binario contiene il backend inotify, l'adapter raw, il watch
+manager e il core, ma non contiene il dispatcher legacy.
 
 ```mermaid
 flowchart TD

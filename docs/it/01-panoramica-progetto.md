@@ -75,7 +75,8 @@ Il progetto e' in fase di integrazione. Attualmente:
   gestione watch e conversione verso eventi raw Alfred
 - `core/` e' lo stream semantico ufficiale di default
 - `events.c` e `move_cache.c` restano nel modulo inotify solo come supporto
-  legacy per lo shadow mode
+  legacy per lo shadow mode e vengono compilati solo con
+  `ENABLE_LEGACY_SHADOW=1`
 
 Il flusso runtime normale e':
 
@@ -92,8 +93,8 @@ app/logger
 ```
 
 La direzione futura non e' cambiare questo flusso, ma renderlo piu' pulito:
-rendere il legacy opzionale a livello build, confinare o rimuovere il vecchio
-dispatcher e progettare overflow/resync come feature separata.
+confinare o rimuovere il vecchio dispatcher legacy e progettare overflow/resync
+come feature separata.
 
 ## Diagramma generale
 
