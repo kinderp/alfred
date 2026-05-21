@@ -9,6 +9,8 @@
 #include "config.h"
 #include "watch_manager.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,7 +42,7 @@ void config_defaults(config_t *cfg)
     cfg->watcher_capacity   = 128;
 
     cfg->watch_mask = watch_manager_default_mask();
-    cfg->event_engine_mode = EVENT_ENGINE_SHADOW;
+    cfg->event_engine_mode = EVENT_ENGINE_CORE;
 
     snprintf(cfg->raw_log,
              sizeof(cfg->raw_log),
@@ -105,6 +107,33 @@ static int parse_bool(const char *value)
     return 0;
 }
 
+static size_t parse_size_or_default(const char *value, size_t fallback)
+{
+    if (value == NULL)
+        return fallback;
+
+    /*
+     * Capacity fields are size_t, while atoi() returns int and silently accepts
+     * malformed input. Using strtoul() lets us reject negative values,
+     * non-numeric suffixes, and conversion errors before assigning to size_t.
+     */
+    if (value[0] == '-')
+        return fallback;
+
+    errno = 0;
+
+    char *end = NULL;
+    unsigned long parsed = strtoul(value, &end, 10);
+
+    if (errno != 0 || end == value || *end != '\0')
+        return fallback;
+
+    if (parsed > (unsigned long)SIZE_MAX)
+        return fallback;
+
+    return (size_t)parsed;
+}
+
 /*
  * config_set_event_engine - parse the event engine mode option
  *
@@ -163,7 +192,7 @@ const char *config_event_engine_name(event_engine_mode_t mode)
  *   recursive=true
  *   use_epoll=false
  *   move_cache_size=256
- *   event_engine=shadow
+ *   event_engine=core
  *   raw_log=myraw.log
  *
  * Return: ERR_OK on success, ERR_INVALID_ARG for invalid input, or ERR_CONFIG
@@ -224,13 +253,13 @@ error_t config_load(config_t *cfg, const char *path)
         else if (strcmp(key, "move_cache_size") == 0) {
 
             cfg->move_cache_size =
-                atoi(value);
+                parse_size_or_default(value, cfg->move_cache_size);
         }
 
         else if (strcmp(key, "watcher_capacity") == 0) {
 
             cfg->watcher_capacity =
-                atoi(value);
+                parse_size_or_default(value, cfg->watcher_capacity);
         }
 
         else if (strcmp(key, "event_engine") == 0) {

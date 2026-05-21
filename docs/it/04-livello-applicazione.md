@@ -263,7 +263,7 @@ Questo semplifica cleanup e ownership.
 - watch ricorsivo attivo
 - capacita' iniziali delle tabelle
 - mask inotify di default
-- motore eventi in `shadow`
+- motore eventi in `core`
 - nomi standard dei log
 
 `config_load()` legge righe semplici:
@@ -277,13 +277,36 @@ Esempio:
 ```text
 recursive=true
 move_cache_size=256
-event_engine=shadow
+event_engine=core
 raw_log=myraw.log
 ```
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile
 o valori di configurazione non validi.
+
+I valori numerici come `move_cache_size` e `watcher_capacity` vengono letti come
+interi senza segno. Se il valore non e' valido, Alfred mantiene il default gia'
+presente nella configurazione invece di convertire stringhe negative o malformate
+in capacita' non sensate.
+
+Il motivo e' pratico: questi campi sono `size_t`, quindi non possono
+rappresentare numeri negativi. La vecchia conversione con `atoi()` restituiva un
+`int`; assegnare quel valore a `size_t` genera warning con `-Wsign-conversion` e
+puo' trasformare valori come `-1` in capacita' enormi. Inoltre `atoi()` non
+distingue bene tra `0`, `abc` e stringhe parzialmente valide come `12abc`.
+
+Il parser dedicato usa `strtoul()` e accetta solo stringhe numeriche intere
+senza segno. Se trova `NULL`, un valore negativo, caratteri non numerici,
+overflow o una conversione fallita, restituisce il valore precedente della
+configurazione. In pratica:
+
+```text
+watcher_capacity=256   -> 256
+watcher_capacity=abc   -> resta il default
+watcher_capacity=12abc -> resta il default
+watcher_capacity=-1    -> resta il default
+```
 
 La chiave `event_engine` accetta:
 
@@ -292,7 +315,9 @@ shadow
 core
 ```
 
-`shadow` e' il default. In questa modalita' Alfred mantiene due stream:
+`core` e' il default. In questa modalita' Alfred produce lo stream ufficiale
+plain dal core e non chiama il dispatcher legacy. Per riattivare il confronto si
+usa `ALFRED_EVENT_ENGINE=shadow`.
 
 ```text
 legacy dispatcher -> evento ufficiale storico
@@ -312,14 +337,15 @@ quella diagnostica nasce dal watch manager, non dal dispatcher semantico legacy.
 
 Nota temporanea dell'integrazione: `config_load()` sa gia' leggere
 `event_engine`, ma l'avvio del programma non espone ancora un'opzione CLI per
-indicare un file di configurazione. Per provare la modalita' core durante lo
-switch si usa l'override d'ambiente:
+indicare un file di configurazione. Per forzare esplicitamente la modalita'
+core si usa l'override d'ambiente:
 
 ```bash
 ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare
 ```
 
-Senza override, Alfred resta in `shadow`.
+Senza override, Alfred usa `core`. Per riattivare il confronto si usa
+`ALFRED_EVENT_ENGINE=shadow`.
 
 ## app/src/logger.c
 

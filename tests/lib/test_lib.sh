@@ -18,7 +18,7 @@ reset_env() {
 start_alfred() {
     reset_env
 
-    "$ALFRED_BIN" "$TEST_ROOT" > "$LOG_FILE" 2>&1 &
+    ALFRED_EVENT_ENGINE=shadow "$ALFRED_BIN" "$TEST_ROOT" > "$LOG_FILE" 2>&1 &
     ALFRED_PID=$!
 
     sleep 1

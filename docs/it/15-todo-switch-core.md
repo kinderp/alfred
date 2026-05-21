@@ -54,11 +54,10 @@ Il backend puo' scoprire fatti. Non deve decidere la semantica finale.
 Al momento:
 
 - il core e' inizializzato in `app_t`
-- il runtime manda eventi inotify al core in shadow mode
-- `event_engine=shadow` e' il default e mantiene il legacy dispatcher come
-  stream ufficiale storico
-- `ALFRED_EVENT_ENGINE=core` abilita una modalita' di prova in cui il core
-  scrive lo stream ufficiale plain e il legacy dispatcher non viene chiamato
+- il runtime manda eventi inotify al core
+- `event_engine=core` e' il default e usa il core come stream ufficiale plain
+- `ALFRED_EVENT_ENGINE=shadow` abilita ancora il confronto legacy/core quando
+  serve osservare le differenze
 - esiste un primo backend inotify esplicito in
   `modules/inotify/src/inotify_backend.c`
 - il backend legge il fd inotify, logga gli eventi raw, costruisce
@@ -86,8 +85,8 @@ finire dopo lo switch completo al core.
 ### `modules/inotify/src/events.c`
 
 Questo file e' ancora il dispatcher semantico legacy. Viene chiamato solo in
-`event_engine=shadow`, mentre in `ALFRED_EVENT_ENGINE=core` viene saltato dal
-loop applicativo.
+`event_engine=shadow`, mentre nel default `event_engine=core` viene saltato dal
+backend.
 
 Responsabilita' ancora presenti:
 
@@ -217,8 +216,8 @@ inizializzato.
 
 L'ordine piu' pulito e':
 
-1. mantenere `event_engine=shadow` e `ALFRED_EVENT_ENGINE=core` finche' servono
-   per confronto e prove manuali
+1. mantenere `ALFRED_EVENT_ENGINE=shadow` finche' serve per confronto e prove
+   manuali
 2. spostare il codice di lettura inotify e manutenzione watch fuori da `app.c`
    verso un backend inotify esplicito: fatto
 3. far emettere al backend solo `alfred_raw_event_t`, includendo eventuali raw
@@ -306,18 +305,18 @@ del core come evento ufficiale.
 Stato attuale:
 
 ```text
-event_engine=shadow
-    core_logger_on_event -> logger_event con prefisso core
-    legacy events.c      -> logger_event ufficiale storico
-
-ALFRED_EVENT_ENGINE=core
+event_engine=core
     core_logger_on_event -> logger_event ufficiale plain
     legacy events.c      -> non chiamato dal loop
+
+ALFRED_EVENT_ENGINE=shadow
+    core_logger_on_event -> logger_event con prefisso core
+    legacy events.c      -> logger_event ufficiale storico
 ```
 
-Quindi lo switch e' gia' provabile senza rimuovere subito `events.c`. Questa e'
-una scelta prudente: conserva il confronto shadow e permette di testare il core
-come sorgente ufficiale.
+Quindi lo switch del default e' gia' avvenuto senza rimuovere subito
+`events.c`. Questa e' una scelta prudente: il core e' la sorgente ufficiale, ma
+il confronto shadow resta disponibile con override esplicito.
 
 Disegno finale:
 

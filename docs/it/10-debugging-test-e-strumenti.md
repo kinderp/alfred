@@ -326,11 +326,17 @@ potuto inoltrare al core, i relativi eventi `DIR_CREATED`.
 
 ## Provare il core come stream ufficiale
 
-Il confronto shadow resta il default. Per provare il core come sorgente
-ufficiale degli eventi semantici, usare l'override d'ambiente:
+Il core e' lo stream ufficiale di default. Per forzare esplicitamente la stessa
+modalita', usare l'override d'ambiente:
 
 ```bash
 ALFRED_EVENT_ENGINE=core ./alfred /tmp/cartella-da-osservare
+```
+
+Per riattivare il confronto shadow legacy/core si usa invece:
+
+```bash
+ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
 
 In questa modalita' `events.log` usa il formato plain:

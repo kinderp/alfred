@@ -45,9 +45,10 @@ esistente.
 
 Il nuovo percorso core produce output aggiuntivo con prefisso `core`.
 
-## Flusso in core mode
+## Flusso di default in core mode
 
-Durante lo switch verso il core possiamo avviare Alfred con:
+Il default attuale usa il core come stream ufficiale. La stessa modalita' puo'
+essere forzata esplicitamente con:
 
 ```bash
 ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare

@@ -109,9 +109,8 @@ Stati usati:
   rettangoli Mermaid.
 - `app/include/config.h`, `app/src/config.c`, `app/include/core_logger.h`,
   `app/src/core_logger.c`, `app/include/app.h` e `app/src/app.c`: aggiunta la
-  modalita' `event_engine=shadow|core`, con `shadow` come default e override
-  temporaneo `ALFRED_EVENT_ENGINE=core` per provare il core come stream
-  ufficiale.
+  modalita' `event_engine=shadow|core`; inizialmente `shadow` era il default,
+  poi il default e' stato spostato a `core` in una fase successiva.
 - `04-livello-applicazione.md`, `07-flusso-eventi.md`,
   `10-debugging-test-e-strumenti.md`, `12-confronto-shadow-mode.md` e
   `15-todo-switch-core.md`: documentata la differenza tra shadow mode e core
@@ -227,3 +226,13 @@ Stati usati:
 - `modules/inotify/src/inotify_backend.c`, `app/src/app.c` e
   `15-todo-switch-core.md`: spostato nel backend anche il ciclo di vita del
   dispatcher legacy, cosi' `app.c` non dipende piu' da `events.h`.
+- `app/src/config.c`, `tests/lib/test_lib.sh`, `04-livello-applicazione.md`,
+  `10-debugging-test-e-strumenti.md` e `15-todo-switch-core.md`: cambiato il
+  default runtime a `event_engine=core`, lasciando i test funzionali legacy in
+  shadow esplicito con `ALFRED_EVENT_ENGINE=shadow`.
+- `app/src/config.c` e `04-livello-applicazione.md`: sostituita la conversione
+  `atoi()` dei campi numerici di capacita' con parsing unsigned esplicito,
+  mantenendo il valore di default se la stringa non e' valida.
+- `app/src/config.c` e `04-livello-applicazione.md`: aggiunta spiegazione del
+  rischio `atoi()` verso `size_t` e rifiuto esplicito dei valori negativi come
+  `-1`.
