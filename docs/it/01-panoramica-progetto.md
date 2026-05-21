@@ -71,10 +71,13 @@ La trasformazione da raw a semantico e' il compito piu' importante del core.
 Il progetto e' in fase di integrazione. Attualmente:
 
 - `app/` contiene il ciclo di vita del programma
-- `modules/inotify/` contiene ancora sia codice backend sia logica semantica
-- `core/` e' stato importato e ora viene compilato dal Makefile principale
+- `modules/inotify/` contiene il backend inotify, cioe' lettura eventi,
+  gestione watch e conversione verso eventi raw Alfred
+- `core/` e' lo stream semantico ufficiale di default
+- `events.c` e `move_cache.c` restano nel modulo inotify solo come supporto
+  legacy per lo shadow mode
 
-La direzione futura e':
+Il flusso runtime normale e':
 
 ```text
 modules/inotify
@@ -87,6 +90,10 @@ core
         v
 app/logger
 ```
+
+La direzione futura non e' cambiare questo flusso, ma renderlo piu' pulito:
+rendere il legacy opzionale a livello build, confinare o rimuovere il vecchio
+dispatcher e progettare overflow/resync come feature separata.
 
 ## Diagramma generale
 
@@ -114,3 +121,13 @@ Per contribuire al progetto servono competenze progressive:
 
 Non serve sapere tutto subito. La documentazione e' organizzata per accompagnare
 lo studio un passo alla volta.
+
+Per una lettura guidata del codice, dopo i capitoli su architettura, app,
+inotify e core, leggi:
+
+```text
+docs/it/16-mappa-codice-e-strutture.md
+```
+
+Quel capitolo segue funzioni, strutture dati, campi modificati ed eventi trigger
+come se fosse una visita guidata dentro la codebase.

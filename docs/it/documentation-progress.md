@@ -31,6 +31,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `01-panoramica-progetto.md`: aggiornato lo stato corrente per indicare che il
+  core e' lo stream semantico ufficiale di default, mentre `events.c` e
+  `move_cache.c` restano supporto legacy per shadow mode; aggiunto rimando alla
+  lettura guidata della codebase.
 - `16-mappa-codice-e-strutture.md`: chiarito anche nel capitolo della lettura
   guidata che `make docs-animations` e' un nome ipotetico futuro e non un target
   gia' presente nel Makefile.
