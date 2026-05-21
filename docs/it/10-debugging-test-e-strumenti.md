@@ -213,6 +213,42 @@ nel test `modify_file` `FILE_CREATED` deve comparire una sola volta, mentre
 `FILE_MODIFIED` e `FILE_READY` devono comparire due volte: una per la creazione
 con scrittura iniziale e una per la modifica successiva.
 
+### Perche' l'overflow resta fuori dalla suite iniziale
+
+L'overflow della coda inotify non viene ancora trasformato in un test
+end-to-end stabile della suite core. Non e' stato dimenticato: lo rimandiamo a
+dopo lo switch completo al core perche' ha una natura diversa dagli scenari
+base.
+
+Gli scenari core attuali rispondono alla domanda:
+
+```text
+dato un evento filesystem normale, quale evento semantico produce Alfred?
+```
+
+L'overflow risponde invece a una domanda di recovery:
+
+```text
+se il backend perde affidabilita' perche' la coda kernel trabocca,
+come ricostruiamo lo stato dell'albero osservato?
+```
+
+Renderlo riproducibile in modo affidabile in un test end-to-end e' difficile,
+perche' dipende da timing, carico della macchina, velocita' del filesystem,
+dimensione della coda kernel e capacita' del processo di drenare gli eventi.
+Un test che prova solo a saturare inotify rischia quindi di essere fragile.
+
+Quando il core sara' il percorso ufficiale, l'overflow dovra' essere progettato
+come feature separata. Le opzioni da discutere sono:
+
+- evento diagnostico backend
+- evento semantico di tipo resync richiesto
+- scan completo dell'albero con eventi sintetici
+- combinazione di log diagnostico e procedura controllata di resync
+
+Per questo, nella suite core iniziale l'overflow resta documentato come lavoro
+futuro e non come test mancante.
+
 ## Test shadow
 
 Durante l'integrazione del core esiste anche un tool diagnostico in:

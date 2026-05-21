@@ -177,3 +177,11 @@ Stati usati:
 - `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
   `15-todo-switch-core.md`: documentato il test core `modify / close-write` e
   aggiornato il TODO degli scenari core rimanenti.
+- `10-debugging-test-e-strumenti.md` e `15-todo-switch-core.md`: documentato
+  che l'overflow viene rimandato a dopo lo switch completo al core perche' e'
+  una policy di recovery/resync difficile da rendere stabile come test
+  end-to-end iniziale.
+- `15-todo-switch-core.md`: aggiunta la mappa operativa della logica legacy
+  rimasta, distinguendo semantica ancora in `events.c`, stato backend ancora in
+  `app.c`, adapter inotify gia' corretto, watch manager e campi temporanei in
+  `app_t`.

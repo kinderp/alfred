@@ -73,6 +73,136 @@ Al momento:
 - il core recupera `DIR_CREATED` mancanti in scenari tipo
   `recursive_create_nested_dir`, mentre il legacy resta incompleto
 
+## Mappa della logica legacy rimasta
+
+Questa sezione fotografa dove si trova ancora la logica storica e dove dovrebbe
+finire dopo lo switch completo al core.
+
+### `modules/inotify/src/events.c`
+
+Questo file e' ancora il dispatcher semantico legacy. Viene chiamato solo in
+`event_engine=shadow`, mentre in `ALFRED_EVENT_ENGINE=core` viene saltato dal
+loop applicativo.
+
+Responsabilita' ancora presenti:
+
+- `app_dispatch_raw_event()`: riceve direttamente `struct inotify_event` e
+  decide quale handler legacy chiamare
+- `handle_create()`: trasforma `IN_CREATE` in `FILE_CREATED` o `DIR_CREATED`
+- `handle_delete()`: trasforma `IN_DELETE` in `FILE_DELETED` o `DIR_DELETED`
+- `handle_move_from()`: salva la prima meta' del move nel `move_cache`
+- `handle_move_to()`: recupera il cookie, ricostruisce sorgente/destinazione e
+  classifica rename/move
+- `handle_ignored()`: trasforma `IN_IGNORED` in `WATCH_REMOVED` e rimuove il
+  watch dalla tabella
+- `handle_overflow()`: trasforma `IN_Q_OVERFLOW` in `QUEUE_OVERFLOW`
+- `emit_event()`: scrive direttamente lo stream semantico legacy con
+  `logger_event()`
+
+Classificazione:
+
+- semantica da rimuovere: create, delete, move, rename, emissione degli eventi
+  finali
+- diagnostica/backend state da preservare altrove: `IN_IGNORED`, rimozione del
+  watch, overflow
+- supporto legacy da eliminare quando il core sara' ufficiale: `move_cache`
+
+Nota importante: oggi il legacy non conosce `FILE_RELOCATED` o
+`DIR_RELOCATED`. Quando cambiano sia contenitore sia nome, `events.c` emette due
+eventi (`MOVED` + `RENAMED`). Il core invece deve emettere un solo evento
+`RELOCATED`.
+
+### `app/src/app.c`
+
+`app.c` e' ancora troppo legato al backend inotify. Questo e' accettabile nella
+fase di integrazione, ma non e' la forma finale.
+
+Responsabilita' attuali:
+
+- apre direttamente il file descriptor con `inotify_init1()`
+- legge direttamente `struct inotify_event` dal file descriptor
+- scrive il raw log usando `raw_event_name_from_mask()`
+- chiama `dispatch_event_to_core()` per convertire l'evento in
+  `alfred_raw_event_t` e passarlo al core
+- in shadow mode chiama ancora `app_dispatch_raw_event()` del legacy
+- chiama `handle_backend_dir_create()` per mantenere i watch ricorsivi
+- contiene `app_process_synthetic_dir_create()`, che crea raw event sintetici
+  `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` per le directory scoperte dallo scan
+
+Il punto piu' brutto, ma intenzionale e temporaneo, e':
+
+```text
+app.c -> handle_backend_dir_create()
+      -> watch_manager_add_recursive_with_discovery()
+      -> app_process_synthetic_dir_create()
+      -> core
+```
+
+Questa catena serve a non perdere le directory create rapidamente prima che il
+watch del padre sia installato. Dal punto di vista architetturale, pero',
+`app.c` non dovrebbe conoscere questo dettaglio: e' manutenzione dello stato del
+backend inotify e dovrebbe stare nel backend o in una futura interfaccia
+backend.
+
+### `modules/inotify/src/inotify_adapter.c`
+
+Questo file e' gia' vicino alla forma desiderata. Converte `struct
+inotify_event` in `alfred_raw_event_t` senza fare semantica finale.
+
+Responsabilita' corrette:
+
+- conversione maschere `IN_*` in `ALFRED_RAW_*`
+- ricostruzione del path a partire da `parent + name`
+- inizializzazione dei campi raw: timestamp, source, mask, cookie, pid, path
+
+Da preservare: deve restare conversion-only. Non deve assorbire la semantica che
+stiamo togliendo da `events.c`.
+
+### `modules/inotify/src/watch_manager.c`
+
+Questo file contiene stato backend reale:
+
+- `watch_manager_default_mask()`
+- `watch_manager_add()`
+- `watch_manager_remove()`
+- `watch_manager_add_recursive()`
+- `watch_manager_add_recursive_with_discovery()`
+
+`WATCH_ADDED` e `WATCH_REMOVED` qui sono log diagnostici del backend, non eventi
+semantici core. Lo scan ricorsivo e' backend state; la parte delicata e' la
+notifica delle directory scoperte, perche' oggi chiama indietro `app.c` per
+generare raw event sintetici verso il core.
+
+### `app_t`
+
+`app_t` contiene ancora stato specifico inotify:
+
+- `inotify_fd`
+- `watchers`
+- `moves`
+
+Nel design finale `moves` scompare dal runtime legacy perche' la correlazione
+vive nel core. `inotify_fd` e `watchers` dovrebbero essere incapsulati in un
+backend inotify, non esposti direttamente come campi principali
+dell'applicazione.
+
+## Ordine consigliato per lo switch
+
+L'ordine piu' pulito e':
+
+1. mantenere `event_engine=shadow` e `ALFRED_EVENT_ENGINE=core` finche' servono
+   per confronto e prove manuali
+2. spostare il codice di lettura inotify e manutenzione watch fuori da `app.c`
+   verso un backend inotify esplicito
+3. far emettere al backend solo `alfred_raw_event_t`, includendo eventuali raw
+   sintetici per directory scoperte dallo scan
+4. lasciare al core tutta la semantica: create, delete, modify, close-write,
+   move, rename, relocated
+5. rimuovere `move_cache` da `app_t` e dal percorso runtime
+6. rimuovere `events.c` dal percorso ufficiale, conservandolo solo se serve
+   ancora come strumento temporaneo di confronto
+7. solo dopo progettare overflow/resync come feature separata
+
 ## Passi consigliati
 
 ### 1. Stabilizzare lo shadow mode
@@ -113,6 +243,14 @@ Copertura iniziale:
 Scenari ancora da aggiungere:
 
 - overflow, se si decide di renderlo riproducibile in modo stabile
+
+Nota: l'overflow non fa parte del blocco iniziale dei test core-only. Gli altri
+scenari fissano la semantica prodotta a partire da eventi filesystem normali;
+l'overflow richiede invece una decisione di recovery/resync quando il backend
+non puo' piu' garantire di aver consegnato tutti gli eventi. Lo rimandiamo a
+dopo lo switch completo al core, quando sara' piu' chiaro se rappresentarlo come
+diagnostica backend, evento semantico di resync richiesto, scan sintetico
+dell'albero o una combinazione di queste scelte.
 
 ### 2. Rendere esplicite le differenze attese
 
