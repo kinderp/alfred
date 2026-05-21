@@ -9,6 +9,28 @@ Status values:
 - `Partial`: contains useful comments but still needs a style pass.
 - `Pending`: not yet reviewed for the project comment style.
 
+## Next Heavy Pass
+
+The next integration step is a documentation-heavy pass before more structural
+changes. The priority is to document ownership, integration boundaries,
+temporary legacy paths, and the raw-to-semantic event flow.
+
+Recommended order:
+
+1. `modules/inotify/src/inotify_backend.c`
+2. `modules/inotify/include/inotify_backend.h`
+3. `core/src/alfred_correlator.c`
+4. `core/include/alfred_correlator.h`
+5. `app/src/app.c`
+6. `modules/inotify/src/watch_manager.c`
+7. `modules/inotify/src/inotify_adapter.c`
+8. `app/src/config.c`
+9. `modules/inotify/src/events.c`
+10. `modules/inotify/src/move_cache.c`
+
+Legacy files should be commented as legacy/shadow support, not as the future
+runtime architecture.
+
 ## App
 
 | Status | File |

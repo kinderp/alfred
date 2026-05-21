@@ -418,6 +418,116 @@ Da rivedere:
 - `watchers`
 - eventuali campi temporanei legacy
 
+## Roadmap orientativa allo switch definitivo
+
+Questa lista riassume i passi ancora necessari prima di considerare concluso lo
+switch dal dispatcher legacy al core. L'effort e' indicativo: serve a capire
+quali punti sono semplici pulizie e quali invece richiedono discussione,
+verifica e documentazione piu' estesa.
+
+| Passo | Effort | Perche' serve |
+| --- | --- | --- |
+| Rendere legacy shadow opzionale a livello build | Medio | `events.c` e `move_cache.c` devono restare disponibili per confronto, ma non devono essere parte necessaria del binario core normale. |
+| Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
+| Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
+| Revisione completa della suite core-only | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
+| Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
+| Decisione sui test funzionali legacy | Medio | Dopo lo switch bisogna scegliere se mantenerli come shadow, migrarli al core o archiviarne una parte. |
+| Spegnere shadow come modalita' ordinaria | Medio | `core` e' gia' il default, ma shadow deve diventare chiaramente una modalita' di debug/confronto e non un requisito operativo. |
+| Quarantena o rimozione finale del legacy | Medio/alto | A fine migrazione bisogna decidere se eliminare `events.c`/`move_cache.c` o spostarli in un'area legacy esplicita. |
+| Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
+
+L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
+solo un evento da tradurre, ma una condizione in cui il backend ammette di non
+conoscere piu' con certezza lo stato del filesystem. Gestirlo bene significa
+decidere se fare resync, emettere diagnostica, ricostruire eventi sintetici o
+combinare piu' strategie. Farlo prima dello switch rischierebbe di mescolare due
+problemi diversi: migrazione della semantica al core e recovery da perdita di
+eventi.
+
+## Fase A: documentazione pesante del codice
+
+Prima di altri cambiamenti strutturali conviene fare una fase dedicata ai
+commenti e alla documentazione tecnica. L'obiettivo non e' aumentare il numero
+di commenti, ma mettere le spiegazioni nei punti in cui servono davvero.
+
+Passi operativi:
+
+1. rileggere `docs/commenting-style.md`
+2. rileggere `docs/commenting-progress.md`
+3. mappare i file C principali ancora poco commentati
+4. aggiornare `docs/commenting-progress.md` con priorita' e stato reale
+5. aggiungere commenti in inglese nel codice e spiegazioni didattiche in
+   italiano negli `.md`
+
+Priorita' consigliata:
+
+| Priorita' | File | Motivo |
+| --- | --- | --- |
+| Alta | `modules/inotify/src/inotify_backend.c` | E' il confine piu' importante tra inotify, raw event, watch ricorsivi, raw sintetici e shadow legacy. |
+| Alta | `modules/inotify/include/inotify_backend.h` | Deve spiegare che cosa possiede il backend e quale contratto offre all'app. |
+| Alta | `core/src/alfred_correlator.c` | Contiene la logica che trasforma raw event in eventi semantici, inclusa la correlazione move/rename. |
+| Alta | `core/include/alfred_correlator.h` | Deve rendere chiaro il contratto pubblico del core. |
+| Alta | `app/src/app.c` | Ora deve essere descritto come orchestratore, non come luogo della semantica filesystem. |
+| Media | `modules/inotify/src/watch_manager.c` | Gestisce stato backend reale e discovery ricorsiva; e' delicato per il bug `mkdir -p`. |
+| Media | `modules/inotify/src/inotify_adapter.c` | Va mantenuto conversion-only; i commenti devono proteggere questo confine. |
+| Media | `app/src/config.c` | Contiene scelte importanti su default core, shadow mode e parsing sicuro dei numeri. |
+| Bassa/legacy | `modules/inotify/src/events.c` | Va commentato come legacy shadow, evitando di investirci troppo se verra' rimosso o quarantinato. |
+| Bassa/legacy | `modules/inotify/src/move_cache.c` | Serve ancora solo al dispatcher legacy; utile documentarlo per confronto storico. |
+
+Regola pratica: i commenti nel codice devono essere in inglese e vicini alle
+funzioni; le spiegazioni lunghe, didattiche e con contesto storico devono stare
+in `docs/it`.
+
+## Mappa chiamate e documentazione generabile
+
+Sarebbe utile avere una documentazione discorsiva in italiano che racconti
+"quale funzione chiama quale funzione" e che si possa aggiornare con un comando
+quando il codice cambia. L'idea consigliata e' separare tre livelli:
+
+1. commenti strutturati nel codice C, in inglese, secondo
+   `docs/commenting-style.md`
+2. dati generati automaticamente da un comando, per esempio una mappa
+   `caller -> callee` estratta con `cflow`, `clang` o uno script basato su
+   `ctags`
+3. capitolo italiano scritto a mano che interpreta la mappa e collega le
+   funzioni ai concetti architetturali
+
+Un possibile target futuro del Makefile potrebbe essere:
+
+```bash
+make docs-callgraph
+```
+
+Output possibile:
+
+```text
+docs/generated/callgraph.txt
+docs/generated/functions-index.md
+docs/it/16-mappa-chiamate-codice.md
+```
+
+La parte generata dovrebbe essere considerata supporto tecnico, non
+documentazione didattica finale. Gli studenti hanno bisogno anche della lettura
+ragionata: per esempio non basta sapere che `inotify_backend_poll()` chiama
+`inotify_adapter_from_event()`, bisogna spiegare che quella chiamata e' il punto
+in cui il backend smette di parlare inotify e inizia a produrre fatti raw Alfred.
+
+Il capitolo italiano dovrebbe avere sezioni come:
+
+- avvio dell'applicazione
+- configurazione e scelta `event_engine`
+- inizializzazione backend inotify
+- loop di polling
+- conversione `struct inotify_event` -> `alfred_raw_event_t`
+- ingresso nel core
+- emissione degli eventi semantici
+- percorso shadow legacy, se compilato
+
+Questa mappa va progettata dopo la fase A, perche' i commenti strutturati nel
+codice renderanno piu' facile generare o collegare un indice affidabile delle
+funzioni.
+
 ## Regola di avanzamento
 
 Non fare uno switch grande e cieco.

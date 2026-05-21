@@ -30,6 +30,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `15-todo-switch-core.md`: aggiunta roadmap orientativa allo switch definitivo
+  con effort stimato, motivazione del rinvio overflow, piano della fase A per
+  la documentazione pesante del codice e proposta per una futura mappa
+  generabile delle chiamate tra funzioni.
+- `docs/commenting-progress.md`: aggiunta la priorita' della prossima passata
+  pesante sui commenti del codice, distinguendo file core/backend/app e file
+  legacy shadow.
+
 - `10-debugging-test-e-strumenti.md`: aggiunta spiegazione dei test shadow e
   dell'uso prudente di `--strict`.
 - `12-confronto-shadow-mode.md`: aggiunto lo scenario `move_rename_dir` e la
