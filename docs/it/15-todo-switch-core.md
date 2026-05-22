@@ -212,6 +212,81 @@ Il prossimo passo tecnico non deve ancora cambiare comportamento. Deve
 scegliere quale API renda esplicite queste quattro famiglie senza introdurre
 ownership confusa.
 
+#### Proposta scelta: context backend separato
+
+La direzione scelta per il refactor e' separare lo stato posseduto dal backend
+dalle dipendenze esterne prese in prestito.
+
+Stato posseduto:
+
+```c
+typedef struct inotify_backend {
+    int fd;
+    watcher_table_t watchers;
+} inotify_backend_t;
+```
+
+Dipendenze operative prese in prestito:
+
+```c
+typedef struct inotify_backend_context {
+    inotify_backend_t *runtime;
+    const config_t *config;
+    logger_t *logger;
+    inotify_backend_event_fn on_event;
+    void *userdata;
+} inotify_backend_context_t;
+```
+
+Questa e' una proposta di forma, non ancora codice definitivo. Il punto
+didattico e architetturale e' il seguente:
+
+- `inotify_backend_t` risponde alla domanda: "che cosa possiede il backend?"
+- `inotify_backend_context_t` risponde alla domanda: "di cosa ha bisogno il
+  backend mentre lavora?"
+
+Regole di ownership desiderate:
+
+| Campo | Ownership | Lifetime richiesta |
+| --- | --- | --- |
+| `runtime` | posseduto dall'app, mutato dal backend | valido da `inotify_backend_init()` a `inotify_backend_shutdown()` |
+| `config` | posseduto dall'app, letto dal backend | valido per tutta la vita del backend |
+| `logger` | posseduto dall'app, usato dal backend | inizializzato prima del backend e chiuso dopo il backend |
+| `on_event` | funzione fornita dall'app | valida durante `inotify_backend_poll()` e raw sintetici |
+| `userdata` | posseduto dal chiamante | valido almeno durante la chiamata che lo usa |
+
+Vantaggi della scelta:
+
+- evita di passare `app_t` intero al backend
+- mantiene `inotify_backend_t` piccolo e chiaramente proprietario solo di fd e
+  watcher table
+- rende esplicite configurazione e diagnostica senza trasferirne la proprieta'
+- prepara `watch_manager_*()` a ricevere un contesto backend invece dell'app
+  completa
+- aiuta gli studenti a distinguere ownership, accesso e lifetime
+
+Svantaggi e attenzioni:
+
+- introduce un tipo in piu'
+- richiede disciplina sui puntatori presi in prestito
+- non va applicato in modo massivo senza test intermedi
+- finche' legacy shadow esiste, alcune funzioni potranno ancora avere bisogno
+  di un ponte temporaneo verso `app_t` o verso una struttura legacy dedicata
+
+Migrazione consigliata:
+
+1. introdurre il tipo context senza cambiare subito tutta l'API pubblica
+2. convertire prima il watch manager, perche' usa solo fd, watchers, mask e
+   logger
+3. convertire poi le funzioni interne del backend che gestiscono discovery e raw
+   sintetici
+4. lasciare per ultimo il ponte legacy shadow, oppure rimuoverlo quando shadow
+   non sara' piu' necessario
+5. aggiornare documentazione e test a ogni micro-passaggio
+
+Questa scelta non cambia la semantica degli eventi: serve solo a rendere piu'
+pulito il confine tra app, backend e core.
+
 ### `modules/inotify/src/inotify_adapter.c`
 
 Questo file e' gia' vicino alla forma desiderata. Converte `struct

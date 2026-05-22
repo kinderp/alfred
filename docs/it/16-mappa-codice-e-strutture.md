@@ -264,6 +264,87 @@ Oggi `app_t` risolve entrambi i problemi in modo pratico ma largo. Il backend
 riceve tutto il contenitore, anche se usa solo una parte. Il refactor finale
 dovrebbe rendere visibili solo le dipendenze necessarie.
 
+### Context backend proposto
+
+La proposta scelta e' introdurre un context separato. In questo modo
+`inotify_backend_t` continua a rappresentare lo stato posseduto dal backend,
+mentre il context rappresenta le dipendenze prese in prestito.
+
+```mermaid
+flowchart TD
+    A["app_t"] --> B["inotify_backend_t runtime"]
+    A --> C["config_t"]
+    A --> D["logger_t"]
+    A --> E["core callback"]
+
+    F["inotify_backend_context_t"] --> B
+    F --> C
+    F --> D
+    F --> E
+
+    B --> G["fd"]
+    B --> H["watcher_table_t"]
+```
+
+Forma concettuale:
+
+```c
+typedef struct inotify_backend_context {
+    inotify_backend_t *runtime;
+    const config_t *config;
+    logger_t *logger;
+    inotify_backend_event_fn on_event;
+    void *userdata;
+} inotify_backend_context_t;
+```
+
+Il context non deve possedere `config`, `logger` o callback. Li usa soltanto
+mentre l'applicazione e' viva. Questa distinzione e' centrale:
+
+```text
+possedere un dato  -> doverlo inizializzare e liberare
+prendere in prestito -> poterlo usare entro una lifetime garantita da altri
+```
+
+Con questa proposta, il backend finale dovrebbe leggere cosi':
+
+```text
+app_t
+  possiede config, logger, core e inotify_backend_t
+
+inotify_backend_t
+  possiede fd e watcher_table_t
+
+inotify_backend_context_t
+  collega temporaneamente backend, config, logger e callback
+  durante init, poll, watch management e discovery
+```
+
+Perche' non mettere direttamente `config` e `logger` dentro
+`inotify_backend_t`? Perche' non sono davvero posseduti dal backend. Sono
+servizi applicativi condivisi. Inserirli come puntatori permanenti nello stato
+runtime sarebbe possibile, ma renderebbe meno chiaro agli studenti quali campi
+devono essere liberati dal backend e quali invece sono solo riferimenti.
+
+Il primo candidato alla migrazione e' il watch manager:
+
+```text
+oggi:
+  watch_manager_add(app, path)
+
+direzione:
+  watch_manager_add(ctx, path)
+```
+
+Questo passo e' abbastanza piccolo perche' il watch manager usa solo:
+
+- fd
+- watcher table
+- watch mask
+- logger
+
+Non usa il core e non dovrebbe conoscere l'app completa.
+
 ## Struttura dati di configurazione
 
 `config_t` guida molte decisioni prese durante l'inizializzazione. Non e' una

@@ -31,6 +31,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentata la
+  proposta scelta per il prossimo refactor delle responsabilita': introdurre un
+  `inotify_backend_context_t` separato dallo stato posseduto
+  `inotify_backend_t`, cosi' config, logger e callback restano dipendenze prese
+  in prestito e non campi posseduti dal backend.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: aggiunta la
   mappa delle dipendenze residue del backend inotify da `app_t`. La mappa
   distingue stato backend (`fd`, watcher table), configurazione backend
