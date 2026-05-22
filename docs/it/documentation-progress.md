@@ -31,6 +31,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: `inotify_backend_poll()` ora
+  costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` e
+  `ctx.logger` per file descriptor, watcher table e diagnostica. Restano su
+  `app_t` solo la selezione `event_engine_mode` e la dispatch legacy/shadow.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  terzo micro-refactor del backend context, spiegando perche' il poll path puo'
+  essere ristretto internamente prima di cambiare la firma pubblica.
 - `modules/inotify/include/inotify_backend.h`,
   `modules/inotify/src/inotify_backend.c` e `app/src/app.c`: cambiata la
   callback raw/core `inotify_backend_event_fn` da `(app, raw, userdata)` a

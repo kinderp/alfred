@@ -244,14 +244,14 @@ Tabella di lettura:
 
 | Dipendenza | Dove serve | Perche' serve | Dovrebbe restare visibile al backend finale? |
 | --- | --- | --- | --- |
-| `app->inotify.fd` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
-| `app->inotify.watchers` | poll, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
+| `app->inotify.fd` | `inotify_backend_poll()` tramite `ctx.runtime`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
+| `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` | dimensione iniziale watcher table | si', come configurazione backend |
 | `app->config.event_engine_mode` | init e poll | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
 | `app->config.move_cache_size` | `legacy_events_init()` | dimensione cache move legacy | no nel percorso core finale |
-| `app->logger` | backend e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
+| `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
 Questa tabella e' utile per il prossimo refactor perche' separa due idee che
@@ -404,6 +404,23 @@ handle_backend_event(raw, userdata)
 
 Questo e' piu' pulito perche' il backend non deve conoscere il tipo del consumer
 del raw event. Sa solo invocare una callback.
+
+Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
+
+```text
+inotify_backend_poll(app, on_event, userdata)
+  backend_context_from_app(app, &ctx)
+  read(ctx.runtime->fd, ...)
+  watcher_get_path(&ctx.runtime->watchers, wd)
+  logger_raw(ctx.logger, ...)
+  on_event(raw, userdata)
+  if app->config.event_engine_mode == shadow:
+    legacy_events_dispatch(app, ev)
+```
+
+La riga shadow resta legata ad `app` per scelta intenzionale. Il legacy usa
+ancora strutture e funzioni nate prima del core, quindi viene mantenuto come
+ponte temporaneo invece di forzare un refactor piu' grande nello stesso passo.
 
 ## Struttura dati di configurazione
 

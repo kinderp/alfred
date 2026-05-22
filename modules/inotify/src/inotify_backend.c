@@ -263,10 +263,13 @@ int inotify_backend_poll(app_t *app,
     if (app == NULL || on_event == NULL)
         return ERR_INVALID_ARG;
 
+    inotify_backend_context_t ctx;
+    backend_context_from_app(app, &ctx);
+
     char buffer[EVENT_BUFFER_SIZE];
 
     ssize_t bytes =
-        read(app->inotify.fd,
+        read(ctx.runtime->fd,
              buffer,
              sizeof(buffer));
 
@@ -282,7 +285,7 @@ int inotify_backend_poll(app_t *app,
         if (errno == EINTR)
             return ERR_OK;
 
-        logger_error(&app->logger,
+        logger_error(ctx.logger,
                      "read failed errno=%d (%s)",
                      errno,
                      strerror(errno));
@@ -291,12 +294,12 @@ int inotify_backend_poll(app_t *app,
     }
 
     if (bytes == 0) {
-        logger_error(&app->logger,
+        logger_error(ctx.logger,
                      "unexpected EOF on inotify fd");
         return ERR_IO;
     }
 
-    logger_raw(&app->logger,
+    logger_raw(ctx.logger,
                "read %zd bytes from inotify",
                bytes);
 
@@ -309,10 +312,10 @@ int inotify_backend_poll(app_t *app,
             (struct inotify_event *)ptr;
 
         const char *parent =
-            watcher_get_path(&app->inotify.watchers, ev->wd);
+            watcher_get_path(&ctx.runtime->watchers, ev->wd);
 
         raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
-        logger_raw(&app->logger,
+        logger_raw(ctx.logger,
                    "%s wd=%d path=%s name=%s",
                    mask_str,
                    ev->wd,
@@ -332,7 +335,7 @@ int inotify_backend_poll(app_t *app,
                 raw_ptr = &raw;
             }
             else {
-                logger_error(&app->logger,
+                logger_error(ctx.logger,
                              "failed to build core raw event wd=%d",
                              ev->wd);
             }
@@ -348,7 +351,7 @@ int inotify_backend_poll(app_t *app,
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
             legacy_events_dispatch(app, ev);
 #else
-            logger_error(&app->logger,
+            logger_error(ctx.logger,
                          "shadow event engine reached poll without "
                          "legacy shadow support");
             return ERR_CONFIG;

@@ -190,7 +190,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | `app->inotify`, `app->config.watcher_capacity`, `app->config.event_engine_mode`, `app->config.move_cache_size`, `app->logger` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | passare un contesto backend con fd/watchers, config letta in sola lettura e logger esplicito |
 | `inotify_backend_add_startup_watch()` | `app->config.recursive`, poi passa `app` al watch manager | sceglie watch singolo o ricorsivo | passare solo backend state, config e logger necessari al watch manager |
 | `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
-| `inotify_backend_poll()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger`, `app->config.event_engine_mode` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | poll su contesto backend; callback non dovrebbe richiedere tutto `app_t` |
+| `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`/`ctx.logger`; resta su `app->config.event_engine_mode` e `legacy_events_dispatch(app, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | spostare anche la decisione shadow fuori dall'app completa oppure rimuoverla con il legacy |
 | `backend_handle_dir_create()` | `app->config.recursive`, `app->inotify.watchers`, watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | funzione interna su contesto backend + callback raw |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
@@ -314,9 +314,25 @@ Stato implementato del secondo micro-refactor:
   `struct app *`
 
 Il punto residuo e' ora piu' piccolo: `inotify_backend_poll()` riceve ancora
-`app_t` per leggere configurazione, logger, runtime e legacy shadow. La callback
-raw/core invece e' gia' diventata generica: il consumer applicativo arriva da
-`userdata`.
+`app_t`, ma il suo corpo puo' gia' leggere runtime e logger tramite il context
+backend. La callback raw/core invece e' gia' diventata generica: il consumer
+applicativo arriva da `userdata`.
+
+Stato implementato del terzo micro-refactor:
+
+- `inotify_backend_poll()` costruisce un `inotify_backend_context_t` locale
+  all'inizio della funzione
+- la lettura del file descriptor usa `ctx.runtime->fd`
+- il lookup del path padre usa `ctx.runtime->watchers`
+- i log raw e gli errori interni al poll usano `ctx.logger`
+- restano volutamente su `app_t` solo la scelta `event_engine_mode` e la
+  chiamata legacy `legacy_events_dispatch(app, ev)`, perche' appartengono al
+  ponte shadow temporaneo e non al backend core finale
+
+Questo passaggio non cambia la firma pubblica di `inotify_backend_poll()`: e'
+un refactor interno. Serve a rendere visibile agli studenti una tecnica
+importante: si puo' restringere prima il corpo delle funzioni e cambiare la API
+solo quando il nuovo confine e' abbastanza chiaro.
 
 ### `modules/inotify/src/inotify_adapter.c`
 
