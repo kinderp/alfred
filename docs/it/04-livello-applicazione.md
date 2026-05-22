@@ -135,16 +135,16 @@ gli eventi semantici attraverso `logger_event()`.
 
 ```mermaid
 flowchart TD
-    A[app_run] --> B[inotify_backend_poll]
-    B --> C[backend legge fd inotify]
-    C --> D[backend log raw]
-    D --> E[backend costruisce alfred_raw_event_t]
-    E --> F[callback app]
-    F --> G[alfred_process core]
-    F --> H{event_engine shadow?}
-    H -->|si| I[vecchio dispatcher events.c]
-    H -->|no| J[skip legacy]
-    B --> K[backend aggiorna watch ricorsivi]
+    A[app_run] --> B[poll backend]
+    B --> C[read fd]
+    C --> D[raw log]
+    D --> E[raw event]
+    E --> F[callback]
+    F --> G[core]
+    F --> H{shadow?}
+    H -->|si| I[legacy]
+    H -->|no| J[skip]
+    B --> K[watch repair]
     K --> A
 ```
 
@@ -152,6 +152,17 @@ Il file descriptor e' non bloccante, ma `app.c` non chiama piu' direttamente
 `read()`. La lettura e il parsing di `struct inotify_event` sono stati spostati
 nel backend inotify. `app.c` resta il coordinatore: chiama il backend, riceve
 eventi raw tramite callback e li inoltra al core.
+
+Legenda del diagramma:
+
+- `poll backend`: `inotify_backend_poll()`
+- `read fd`: lettura del file descriptor inotify non bloccante
+- `raw log`: scrittura del log grezzo del backend
+- `raw event`: costruzione di `alfred_raw_event_t`
+- `callback`: ritorno verso `app.c`
+- `core`: chiamata a `alfred_process()`
+- `legacy`: vecchio dispatcher `events.c`, solo in shadow mode
+- `watch repair`: aggiornamento dei watch ricorsivi dopo directory create
 
 ### Shadow mode
 
