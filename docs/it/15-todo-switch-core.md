@@ -191,7 +191,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_add_startup_watch()` | `app->config.recursive`, poi passa `app` al watch manager | sceglie watch singolo o ricorsivo | passare solo backend state, config e logger necessari al watch manager |
 | `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`/`ctx.logger`; resta su `app->config.event_engine_mode` e `legacy_events_dispatch(app, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | spostare anche la decisione shadow fuori dall'app completa oppure rimuoverla con il legacy |
-| `backend_handle_dir_create()` | `app->config.recursive`, `app->inotify.watchers`, watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | funzione interna su contesto backend + callback raw |
+| `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
 | `watch_manager_add()` | `app->inotify.fd`, `app->config.watch_mask`, `app->inotify.watchers`, `app->logger` | installa watch kernel, salva mapping, logga `WATCH_ADDED` | ricevere fd/watchers/mask/logger espliciti o un contesto backend |
@@ -328,6 +328,8 @@ Stato implementato del terzo micro-refactor:
 - restano volutamente su `app_t` solo la scelta `event_engine_mode` e la
   chiamata legacy `legacy_events_dispatch(app, ev)`, perche' appartengono al
   ponte shadow temporaneo e non al backend core finale
+- `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
+  poll path, quindi non ricostruisce piu' un context da `app_t`
 
 Questo passaggio non cambia la firma pubblica di `inotify_backend_poll()`: e'
 un refactor interno. Serve a rendere visibile agli studenti una tecnica

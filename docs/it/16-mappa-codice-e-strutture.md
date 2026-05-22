@@ -246,7 +246,7 @@ Tabella di lettura:
 | --- | --- | --- | --- |
 | `app->inotify.fd` | `inotify_backend_poll()` tramite `ctx.runtime`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
 | `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
-| `app->config.recursive` | startup watch e `backend_handle_dir_create()` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
+| `app->config.recursive` | startup watch; `backend_handle_dir_create()` lo legge tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` | dimensione iniziale watcher table | si', come configurazione backend |
 | `app->config.event_engine_mode` | init e poll | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
@@ -371,13 +371,14 @@ watch_manager_add(&ctx, path):
 Anche la discovery ricorsiva usa ora lo stesso context:
 
 ```text
-backend_handle_dir_create(app, ev, on_event, userdata)
-  backend_context_from_app(app, &ctx)
+backend_handle_dir_create(ctx, ev, on_event, userdata)
+  legge ctx.config->recursive
+  cerca il path padre in ctx.runtime->watchers
   backend_emit_context_t:
-    ctx = &ctx
+    ctx = ctx
     on_event = on_event
     userdata = userdata
-  watch_manager_add_recursive_with_discovery(&ctx, ...)
+  watch_manager_add_recursive_with_discovery(ctx, ...)
   backend_process_discovered_dir(ctx, path, userdata)
   backend_emit_synthetic_dir_create(ctx, path, on_event, userdata)
 ```
@@ -414,6 +415,7 @@ inotify_backend_poll(app, on_event, userdata)
   watcher_get_path(&ctx.runtime->watchers, wd)
   logger_raw(ctx.logger, ...)
   on_event(raw, userdata)
+  backend_handle_dir_create(&ctx, ev, on_event, userdata)
   if app->config.event_engine_mode == shadow:
     legacy_events_dispatch(app, ev)
 ```

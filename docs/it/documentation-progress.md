@@ -35,6 +35,8 @@ Stati usati:
   costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` e
   `ctx.logger` per file descriptor, watcher table e diagnostica. Restano su
   `app_t` solo la selezione `event_engine_mode` e la dispatch legacy/shadow.
+  Anche `backend_handle_dir_create()` riceve ora il context gia' costruito dal
+  poll path invece di ricostruirlo dall'applicazione.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   terzo micro-refactor del backend context, spiegando perche' il poll path puo'
   essere ristretto internamente prima di cambiare la firma pubblica.

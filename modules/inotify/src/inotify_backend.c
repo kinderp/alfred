@@ -55,7 +55,7 @@ typedef struct backend_emit_context {
  * Local Declarations
  * ========================================================================== */
 
-static void backend_handle_dir_create(app_t *app,
+static void backend_handle_dir_create(inotify_backend_context_t *ctx,
                                       const struct inotify_event *ev,
                                       inotify_backend_event_fn on_event,
                                       void *userdata);
@@ -358,7 +358,7 @@ int inotify_backend_poll(app_t *app,
 #endif
         }
 
-        backend_handle_dir_create(app, ev, on_event, userdata);
+        backend_handle_dir_create(&ctx, ev, on_event, userdata);
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
@@ -372,7 +372,7 @@ int inotify_backend_poll(app_t *app,
 
 /*
  * backend_handle_dir_create - maintain recursive watches after a new directory
- * @app: initialized application context
+ * @ctx: narrowed backend context used by the poll path
  * @ev: raw inotify event currently being processed
  * @on_event: callback used for synthetic raw events
  * @userdata: callback context passed through unchanged
@@ -383,15 +383,15 @@ int inotify_backend_poll(app_t *app,
  * kernel create event could not have been observed, it emits synthetic raw
  * CREATE|ISDIR facts so the core can still produce DIR_CREATED.
  */
-static void backend_handle_dir_create(app_t *app,
+static void backend_handle_dir_create(inotify_backend_context_t *ctx,
                                       const struct inotify_event *ev,
                                       inotify_backend_event_fn on_event,
                                       void *userdata)
 {
-    if (app == NULL || ev == NULL)
+    if (ctx == NULL || ev == NULL)
         return;
 
-    if (!app->config.recursive)
+    if (!ctx->config->recursive)
         return;
 
     if ((ev->mask & IN_CREATE) == 0 ||
@@ -400,7 +400,7 @@ static void backend_handle_dir_create(app_t *app,
     }
 
     const char *base =
-        watcher_get_path(&app->inotify.watchers, ev->wd);
+        watcher_get_path(&ctx->runtime->watchers, ev->wd);
 
     if (base == NULL)
         return;
@@ -410,18 +410,14 @@ static void backend_handle_dir_create(app_t *app,
     if (path_join(full, sizeof(full), base, ev->name) != 0)
         return;
 
-    inotify_backend_context_t ctx;
-
-    backend_context_from_app(app, &ctx);
-
     backend_emit_context_t context;
 
-    context.ctx = &ctx;
+    context.ctx = ctx;
     context.on_event = on_event;
     context.userdata = userdata;
 
     watch_manager_add_recursive_with_discovery(
-        &ctx,
+        ctx,
         full,
         backend_process_discovered_dir,
         &context);
