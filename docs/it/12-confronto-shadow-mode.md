@@ -666,6 +666,6 @@ Scenari utili:
 
 - queue overflow, se riproducibile
 - run core-mode sistematiche per tutti gli scenari shadow
-- confronto tra suite funzionale storica e futura suite core-only
+- confronto tra suite funzionale storica legacy-shadow e `make test-core`
 
 Ogni scenario dovrebbe essere piccolo e leggibile.

@@ -76,7 +76,7 @@ Importante: i test funzionali storici controllano soprattutto il comportamento
 legacy visibile in `events.log`. Durante l'integrazione core/shadow mode, lo
 stesso file puo' contenere anche righe `core ...`.
 
-## Test core-only
+## Test core end-to-end
 
 I test core si trovano in:
 
@@ -105,6 +105,23 @@ diagnosi backend e per capire cosa arriva da inotify, ma eventi grezzi come
 sensibili al kernel, al filesystem e al timing. Per questo i test core fissano
 il contratto semantico di Alfred.
 
+Il nome `test-core` non significa "test unitario del solo core in memoria".
+Questi test sono gia' end-to-end sul percorso core reale:
+
+```text
+filesystem reale
+-> kernel inotify reale
+-> backend inotify Alfred
+-> alfred_raw_event_t
+-> core Alfred
+-> events.log ufficiale core
+```
+
+La parola "core" indica quale stream semantico viene considerato ufficiale, non
+quali livelli del programma vengono saltati. Per questo non serve introdurre
+ora una suite separata chiamata `test-functional-core`: sarebbe quasi un doppione
+di `make test-core`.
+
 Gli eventi raw Alfred (`alfred_raw_event_t`) hanno valore di test, ma sono piu'
 adatti a test unitari dell'adapter o del core, dove possiamo costruire input
 controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
@@ -120,7 +137,8 @@ switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
   principale e oggi viene eseguito da `make test` con
   `ENABLE_LEGACY_SHADOW=1`
 - `tests/core/` nasce per fissare lo stream semantico ufficiale del core e oggi
-  viene eseguito da `make test-core` in build core-only
+  viene eseguito da `make test-core` in build core-only, usando comunque
+  filesystem, inotify e backend reali
 
 Per questo la domanda non e': "quale suite e' migliore?". La domanda corretta
 e':
@@ -133,7 +151,7 @@ e quale e' gia' coperto meglio dalla suite core?
 
 Mappa corrente:
 
-| Scenario | Test funzionale legacy | Test core-only | Stato |
+| Scenario | Test funzionale legacy | Test core end-to-end | Stato |
 | --- | --- | --- | --- |
 | create file | `tests/functional/test_create_file.sh` | `tests/core/test_create_file.sh` | Coperto da entrambe; core controlla anche `FILE_MODIFIED` e `FILE_READY` quando il file viene scritto. |
 | create directory | `tests/functional/test_create_dir.sh` | `tests/core/test_create_dir.sh` | Coperto da entrambe; funzionale controlla anche diagnostica `WATCH_ADDED`. |
@@ -151,8 +169,8 @@ Mappa corrente:
 
 Conclusione operativa:
 
-- la suite core-only e' oggi la sorgente piu' precisa per il contratto
-  semantico futuro
+- la suite `make test-core` e' oggi la sorgente piu' precisa per il
+  comportamento end-to-end futuro del percorso core
 - la suite funzionale storica resta utile come smoke test end-to-end legacy
   shadow, soprattutto per watch diagnostici e compatibilita' durante la
   migrazione
@@ -166,9 +184,11 @@ Strategia consigliata per il prossimo refactor dei test:
 
 1. mantenere per ora `make test` come suite legacy-shadow
 2. usare `make test-core` come contratto ufficiale core
-3. aggiungere eventualmente un target separato per funzionali core end-to-end,
-   senza riusare in modo ambiguo il nome storico
-4. quando lo shadow non servira' piu', archiviare o spostare i funzionali
+3. non aggiungere per ora una terza suite `test-functional-core`, perche'
+   `make test-core` e' gia' end-to-end sul percorso core
+4. quando lo shadow non servira' piu', decidere se `make test` deve diventare
+   alias di `make test-core` oppure restare un target storico separato
+5. quando lo shadow sara' archiviato, spostare o rimuovere i funzionali
    legacy invece di lasciarli mescolati alla suite ufficiale
 
 ## Collegamento con la lettura guidata del codice

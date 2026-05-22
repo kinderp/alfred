@@ -31,6 +31,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `14-scenari-test.md`, `15-todo-switch-core.md`,
+  `10-debugging-test-e-strumenti.md`, `09-makefile-e-build-system.md` e
+  `12-confronto-shadow-mode.md`: chiarito che `make test-core` e' gia' un test
+  end-to-end del percorso core reale, non un test unitario del solo core in
+  memoria. Rimossa l'ambiguita' sulla possibile suite `test-functional-core`:
+  per ora non serve una terza suite.
 - `tests/functional/test_move_rename_file.sh`: implementato lo scenario
   funzionale legacy per il file spostato e rinominato, fissando la doppia
   emissione storica `FILE_MOVED + FILE_RENAMED`.
@@ -40,8 +46,8 @@ Stati usati:
   `FILE_RELOCATED` del core.
 - `15-todo-switch-core.md`: documentata la decisione provvisoria sui test:
   `make test` resta per ora legacy-shadow, mentre `make test-core` resta il
-  contratto semantico ufficiale del core; una futura suite funzionale core
-  end-to-end andra' progettata esplicitamente.
+  percorso end-to-end ufficiale del core; piu' avanti si decidera' se `make
+  test` dovra' diventare alias del percorso core o restare legacy.
 - `16-mappa-codice-e-strutture.md`: aggiunto un call graph guidato
   `main -> app -> backend -> core -> logger`, piu' due sezioni discorsive sul
   ciclo backend inotify e sul ciclo core. Le nuove sezioni spiegano quali
@@ -284,16 +290,16 @@ Stati usati:
   `14-scenari-test.md` e `15-todo-switch-core.md`: documentato il runner
   core-mode e il motivo per cui la manutenzione dei watch e' backend state, non
   semantica legacy.
-- `tests/core/`: aggiunta suite parallela core-only con runner, libreria shell e
+- `tests/core/`: aggiunta suite parallela core con runner, libreria shell e
   primi tre scenari: create file, move+rename file e recursive create nested
   directory.
-- `Makefile`: aggiunto target `test-core` per eseguire la suite core-only senza
+- `Makefile`: aggiunto target `test-core` per eseguire la suite core senza
   modificare `make test`.
 - `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
-  `15-todo-switch-core.md`: documentata la suite core-only e chiarito che i test
+  `15-todo-switch-core.md`: documentata la suite core e chiarito che i test
   end-to-end del core fissano lo stream semantico, mentre raw inotify e
   `alfred_raw_event_t` sono piu' adatti a diagnostica o test unitari mirati.
-- `tests/core/`: estesa la suite core-only con delete file, rename file, create
+- `tests/core/`: estesa la suite core con delete file, rename file, create
   directory e delete directory.
 - `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
   `15-todo-switch-core.md`: aggiunti gli scenari core appena coperti, con

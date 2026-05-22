@@ -250,10 +250,12 @@ Scenari ancora utili:
   ufficiale del core
 - overflow, se riproducibile
 
-### 1b. Stabilizzare la suite core-only
+### 1b. Stabilizzare la suite core end-to-end
 
-La suite parallela `tests/core/` fissa il comportamento futuro del core come
-stream ufficiale plain, senza sostituire subito i test funzionali storici.
+La suite parallela `tests/core/` fissa il comportamento futuro del percorso
+core come stream ufficiale plain, senza sostituire subito i test funzionali
+storici. E' una suite end-to-end: avvia Alfred reale, riceve eventi inotify
+reali e controlla l'`events.log` prodotto dal core.
 
 Copertura iniziale:
 
@@ -274,13 +276,13 @@ Scenari ancora da aggiungere:
 
 - overflow, se si decide di renderlo riproducibile in modo stabile
 
-Nota: l'overflow non fa parte del blocco iniziale dei test core-only. Gli altri
-scenari fissano la semantica prodotta a partire da eventi filesystem normali;
-l'overflow richiede invece una decisione di recovery/resync quando il backend
-non puo' piu' garantire di aver consegnato tutti gli eventi. Lo rimandiamo a
-dopo lo switch completo al core, quando sara' piu' chiaro se rappresentarlo come
-diagnostica backend, evento semantico di resync richiesto, scan sintetico
-dell'albero o una combinazione di queste scelte.
+Nota: l'overflow non fa parte del blocco iniziale dei test core end-to-end. Gli
+altri scenari fissano la semantica prodotta a partire da eventi filesystem
+normali; l'overflow richiede invece una decisione di recovery/resync quando il
+backend non puo' piu' garantire di aver consegnato tutti gli eventi. Lo
+rimandiamo a dopo lo switch completo al core, quando sara' piu' chiaro se
+rappresentarlo come diagnostica backend, evento semantico di resync richiesto,
+scan sintetico dell'albero o una combinazione di queste scelte.
 
 ### 2. Rendere esplicite le differenze attese
 
@@ -434,7 +436,7 @@ verifica e documentazione piu' estesa.
 | Rendere legacy shadow opzionale a livello build | Fatto | `events.c` e `move_cache.c` restano disponibili con `ENABLE_LEGACY_SHADOW=1`, ma non fanno parte del binario core normale. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
-| Revisione completa della suite core-only | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
+| Revisione completa della suite core end-to-end | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
 | Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
 | Decisione sui test funzionali legacy | Medio | Dopo lo switch bisogna scegliere se mantenerli come shadow, migrarli al core o archiviarne una parte. |
 | Spegnere shadow come modalita' ordinaria | Medio | `core` e' gia' il default, ma shadow deve diventare chiaramente una modalita' di debug/confronto e non un requisito operativo. |
@@ -467,14 +469,16 @@ Decisione provvisoria:
 
 ```text
 make test       -> resta legacy-shadow per compatibilita' e diagnostica
-make test-core  -> resta contratto semantico ufficiale del core
+make test-core  -> resta end-to-end ufficiale del percorso core
 ```
 
 Non conviene rinominare o riscrivere subito `make test`, perche' quel nome oggi
-ha ancora il valore pratico di smoke test storico. Il prossimo passo, quando
-vorremo avvicinarci allo switch definitivo, sara' progettare una suite
-funzionale core end-to-end separata oppure decidere esplicitamente di cambiare
-il significato di `make test`.
+ha ancora il valore pratico di smoke test storico. Non serve nemmeno creare ora
+una suite `test-functional-core`: `make test-core` avvia gia' Alfred reale,
+passa dal backend inotify reale e controlla l'`events.log` core. Il prossimo
+passo, quando vorremo avvicinarci allo switch definitivo, sara' decidere
+esplicitamente se `make test` deve diventare un alias del percorso core oppure
+restare un target legacy separato finche' shadow mode esiste.
 
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non

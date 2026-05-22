@@ -160,9 +160,9 @@ La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
 attesi nei log, e' raccolta in
 [Scenari di test](14-scenari-test.md).
 
-## Test core
+## Test core end-to-end
 
-La suite core-only si trova in:
+La suite core end-to-end si trova in:
 
 ```text
 tests/core/
@@ -186,6 +186,12 @@ costruiscono invece la variante con `ENABLE_LEGACY_SHADOW=1`.
 
 e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
 righe `core seq=...`, perche' quelle appartengono allo shadow mode.
+
+Importante: `make test-core` non e' un test unitario isolato del solo core.
+Esegue Alfred reale su una directory temporanea, usa il kernel inotify reale,
+passa dal backend inotify e controlla l'`events.log` prodotto dal core. E'
+quindi gia' il test end-to-end del percorso core; il nome serve solo a
+distinguerlo dai funzionali storici legacy-shadow.
 
 La copertura iniziale include scenari base e alcuni casi semantici critici:
 
@@ -213,8 +219,8 @@ La copertura iniziale include scenari base e alcuni casi semantici critici:
 - `test_rename_file.sh`: verifica `FILE_RENAMED` dopo la fase
   `CREATED/MODIFIED/READY`
 
-Questa suite fissa il contratto futuro del core senza cambiare subito i test
-funzionali storici.
+Questa suite fissa il comportamento end-to-end futuro del percorso core senza
+cambiare subito i test funzionali storici.
 
 La libreria `tests/core/test_lib.sh` include anche `assert_count`, usato quando
 uno scenario deve fissare quante volte un evento puo' comparire. Per esempio,

@@ -940,7 +940,7 @@ target `make test` costruisce prima il binario con:
 ENABLE_LEGACY_SHADOW=1
 ```
 
-La suite core-only resta separata:
+La suite core resta separata:
 
 ```bash
 make test-core
@@ -949,6 +949,12 @@ make test-core
 Il target `make test-core` ricostruisce esplicitamente il binario nella variante
 core-only prima di lanciare `tests/core/`, cosi' non dipende da un eventuale
 binario legacy-shadow prodotto da un test precedente.
+
+Nonostante il nome, `test-core` non salta il backend: gli script creano file e
+directory reali, Alfred riceve eventi inotify reali e il core produce
+`events.log`. La differenza rispetto a `make test` e' lo stream considerato
+ufficiale: `make test` conserva il percorso storico legacy-shadow, mentre
+`make test-core` verifica il percorso core.
 
 ### valgrind
 
@@ -1000,7 +1006,7 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Ricompilare da zero | `make re` |
 | Build ottimizzata | `make release` |
 | Eseguire test funzionali legacy/shadow | `make test` |
-| Eseguire test core-only | `make test-core` |
+| Eseguire test end-to-end del percorso core | `make test-core` |
 | Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
