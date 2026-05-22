@@ -143,7 +143,7 @@ Mappa corrente:
 | rename directory | `tests/functional/test_rename_dir.sh` | `tests/core/test_rename_dir.sh` | Coperto da entrambe; core esclude esplicitamente `DIR_MOVED` e `DIR_RELOCATED`. |
 | move file | `tests/functional/test_move_file.sh` | `tests/core/test_move_file.sh` | Coperto da entrambe; core controlla anche che non sia classificato come rename/relocated. |
 | move directory | non presente nei funzionali storici | `tests/core/test_move_dir.sh` | Coperto solo dal core; utile mantenerlo come contratto semantico ufficiale. |
-| move + rename file | `tests/functional/test_move_rename_file.sh` esiste ma e' vuoto | `tests/core/test_move_rename_file.sh` | Coperto dal core; il funzionale storico non aggiunge copertura reale. |
+| move + rename file | `tests/functional/test_move_rename_file.sh` | `tests/core/test_move_rename_file.sh` | Coperto da entrambe, ma con semantica diversa: legacy emette `FILE_MOVED + FILE_RENAMED`, core emette un solo `FILE_RELOCATED`. |
 | move + rename directory | `tests/functional/test_move_rename_dir.sh` | `tests/core/test_move_rename_dir.sh` | Coperto da entrambe, ma con semantica diversa: legacy emette `MOVED + RENAMED`, core emette un solo `RELOCATED`. |
 | recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Funzionale utile per diagnostica watch e creazione lenta; non riproduce il bug `mkdir -p`. |
 | recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
@@ -158,9 +158,9 @@ Conclusione operativa:
   migrazione
 - non conviene migrare subito `make test` a core-only senza prima decidere cosa
   fare dei controlli su `WATCH_ADDED` e `WATCH_REMOVED`
-- `tests/functional/test_move_rename_file.sh` va considerato debito tecnico:
-  essendo vuoto, o viene implementato come scenario legacy/shadow esplicito o
-  viene archiviato quando la suite funzionale verra' ripensata
+- `tests/functional/test_move_rename_file.sh` resta utile come scenario
+  legacy/shadow esplicito per mostrare la vecchia doppia emissione
+  `FILE_MOVED + FILE_RENAMED`
 
 Strategia consigliata per il prossimo refactor dei test:
 
@@ -805,10 +805,7 @@ File:
 tests/functional/test_move_rename_file.sh
 ```
 
-Stato attuale: il file esiste ma non contiene ancora uno scenario. Lo scenario
-equivalente e' coperto dal tool shadow con `move_rename_file`.
-
-Scenario consigliato:
+Operazioni:
 
 ```bash
 mkdir "$TEST_ROOT/src"
@@ -829,6 +826,10 @@ Event log core target:
 ```text
 core ... type=FILE_RELOCATED from=$ROOT/src/old.txt to=$ROOT/dst/new.txt
 ```
+
+Il test funzionale controlla esplicitamente il comportamento legacy, cioe' la
+doppia emissione `FILE_MOVED` e `FILE_RENAMED`. Il test core controlla invece
+la semantica target: una sola operazione logica `FILE_RELOCATED`.
 
 ### recursive create
 

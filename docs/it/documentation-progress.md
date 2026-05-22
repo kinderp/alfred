@@ -31,11 +31,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
-- `14-scenari-test.md`: aggiunta la mappa tra test funzionali legacy e test
-  core-only, indicando per ogni scenario se la copertura e' doppia, solo core,
-  diagnostica legacy o debito tecnico. La mappa chiarisce anche che
-  `tests/functional/test_move_rename_file.sh` e' vuoto e non rappresenta
-  copertura reale.
+- `tests/functional/test_move_rename_file.sh`: implementato lo scenario
+  funzionale legacy per il file spostato e rinominato, fissando la doppia
+  emissione storica `FILE_MOVED + FILE_RENAMED`.
+- `14-scenari-test.md`: aggiornata la mappa tra test funzionali legacy e test
+  core-only: `move_rename_file` ora e' coperto da entrambe le suite, con
+  differenza semantica intenzionale tra doppio evento legacy e singolo
+  `FILE_RELOCATED` del core.
 - `15-todo-switch-core.md`: documentata la decisione provvisoria sui test:
   `make test` resta per ora legacy-shadow, mentre `make test-core` resta il
   contratto semantico ufficiale del core; una futura suite funzionale core

@@ -451,10 +451,10 @@ Risultato della revisione:
 - tutti gli scenari funzionali storici realmente implementati hanno una
   copertura core equivalente o piu' precisa
 - la suite core aggiunge scenari non presenti nei funzionali storici:
-  `move_dir`, `modify_file`, `recursive_create_nested_dir` e
-  `move_rename_file`
-- `tests/functional/test_move_rename_file.sh` esiste ma non contiene uno
-  scenario, quindi non deve essere considerato copertura reale
+  `move_dir`, `modify_file` e `recursive_create_nested_dir`
+- `tests/functional/test_move_rename_file.sh` ora contiene lo scenario legacy
+  esplicito: il legacy emette `FILE_MOVED + FILE_RENAMED`, mentre il core
+  emette un solo `FILE_RELOCATED`
 - `tests/functional/test_recursive.sh` resta diverso da
   `tests/core/test_recursive_create_nested_dir.sh`: il primo verifica una
   creazione lenta con watch aggiunti in tempo, il secondo verifica il caso
