@@ -27,8 +27,7 @@
 
 static void setup_signals(void);
 static void handle_signal(int sig);
-static int handle_backend_event(app_t *app,
-                                const alfred_raw_event_t *raw,
+static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
 /* ============================================================================
@@ -88,20 +87,18 @@ static void setup_signals(void)
 
 /*
  * handle_backend_event - consume one backend event
- * @app: initialized application context
  * @raw: optional raw event for the core
- * @userdata: unused callback context
+ * @userdata: application context supplied by app_run()
  *
  * The backend owns inotify parsing, raw conversion, recursive watch repair,
  * and legacy shadow dispatch when that optional code is compiled in. The app
  * callback is deliberately small: it is the bridge from "backend raw fact" to
  * "core semantic processing".
  */
-static int handle_backend_event(app_t *app,
-                                const alfred_raw_event_t *raw,
+static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata)
 {
-    (void)userdata;
+    app_t *app = (app_t *)userdata;
 
     if (app == NULL)
         return ERR_INVALID_ARG;
@@ -274,7 +271,7 @@ int app_run(app_t *app)
 
         if (inotify_backend_poll(app,
                                  handle_backend_event,
-                                 NULL) != ERR_OK) {
+                                 app) != ERR_OK) {
             break;
         }
     }

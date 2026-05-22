@@ -374,29 +374,36 @@ Anche la discovery ricorsiva usa ora lo stesso context:
 backend_handle_dir_create(app, ev, on_event, userdata)
   backend_context_from_app(app, &ctx)
   backend_emit_context_t:
-    app = app
     ctx = &ctx
     on_event = on_event
     userdata = userdata
   watch_manager_add_recursive_with_discovery(&ctx, ...)
   backend_process_discovered_dir(ctx, path, userdata)
-  backend_emit_synthetic_dir_create(ctx, app, path, on_event, userdata)
+  backend_emit_synthetic_dir_create(ctx, path, on_event, userdata)
 ```
 
-Perche' serve ancora `app` nell'ultimo passaggio? Perche' la callback pubblica
-attuale e':
+La callback pubblica ora e':
 
 ```c
 typedef int (*inotify_backend_event_fn)(
-    struct app *app,
     const alfred_raw_event_t *raw,
     void *userdata
 );
 ```
 
-Quindi il raw sintetico attraversa gia' il context backend, ma la consegna
-finale all'app/core usa ancora `app_t`. Questo e' il prossimo confine da
-discutere, non un comportamento semantico nuovo.
+Quindi il backend consegna solo il raw event e un puntatore opaco. Nel runtime
+attuale `app_run()` passa `app` come `userdata`, e `handle_backend_event()` lo
+ricostruisce:
+
+```text
+inotify_backend_poll(app, handle_backend_event, app)
+handle_backend_event(raw, userdata)
+  app = userdata
+  alfred_process(app->core, raw)
+```
+
+Questo e' piu' pulito perche' il backend non deve conoscere il tipo del consumer
+del raw event. Sa solo invocare una callback.
 
 ## Struttura dati di configurazione
 
@@ -1100,7 +1107,7 @@ frame 3 - conversione raw:
   raw.path = full_path
 
 frame 4 - ingresso nel core:
-  handle_backend_event(app, &raw, NULL)
+  handle_backend_event(&raw, app)
   alfred_process(app->core, &raw)
 
 frame 5 - evento semantico:

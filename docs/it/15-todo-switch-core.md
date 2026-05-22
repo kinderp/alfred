@@ -192,8 +192,8 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
 | `inotify_backend_poll()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger`, `app->config.event_engine_mode` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | poll su contesto backend; callback non dovrebbe richiedere tutto `app_t` |
 | `backend_handle_dir_create()` | `app->config.recursive`, `app->inotify.watchers`, watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | funzione interna su contesto backend + callback raw |
-| `backend_process_discovered_dir()` | passa `app` a `backend_emit_synthetic_dir_create()` | adatta la callback di discovery del watch manager al percorso raw/core | callback di discovery dovrebbe ricevere un contesto backend piu' stretto |
-| `backend_emit_synthetic_dir_create()` | passa `app` alla callback `on_event` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | callback raw con contesto opaco, non necessariamente `app_t` |
+| `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
+| `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
 | `watch_manager_add()` | `app->inotify.fd`, `app->config.watch_mask`, `app->inotify.watchers`, `app->logger` | installa watch kernel, salva mapping, logga `WATCH_ADDED` | ricevere fd/watchers/mask/logger espliciti o un contesto backend |
 | `watch_manager_remove()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger` | rimuove watch kernel, pulisce mapping, logga `WATCH_REMOVED` | ricevere fd/watchers/logger espliciti o un contesto backend |
 | `watch_manager_add_recursive*()` | dipende da `watch_manager_add()`, logger e callback discovery | attraversa directory e aggiunge watch ricorsivi | ricevere contesto backend e callback discovery senza conoscere l'app completa |
@@ -298,8 +298,8 @@ Stato implementato del primo micro-refactor:
 - la callback di discovery del watch manager riceve il context
 - `inotify_backend.c` costruisce un context locale partendo da `app_t` nei
   punti in cui deve chiamare il watch manager
-- `inotify_backend_poll()` e la callback raw/core ricevono ancora `app_t`: non
-  sono stati toccati in questo passaggio
+- `inotify_backend_poll()` riceve ancora `app_t` per guidare il backend, ma la
+  callback raw/core non riceve piu' `app_t`: usa `userdata`
 
 Questa scelta mantiene il refactor piccolo: il watch manager non conosce piu'
 l'app completa, ma il ponte principale `app -> backend -> core` resta invariato.
@@ -307,14 +307,16 @@ l'app completa, ma il ponte principale `app -> backend -> core` resta invariato.
 Stato implementato del secondo micro-refactor:
 
 - la callback di discovery continua a ricevere `inotify_backend_context_t`
-- `backend_emit_context_t` conserva sia il context backend sia `app_t`
-- `backend_emit_synthetic_dir_create()` riceve il context e usa `app_t` solo
-  per chiamare l'attuale callback pubblica `on_event(app, raw, userdata)`
-- il passaggio dei raw sintetici e' quindi preparato per il futuro cambio della
-  callback, ma la firma pubblica di `inotify_backend_poll()` resta invariata
+- `backend_emit_context_t` conserva il context backend e la callback raw/core
+- `backend_emit_synthetic_dir_create()` riceve il context e chiama
+  `on_event(raw, userdata)`
+- la firma pubblica di `inotify_backend_event_fn` non contiene piu'
+  `struct app *`
 
-Il punto residuo e' chiaro: finche' `inotify_backend_event_fn` richiede
-`struct app *`, un piccolo ponte verso `app_t` deve rimanere nel backend.
+Il punto residuo e' ora piu' piccolo: `inotify_backend_poll()` riceve ancora
+`app_t` per leggere configurazione, logger, runtime e legacy shadow. La callback
+raw/core invece e' gia' diventata generica: il consumer applicativo arriva da
+`userdata`.
 
 ### `modules/inotify/src/inotify_adapter.c`
 

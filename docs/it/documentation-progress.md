@@ -31,10 +31,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/src/inotify_backend.c` e `app/src/app.c`: cambiata la
+  callback raw/core `inotify_backend_event_fn` da `(app, raw, userdata)` a
+  `(raw, userdata)`. L'applicazione passa `app_t` come `userdata`, cosi' il
+  backend non deve piu' conoscere il tipo del consumer degli eventi raw.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: aggiornata la
+  documentazione del context backend per spiegare che la callback raw/core e'
+  ora generica e che il residuo `app_t` resta in `inotify_backend_poll()`.
 - `modules/inotify/src/inotify_backend.c`: esteso l'uso del context backend alla
-  discovery ricorsiva e all'emissione dei raw event sintetici. `app_t` resta nel
-  solo punto in cui serve ancora alla callback pubblica
-  `inotify_backend_event_fn`.
+  discovery ricorsiva e all'emissione dei raw event sintetici. Dopo il cambio
+  della callback pubblica, anche questi raw sintetici vengono consegnati con
+  `on_event(raw, userdata)`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   secondo micro-refactor del context, chiarendo che il prossimo confine da
   discutere e' la firma della callback raw/core.

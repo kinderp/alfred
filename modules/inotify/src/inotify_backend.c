@@ -46,7 +46,6 @@
  * ========================================================================== */
 
 typedef struct backend_emit_context {
-    app_t *app;
     inotify_backend_context_t *ctx;
     inotify_backend_event_fn on_event;
     void *userdata;
@@ -72,7 +71,6 @@ static uint64_t backend_now_ns(void);
 
 static int backend_emit_synthetic_dir_create(
     inotify_backend_context_t *ctx,
-    app_t *app,
     const char *path,
     inotify_backend_event_fn on_event,
     void *userdata
@@ -341,7 +339,7 @@ int inotify_backend_poll(app_t *app,
         }
 
         int callback_status =
-            on_event(app, raw_ptr, userdata);
+            on_event(raw_ptr, userdata);
 
         if (callback_status != ERR_OK)
             return callback_status;
@@ -415,7 +413,6 @@ static void backend_handle_dir_create(app_t *app,
 
     backend_emit_context_t context;
 
-    context.app = app;
     context.ctx = &ctx;
     context.on_event = on_event;
     context.userdata = userdata;
@@ -451,7 +448,6 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
         context->ctx = ctx;
 
     (void)backend_emit_synthetic_dir_create(context->ctx,
-                                            context->app,
                                             path,
                                             context->on_event,
                                             context->userdata);
@@ -478,7 +474,6 @@ static uint64_t backend_now_ns(void)
 /*
  * backend_emit_synthetic_dir_create - emit a synthetic raw directory create
  * @ctx: backend context used by the discovery path
- * @app: application context still required by the current raw callback API
  * @path: directory discovered by recursive scanning
  * @on_event: callback used to deliver raw events to the core path
  * @userdata: callback context passed through unchanged
@@ -493,13 +488,12 @@ static uint64_t backend_now_ns(void)
  */
 static int backend_emit_synthetic_dir_create(
     inotify_backend_context_t *ctx,
-    app_t *app,
     const char *path,
     inotify_backend_event_fn on_event,
     void *userdata
 )
 {
-    if (ctx == NULL || app == NULL || path == NULL || on_event == NULL)
+    if (ctx == NULL || path == NULL || on_event == NULL)
         return ERR_INVALID_ARG;
 
     alfred_raw_event_t raw;
@@ -513,5 +507,5 @@ static int backend_emit_synthetic_dir_create(
     raw.pid = 0;
     raw.path = path;
 
-    return on_event(app, &raw, userdata);
+    return on_event(&raw, userdata);
 }

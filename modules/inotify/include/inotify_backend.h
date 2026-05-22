@@ -56,14 +56,15 @@ typedef struct inotify_backend_context {
 
 /*
  * inotify_backend_event_fn - deliver one raw backend event to the application
- * @app: application context used during the current integration phase
  * @raw: raw Alfred event, or NULL when the inotify record cannot be converted
  * @userdata: opaque pointer supplied to inotify_backend_poll()
+ *
+ * The backend does not interpret @userdata. The application decides which
+ * object to pass through; app.c currently passes app_t here.
  *
  * Return: ERR_OK to continue polling, or a negative error_t value to stop.
  */
 typedef int (*inotify_backend_event_fn)(
-    struct app *app,
     const alfred_raw_event_t *raw,
     void *userdata
 );
