@@ -111,6 +111,66 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
+## Mappa funzionali legacy e core
+
+Questa mappa serve a decidere cosa fare dei test funzionali storici durante lo
+switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
+
+- `tests/functional/` nasce quando il dispatcher legacy era lo stream
+  principale e oggi viene eseguito da `make test` con
+  `ENABLE_LEGACY_SHADOW=1`
+- `tests/core/` nasce per fissare lo stream semantico ufficiale del core e oggi
+  viene eseguito da `make test-core` in build core-only
+
+Per questo la domanda non e': "quale suite e' migliore?". La domanda corretta
+e':
+
+```text
+quale scenario deve restare test end-to-end del prodotto finale,
+quale deve restare solo confronto legacy/shadow,
+e quale e' gia' coperto meglio dalla suite core?
+```
+
+Mappa corrente:
+
+| Scenario | Test funzionale legacy | Test core-only | Stato |
+| --- | --- | --- | --- |
+| create file | `tests/functional/test_create_file.sh` | `tests/core/test_create_file.sh` | Coperto da entrambe; core controlla anche `FILE_MODIFIED` e `FILE_READY` quando il file viene scritto. |
+| create directory | `tests/functional/test_create_dir.sh` | `tests/core/test_create_dir.sh` | Coperto da entrambe; funzionale controlla anche diagnostica `WATCH_ADDED`. |
+| delete file | `tests/functional/test_delete_file.sh` | `tests/core/test_delete_file.sh` | Coperto da entrambe; il funzionale storico controlla soprattutto la creazione, il core controlla anche delete e ordine semantico. |
+| delete directory | `tests/functional/test_delete_dir.sh` | `tests/core/test_delete_dir.sh` | Coperto da entrambe; core verifica che `WATCH_REMOVED` non sia evento semantico. |
+| rename file | `tests/functional/test_rename_file.sh` | `tests/core/test_rename_file.sh` | Coperto da entrambe; core controlla anche write lifecycle precedente al rename. |
+| rename directory | `tests/functional/test_rename_dir.sh` | `tests/core/test_rename_dir.sh` | Coperto da entrambe; core esclude esplicitamente `DIR_MOVED` e `DIR_RELOCATED`. |
+| move file | `tests/functional/test_move_file.sh` | `tests/core/test_move_file.sh` | Coperto da entrambe; core controlla anche che non sia classificato come rename/relocated. |
+| move directory | non presente nei funzionali storici | `tests/core/test_move_dir.sh` | Coperto solo dal core; utile mantenerlo come contratto semantico ufficiale. |
+| move + rename file | `tests/functional/test_move_rename_file.sh` esiste ma e' vuoto | `tests/core/test_move_rename_file.sh` | Coperto dal core; il funzionale storico non aggiunge copertura reale. |
+| move + rename directory | `tests/functional/test_move_rename_dir.sh` | `tests/core/test_move_rename_dir.sh` | Coperto da entrambe, ma con semantica diversa: legacy emette `MOVED + RENAMED`, core emette un solo `RELOCATED`. |
+| recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Funzionale utile per diagnostica watch e creazione lenta; non riproduce il bug `mkdir -p`. |
+| recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
+| modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
+
+Conclusione operativa:
+
+- la suite core-only e' oggi la sorgente piu' precisa per il contratto
+  semantico futuro
+- la suite funzionale storica resta utile come smoke test end-to-end legacy
+  shadow, soprattutto per watch diagnostici e compatibilita' durante la
+  migrazione
+- non conviene migrare subito `make test` a core-only senza prima decidere cosa
+  fare dei controlli su `WATCH_ADDED` e `WATCH_REMOVED`
+- `tests/functional/test_move_rename_file.sh` va considerato debito tecnico:
+  essendo vuoto, o viene implementato come scenario legacy/shadow esplicito o
+  viene archiviato quando la suite funzionale verra' ripensata
+
+Strategia consigliata per il prossimo refactor dei test:
+
+1. mantenere per ora `make test` come suite legacy-shadow
+2. usare `make test-core` come contratto ufficiale core
+3. aggiungere eventualmente un target separato per funzionali core end-to-end,
+   senza riusare in modo ambiguo il nome storico
+4. quando lo shadow non servira' piu', archiviare o spostare i funzionali
+   legacy invece di lasciarli mescolati alla suite ufficiale
+
 ## Collegamento con la lettura guidata del codice
 
 Questo capitolo dice quali scenari esistono e quali eventi ci aspettiamo nei

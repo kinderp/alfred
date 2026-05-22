@@ -31,6 +31,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `14-scenari-test.md`: aggiunta la mappa tra test funzionali legacy e test
+  core-only, indicando per ogni scenario se la copertura e' doppia, solo core,
+  diagnostica legacy o debito tecnico. La mappa chiarisce anche che
+  `tests/functional/test_move_rename_file.sh` e' vuoto e non rappresenta
+  copertura reale.
+- `15-todo-switch-core.md`: documentata la decisione provvisoria sui test:
+  `make test` resta per ora legacy-shadow, mentre `make test-core` resta il
+  contratto semantico ufficiale del core; una futura suite funzionale core
+  end-to-end andra' progettata esplicitamente.
 - `16-mappa-codice-e-strutture.md`: aggiunto un call graph guidato
   `main -> app -> backend -> core -> logger`, piu' due sezioni discorsive sul
   ciclo backend inotify e sul ciclo core. Le nuove sezioni spiegano quali

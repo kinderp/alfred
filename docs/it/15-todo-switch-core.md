@@ -441,6 +441,41 @@ verifica e documentazione piu' estesa.
 | Quarantena o rimozione finale del legacy | Medio/alto | A fine migrazione bisogna decidere se eliminare `events.c`/`move_cache.c` o spostarli in un'area legacy esplicita. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
+### Mappa test funzionali legacy e test core
+
+La mappa dettagliata e' in
+[Scenari di test](14-scenari-test.md#mappa-funzionali-legacy-e-core).
+
+Risultato della revisione:
+
+- tutti gli scenari funzionali storici realmente implementati hanno una
+  copertura core equivalente o piu' precisa
+- la suite core aggiunge scenari non presenti nei funzionali storici:
+  `move_dir`, `modify_file`, `recursive_create_nested_dir` e
+  `move_rename_file`
+- `tests/functional/test_move_rename_file.sh` esiste ma non contiene uno
+  scenario, quindi non deve essere considerato copertura reale
+- `tests/functional/test_recursive.sh` resta diverso da
+  `tests/core/test_recursive_create_nested_dir.sh`: il primo verifica una
+  creazione lenta con watch aggiunti in tempo, il secondo verifica il caso
+  veloce `mkdir -p` recuperato con raw event sintetici
+- i test funzionali storici controllano anche diagnostica backend come
+  `WATCH_ADDED` e `WATCH_REMOVED`; questi log non devono diventare eventi
+  semantici core
+
+Decisione provvisoria:
+
+```text
+make test       -> resta legacy-shadow per compatibilita' e diagnostica
+make test-core  -> resta contratto semantico ufficiale del core
+```
+
+Non conviene rinominare o riscrivere subito `make test`, perche' quel nome oggi
+ha ancora il valore pratico di smoke test storico. Il prossimo passo, quando
+vorremo avvicinarci allo switch definitivo, sara' progettare una suite
+funzionale core end-to-end separata oppure decidere esplicitamente di cambiare
+il significato di `make test`.
+
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non
 conoscere piu' con certezza lo stato del filesystem. Gestirlo bene significa
