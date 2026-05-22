@@ -246,7 +246,7 @@ Tabella di lettura:
 | --- | --- | --- | --- |
 | `app->inotify.fd` | `inotify_backend_poll()` tramite `ctx.runtime`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
 | `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
-| `app->config.recursive` | startup watch; `backend_handle_dir_create()` lo legge tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
+| `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` | dimensione iniziale watcher table | si', come configurazione backend |
 | `app->config.event_engine_mode` | init e poll | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
@@ -358,8 +358,9 @@ app_t app
   app.config   -> configurazione
   app.logger   -> diagnostica
 
-inotify_backend.c:
-  backend_context_from_app(&app, &ctx)
+inotify_backend_add_startup_watch(app, path):
+  backend_context_from_app(app, &ctx)
+  legge ctx.config->recursive
 
 watch_manager_add(&ctx, path):
   usa ctx.runtime->fd

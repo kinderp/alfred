@@ -37,6 +37,9 @@ Stati usati:
   `app_t` solo la selezione `event_engine_mode` e la dispatch legacy/shadow.
   Anche `backend_handle_dir_create()` riceve ora il context gia' costruito dal
   poll path invece di ricostruirlo dall'applicazione.
+- `modules/inotify/src/inotify_backend.c`: lo startup watch path legge ora
+  `recursive` da `ctx.config`, quindi anche la scelta tra watch singolo e
+  ricorsivo passa dal context backend interno.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   terzo micro-refactor del backend context, spiegando perche' il poll path puo'
   essere ristretto internamente prima di cambiare la firma pubblica.

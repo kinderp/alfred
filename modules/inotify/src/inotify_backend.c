@@ -197,7 +197,7 @@ int inotify_backend_add_startup_watch(app_t *app,
 
     backend_context_from_app(app, &ctx);
 
-    if (app->config.recursive) {
+    if (ctx.config->recursive) {
         if (watch_manager_add_recursive(&ctx, path) < 0)
             return ERR_INOTIFY;
     }
