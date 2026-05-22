@@ -275,9 +275,9 @@ Svantaggi e attenzioni:
 
 Migrazione consigliata:
 
-1. introdurre il tipo context senza cambiare subito tutta l'API pubblica
+1. introdurre il tipo context senza cambiare subito tutta l'API pubblica: fatto
 2. convertire prima il watch manager, perche' usa solo fd, watchers, mask e
-   logger
+   logger: fatto
 3. convertire poi le funzioni interne del backend che gestiscono discovery e raw
    sintetici
 4. lasciare per ultimo il ponte legacy shadow, oppure rimuoverlo quando shadow
@@ -286,6 +286,23 @@ Migrazione consigliata:
 
 Questa scelta non cambia la semantica degli eventi: serve solo a rendere piu'
 pulito il confine tra app, backend e core.
+
+Stato implementato del primo micro-refactor:
+
+- `inotify_backend_context_t` e' definito in
+  `modules/inotify/include/inotify_backend.h`
+- `watch_manager_add()`, `watch_manager_remove()`,
+  `watch_manager_add_recursive()` e
+  `watch_manager_add_recursive_with_discovery()` ricevono ora il context, non
+  `app_t`
+- la callback di discovery del watch manager riceve il context
+- `inotify_backend.c` costruisce un context locale partendo da `app_t` nei
+  punti in cui deve chiamare il watch manager
+- `inotify_backend_poll()` e la callback raw/core ricevono ancora `app_t`: non
+  sono stati toccati in questo passaggio
+
+Questa scelta mantiene il refactor piccolo: il watch manager non conosce piu'
+l'app completa, ma il ponte principale `app -> backend -> core` resta invariato.
 
 ### `modules/inotify/src/inotify_adapter.c`
 

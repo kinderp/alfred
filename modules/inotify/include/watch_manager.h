@@ -13,13 +13,13 @@
 #ifndef WATCH_MANAGER_H
 #define WATCH_MANAGER_H
 
-#include <stdint.h>
+#include "inotify_backend.h"
 
-struct app;
+#include <stdint.h>
 
 /*
  * watch_manager_discovered_dir_fn - report a directory found during recursion
- * @app: application context used during the current integration phase
+ * @ctx: backend context used while recursive discovery is running
  * @path: discovered directory path
  * @userdata: opaque pointer supplied by the caller
  *
@@ -27,46 +27,46 @@ struct app;
  * synthetic raw directory-create events for the core.
  */
 typedef void (*watch_manager_discovered_dir_fn)(
-    struct app *app,
+    inotify_backend_context_t *ctx,
     const char *path,
     void *userdata
 );
 
 /*
  * watch_manager_add - add one inotify watch and store wd -> path
- * @app: application context containing backend state and configuration
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @path: path to watch
  *
  * Return: inotify watch descriptor on success, -1 on failure.
  */
-int watch_manager_add(struct app *app,
+int watch_manager_add(inotify_backend_context_t *ctx,
                       const char *path);
 
 /*
  * watch_manager_remove - remove one watch and clear its table entry
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime and logger
  * @wd: inotify watch descriptor to remove
  *
  * Return: 0 on success, -1 on invalid or unknown watch descriptor.
  */
-int watch_manager_remove(struct app *app,
+int watch_manager_remove(inotify_backend_context_t *ctx,
                          int wd);
 
 /*
  * watch_manager_add_recursive - add watches for a directory tree
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: root directory to scan
  *
  * Adds a watch for @root and every nested directory currently visible.
  *
  * Return: 0 on success, -1 on failure.
  */
-int watch_manager_add_recursive(struct app *app,
+int watch_manager_add_recursive(inotify_backend_context_t *ctx,
                                 const char *root);
 
 /*
  * watch_manager_add_recursive_with_discovery - recursive add with callbacks
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: root directory to scan
  * @on_discovered: optional callback for discovered child directories
  * @userdata: opaque pointer passed to @on_discovered
@@ -79,7 +79,7 @@ int watch_manager_add_recursive(struct app *app,
  * Return: 0 on success, -1 on failure.
  */
 int watch_manager_add_recursive_with_discovery(
-    struct app *app,
+    inotify_backend_context_t *ctx,
     const char *root,
     watch_manager_discovered_dir_fn on_discovered,
     void *userdata

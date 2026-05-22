@@ -329,10 +329,10 @@ devono essere liberati dal backend e quali invece sono solo riferimenti.
 Il primo candidato alla migrazione e' il watch manager:
 
 ```text
-oggi:
+prima:
   watch_manager_add(app, path)
 
-direzione:
+dopo il primo micro-refactor:
   watch_manager_add(ctx, path)
 ```
 
@@ -344,6 +344,29 @@ Questo passo e' abbastanza piccolo perche' il watch manager usa solo:
 - logger
 
 Non usa il core e non dovrebbe conoscere l'app completa.
+
+Lo stato attuale del codice segue questa direzione: `watch_manager.c` lavora con
+`inotify_backend_context_t`, mentre `inotify_backend.c` costruisce un context
+locale quando deve installare, rimuovere o scoprire watch. Questo non elimina
+ancora `app_t` dal backend, ma riduce gia' l'area che lo vede.
+
+Frame logico del nuovo passaggio:
+
+```text
+app_t app
+  app.inotify  -> stato runtime
+  app.config   -> configurazione
+  app.logger   -> diagnostica
+
+inotify_backend.c:
+  backend_context_from_app(&app, &ctx)
+
+watch_manager_add(&ctx, path):
+  usa ctx.runtime->fd
+  usa ctx.runtime->watchers
+  usa ctx.config->watch_mask
+  usa ctx.logger
+```
 
 ## Struttura dati di configurazione
 

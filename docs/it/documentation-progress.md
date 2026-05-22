@@ -31,6 +31,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/include/watch_manager.h`,
+  `modules/inotify/src/watch_manager.c` e
+  `modules/inotify/src/inotify_backend.c`: introdotto
+  `inotify_backend_context_t` minimo e convertito il watch manager a ricevere
+  il context invece dell'intero `app_t`. Il backend costruisce ancora il context
+  da `app_t`, quindi il cambiamento resta confinato e non modifica la semantica
+  degli eventi.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: aggiornato lo
+  stato della proposta context per indicare che il primo micro-refactor sul
+  watch manager e' stato implementato.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentata la
   proposta scelta per il prossimo refactor delle responsabilita': introdurre un
   `inotify_backend_context_t` separato dallo stato posseduto

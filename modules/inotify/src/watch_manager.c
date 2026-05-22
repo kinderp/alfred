@@ -13,7 +13,6 @@
  * ========================================================================== */
 
 #include "watch_manager.h"
-#include "app.h"
 #include "watcher.h"
 #include "logger.h"
 #include "utils.h"
@@ -26,6 +25,25 @@
 #include <dirent.h>
 #include <limits.h>
 #include <sys/inotify.h>
+
+/* ============================================================================
+ * INTERNAL HELPERS
+ * ========================================================================== */
+
+/*
+ * watch_manager_context_is_valid - validate borrowed backend dependencies
+ * @ctx: context to inspect
+ *
+ * Return: nonzero when all watch-manager dependencies are available.
+ */
+static int watch_manager_context_is_valid(
+    const inotify_backend_context_t *ctx)
+{
+    return ctx != NULL &&
+           ctx->runtime != NULL &&
+           ctx->config != NULL &&
+           ctx->logger != NULL;
+}
 
 /* ============================================================================
  * DEFAULT WATCH MASK
@@ -60,7 +78,7 @@ uint32_t watch_manager_default_mask(void)
 
 /*
  * watch_manager_add - add one kernel watch and store its path mapping
- * @app: application context containing inotify backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @path: filesystem path to watch
  *
  * On success the kernel returns a watch descriptor. The descriptor is then used
@@ -69,20 +87,20 @@ uint32_t watch_manager_default_mask(void)
  *
  * Return: watch descriptor on success, -1 on failure.
  */
-int watch_manager_add(app_t *app,
+int watch_manager_add(inotify_backend_context_t *ctx,
                       const char *path)
 {
-    if (app == NULL || path == NULL)
+    if (!watch_manager_context_is_valid(ctx) || path == NULL)
         return -1;
 
     int wd =
-        inotify_add_watch(app->inotify.fd,
+        inotify_add_watch(ctx->runtime->fd,
                           path,
-                          app->config.watch_mask);
+                          ctx->config->watch_mask);
 
     if (wd < 0) {
 
-        logger_error(&app->logger,
+        logger_error(ctx->logger,
                      "inotify_add_watch failed path=%s errno=%d (%s)",
                      path,
                      errno,
@@ -91,22 +109,22 @@ int watch_manager_add(app_t *app,
         return -1;
     }
 
-    if (watcher_store(&app->inotify.watchers,
+    if (watcher_store(&ctx->runtime->watchers,
                       wd,
                       path) != 0) {
 
-        logger_error(&app->logger,
+        logger_error(ctx->logger,
                      "watcher_store failed wd=%d path=%s",
                      wd,
                      path);
 
-        inotify_rm_watch(app->inotify.fd,
+        inotify_rm_watch(ctx->runtime->fd,
                          wd);
 
         return -1;
     }
 
-    logger_event(&app->logger,
+    logger_event(ctx->logger,
                  "WATCH_ADDED wd=%d path=%s",
                  wd,
                  path);
@@ -120,7 +138,7 @@ int watch_manager_add(app_t *app,
 
 /*
  * watch_manager_remove - remove one kernel watch and clear its table slot
- * @app: application context containing inotify backend state
+ * @ctx: borrowed backend context containing runtime and logger
  * @wd: watch descriptor to remove
  *
  * The path is looked up before table removal so the diagnostic log can still
@@ -128,26 +146,26 @@ int watch_manager_add(app_t *app,
  *
  * Return: 0 on success, -1 when @wd is not known.
  */
-int watch_manager_remove(app_t *app,
+int watch_manager_remove(inotify_backend_context_t *ctx,
                          int wd)
 {
-    if (app == NULL)
+    if (!watch_manager_context_is_valid(ctx))
         return -1;
 
     const char *path =
-        watcher_get_path(&app->inotify.watchers,
+        watcher_get_path(&ctx->runtime->watchers,
                          wd);
 
     if (path == NULL)
         return -1;
 
-    inotify_rm_watch(app->inotify.fd,
+    inotify_rm_watch(ctx->runtime->fd,
                      wd);
 
-    watcher_remove(&app->inotify.watchers,
+    watcher_remove(&ctx->runtime->watchers,
                    wd);
 
-    logger_event(&app->logger,
+    logger_event(ctx->logger,
                  "WATCH_REMOVED wd=%d path=%s",
                  wd,
                  path);
@@ -161,7 +179,7 @@ int watch_manager_remove(app_t *app,
 
 /*
  * recursive_walk - add watches for a directory tree
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: directory currently being scanned
  * @on_discovered: optional callback for discovered directories
  * @userdata: opaque callback data
@@ -175,7 +193,7 @@ int watch_manager_remove(app_t *app,
  *
  * Return: 0 on success, -1 on opendir failure.
  */
-static int recursive_walk(app_t *app,
+static int recursive_walk(inotify_backend_context_t *ctx,
                           const char *root,
                           watch_manager_discovered_dir_fn on_discovered,
                           void *userdata,
@@ -185,7 +203,7 @@ static int recursive_walk(app_t *app,
 
     if (dir == NULL) {
 
-        logger_error(&app->logger,
+        logger_error(ctx->logger,
                      "opendir failed path=%s",
                      root);
 
@@ -197,10 +215,10 @@ static int recursive_walk(app_t *app,
      * raw create emitted by the backend describes a directory that is already
      * watched for subsequent changes.
      */
-    watch_manager_add(app, root);
+    watch_manager_add(ctx, root);
 
     if (notify_root && on_discovered != NULL) {
-        on_discovered(app, root, userdata);
+        on_discovered(ctx, root, userdata);
     }
 
     struct dirent *ent;
@@ -226,7 +244,7 @@ static int recursive_walk(app_t *app,
             continue;
         }
 
-        recursive_walk(app,
+        recursive_walk(ctx,
                        child,
                        on_discovered,
                        userdata,
@@ -244,7 +262,7 @@ static int recursive_walk(app_t *app,
 
 /*
  * watch_manager_add_recursive - add watches below a root directory
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: root directory to scan
  *
  * Used for startup recursive watching, where discovered children already exist
@@ -252,18 +270,18 @@ static int recursive_walk(app_t *app,
  *
  * Return: 0 on success, -1 on failure.
  */
-int watch_manager_add_recursive(app_t *app,
+int watch_manager_add_recursive(inotify_backend_context_t *ctx,
                                 const char *root)
 {
-    if (app == NULL || root == NULL)
+    if (!watch_manager_context_is_valid(ctx) || root == NULL)
         return -1;
 
-    return recursive_walk(app, root, NULL, NULL, 0);
+    return recursive_walk(ctx, root, NULL, NULL, 0);
 }
 
 /*
  * watch_manager_add_recursive_with_discovery - add watches and report children
- * @app: application context containing backend state
+ * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: newly created directory to scan
  * @on_discovered: callback for nested directories found during scanning
  * @userdata: opaque callback data
@@ -276,13 +294,13 @@ int watch_manager_add_recursive(app_t *app,
  * Return: 0 on success, -1 on failure.
  */
 int watch_manager_add_recursive_with_discovery(
-    app_t *app,
+    inotify_backend_context_t *ctx,
     const char *root,
     watch_manager_discovered_dir_fn on_discovered,
     void *userdata)
 {
-    if (app == NULL || root == NULL)
+    if (!watch_manager_context_is_valid(ctx) || root == NULL)
         return -1;
 
-    return recursive_walk(app, root, on_discovered, userdata, 0);
+    return recursive_walk(ctx, root, on_discovered, userdata, 0);
 }

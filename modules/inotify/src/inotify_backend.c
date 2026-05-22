@@ -46,6 +46,7 @@
  * ========================================================================== */
 
 typedef struct backend_emit_context {
+    app_t *app;
     inotify_backend_event_fn on_event;
     void *userdata;
 } backend_emit_context_t;
@@ -59,7 +60,10 @@ static void backend_handle_dir_create(app_t *app,
                                       inotify_backend_event_fn on_event,
                                       void *userdata);
 
-static void backend_process_discovered_dir(app_t *app,
+static void backend_context_from_app(app_t *app,
+                                     inotify_backend_context_t *ctx);
+
+static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
 
@@ -71,6 +75,23 @@ static int backend_emit_synthetic_dir_create(
     inotify_backend_event_fn on_event,
     void *userdata
 );
+
+/*
+ * backend_context_from_app - build the temporary narrowed backend context
+ * @app: application context that still owns runtime/config/logger
+ * @ctx: context object to fill
+ *
+ * This is the first migration step away from passing app_t into every backend
+ * helper. The context borrows app-owned objects; it does not transfer
+ * ownership.
+ */
+static void backend_context_from_app(app_t *app,
+                                     inotify_backend_context_t *ctx)
+{
+    ctx->runtime = &app->inotify;
+    ctx->config = &app->config;
+    ctx->logger = &app->logger;
+}
 
 /* ============================================================================
  * Lifecycle
@@ -172,12 +193,16 @@ int inotify_backend_add_startup_watch(app_t *app,
     if (app == NULL || path == NULL)
         return ERR_INVALID_ARG;
 
+    inotify_backend_context_t ctx;
+
+    backend_context_from_app(app, &ctx);
+
     if (app->config.recursive) {
-        if (watch_manager_add_recursive(app, path) < 0)
+        if (watch_manager_add_recursive(&ctx, path) < 0)
             return ERR_INOTIFY;
     }
     else {
-        if (watch_manager_add(app, path) < 0)
+        if (watch_manager_add(&ctx, path) < 0)
             return ERR_INOTIFY;
     }
 
@@ -384,11 +409,16 @@ static void backend_handle_dir_create(app_t *app,
 
     backend_emit_context_t context;
 
+    context.app = app;
     context.on_event = on_event;
     context.userdata = userdata;
 
+    inotify_backend_context_t ctx;
+
+    backend_context_from_app(app, &ctx);
+
     watch_manager_add_recursive_with_discovery(
-        app,
+        &ctx,
         full,
         backend_process_discovered_dir,
         &context);
@@ -404,17 +434,19 @@ static void backend_handle_dir_create(app_t *app,
  * helper adapts that backend-state notification into the same raw event
  * callback used for real inotify events.
  */
-static void backend_process_discovered_dir(app_t *app,
+static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata)
 {
+    (void)ctx;
+
     backend_emit_context_t *context =
         (backend_emit_context_t *)userdata;
 
     if (context == NULL)
         return;
 
-    (void)backend_emit_synthetic_dir_create(app,
+    (void)backend_emit_synthetic_dir_create(context->app,
                                             path,
                                             context->on_event,
                                             context->userdata);
