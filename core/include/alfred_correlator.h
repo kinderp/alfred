@@ -50,11 +50,10 @@ extern "C" {
 /*
  * Opaque engine instance.
  *
- * Users only hold pointer references.
- * Internal fields remain private in .c files.
- *
- * This prevents accidental misuse and allows
- * internal redesign without changing public API.
+ * Users only hold pointer references. Internal fields live in the private core
+ * headers and .c files. This separation is intentional: backends can feed raw
+ * facts into the engine, but they cannot inspect or mutate pending move state,
+ * debounce state, or the semantic sequence counter.
  */
 typedef struct alfred_engine alfred_engine_t;
 
@@ -129,7 +128,9 @@ typedef enum {
  *
  * Engine does NOT own string memory permanently. Path only needs to remain
  * valid during alfred_process(), except when the core stores a pending
- * MOVED_FROM path internally for later MOVED_TO correlation.
+ * MOVED_FROM path internally for later MOVED_TO correlation. This lifetime
+ * rule is what lets the inotify backend build raw.path in a stack buffer and
+ * still stay safe, as long as the raw event is consumed synchronously.
  */
 typedef struct {
 
@@ -253,7 +254,9 @@ typedef struct {
     /*
      * Strictly increasing sequence number.
      *
-     * Useful for logs and ordering.
+     * Useful for verbose logs, debugging, and comparing two streams. It is not
+     * part of filesystem semantics: changing seq does not change whether an
+     * event is a create, move, rename, or relocated.
      */
     uint64_t seq;
 

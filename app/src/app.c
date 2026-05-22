@@ -5,8 +5,9 @@
  * polling orchestration, and shutdown ordering. Backend-specific inotify reads
  * are delegated to modules/inotify.
  *
- * TODO(core-integration): move remaining inotify-specific state out of app_t
- * once the backend owns a dedicated runtime context.
+ * The current boundary is intentionally narrow: app.c decides startup and
+ * shutdown order, then repeatedly calls inotify_backend_poll(). It does not
+ * parse inotify records and does not classify filesystem semantics.
  * ============================================================================
  */
 
@@ -91,8 +92,10 @@ static void setup_signals(void)
  * @raw: optional raw event for the core
  * @userdata: unused callback context
  *
- * The backend owns inotify parsing, raw conversion, and legacy shadow dispatch.
- * The app callback only forwards raw events to the core.
+ * The backend owns inotify parsing, raw conversion, recursive watch repair,
+ * and legacy shadow dispatch when that optional code is compiled in. The app
+ * callback is deliberately small: it is the bridge from "backend raw fact" to
+ * "core semantic processing".
  */
 static int handle_backend_event(app_t *app,
                                 const alfred_raw_event_t *raw,

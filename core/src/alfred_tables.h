@@ -3,7 +3,8 @@
  *
  * These types are private to the core implementation. They store the state that
  * turns isolated raw events into semantic behavior: pending MOVED_FROM records
- * and per-path MODIFY debounce timestamps.
+ * and per-path MODIFY debounce timestamps. Keeping the tables private is part
+ * of the backend/core split: backends report facts, the core owns correlation.
  * ========================================================================== */
 
 #ifndef ALFRED_TABLES_H
@@ -53,6 +54,10 @@ typedef struct alfred_debounce_entry {
  * @seq: monotonically increasing semantic event sequence number
  * @moves: hash table of pending move entries keyed by cookie
  * @debounce: hash table of debounce entries keyed by path
+ *
+ * seq belongs here because ordering is a property of emitted semantic events,
+ * not of backend raw records. The same raw stream should produce the same
+ * semantic event order inside one engine instance.
  */
 struct alfred_engine {
     alfred_config_t cfg;

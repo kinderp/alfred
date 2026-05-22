@@ -5,8 +5,11 @@
  * The application layer currently owns configuration, logging, core state, and
  * a transitional inotify backend context.
  *
- * TODO(core-integration): move semantic event state out of app_t once the
- * inotify module emits raw events directly into the core correlator.
+ * app_t is still a practical orchestration object: it wires configuration,
+ * logging, the inotify backend, and the core together. The semantic state is
+ * already owned by the core engine; what remains transitional is that the
+ * inotify backend context is embedded here and backend functions still receive
+ * app_t so they can reach configuration, logging, and the core callback.
  * ============================================================================
  */
 
@@ -52,11 +55,12 @@ typedef struct app {
     logger_t logger;
 
     /*
-     * Core correlator configuration and engine.
+     * Core correlator configuration, callback context, and engine.
      *
-     * During integration the engine can run in shadow mode or official core
-     * mode. In both cases the core receives raw events; the selected event
-     * engine mode decides how core_logger_context formats them.
+     * These fields are the semantic side of the runtime. The backend never
+     * writes them directly: it delivers alfred_raw_event_t records through the
+     * app callback, then alfred_process() updates the private engine state and
+     * emits semantic events through core_logger_context.
      */
     alfred_config_t core_config;
     core_logger_context_t core_logger_context;

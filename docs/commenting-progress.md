@@ -24,6 +24,15 @@ with the final core-only architecture.
 Legacy files should be commented as legacy/shadow support, not as the future
 runtime architecture.
 
+Latest refresh:
+
+- strengthened app/core/backend boundary comments in `app/include/app.h` and
+  `app/src/app.c`
+- clarified raw path lifetime, sequence-number purpose, and private core state
+  ownership in `core/include/alfred_correlator.h`
+- expanded the rationale for the private move/debounce tables in
+  `core/src/alfred_tables.h` and `core/src/alfred_tables.c`
+
 Completed in the first heavy pass:
 
 - `modules/inotify/src/inotify_backend.c`

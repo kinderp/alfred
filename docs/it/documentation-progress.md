@@ -31,6 +31,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `16-mappa-codice-e-strutture.md`: aggiunto un call graph guidato
+  `main -> app -> backend -> core -> logger`, piu' due sezioni discorsive sul
+  ciclo backend inotify e sul ciclo core. Le nuove sezioni spiegano quali
+  funzioni cambiano livello di astrazione, quali strutture dati vengono mutate e
+  perche' watch state, raw event e semantica restano separati.
+- `app/include/app.h`, `app/src/app.c`, `core/include/alfred_correlator.h`,
+  `core/src/alfred_tables.h` e `core/src/alfred_tables.c`: rafforzati i
+  commenti di confine su app come orchestratore, backend come produttore di raw
+  fact, core come proprietario di sequenza, debounce e correlazione move.
+- `core/src/alfred_tables.c`: aggiunti controlli di allocazione mancanti in
+  `alfred_move_insert()` e `alfred_debounce_get()`, mantenendo invariato il
+  contratto pubblico ma evitando dereferenziazioni in caso di memoria esaurita.
 - `Makefile` e `modules/inotify/src/inotify_backend.c`: reso il legacy shadow
   opzionale a livello build con `ENABLE_LEGACY_SHADOW=1`; la build normale non
   compila piu' `events.c` e `move_cache.c`, mentre shadow mode fallisce con

@@ -41,6 +41,162 @@ Il punto importante e' che `inotify_backend_poll()` non deve decidere la
 semantica finale. Il backend produce fatti raw; `alfred_process()` produce
 eventi semantici.
 
+## Call graph guidato
+
+Questa sezione serve a leggere il codice dall'esterno verso l'interno. Non e'
+un elenco completo di tutte le funzioni, ma una mappa delle chiamate che
+separano le responsabilita' principali.
+
+```mermaid
+flowchart TD
+    A["main()"] --> B["app_init()"]
+    B --> C["config_defaults()"]
+    B --> D["logger_init()"]
+    B --> E["alfred_create()"]
+    B --> F["inotify_backend_init()"]
+    B --> G["inotify_backend_add_startup_watch()"]
+    G --> H["watch_manager_add()<br/>o recursive add"]
+    H --> I["watcher_store()"]
+    A --> L["app_run()"]
+    L --> M["inotify_backend_poll()"]
+    M --> N["watcher_get_path()"]
+    M --> O["inotify_adapter_build_raw()"]
+    M --> P["handle_backend_event()"]
+    P --> Q["alfred_process()"]
+    Q --> R["alfred_move_*()<br/>alfred_debounce_*()"]
+    Q --> S["core_logger_on_event()"]
+    S --> T["logger_event()"]
+    A --> U["app_shutdown()"]
+    U --> V["inotify_backend_shutdown()"]
+    U --> Z["alfred_destroy()"]
+```
+
+Lettura della mappa:
+
+- `main()` non conosce inotify, core o watch table: avvia il ciclo di vita
+  applicativo.
+- `app_init()` costruisce i sottosistemi nell'ordine in cui servono:
+  configurazione, logger, core, backend e watch iniziali.
+- `app_run()` non interpreta eventi: chiama il backend e lascia che sia il
+  backend a leggere dal file descriptor.
+- `inotify_backend_poll()` e' il confine tecnico con Linux: legge
+  `struct inotify_event`, recupera il path parent, costruisce un raw event
+  Alfred e lo consegna all'app.
+- `handle_backend_event()` e' volutamente piccolo: inoltra il raw event al core.
+- `alfred_process()` e' il punto in cui inizia la semantica Alfred.
+
+Questa distinzione aiuta a evitare un errore comune quando si legge una codebase
+grande: cercare "la funzione che fa tutto". Alfred e' invece diviso in funzioni
+che cambiano livello di astrazione. Il passaggio importante non e' solo
+"chiama un'altra funzione", ma "da questo punto in poi il dato ha un significato
+diverso".
+
+## Ciclo backend inotify
+
+Il ciclo backend e' tutto cio' che accade prima del core. Il suo compito e'
+rispondere a questa domanda:
+
+```text
+che fatto tecnico e' appena arrivato dal filesystem?
+```
+
+Non deve invece rispondere alla domanda:
+
+```text
+che evento semantico deve vedere l'utente?
+```
+
+Passi principali del ciclo backend:
+
+1. `inotify_backend_init()` inizializza `watcher_table_t` e apre il file
+   descriptor inotify non bloccante.
+2. `inotify_backend_add_startup_watch()` installa i watch sui path passati da
+   riga di comando.
+3. `watch_manager_add()` chiama `inotify_add_watch()` usando
+   `config.watch_mask`.
+4. `watcher_store()` salva la relazione `wd -> path`.
+5. `inotify_backend_poll()` legge uno o piu' record dal file descriptor.
+6. `watcher_get_path()` recupera la directory parent associata al `wd`.
+7. `inotify_adapter_build_raw()` costruisce `alfred_raw_event_t`.
+8. la callback `handle_backend_event()` porta il raw event verso il core.
+9. `backend_handle_dir_create()` aggiorna i watch ricorsivi dopo una directory
+   creata e genera raw event sintetici per directory scoperte troppo tardi.
+
+Schema dati del ciclo backend:
+
+```mermaid
+flowchart LR
+    A["struct inotify_event<br/>wd, mask, cookie, name"] --> B["watcher_table_t"]
+    B --> C["parent path"]
+    A --> D["inotify_adapter_build_raw()"]
+    C --> D
+    D --> E["alfred_raw_event_t<br/>mask, cookie, path"]
+    E --> F["callback app/core"]
+```
+
+Il backend modifica stato solo quando quello stato appartiene al backend:
+
+| Stato | Modificato da | Perche' appartiene al backend |
+| --- | --- | --- |
+| `inotify_backend_t.fd` | `inotify_backend_init()`, `inotify_backend_shutdown()` | e' il descrittore Linux letto dal backend |
+| `watcher_table_t` | `watcher_store()`, `watcher_remove()` | serve a tradurre `wd` in path |
+| watch ricorsivi | `watch_manager_add_recursive*()` | mantengono osservabile l'albero filesystem |
+| raw sintetici per discovery | `backend_emit_synthetic_dir_create()` | riparano un limite di osservazione del backend |
+
+`WATCH_ADDED` e `WATCH_REMOVED` restano log diagnostici del backend. Non sono
+eventi semantici perche' non descrivono un cambiamento del file osservato, ma un
+cambiamento dello stato interno del monitor.
+
+## Ciclo core
+
+Il ciclo core inizia quando esiste gia' un `alfred_raw_event_t`. La domanda del
+core e':
+
+```text
+quale evento stabile deve vedere l'applicazione?
+```
+
+Passi principali del ciclo core:
+
+1. `alfred_process()` riceve un raw event gia' normalizzato.
+2. `alfred_move_sweep()` rimuove eventuali move pendenti scaduti.
+3. un raw `CREATE` diventa `FILE_CREATED` o `DIR_CREATED`.
+4. un raw `CLOSE_WRITE` diventa `FILE_READY`.
+5. un raw `MODIFY` passa da `alfred_debounce_get()` e
+   `alfred_debounce_should_emit()` prima di diventare `FILE_MODIFIED`.
+6. un raw `DELETE` diventa `FILE_DELETED` o `DIR_DELETED`.
+7. un raw `MOVED_FROM` viene salvato in `moves[1024]`.
+8. un raw `MOVED_TO` cerca il `MOVED_FROM` con lo stesso cookie, poi
+   `classify_move()` sceglie `RENAMED`, `MOVED` o `RELOCATED`.
+9. `emit()` assegna `seq`, costruisce `alfred_event_t` e chiama la callback.
+
+Schema dati del ciclo core:
+
+```mermaid
+flowchart TD
+    A["alfred_raw_event_t"] --> B["alfred_process()"]
+    B --> C{"mask raw"}
+    C --> D["create/delete/close-write<br/>emissione diretta"]
+    C --> E["modify<br/>debounce[path]"]
+    C --> F["moved_from<br/>moves[cookie] insert"]
+    C --> G["moved_to<br/>moves[cookie] take"]
+    G --> H["classify_move()"]
+    D --> I["emit()"]
+    E --> I
+    H --> I
+    I --> L["alfred_event_t<br/>seq, type, src, dst"]
+```
+
+La differenza fra backend e core diventa evidente nei move:
+
+- il backend vede due fatti tecnici: `MOVED_FROM` e `MOVED_TO`
+- il core produce un solo risultato semantico: `RENAMED`, `MOVED` o
+  `RELOCATED`
+
+Questo e' il motivo per cui la cache move legacy non deve tornare nel percorso
+runtime normale. La correlazione dei move e' semantica, quindi appartiene al
+core.
+
 ## Strutture dati backend
 
 Le strutture dati principali del backend inotify sono:
@@ -428,6 +584,11 @@ Campi principali:
 | `seq` | numero progressivo degli eventi semantici | `alfred_create()`, `emit()` | `core_logger_on_event()` tramite evento emesso |
 | `moves[1024]` | tabella hash dei move pendenti | `alfred_move_insert()`, `alfred_move_take()`, `alfred_move_sweep()` | `alfred_process()` |
 | `debounce[1024]` | tabella hash per debounce MODIFY | `alfred_debounce_get()`, `alfred_debounce_should_emit()` | `alfred_process()` |
+
+Nota su `seq`: il numero progressivo e' utile per debug e log verbose, ma non
+definisce la semantica. Due eventi con tipo e path uguali non cambiano
+significato perche' hanno un numero di sequenza diverso; il numero aiuta solo a
+ricostruire l'ordine di emissione.
 
 ### `alfred_move_entry_t`
 

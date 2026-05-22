@@ -8,6 +8,8 @@
  * The tables are deliberately simple fixed-bucket hash tables with linked-list
  * buckets. They keep the code easy to inspect for students and avoid external
  * dependencies while still providing O(1) average lookup for the project scale.
+ * This is not meant to be a generic container library: each table exists only
+ * because one semantic rule needs memory across raw events.
  * ========================================================================== */
 
 #include <stdlib.h>
@@ -76,6 +78,8 @@ void alfred_move_insert(
     idx = move_index(r->cookie);
 
     n = calloc(1, sizeof(*n));
+    if (!n)
+        return;
 
     n->cookie = r->cookie;
     n->ts_ns = r->ts_ns;
@@ -83,6 +87,10 @@ void alfred_move_insert(
     n->is_dir = (r->mask & ALFRED_RAW_ISDIR);
 
     n->src_path = alfred_strdup(r->path);
+    if (!n->src_path) {
+        free(n);
+        return;
+    }
 
     n->next = e->moves[idx];
     e->moves[idx] = n;
@@ -215,7 +223,14 @@ alfred_debounce_entry_t *alfred_debounce_get(
 
     /* Create a new entry if the path has not been seen before. */
     n = calloc(1, sizeof(*n));
+    if (!n)
+        return NULL;
+
     n->path = alfred_strdup(path);
+    if (!n->path) {
+        free(n);
+        return NULL;
+    }
 
     n->next = e->debounce[idx];
     e->debounce[idx] = n;
