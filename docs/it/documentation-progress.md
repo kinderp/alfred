@@ -31,6 +31,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: esteso l'uso del context backend alla
+  discovery ricorsiva e all'emissione dei raw event sintetici. `app_t` resta nel
+  solo punto in cui serve ancora alla callback pubblica
+  `inotify_backend_event_fn`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  secondo micro-refactor del context, chiarendo che il prossimo confine da
+  discutere e' la firma della callback raw/core.
 - `modules/inotify/include/inotify_backend.h`,
   `modules/inotify/include/watch_manager.h`,
   `modules/inotify/src/watch_manager.c` e

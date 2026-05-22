@@ -47,6 +47,7 @@
 
 typedef struct backend_emit_context {
     app_t *app;
+    inotify_backend_context_t *ctx;
     inotify_backend_event_fn on_event;
     void *userdata;
 } backend_emit_context_t;
@@ -70,6 +71,7 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
 static uint64_t backend_now_ns(void);
 
 static int backend_emit_synthetic_dir_create(
+    inotify_backend_context_t *ctx,
     app_t *app,
     const char *path,
     inotify_backend_event_fn on_event,
@@ -407,15 +409,16 @@ static void backend_handle_dir_create(app_t *app,
     if (path_join(full, sizeof(full), base, ev->name) != 0)
         return;
 
-    backend_emit_context_t context;
-
-    context.app = app;
-    context.on_event = on_event;
-    context.userdata = userdata;
-
     inotify_backend_context_t ctx;
 
     backend_context_from_app(app, &ctx);
+
+    backend_emit_context_t context;
+
+    context.app = app;
+    context.ctx = &ctx;
+    context.on_event = on_event;
+    context.userdata = userdata;
 
     watch_manager_add_recursive_with_discovery(
         &ctx,
@@ -426,7 +429,7 @@ static void backend_handle_dir_create(app_t *app,
 
 /*
  * backend_process_discovered_dir - convert recursive discovery into raw input
- * @app: initialized application context
+ * @ctx: backend context used for discovery
  * @path: discovered directory path
  * @userdata: backend_emit_context_t supplied by backend_handle_dir_create()
  *
@@ -438,15 +441,17 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata)
 {
-    (void)ctx;
-
     backend_emit_context_t *context =
         (backend_emit_context_t *)userdata;
 
     if (context == NULL)
         return;
 
-    (void)backend_emit_synthetic_dir_create(context->app,
+    if (context->ctx == NULL)
+        context->ctx = ctx;
+
+    (void)backend_emit_synthetic_dir_create(context->ctx,
+                                            context->app,
                                             path,
                                             context->on_event,
                                             context->userdata);
@@ -472,7 +477,8 @@ static uint64_t backend_now_ns(void)
 
 /*
  * backend_emit_synthetic_dir_create - emit a synthetic raw directory create
- * @app: initialized application context
+ * @ctx: backend context used by the discovery path
+ * @app: application context still required by the current raw callback API
  * @path: directory discovered by recursive scanning
  * @on_event: callback used to deliver raw events to the core path
  * @userdata: callback context passed through unchanged
@@ -486,13 +492,14 @@ static uint64_t backend_now_ns(void)
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 static int backend_emit_synthetic_dir_create(
+    inotify_backend_context_t *ctx,
     app_t *app,
     const char *path,
     inotify_backend_event_fn on_event,
     void *userdata
 )
 {
-    if (app == NULL || path == NULL || on_event == NULL)
+    if (ctx == NULL || app == NULL || path == NULL || on_event == NULL)
         return ERR_INVALID_ARG;
 
     alfred_raw_event_t raw;

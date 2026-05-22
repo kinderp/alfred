@@ -279,7 +279,7 @@ Migrazione consigliata:
 2. convertire prima il watch manager, perche' usa solo fd, watchers, mask e
    logger: fatto
 3. convertire poi le funzioni interne del backend che gestiscono discovery e raw
-   sintetici
+   sintetici: parziale
 4. lasciare per ultimo il ponte legacy shadow, oppure rimuoverlo quando shadow
    non sara' piu' necessario
 5. aggiornare documentazione e test a ogni micro-passaggio
@@ -303,6 +303,18 @@ Stato implementato del primo micro-refactor:
 
 Questa scelta mantiene il refactor piccolo: il watch manager non conosce piu'
 l'app completa, ma il ponte principale `app -> backend -> core` resta invariato.
+
+Stato implementato del secondo micro-refactor:
+
+- la callback di discovery continua a ricevere `inotify_backend_context_t`
+- `backend_emit_context_t` conserva sia il context backend sia `app_t`
+- `backend_emit_synthetic_dir_create()` riceve il context e usa `app_t` solo
+  per chiamare l'attuale callback pubblica `on_event(app, raw, userdata)`
+- il passaggio dei raw sintetici e' quindi preparato per il futuro cambio della
+  callback, ma la firma pubblica di `inotify_backend_poll()` resta invariata
+
+Il punto residuo e' chiaro: finche' `inotify_backend_event_fn` richiede
+`struct app *`, un piccolo ponte verso `app_t` deve rimanere nel backend.
 
 ### `modules/inotify/src/inotify_adapter.c`
 
