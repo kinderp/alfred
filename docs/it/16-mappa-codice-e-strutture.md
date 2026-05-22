@@ -217,6 +217,53 @@ integrazione. La direzione finale e' avere un backend sempre piu' autonomo, ma
 oggi il campo `app_t.inotify` rende esplicito dove vivono `fd` e tabella dei
 watch.
 
+### Dipendenze backend da `app_t`
+
+Il backend riceve ancora `app_t *` in molte funzioni. Questo non significa che
+usi tutta l'applicazione. La lettura del codice mostra che le dipendenze reali
+sono limitate e abbastanza regolari.
+
+```mermaid
+flowchart TD
+    A["app_t passato al backend"] --> B["app->inotify"]
+    A --> C["app->config"]
+    A --> D["app->logger"]
+    A --> E["callback verso app/core"]
+    A --> F["legacy shadow<br/>solo ENABLE_LEGACY_SHADOW"]
+
+    B --> B1["fd"]
+    B --> B2["watcher_table_t"]
+    C --> C1["recursive"]
+    C --> C2["watch_mask"]
+    C --> C3["watcher_capacity"]
+    C --> C4["event_engine_mode"]
+    C --> C5["move_cache_size<br/>solo legacy"]
+```
+
+Tabella di lettura:
+
+| Dipendenza | Dove serve | Perche' serve | Dovrebbe restare visibile al backend finale? |
+| --- | --- | --- | --- |
+| `app->inotify.fd` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
+| `app->inotify.watchers` | poll, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
+| `app->config.recursive` | startup watch e `backend_handle_dir_create()` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
+| `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
+| `app->config.watcher_capacity` | `inotify_backend_init()` | dimensione iniziale watcher table | si', come configurazione backend |
+| `app->config.event_engine_mode` | init e poll | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
+| `app->config.move_cache_size` | `legacy_events_init()` | dimensione cache move legacy | no nel percorso core finale |
+| `app->logger` | backend e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
+| callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
+
+Questa tabella e' utile per il prossimo refactor perche' separa due idee che
+spesso vengono confuse:
+
+- ownership: chi possiede davvero il dato
+- accesso: chi ha bisogno di leggerlo o modificarlo durante una funzione
+
+Oggi `app_t` risolve entrambi i problemi in modo pratico ma largo. Il backend
+riceve tutto il contenitore, anche se usa solo una parte. Il refactor finale
+dovrebbe rendere visibili solo le dipendenze necessarie.
+
 ## Struttura dati di configurazione
 
 `config_t` guida molte decisioni prese durante l'inizializzazione. Non e' una

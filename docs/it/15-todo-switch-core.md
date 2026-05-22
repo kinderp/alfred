@@ -175,6 +175,43 @@ Limite intenzionale: le funzioni del backend ricevono ancora `app_t *`. Questo
 evita un grande refactor immediato, ma il target resta separare in modo piu'
 netto configurazione, logger e callback dal contesto applicativo completo.
 
+#### Mappa delle dipendenze residue da `app_t`
+
+Il backend inotify non accede direttamente al core: non chiama
+`alfred_process()` e non legge `app->core`. Il collegamento con il core passa
+solo dalla callback ricevuta da `inotify_backend_poll()`. Il problema residuo e'
+piu' sottile: molte funzioni backend ricevono comunque l'intero `app_t`, quindi
+possono vedere piu' stato di quanto serva davvero.
+
+Dipendenze reali osservate oggi:
+
+| Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
+| --- | --- | --- | --- |
+| `inotify_backend_init()` | `app->inotify`, `app->config.watcher_capacity`, `app->config.event_engine_mode`, `app->config.move_cache_size`, `app->logger` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | passare un contesto backend con fd/watchers, config letta in sola lettura e logger esplicito |
+| `inotify_backend_add_startup_watch()` | `app->config.recursive`, poi passa `app` al watch manager | sceglie watch singolo o ricorsivo | passare solo backend state, config e logger necessari al watch manager |
+| `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
+| `inotify_backend_poll()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger`, `app->config.event_engine_mode` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | poll su contesto backend; callback non dovrebbe richiedere tutto `app_t` |
+| `backend_handle_dir_create()` | `app->config.recursive`, `app->inotify.watchers`, watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | funzione interna su contesto backend + callback raw |
+| `backend_process_discovered_dir()` | passa `app` a `backend_emit_synthetic_dir_create()` | adatta la callback di discovery del watch manager al percorso raw/core | callback di discovery dovrebbe ricevere un contesto backend piu' stretto |
+| `backend_emit_synthetic_dir_create()` | passa `app` alla callback `on_event` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | callback raw con contesto opaco, non necessariamente `app_t` |
+| `watch_manager_add()` | `app->inotify.fd`, `app->config.watch_mask`, `app->inotify.watchers`, `app->logger` | installa watch kernel, salva mapping, logga `WATCH_ADDED` | ricevere fd/watchers/mask/logger espliciti o un contesto backend |
+| `watch_manager_remove()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger` | rimuove watch kernel, pulisce mapping, logga `WATCH_REMOVED` | ricevere fd/watchers/logger espliciti o un contesto backend |
+| `watch_manager_add_recursive*()` | dipende da `watch_manager_add()`, logger e callback discovery | attraversa directory e aggiunge watch ricorsivi | ricevere contesto backend e callback discovery senza conoscere l'app completa |
+
+Questa mappa chiarisce una cosa importante: `app_t` oggi viene usato come
+contenitore comodo, non perche' il backend abbia davvero bisogno di tutta
+l'applicazione. Le dipendenze sono raggruppabili in quattro famiglie:
+
+- stato backend: `fd` e `watcher_table_t`
+- configurazione backend: `recursive`, `watch_mask`, `watcher_capacity`
+- diagnostica: `logger_t`
+- compatibilita' temporanea: legacy shadow e callback che ancora ricevono
+  `app_t`
+
+Il prossimo passo tecnico non deve ancora cambiare comportamento. Deve
+scegliere quale API renda esplicite queste quattro famiglie senza introdurre
+ownership confusa.
+
 ### `modules/inotify/src/inotify_adapter.c`
 
 Questo file e' gia' vicino alla forma desiderata. Converte `struct

@@ -31,6 +31,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: aggiunta la
+  mappa delle dipendenze residue del backend inotify da `app_t`. La mappa
+  distingue stato backend (`fd`, watcher table), configurazione backend
+  (`recursive`, `watch_mask`, `watcher_capacity`), diagnostica (`logger`) e
+  compatibilita' temporanea legacy/shadow.
 - `14-scenari-test.md`, `15-todo-switch-core.md`,
   `10-debugging-test-e-strumenti.md`, `09-makefile-e-build-system.md` e
   `12-confronto-shadow-mode.md`: chiarito che `make test-core` e' gia' un test
