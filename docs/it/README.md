@@ -36,6 +36,11 @@ Quel capitolo collega funzioni, strutture dati, campi modificati, eventi trigger
 e diagrammi. Va usato come percorso di lettura della codebase, non solo come
 appendice.
 
+Per navigare il codice direttamente dal browser, usa anche la cartella
+[code-browser](../code-browser/README.md). Contiene gli script per avviare
+Bootlin Elixir su Alfred e cercare funzioni, strutture dati, definizioni e
+riferimenti dal browser.
+
 Ogni capitolo dovrebbe contenere:
 
 - contesto generale

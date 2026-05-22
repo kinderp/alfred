@@ -27,10 +27,15 @@ Stati usati:
 | Completo | `14-scenari-test.md` |
 | Parziale | `15-todo-switch-core.md` |
 | Parziale | `16-mappa-codice-e-strutture.md` |
+| Completo | `../code-browser/README.md` |
 | Parziale | `glossario.md` |
 
 ## Aggiornamenti recenti
 
+- `docs/code-browser/`: aggiunta una configurazione locale per Bootlin Elixir,
+  con script di setup, reindex, avvio e stop. La guida spiega come usare il code
+  browser per navigare Alfred dal browser e collegare la lettura del codice alla
+  documentazione italiana.
 - `modules/inotify/src/inotify_backend.c`: `inotify_backend_poll()` ora
   costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` e
   `ctx.logger` per file descriptor, watcher table e diagnostica. Restano su
