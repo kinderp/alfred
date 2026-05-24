@@ -35,6 +35,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: nel poll path la scelta
+  `event_engine_mode` viene ora letta da `ctx.config` invece che da
+  `app->config`. Resta intenzionalmente legato ad `app_t` solo il dispatch
+  legacy `legacy_events_dispatch(app, ev)`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  sesto micro-refactor del backend context, chiarendo che il residuo sostanziale
+  nel poll path e' il ponte legacy/shadow.
 - `10-debugging-test-e-strumenti.md` e `00-regole-operative.md`: aggiunto un
   esempio dettagliato e riproducibile di ricognizione prima di un micro-refactor
   usando Kythe, `rg`, `sed` e lettura della documentazione collegata. La sezione

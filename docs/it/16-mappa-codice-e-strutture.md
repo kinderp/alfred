@@ -249,7 +249,7 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | init tramite `ctx.config`, poll ancora come ponte shadow | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
+| `app->config.event_engine_mode` | init e poll tramite `ctx.config` | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
 | `app->config.move_cache_size` | `legacy_events_init()` tramite `ctx.config` | dimensione cache move legacy | no nel percorso core finale |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
@@ -444,13 +444,14 @@ inotify_backend_poll(app, on_event, userdata)
   logger_raw(ctx.logger, ...)
   on_event(raw, userdata)
   backend_handle_dir_create(&ctx, ev, on_event, userdata)
-  if app->config.event_engine_mode == shadow:
+  if ctx.config->event_engine_mode == shadow:
     legacy_events_dispatch(app, ev)
 ```
 
-La riga shadow resta legata ad `app` per scelta intenzionale. Il legacy usa
-ancora strutture e funzioni nate prima del core, quindi viene mantenuto come
-ponte temporaneo invece di forzare un refactor piu' grande nello stesso passo.
+La scelta core/shadow viene ormai letta dal context. Resta invece legata ad
+`app` la chiamata `legacy_events_dispatch(app, ev)`: il legacy usa ancora
+strutture e funzioni nate prima del core, quindi viene mantenuto come ponte
+temporaneo invece di forzare un refactor piu' grande nello stesso passo.
 
 ## Struttura dati di configurazione
 

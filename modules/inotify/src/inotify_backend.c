@@ -355,7 +355,7 @@ int inotify_backend_poll(app_t *app,
         if (callback_status != ERR_OK)
             return callback_status;
 
-        if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+        if (ctx.config->event_engine_mode == EVENT_ENGINE_SHADOW) {
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
             legacy_events_dispatch(app, ev);
 #else
