@@ -219,9 +219,11 @@ watch.
 
 ### Dipendenze backend da `app_t`
 
-Il backend riceve ancora `app_t *` in molte funzioni. Questo non significa che
-usi tutta l'applicazione. La lettura del codice mostra che le dipendenze reali
-sono limitate e abbastanza regolari.
+Storicamente il backend riceveva `app_t *` in molte funzioni. Dopo i
+micro-refactor piu' recenti, le funzioni lifecycle pulite ricevono direttamente
+`inotify_backend_context_t *`; `poll()` resta l'eccezione temporanea perche'
+deve ancora alimentare il ponte legacy/shadow. La lettura del codice mostra che
+le dipendenze reali sono limitate e abbastanza regolari.
 
 ```mermaid
 flowchart TD
@@ -264,9 +266,10 @@ Oggi `app_t` risolve entrambi i problemi in modo pratico ma largo. Il backend
 riceve tutto il contenitore, anche se usa solo una parte. Il refactor finale
 dovrebbe rendere visibili solo le dipendenze necessarie.
 
-Il micro-refactor su `inotify_backend_init()` segue esattamente questa
-direzione senza cambiare la firma pubblica. La funzione riceve ancora `app_t`,
-ma costruisce subito un `inotify_backend_context_t` locale e poi usa:
+Il micro-refactor iniziale su `inotify_backend_init()` ha seguito questa
+direzione restringendo prima il corpo della funzione. Dopo il successivo cambio
+di firma pubblica, `app.c` costruisce il `inotify_backend_context_t` e lo passa
+direttamente al backend. La funzione ora usa:
 
 - `ctx.runtime->watchers` per inizializzare e distruggere la tabella dei watch
 - `ctx.runtime->fd` per aprire, loggare e chiudere il file descriptor inotify
@@ -275,13 +278,14 @@ ma costruisce subito un `inotify_backend_context_t` locale e poi usa:
   legacy/shadow
 - `ctx.logger` per diagnostica ed errori
 
-Questa e' una distinzione didattica importante: anche se l'API pubblica non e'
-ancora cambiata, il corpo della funzione mostra gia' quali dati appartengono al
-backend e quali sono solo dipendenze prese in prestito dall'applicazione.
+Questa e' una distinzione didattica importante: prima il corpo della funzione ha
+mostrato quali dati appartengono al backend e quali sono solo dipendenze prese
+in prestito dall'applicazione; poi la firma pubblica e' stata resa coerente con
+questa distinzione.
 
 Il micro-refactor su `inotify_backend_shutdown()` completa la simmetria con
-`init()`. Anche qui la funzione riceve ancora `app_t`, ma costruisce un
-`inotify_backend_context_t` locale e poi usa:
+`init()`. Anche qui la forma finale pulita riceve direttamente
+`inotify_backend_context_t *` e usa:
 
 - `ctx.runtime->fd` per controllare, chiudere e invalidare il file descriptor
 - `ctx.runtime->watchers` per distruggere la tabella dei watch
@@ -385,9 +389,13 @@ app_t app
   app.config   -> configurazione
   app.logger   -> diagnostica
 
-inotify_backend_init(app):
-  backend_context_from_app(app, &ctx)
-  backend_init(&ctx)
+app_build_inotify_backend_context(app, &ctx):
+  ctx.runtime = &app->inotify
+  ctx.config = &app->config
+  ctx.logger = &app->logger
+
+inotify_backend_init(&ctx):
+  backend_init(ctx)
 
 backend_init(ctx):
   ctx->runtime->fd = -1
@@ -395,9 +403,8 @@ backend_init(ctx):
   inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
   legacy_events_init(ctx->config->move_cache_size) se shadow
 
-inotify_backend_add_startup_watch(app, path):
-  backend_context_from_app(app, &ctx)
-  backend_add_startup_watch(&ctx, path)
+inotify_backend_add_startup_watch(&ctx, path):
+  backend_add_startup_watch(ctx, path)
 
 backend_add_startup_watch(ctx, path):
   legge ctx->config->recursive
@@ -408,9 +415,8 @@ watch_manager_add(&ctx, path):
   usa ctx.config->watch_mask
   usa ctx.logger
 
-inotify_backend_shutdown(app):
-  backend_context_from_app(app, &ctx)
-  backend_shutdown(&ctx)
+inotify_backend_shutdown(&ctx):
+  backend_shutdown(ctx)
 
 backend_shutdown(ctx):
   chiude ctx->runtime->fd
@@ -478,6 +484,13 @@ dispatcher storico non e' piu' nel corpo principale del poll: passa da
 riceve ancora `app_t` perche' `events.c` richiede l'app completa, ma rende
 esplicito che quella dipendenza appartiene solo al percorso legacy/shadow e non
 al percorso backend/raw/core.
+
+La differenza tra lifecycle e poll e' intenzionale. Le funzioni lifecycle
+pubbliche (`init`, startup watch, shutdown) ricevono gia' il context costruito
+da `app.c`. `poll()` invece costruisce ancora il context dentro il backend
+perche' deve passare l'app completa al bridge legacy/shadow. Questo evita di
+nascondere dentro `app.c` una dipendenza che appartiene solo al vecchio
+dispatcher.
 
 ## Struttura dati di configurazione
 
@@ -1124,13 +1137,14 @@ frame 1 - configurazione pronta:
   config.watcher_capacity = 128
 
 frame 2 - backend inizializzato:
-  inotify_backend_init()
+  app_build_inotify_backend_context(app, &ctx)
+  inotify_backend_init(&ctx)
   app.inotify.fd = <fd inotify>
   watcher_init(&app.inotify.watchers, 128)
   watchers.count = 0
 
 frame 3 - richiesta watch:
-  inotify_backend_add_startup_watch(app, "/tmp/progetto")
+  inotify_backend_add_startup_watch(&ctx, "/tmp/progetto")
   watch_manager_add_recursive() oppure watch_manager_add()
 
 frame 4 - chiamata kernel:

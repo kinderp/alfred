@@ -27,6 +27,10 @@
 
 static void setup_signals(void);
 static void handle_signal(int sig);
+static void app_build_inotify_backend_context(
+    app_t *app,
+    inotify_backend_context_t *ctx
+);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -40,6 +44,25 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
  * all resource cleanup remains in normal process context.
  */
 static app_t *g_app = NULL;
+
+/*
+ * app_build_inotify_backend_context - expose backend dependencies explicitly
+ * @app: application context that owns runtime, config, and logger
+ * @ctx: backend context to fill with borrowed pointers
+ *
+ * app_t remains the ownership root, but the clean backend lifecycle APIs no
+ * longer receive the full application object. app.c builds the narrow context
+ * at the orchestration boundary and passes only what the backend needs.
+ */
+static void app_build_inotify_backend_context(
+    app_t *app,
+    inotify_backend_context_t *ctx
+)
+{
+    ctx->runtime = &app->inotify;
+    ctx->config = &app->config;
+    ctx->logger = &app->logger;
+}
 
 /* ============================================================================
  * Signal Handling
@@ -208,7 +231,10 @@ int app_init(app_t *app, int argc, char **argv)
                 "alfred core initialized event_engine=%s",
                 config_event_engine_name(app->config.event_engine_mode));
 
-    error = inotify_backend_init(app);
+    inotify_backend_context_t backend_ctx;
+    app_build_inotify_backend_context(app, &backend_ctx);
+
+    error = inotify_backend_init(&backend_ctx);
     if (error != ERR_OK)
         goto fail;
 
@@ -234,7 +260,7 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     for (int i = 1; i < argc; i++) {
-        error = inotify_backend_add_startup_watch(app, argv[i]);
+        error = inotify_backend_add_startup_watch(&backend_ctx, argv[i]);
         if (error != ERR_OK)
             goto fail;
     }
@@ -297,7 +323,9 @@ void app_shutdown(app_t *app)
     logger_info(&app->logger,
                 "shutdown started");
 
-    inotify_backend_shutdown(app);
+    inotify_backend_context_t backend_ctx;
+    app_build_inotify_backend_context(app, &backend_ctx);
+    inotify_backend_shutdown(&backend_ctx);
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may

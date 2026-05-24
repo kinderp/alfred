@@ -2,8 +2,9 @@
  * inotify_backend.h - inotify backend boundary
  *
  * This interface is the first step toward moving backend-specific runtime
- * ownership out of app.c. It still uses app_t as temporary state storage, but
- * centralizes inotify reading, raw conversion, and recursive watch discovery.
+ * ownership out of app.c. Lifecycle operations receive an explicit backend
+ * context; polling still accepts app_t only as a temporary legacy-shadow bridge
+ * while the migration remains reversible.
  *
  * The backend contract is intentionally raw-oriented: callers receive
  * alfred_raw_event_t records and leave semantic classification to the core.
@@ -71,23 +72,23 @@ typedef int (*inotify_backend_event_fn)(
 
 /*
  * inotify_backend_init - initialize descriptor, watcher table, and shadow state
- * @app: application context containing configuration and backend storage
+ * @ctx: backend context containing runtime, configuration, and logger
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
-int inotify_backend_init(struct app *app);
+int inotify_backend_init(inotify_backend_context_t *ctx);
 
 /*
  * inotify_backend_add_startup_watch - add one configured startup path
- * @app: initialized application context
+ * @ctx: initialized backend context
  * @path: filesystem path to watch
  *
- * The function respects app->config.recursive and delegates the actual watch
+ * The function respects ctx->config->recursive and delegates the actual watch
  * installation to watch_manager.c.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
-int inotify_backend_add_startup_watch(struct app *app,
+int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
                                       const char *path);
 
 /*
@@ -109,10 +110,10 @@ int inotify_backend_poll(struct app *app,
 
 /*
  * inotify_backend_shutdown - release backend-owned runtime state
- * @app: application context containing the backend state
+ * @ctx: backend context containing the runtime state
  *
  * Safe to call during partial initialization failure.
  */
-void inotify_backend_shutdown(struct app *app);
+void inotify_backend_shutdown(inotify_backend_context_t *ctx);
 
 #endif /* INOTIFY_BACKEND_H */

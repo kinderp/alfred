@@ -97,8 +97,9 @@ static int backend_emit_synthetic_dir_create(
  * @app: application context that still owns runtime/config/logger
  * @ctx: context object to fill
  *
- * This is the first migration step away from passing app_t into every backend
- * helper. The context borrows app-owned objects; it does not transfer
+ * Most clean lifecycle APIs now receive the context directly from app.c. This
+ * helper remains only for the poll wrapper while legacy shadow still needs the
+ * full app_t. The context borrows app-owned objects; it does not transfer
  * ownership.
  */
 static void backend_context_from_app(app_t *app,
@@ -115,7 +116,7 @@ static void backend_context_from_app(app_t *app,
 
 /*
  * inotify_backend_init - initialize the inotify backend runtime
- * @app: application context containing config, logger, and backend storage
+ * @ctx: backend context containing config, logger, and backend storage
  *
  * Initializes the watcher table first, then opens a nonblocking inotify file
  * descriptor. If the binary was built with ALFRED_ENABLE_LEGACY_SHADOW,
@@ -126,16 +127,12 @@ static void backend_context_from_app(app_t *app,
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
-int inotify_backend_init(app_t *app)
+int inotify_backend_init(inotify_backend_context_t *ctx)
 {
-    if (app == NULL)
+    if (ctx == NULL)
         return ERR_INVALID_ARG;
 
-    inotify_backend_context_t ctx;
-
-    backend_context_from_app(app, &ctx);
-
-    return backend_init(&ctx);
+    return backend_init(ctx);
 }
 
 /*
@@ -212,7 +209,7 @@ static int backend_init(inotify_backend_context_t *ctx)
 
 /*
  * inotify_backend_add_startup_watch - add one startup path to the backend
- * @app: initialized application context
+ * @ctx: initialized backend context
  * @path: path supplied on the command line
  *
  * Startup watch installation is backend state, not semantic event processing.
@@ -222,17 +219,13 @@ static int backend_init(inotify_backend_context_t *ctx)
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
-int inotify_backend_add_startup_watch(app_t *app,
+int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
                                       const char *path)
 {
-    if (app == NULL || path == NULL)
+    if (ctx == NULL || path == NULL)
         return ERR_INVALID_ARG;
 
-    inotify_backend_context_t ctx;
-
-    backend_context_from_app(app, &ctx);
-
-    return backend_add_startup_watch(&ctx, path);
+    return backend_add_startup_watch(ctx, path);
 }
 
 /*
@@ -240,9 +233,8 @@ int inotify_backend_add_startup_watch(app_t *app,
  * @ctx: narrowed backend context with runtime, config, and logger
  * @path: path supplied on the command line
  *
- * This helper is the context-shaped form of the public startup-watch API. The
- * current public wrapper still receives app_t for compatibility with app.c, but
- * the actual backend decision only needs the context and the path.
+ * This helper keeps the startup-watch decision separate from public argument
+ * validation. The backend decision only needs the context and the path.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -263,22 +255,18 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 
 /*
  * inotify_backend_shutdown - release backend runtime resources
- * @app: application context containing the backend state
+ * @ctx: backend context containing runtime state
  *
  * The function is safe for partial initialization paths. When legacy shadow is
  * compiled in, its shutdown stays here because the backend owns the temporary
  * bridge to events.c.
  */
-void inotify_backend_shutdown(app_t *app)
+void inotify_backend_shutdown(inotify_backend_context_t *ctx)
 {
-    if (app == NULL)
+    if (ctx == NULL)
         return;
 
-    inotify_backend_context_t ctx;
-
-    backend_context_from_app(app, &ctx);
-
-    backend_shutdown(&ctx);
+    backend_shutdown(ctx);
 }
 
 /*

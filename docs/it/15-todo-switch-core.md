@@ -76,8 +76,10 @@ Al momento:
   `recursive_create_nested_dir`, mentre il legacy resta incompleto
 - `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`: vivono in
   `inotify_backend_t`, contenuto nel campo `app_t.inotify`
-- il backend riceve ancora `app_t *` per usare configurazione, logger e callback
-  verso il core
+- le funzioni lifecycle pulite del backend ricevono `inotify_backend_context_t *`
+  per usare runtime, configurazione e logger
+- `inotify_backend_poll()` riceve ancora `app_t *` solo per il ponte
+  legacy/shadow; la callback verso il core resta generica tramite `userdata`
 
 ## Mappa della logica legacy rimasta
 
@@ -187,9 +189,9 @@ Dipendenze reali osservate oggi:
 
 | Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
 | --- | --- | --- | --- |
-| `inotify_backend_init()` | wrapper pubblico da `app_t` a context; delega a `backend_init(&ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
-| `inotify_backend_add_startup_watch()` | wrapper pubblico da `app_t` a context; delega a `backend_add_startup_watch(&ctx, path)` | sceglie watch singolo o ricorsivo tramite context | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
-| `inotify_backend_shutdown()` | wrapper pubblico da `app_t` a context; delega a `backend_shutdown(&ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
+| `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
+| `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
+| `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_poll()` | wrapper pubblico da `app_t` a context; delega a `backend_poll(&ctx, app, on_event, userdata)` dove `app` e' il solo `legacy_app` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere il parametro `legacy_app` quando shadow legacy non servira' piu' |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
@@ -340,10 +342,11 @@ Stato implementato del quarto micro-refactor:
 - il ponte legacy resta esplicito tramite `ctx.config->event_engine_mode` e
   `ctx.config->move_cache_size`
 
-La firma pubblica e' ancora `inotify_backend_init(app_t *app)`: il passo non
-cambia l'API esterna e non cambia la semantica. Serve a restringere il corpo
-della funzione e a rendere evidente che init ha bisogno di runtime, config e
-logger, non dell'intera applicazione.
+In quel passo la firma pubblica era ancora `inotify_backend_init(app_t *app)`.
+Quella forma e' stata superata dal dodicesimo micro-refactor, che ha cambiato
+la firma pubblica pulita in `inotify_backend_init(inotify_backend_context_t *)`.
+Il valore didattico del quarto passo resta comunque valido: prima abbiamo
+ristretto il corpo della funzione, poi abbiamo cambiato il confine pubblico.
 
 Stato implementato del quinto micro-refactor:
 
@@ -355,9 +358,11 @@ Stato implementato del quinto micro-refactor:
   `ALFRED_ENABLE_LEGACY_SHADOW`, perche' fa ancora parte del ponte temporaneo
   verso il dispatcher legacy
 
-Questo rende simmetrici init e shutdown: entrambi ricevono ancora `app_t`, ma
-internamente lavorano sullo stato runtime del backend attraverso il context.
-La semantica osservabile e l'ordine di cleanup non cambiano.
+In quel momento init e shutdown ricevevano ancora `app_t`, ma internamente
+lavoravano gia' sullo stato runtime del backend attraverso il context. Dopo il
+dodicesimo micro-refactor, anche le firme pubbliche pulite ricevono direttamente
+`inotify_backend_context_t *`. La semantica osservabile e l'ordine di cleanup
+non sono cambiati.
 
 Stato implementato del sesto micro-refactor:
 
@@ -392,10 +397,10 @@ potra' essere rimossa o spostata quando il confronto shadow non servira' piu'.
 
 Stato implementato dell'ottavo micro-refactor:
 
-- `inotify_backend_add_startup_watch(app, path)` resta la funzione pubblica
-  chiamata da `app.c`
-- il wrapper pubblico controlla gli argomenti, costruisce
-  `inotify_backend_context_t` con `backend_context_from_app()` e delega a
+- in quel passo `inotify_backend_add_startup_watch(app, path)` restava ancora
+  la funzione pubblica chiamata da `app.c`
+- il wrapper pubblico controllava gli argomenti, costruiva
+  `inotify_backend_context_t` con `backend_context_from_app()` e delegava a
   `backend_add_startup_watch(&ctx, path)`
 - `backend_add_startup_watch()` contiene la logica reale: legge
   `ctx->config->recursive` e chiama `watch_manager_add_recursive(ctx, path)` o
@@ -410,10 +415,10 @@ cambiare la firma pubblica senza mescolare refactor e comportamento.
 
 Stato implementato del nono micro-refactor:
 
-- `inotify_backend_shutdown(app)` resta la funzione pubblica chiamata da
-  `app_shutdown()`
-- il wrapper pubblico controlla `app == NULL`, costruisce
-  `inotify_backend_context_t` e delega a `backend_shutdown(&ctx)`
+- in quel passo `inotify_backend_shutdown(app)` restava ancora la funzione
+  pubblica chiamata da `app_shutdown()`
+- il wrapper pubblico controllava `app == NULL`, costruiva
+  `inotify_backend_context_t` e delegava a `backend_shutdown(&ctx)`
 - `backend_shutdown()` chiude `ctx->runtime->fd`, lo riporta a `-1`, spegne il
   legacy shadow opzionale con `legacy_events_shutdown()` e distrugge
   `ctx->runtime->watchers`
@@ -427,10 +432,10 @@ confine futuro basato su `inotify_backend_context_t`.
 
 Stato implementato del decimo micro-refactor:
 
-- `inotify_backend_init(app)` resta la funzione pubblica chiamata da
-  `app_init()`
-- il wrapper pubblico controlla `app == NULL`, costruisce
-  `inotify_backend_context_t` e delega a `backend_init(&ctx)`
+- in quel passo `inotify_backend_init(app)` restava ancora la funzione pubblica
+  chiamata da `app_init()`
+- il wrapper pubblico controllava `app == NULL`, costruiva
+  `inotify_backend_context_t` e delegava a `backend_init(&ctx)`
 - `backend_init()` contiene tutta la logica reale di inizializzazione:
   imposta `ctx->runtime->fd = -1`, inizializza la watcher table, apre il file
   descriptor inotify non bloccante e inizializza il legacy shadow solo se
@@ -462,20 +467,37 @@ Stato implementato dell'undicesimo micro-refactor:
 - il comportamento non cambia: il raw/core path lavora sul context; shadow mode
   resta disponibile come ponte temporaneo
 
-Questo completa la forma interna context-shaped delle funzioni principali del
-backend. Le funzioni pubbliche ricevono ancora `app_t` per non cambiare subito
-`app.c`, ma `init`, startup watch, shutdown e poll hanno ormai un helper interno
-che mostra il confine futuro. Il nodo ancora aperto e' strategico: decidere se
-cambiare le firme pubbliche ora oppure aspettare la rimozione o quarantena
-definitiva dello shadow legacy.
+Questo completava la forma interna context-shaped delle funzioni principali del
+backend. Nel dodicesimo micro-refactor le firme pubbliche pulite di init,
+startup watch e shutdown sono state effettivamente cambiate; `poll()` resta
+separato perche' conserva il ponte `legacy_app` verso shadow.
+
+Stato implementato del dodicesimo micro-refactor:
+
+- le firme pubbliche pulite del backend non ricevono piu' `app_t`
+- `inotify_backend_init()` riceve `inotify_backend_context_t *ctx`
+- `inotify_backend_add_startup_watch()` riceve
+  `inotify_backend_context_t *ctx` e `path`
+- `inotify_backend_shutdown()` riceve `inotify_backend_context_t *ctx`
+- `app.c` costruisce il context con `app_build_inotify_backend_context()`,
+  passando al backend solo `app.inotify`, `app.config` e `app.logger`
+- `inotify_backend_poll()` resta temporaneamente su `app_t`, perche' il suo
+  helper interno riceve ancora `legacy_app` per il bridge shadow
+
+Questo e' il primo passo in cui il confine pubblico cambia davvero. Non e'
+solo un refactor interno: da questo punto il chiamante applicativo deve sapere
+costruire il context backend. La scelta e' corretta per `init`, startup watch e
+shutdown perche' queste funzioni non hanno piu' bisogno dell'app completa. Non
+viene applicata ancora a `poll()` per non nascondere il problema residuo:
+`events.c` richiede ancora `app_t` durante il confronto legacy/shadow.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
 
-Questo passaggio non cambia la firma pubblica di `inotify_backend_poll()`: e'
-un refactor interno. Serve a rendere visibile agli studenti una tecnica
-importante: si puo' restringere prima il corpo delle funzioni e cambiare la API
-solo quando il nuovo confine e' abbastanza chiaro.
+Questo passaggio non cambia ancora la firma pubblica di
+`inotify_backend_poll()`: e' un refactor interno. Serve a rendere visibile agli
+studenti una tecnica importante: si puo' restringere prima il corpo delle
+funzioni e cambiare la API solo quando il nuovo confine e' abbastanza chiaro.
 
 ### `modules/inotify/src/inotify_adapter.c`
 

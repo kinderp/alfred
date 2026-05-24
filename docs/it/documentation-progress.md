@@ -35,6 +35,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
+  e `app/src/app.c`: cambiate le firme pubbliche pulite del backend. Init,
+  startup watch e shutdown ricevono ora `inotify_backend_context_t *`; `app.c`
+  costruisce il context con `app_build_inotify_backend_context()`. Poll resta
+  temporaneamente su `app_t` per il bridge legacy/shadow.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  dodicesimo micro-refactor, primo cambio reale del confine pubblico tra app e
+  backend.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_poll()` come forma
   interna context-shaped del polling. `inotify_backend_poll(app, on_event,
   userdata)` resta wrapper pubblico, mentre il corpo reale usa il context e
@@ -43,21 +51,23 @@ Stati usati:
   l'undicesimo micro-refactor, chiarendo che il parametro `app_t` nel poll path
   ha ormai significato solo legacy/shadow.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_init()` come forma
-  interna context-shaped dell'inizializzazione backend. La funzione pubblica
-  `inotify_backend_init(app)` resta wrapper compatibile con `app_init()`.
+  interna context-shaped dell'inizializzazione backend. Questo passo e' stato
+  poi completato dal cambio di firma pubblica verso
+  `inotify_backend_context_t *`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   decimo micro-refactor, con attenzione agli error path di init e al fatto che
   il refactor non cambia ordine di acquisizione e cleanup delle risorse.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_shutdown()` come
-  forma interna context-shaped dello shutdown backend. La funzione pubblica
-  `inotify_backend_shutdown(app)` resta wrapper compatibile con `app.c`.
+  forma interna context-shaped dello shutdown backend. Questo passo e' stato
+  poi completato dal cambio di firma pubblica verso
+  `inotify_backend_context_t *`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   nono micro-refactor, spiegando che shutdown non richiede un bridge `app_t`
   per il legacy perche' `legacy_events_shutdown()` non riceve l'app completa.
 - `modules/inotify/src/inotify_backend.c`: estratto
   `backend_add_startup_watch()` come forma interna context-shaped della API di
-  startup watch. `inotify_backend_add_startup_watch(app, path)` resta wrapper
-  pubblico temporaneo per compatibilita' con `app.c`.
+  startup watch. Questo passo e' stato poi completato dal cambio di firma
+  pubblica verso `inotify_backend_context_t *`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato
   l'ottavo micro-refactor, spiegando la tecnica di migrazione C in cui la firma
   futura viene introdotta prima come helper interno e solo dopo potra'
@@ -110,19 +120,19 @@ Stati usati:
   `make test`, `make`, il motivo di ogni comando, cosa significa percorso core
   end-to-end ufficiale e perche' il `make` finale riporta il workspace alla
   build core-only dopo la suite legacy/shadow.
-- `modules/inotify/src/inotify_backend.c`: `inotify_backend_shutdown()` ora
-  costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` per
-  chiudere il file descriptor e distruggere la watcher table. Il cleanup legacy
-  shadow resta esplicito e condizionato dalla build.
+- `modules/inotify/src/inotify_backend.c`: `inotify_backend_shutdown()` e' stato
+  prima ristretto internamente a `inotify_backend_context_t`; dopo il
+  dodicesimo micro-refactor la firma pubblica pulita riceve direttamente il
+  context. Il cleanup legacy shadow resta esplicito e condizionato dalla build.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   quinto micro-refactor del backend context, chiarendo la simmetria tra init e
   shutdown e il fatto che il cleanup legacy non appartiene al backend core
   finale.
-- `modules/inotify/src/inotify_backend.c`: `inotify_backend_init()` ora
-  costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime`,
-  `ctx.config` e `ctx.logger` per watcher table, file descriptor, configurazione
-  e diagnostica. La firma pubblica resta `inotify_backend_init(app_t *app)` e
-  il ponte legacy/shadow resta esplicito tramite la configurazione.
+- `modules/inotify/src/inotify_backend.c`: `inotify_backend_init()` e' stato
+  prima ristretto internamente a `inotify_backend_context_t` per watcher table,
+  file descriptor, configurazione e diagnostica; dopo il dodicesimo
+  micro-refactor la firma pubblica pulita riceve direttamente il context. Il
+  ponte legacy/shadow resta esplicito tramite la configurazione.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   quarto micro-refactor del backend context, chiarendo che anche l'init e'
   ristretto internamente senza cambiare API pubblica o semantica osservabile.
