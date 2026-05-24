@@ -34,6 +34,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: `inotify_backend_init()` ora
+  costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime`,
+  `ctx.config` e `ctx.logger` per watcher table, file descriptor, configurazione
+  e diagnostica. La firma pubblica resta `inotify_backend_init(app_t *app)` e
+  il ponte legacy/shadow resta esplicito tramite la configurazione.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  quarto micro-refactor del backend context, chiarendo che anche l'init e'
+  ristretto internamente senza cambiare API pubblica o semantica osservabile.
 - `00-regole-operative.md`: aggiunte regole operative per usare Kythe e un
   futuro Graphify nel workflow: gli indici semantici servono a restringere il
   campo e ridurre letture inutili, ma ogni risultato va verificato sui file

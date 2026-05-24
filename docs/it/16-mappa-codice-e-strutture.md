@@ -248,9 +248,9 @@ Tabella di lettura:
 | `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
-| `app->config.watcher_capacity` | `inotify_backend_init()` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | init e poll | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
-| `app->config.move_cache_size` | `legacy_events_init()` | dimensione cache move legacy | no nel percorso core finale |
+| `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
+| `app->config.event_engine_mode` | init tramite `ctx.config`, poll ancora come ponte shadow | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
+| `app->config.move_cache_size` | `legacy_events_init()` tramite `ctx.config` | dimensione cache move legacy | no nel percorso core finale |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -263,6 +263,21 @@ spesso vengono confuse:
 Oggi `app_t` risolve entrambi i problemi in modo pratico ma largo. Il backend
 riceve tutto il contenitore, anche se usa solo una parte. Il refactor finale
 dovrebbe rendere visibili solo le dipendenze necessarie.
+
+Il micro-refactor su `inotify_backend_init()` segue esattamente questa
+direzione senza cambiare la firma pubblica. La funzione riceve ancora `app_t`,
+ma costruisce subito un `inotify_backend_context_t` locale e poi usa:
+
+- `ctx.runtime->watchers` per inizializzare e distruggere la tabella dei watch
+- `ctx.runtime->fd` per aprire, loggare e chiudere il file descriptor inotify
+- `ctx.config->watcher_capacity` per dimensionare la watcher table
+- `ctx.config->event_engine_mode` e `ctx.config->move_cache_size` per il ponte
+  legacy/shadow
+- `ctx.logger` per diagnostica ed errori
+
+Questa e' una distinzione didattica importante: anche se l'API pubblica non e'
+ancora cambiata, il corpo della funzione mostra gia' quali dati appartengono al
+backend e quali sono solo dipendenze prese in prestito dall'applicazione.
 
 ### Context backend proposto
 

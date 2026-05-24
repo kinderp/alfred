@@ -187,7 +187,7 @@ Dipendenze reali osservate oggi:
 
 | Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
 | --- | --- | --- | --- |
-| `inotify_backend_init()` | `app->inotify`, `app->config.watcher_capacity`, `app->config.event_engine_mode`, `app->config.move_cache_size`, `app->logger` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | passare un contesto backend con fd/watchers, config letta in sola lettura e logger esplicito |
+| `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
 | `inotify_backend_add_startup_watch()` | costruisce `inotify_backend_context_t`; legge `ctx.config->recursive`; passa `ctx` al watch manager | sceglie watch singolo o ricorsivo | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`/`ctx.logger`; resta su `app->config.event_engine_mode` e `legacy_events_dispatch(app, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | spostare anche la decisione shadow fuori dall'app completa oppure rimuoverla con il legacy |
@@ -328,6 +328,22 @@ Stato implementato del terzo micro-refactor:
 - restano volutamente su `app_t` solo la scelta `event_engine_mode` e la
   chiamata legacy `legacy_events_dispatch(app, ev)`, perche' appartengono al
   ponte shadow temporaneo e non al backend core finale
+
+Stato implementato del quarto micro-refactor:
+
+- `inotify_backend_init()` costruisce un `inotify_backend_context_t` locale
+  subito dopo il controllo degli argomenti
+- l'inizializzazione della watcher table usa `ctx.runtime->watchers` e
+  `ctx.config->watcher_capacity`
+- l'apertura e il cleanup del file descriptor usano `ctx.runtime->fd`
+- i log di init, errore e shadow setup usano `ctx.logger`
+- il ponte legacy resta esplicito tramite `ctx.config->event_engine_mode` e
+  `ctx.config->move_cache_size`
+
+La firma pubblica e' ancora `inotify_backend_init(app_t *app)`: il passo non
+cambia l'API esterna e non cambia la semantica. Serve a restringere il corpo
+della funzione e a rendere evidente che init ha bisogno di runtime, config e
+logger, non dell'intera applicazione.
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
 

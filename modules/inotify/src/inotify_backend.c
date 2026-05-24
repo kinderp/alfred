@@ -115,59 +115,63 @@ int inotify_backend_init(app_t *app)
     if (app == NULL)
         return ERR_INVALID_ARG;
 
-    app->inotify.fd = -1;
+    inotify_backend_context_t ctx;
 
-    if (watcher_init(&app->inotify.watchers,
-                     app->config.watcher_capacity) != 0) {
+    backend_context_from_app(app, &ctx);
 
-        logger_error(&app->logger,
+    ctx.runtime->fd = -1;
+
+    if (watcher_init(&ctx.runtime->watchers,
+                     ctx.config->watcher_capacity) != 0) {
+
+        logger_error(ctx.logger,
                      "watcher_init failed");
 
         return ERR_ALLOC;
     }
 
-    logger_info(&app->logger,
+    logger_info(ctx.logger,
                 "watcher table initialized");
 
-    app->inotify.fd =
+    ctx.runtime->fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
-    if (app->inotify.fd < 0) {
-        logger_error(&app->logger,
+    if (ctx.runtime->fd < 0) {
+        logger_error(ctx.logger,
                      "inotify_init1 failed errno=%d (%s)",
                      errno,
                      strerror(errno));
 
-        watcher_destroy(&app->inotify.watchers);
+        watcher_destroy(&ctx.runtime->watchers);
         return ERR_INOTIFY;
     }
 
-    logger_info(&app->logger,
+    logger_info(ctx.logger,
                 "inotify backend initialized fd=%d",
-                app->inotify.fd);
+                ctx.runtime->fd);
 
-    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+    if (ctx.config->event_engine_mode == EVENT_ENGINE_SHADOW) {
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
-        if (legacy_events_init(app->config.move_cache_size) != 0) {
-            logger_error(&app->logger,
+        if (legacy_events_init(ctx.config->move_cache_size) != 0) {
+            logger_error(ctx.logger,
                          "legacy_events_init failed");
 
-            close(app->inotify.fd);
-            app->inotify.fd = -1;
-            watcher_destroy(&app->inotify.watchers);
+            close(ctx.runtime->fd);
+            ctx.runtime->fd = -1;
+            watcher_destroy(&ctx.runtime->watchers);
             return ERR_ALLOC;
         }
 
-        logger_info(&app->logger,
+        logger_info(ctx.logger,
                     "legacy event dispatcher initialized");
 #else
-        logger_error(&app->logger,
+        logger_error(ctx.logger,
                      "shadow event engine requires build with "
                      "ENABLE_LEGACY_SHADOW=1");
 
-        close(app->inotify.fd);
-        app->inotify.fd = -1;
-        watcher_destroy(&app->inotify.watchers);
+        close(ctx.runtime->fd);
+        ctx.runtime->fd = -1;
+        watcher_destroy(&ctx.runtime->watchers);
         return ERR_CONFIG;
 #endif
     }
