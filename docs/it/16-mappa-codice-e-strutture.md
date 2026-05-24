@@ -385,6 +385,16 @@ app_t app
   app.config   -> configurazione
   app.logger   -> diagnostica
 
+inotify_backend_init(app):
+  backend_context_from_app(app, &ctx)
+  backend_init(&ctx)
+
+backend_init(ctx):
+  ctx->runtime->fd = -1
+  watcher_init(&ctx->runtime->watchers, ctx->config->watcher_capacity)
+  inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
+  legacy_events_init(ctx->config->move_cache_size) se shadow
+
 inotify_backend_add_startup_watch(app, path):
   backend_context_from_app(app, &ctx)
   backend_add_startup_watch(&ctx, path)

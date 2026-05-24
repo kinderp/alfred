@@ -63,6 +63,8 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
 static void backend_context_from_app(app_t *app,
                                      inotify_backend_context_t *ctx);
 
+static int backend_init(inotify_backend_context_t *ctx);
+
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path);
 
@@ -128,59 +130,74 @@ int inotify_backend_init(app_t *app)
 
     backend_context_from_app(app, &ctx);
 
-    ctx.runtime->fd = -1;
+    return backend_init(&ctx);
+}
 
-    if (watcher_init(&ctx.runtime->watchers,
-                     ctx.config->watcher_capacity) != 0) {
+/*
+ * backend_init - initialize backend runtime through context
+ * @ctx: narrowed backend context with runtime, config, and logger
+ *
+ * This helper is the context-shaped form of backend initialization. It keeps
+ * the same cleanup order as the public function previously had: watcher table
+ * first, inotify descriptor second, optional legacy shadow state last.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+static int backend_init(inotify_backend_context_t *ctx)
+{
+    ctx->runtime->fd = -1;
 
-        logger_error(ctx.logger,
+    if (watcher_init(&ctx->runtime->watchers,
+                     ctx->config->watcher_capacity) != 0) {
+
+        logger_error(ctx->logger,
                      "watcher_init failed");
 
         return ERR_ALLOC;
     }
 
-    logger_info(ctx.logger,
+    logger_info(ctx->logger,
                 "watcher table initialized");
 
-    ctx.runtime->fd =
+    ctx->runtime->fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
-    if (ctx.runtime->fd < 0) {
-        logger_error(ctx.logger,
+    if (ctx->runtime->fd < 0) {
+        logger_error(ctx->logger,
                      "inotify_init1 failed errno=%d (%s)",
                      errno,
                      strerror(errno));
 
-        watcher_destroy(&ctx.runtime->watchers);
+        watcher_destroy(&ctx->runtime->watchers);
         return ERR_INOTIFY;
     }
 
-    logger_info(ctx.logger,
+    logger_info(ctx->logger,
                 "inotify backend initialized fd=%d",
-                ctx.runtime->fd);
+                ctx->runtime->fd);
 
-    if (ctx.config->event_engine_mode == EVENT_ENGINE_SHADOW) {
+    if (ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW) {
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
-        if (legacy_events_init(ctx.config->move_cache_size) != 0) {
-            logger_error(ctx.logger,
+        if (legacy_events_init(ctx->config->move_cache_size) != 0) {
+            logger_error(ctx->logger,
                          "legacy_events_init failed");
 
-            close(ctx.runtime->fd);
-            ctx.runtime->fd = -1;
-            watcher_destroy(&ctx.runtime->watchers);
+            close(ctx->runtime->fd);
+            ctx->runtime->fd = -1;
+            watcher_destroy(&ctx->runtime->watchers);
             return ERR_ALLOC;
         }
 
-        logger_info(ctx.logger,
+        logger_info(ctx->logger,
                     "legacy event dispatcher initialized");
 #else
-        logger_error(ctx.logger,
+        logger_error(ctx->logger,
                      "shadow event engine requires build with "
                      "ENABLE_LEGACY_SHADOW=1");
 
-        close(ctx.runtime->fd);
-        ctx.runtime->fd = -1;
-        watcher_destroy(&ctx.runtime->watchers);
+        close(ctx->runtime->fd);
+        ctx->runtime->fd = -1;
+        watcher_destroy(&ctx->runtime->watchers);
         return ERR_CONFIG;
 #endif
     }

@@ -187,7 +187,7 @@ Dipendenze reali osservate oggi:
 
 | Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
 | --- | --- | --- | --- |
-| `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
+| `inotify_backend_init()` | wrapper pubblico da `app_t` a context; delega a `backend_init(&ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_add_startup_watch()` | wrapper pubblico da `app_t` a context; delega a `backend_add_startup_watch(&ctx, path)` | sceglie watch singolo o ricorsivo tramite context | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_shutdown()` | wrapper pubblico da `app_t` a context; delega a `backend_shutdown(&ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; il ponte legacy e' confinato in `backend_dispatch_legacy_shadow(app, &ctx, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere o spostare fuori dal backend il bridge legacy che richiede ancora `app_t` |
@@ -424,6 +424,28 @@ Stato implementato del nono micro-refactor:
 Questo rende startup watch e shutdown simmetrici: entrambi hanno una funzione
 pubblica compatibile con `app.c` e una funzione interna che mostra gia' il
 confine futuro basato su `inotify_backend_context_t`.
+
+Stato implementato del decimo micro-refactor:
+
+- `inotify_backend_init(app)` resta la funzione pubblica chiamata da
+  `app_init()`
+- il wrapper pubblico controlla `app == NULL`, costruisce
+  `inotify_backend_context_t` e delega a `backend_init(&ctx)`
+- `backend_init()` contiene tutta la logica reale di inizializzazione:
+  imposta `ctx->runtime->fd = -1`, inizializza la watcher table, apre il file
+  descriptor inotify non bloccante e inizializza il legacy shadow solo se
+  `ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW`
+- gli error path restano invariati: fallimento di `watcher_init()` ritorna
+  `ERR_ALLOC`; fallimento di `inotify_init1()` distrugge la watcher table e
+  ritorna `ERR_INOTIFY`; fallimento di `legacy_events_init()` chiude fd,
+  riporta fd a `-1`, distrugge la watcher table e ritorna `ERR_ALLOC`; shadow
+  richiesto senza build legacy fa lo stesso cleanup e ritorna `ERR_CONFIG`
+
+Questo passo era piu' delicato di startup watch e shutdown perche'
+l'inizializzazione costruisce risorse in sequenza. In C, quando una funzione
+inizializza piu' risorse, ogni uscita di errore deve rilasciare solo le risorse
+gia' acquisite e lasciare lo stato in una forma prevedibile. Il refactor ha
+quindi cambiato la forma della funzione, non l'ordine di acquisizione e cleanup.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

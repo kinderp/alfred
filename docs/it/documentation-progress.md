@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: estratto `backend_init()` come forma
+  interna context-shaped dell'inizializzazione backend. La funzione pubblica
+  `inotify_backend_init(app)` resta wrapper compatibile con `app_init()`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  decimo micro-refactor, con attenzione agli error path di init e al fatto che
+  il refactor non cambia ordine di acquisizione e cleanup delle risorse.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_shutdown()` come
   forma interna context-shaped dello shutdown backend. La funzione pubblica
   `inotify_backend_shutdown(app)` resta wrapper compatibile con `app.c`.
