@@ -874,17 +874,18 @@ Risultato della revisione:
 Decisione provvisoria:
 
 ```text
-make test       -> resta legacy-shadow per compatibilita' e diagnostica
-make test-core  -> resta end-to-end ufficiale del percorso core
+make test-core          -> end-to-end ufficiale del percorso core
+make test-legacy-shadow -> funzionali storici legacy/shadow
+make test               -> alias temporaneo di test-legacy-shadow
 ```
 
-Non conviene rinominare o riscrivere subito `make test`, perche' quel nome oggi
-ha ancora il valore pratico di smoke test storico. Non serve nemmeno creare ora
-una suite `test-functional-core`: `make test-core` avvia gia' Alfred reale,
-passa dal backend inotify reale e controlla l'`events.log` core. Il prossimo
-passo, quando vorremo avvicinarci allo switch definitivo, sara' decidere
-esplicitamente se `make test` deve diventare un alias del percorso core oppure
-restare un target legacy separato finche' shadow mode esiste.
+Il nome esplicito `test-legacy-shadow` riduce l'ambiguita' per studenti e
+contributori: la suite storica resta disponibile, ma non e' piu' presentata come
+il contratto futuro del prodotto. Non serve creare ora una suite
+`test-functional-core`: `make test-core` avvia gia' Alfred reale, passa dal
+backend inotify reale e controlla l'`events.log` core. Quando lo shadow non
+servira' piu', dovremo decidere se `make test` diventera' un alias di
+`make test-core` oppure restera' un target storico separato.
 
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non
@@ -1018,8 +1019,15 @@ ricostruisce il binario core-only ed esegue la suite `tests/core/`.
 make test
 ```
 
-ricostruisce il binario con `ENABLE_LEGACY_SHADOW=1` ed esegue i test
-funzionali storici, che usano ancora il confronto shadow/legacy.
+per ora e' un alias di:
+
+```bash
+make test-legacy-shadow
+```
+
+`make test-legacy-shadow` ricostruisce il binario con
+`ENABLE_LEGACY_SHADOW=1` ed esegue i test funzionali storici, che usano ancora
+il confronto shadow/legacy.
 
 ## Regola di avanzamento
 

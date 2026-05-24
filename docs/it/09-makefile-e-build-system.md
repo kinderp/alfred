@@ -921,10 +921,30 @@ Compila e poi esegue:
 Nota: il programma richiede percorsi da monitorare, quindi `make run` potrebbe
 non essere sufficiente per un'esecuzione reale.
 
-### test
+### test-core
 
 ```bash
-make test
+make test-core
+```
+
+Il target `make test-core` ricostruisce esplicitamente il binario nella variante
+core-only prima di lanciare:
+
+```text
+tests/core/
+```
+
+In questo modo non dipende da un eventuale binario legacy-shadow prodotto da un
+test precedente.
+
+Nonostante il nome, `test-core` non salta il backend: gli script creano file e
+directory reali, Alfred riceve eventi inotify reali e il core produce
+`events.log`. Questa e' la suite end-to-end ufficiale del percorso core.
+
+### test-legacy-shadow
+
+```bash
+make test-legacy-shadow
 ```
 
 Esegue gli script in:
@@ -934,27 +954,22 @@ tests/functional/
 ```
 
 Questi test funzionali storici usano ancora lo shadow legacy. Per questo il
-target `make test` costruisce prima il binario con:
+target costruisce prima il binario con:
 
 ```bash
 ENABLE_LEGACY_SHADOW=1
 ```
 
-La suite core resta separata:
+### test
 
 ```bash
-make test-core
+make test
 ```
 
-Il target `make test-core` ricostruisce esplicitamente il binario nella variante
-core-only prima di lanciare `tests/core/`, cosi' non dipende da un eventuale
-binario legacy-shadow prodotto da un test precedente.
-
-Nonostante il nome, `test-core` non salta il backend: gli script creano file e
-directory reali, Alfred riceve eventi inotify reali e il core produce
-`events.log`. La differenza rispetto a `make test` e' lo stream considerato
-ufficiale: `make test` conserva il percorso storico legacy-shadow, mentre
-`make test-core` verifica il percorso core.
+Per compatibilita', `make test` resta un alias temporaneo di
+`make test-legacy-shadow`. Il nome storico continua quindi a eseguire la suite
+legacy/shadow, mentre `make test-core` resta la suite ufficiale del percorso
+core.
 
 ### valgrind
 
@@ -1005,8 +1020,9 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Pulire tutto | `make fclean` |
 | Ricompilare da zero | `make re` |
 | Build ottimizzata | `make release` |
-| Eseguire test funzionali legacy/shadow | `make test` |
 | Eseguire test end-to-end del percorso core | `make test-core` |
+| Eseguire test funzionali legacy/shadow | `make test-legacy-shadow` |
+| Eseguire alias storico dei test legacy/shadow | `make test` |
 | Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |

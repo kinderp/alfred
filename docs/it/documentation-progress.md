@@ -35,6 +35,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile`: aggiunto il target esplicito `test-legacy-shadow`.
+  `make test` resta un alias temporaneo dei funzionali storici, mentre
+  `make test-core` resta la suite end-to-end ufficiale del percorso core.
+- `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md` e `15-todo-switch-core.md`: aggiornata la
+  documentazione dei target di test per distinguere core ufficiale e
+  compatibilita' legacy/shadow.
 - `tests/core/test_shadow_requires_legacy_build.sh`: aggiunto test core-only
   che verifica il fallimento esplicito di `ALFRED_EVENT_ENGINE=shadow` quando
   Alfred e' compilato senza `ENABLE_LEGACY_SHADOW=1`.

@@ -59,8 +59,10 @@ tests/functional/
 Si eseguono con:
 
 ```bash
-make test
+make test-legacy-shadow
 ```
+
+`make test` resta un alias storico temporaneo dello stesso target.
 
 Oppure direttamente:
 
@@ -134,8 +136,8 @@ Questa mappa serve a decidere cosa fare dei test funzionali storici durante lo
 switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
 
 - `tests/functional/` nasce quando il dispatcher legacy era lo stream
-  principale e oggi viene eseguito da `make test` con
-  `ENABLE_LEGACY_SHADOW=1`
+  principale e oggi viene eseguito da `make test-legacy-shadow` con
+  `ENABLE_LEGACY_SHADOW=1`; `make test` resta un alias storico temporaneo
 - `tests/core/` nasce per fissare lo stream semantico ufficiale del core e oggi
   viene eseguito da `make test-core` in build core-only, usando comunque
   filesystem, inotify e backend reali
@@ -214,13 +216,15 @@ comportamento di errore quando si chiede shadow mode senza supporto legacy.
 
 Strategia consigliata per il prossimo refactor dei test:
 
-1. mantenere per ora `make test` come suite legacy-shadow
+1. mantenere per ora `make test-legacy-shadow` come suite legacy-shadow
 2. usare `make test-core` come contratto ufficiale core
 3. non aggiungere per ora una terza suite `test-functional-core`, perche'
    `make test-core` e' gia' end-to-end sul percorso core
-4. quando lo shadow non servira' piu', decidere se `make test` deve diventare
+4. mantenere `make test` come alias temporaneo dei funzionali storici finche'
+   serve compatibilita'
+5. quando lo shadow non servira' piu', decidere se `make test` deve diventare
    alias di `make test-core` oppure restare un target storico separato
-5. quando lo shadow sara' archiviato, spostare o rimuovere i funzionali
+6. quando lo shadow sara' archiviato, spostare o rimuovere i funzionali
    legacy invece di lasciarli mescolati alla suite ufficiale
 
 ## Collegamento con la lettura guidata del codice

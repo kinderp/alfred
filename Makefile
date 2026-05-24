@@ -218,12 +218,14 @@ run: all
 
 # -----------------------------------------------------------------------------
 # TEST
-# You can run all tests in two ways:
-# 1. make && make test
-# 2. cd tests/functional && ./run_all.sh
+# test-core is the official core end-to-end suite.
+# test-legacy-shadow keeps the historical functional shadow suite explicit.
+# test remains a temporary compatibility alias for test-legacy-shadow.
 # -----------------------------------------------------------------------------
 
-test:
+test: test-legacy-shadow
+
+test-legacy-shadow:
 	$(MAKE) ENABLE_LEGACY_SHADOW=1 all
 	cd tests/functional && bash run_all.sh
 

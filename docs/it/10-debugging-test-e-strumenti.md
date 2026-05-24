@@ -570,13 +570,15 @@ La sequenza standard e':
 git diff --check
 make
 make test-core
+make test-legacy-shadow
 make test
 make
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
 problemi piu' semplici, poi il comportamento core, poi la compatibilita'
-legacy/shadow, e infine a lasciare il workspace nella build normale.
+legacy/shadow, controllare l'alias storico `make test`, e infine lasciare il
+workspace nella build normale.
 
 ### 1. `git diff --check`
 
@@ -640,12 +642,12 @@ il percorso ufficiale inotify -> raw -> core -> events.log funziona ancora?
 E' importante eseguirlo prima dei funzionali storici perche' il core e' il
 runtime ufficiale di default.
 
-### 4. `make test`
+### 4. `make test-legacy-shadow`
 
 Il comando:
 
 ```bash
-make test
+make test-legacy-shadow
 ```
 
 esegue i test funzionali storici in:
@@ -672,9 +674,28 @@ la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
 Anche se il core e' il percorso ufficiale, questi test restano utili finche'
 shadow mode viene mantenuto come ponte di confronto.
 
-### 5. `make` finale
+### 5. `make test`
 
-Dopo `make test`, il binario nel workspace e' stato ricompilato nella variante:
+Il comando:
+
+```bash
+make test
+```
+
+oggi e' un alias temporaneo di `make test-legacy-shadow`. Viene mantenuto per
+compatibilita' con il nome storico, ma non va confuso con la suite ufficiale del
+core. Per il percorso core usare sempre `make test-core`.
+
+Questo passo risponde alla domanda:
+
+```text
+l'alias storico usato dai contributori funziona ancora?
+```
+
+### 6. `make` finale
+
+Dopo `make test-legacy-shadow` o `make test`, il binario nel workspace e' stato
+ricompilato nella variante:
 
 ```text
 ENABLE_LEGACY_SHADOW=1
@@ -704,8 +725,9 @@ Esempi:
 - se fallisce `git diff --check`, correggi whitespace o patch
 - se fallisce `make`, correggi compilazione o linking
 - se fallisce `make test-core`, analizza il comportamento semantico del core
-- se fallisce `make test`, controlla compatibilita' legacy/shadow o test
-  funzionali storici
+- se fallisce `make test-legacy-shadow`, controlla compatibilita'
+  legacy/shadow o test funzionali storici
+- se fallisce `make test`, controlla l'alias storico nel Makefile
 - se fallisce il `make` finale, il workspace non e' tornato alla build normale
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
@@ -725,8 +747,10 @@ tests/functional/
 Per eseguirli:
 
 ```bash
-make test
+make test-legacy-shadow
 ```
+
+`make test` resta un alias storico dello stesso target.
 
 Oppure direttamente:
 
