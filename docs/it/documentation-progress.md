@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/core/test_shadow_requires_legacy_build.sh`: aggiunto test core-only
+  che verifica il fallimento esplicito di `ALFRED_EVENT_ENGINE=shadow` quando
+  Alfred e' compilato senza `ENABLE_LEGACY_SHADOW=1`.
+- `14-scenari-test.md` e `15-todo-switch-core.md`: documentato il nuovo
+  scenario runtime/configurazione, spiegando perche' vive nella suite core e
+  quale contratto protegge.
 - `app/src/app.c` e `modules/inotify/src/inotify_backend.c`: reso opzionale il
   bridge shadow nel poll path. In `event_engine=core`, `app_run()` passa
   `NULL`; in `event_engine=shadow`, passa il bridge opaco verso il dispatcher

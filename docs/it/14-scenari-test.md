@@ -166,6 +166,7 @@ Mappa corrente:
 | recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Funzionale utile per diagnostica watch e creazione lenta; non riproduce il bug `mkdir -p`. |
 | recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
+| shadow senza build legacy | non presente nei funzionali storici | `tests/core/test_shadow_requires_legacy_build.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente quando il binario e' core-only. |
 
 Conclusione operativa:
 
@@ -179,6 +180,37 @@ Conclusione operativa:
 - `tests/functional/test_move_rename_file.sh` resta utile come scenario
   legacy/shadow esplicito per mostrare la vecchia doppia emissione
   `FILE_MOVED + FILE_RENAMED`
+
+### Scenario core: shadow richiesto senza build legacy
+
+File:
+
+```text
+tests/core/test_shadow_requires_legacy_build.sh
+```
+
+Questo scenario non controlla eventi filesystem. Controlla invece un contratto
+di configurazione runtime nato durante lo switch al core:
+
+```text
+build: ENABLE_LEGACY_SHADOW=0
+runtime: ALFRED_EVENT_ENGINE=shadow
+```
+
+Il risultato atteso e' un fallimento esplicito di startup. Alfred non deve fare
+fallback silenzioso a `event_engine=core`, perche' in quel caso lo sviluppatore
+crederebbe di stare confrontando legacy e core mentre in realta' il dispatcher
+legacy non e' compilato.
+
+Il test verifica due cose:
+
+- il processo esce con status diverso da zero
+- `errors.log` contiene il messaggio che shadow mode richiede una build con
+  `ENABLE_LEGACY_SHADOW=1`
+
+Il test vive in `tests/core/` per un motivo preciso: `make test-core`
+ricostruisce il binario core-only. Quindi e' il posto naturale per fissare il
+comportamento di errore quando si chiede shadow mode senza supporto legacy.
 
 Strategia consigliata per il prossimo refactor dei test:
 

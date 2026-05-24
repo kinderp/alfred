@@ -995,6 +995,17 @@ non compila `events.c` e `move_cache.c`. Se un binario core-only riceve
 `ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con un errore esplicito invece di
 fare fallback silenzioso a core mode.
 
+Questo contratto e' fissato da:
+
+```text
+tests/core/test_shadow_requires_legacy_build.sh
+```
+
+Il test appartiene alla suite core perche' `make test-core` ricostruisce Alfred
+con `ENABLE_LEGACY_SHADOW=0`. In questo modo controlliamo proprio il caso che ci
+interessa: shadow mode richiesto a runtime, ma dispatcher legacy assente dalla
+build.
+
 I target di test sono separati:
 
 ```bash
