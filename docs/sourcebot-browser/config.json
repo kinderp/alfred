@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v3/index.json",
+  "connections": {
+    "alfred-local": {
+      "type": "git",
+      "url": "file:///repos/alfred",
+      "revisions": {
+        "branches": [
+          "integration_core",
+          "main",
+          "master"
+        ],
+        "tags": []
+      }
+    }
+  },
+  "settings": {
+    "maxFileSize": 2097152,
+    "reindexIntervalMs": 3600000
+  }
+}

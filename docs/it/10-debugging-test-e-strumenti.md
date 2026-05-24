@@ -126,6 +126,141 @@ Significato:
 - `print`: stampa una variabile
 - `backtrace`: mostra la catena di chiamate
 
+## Browser del codice
+
+Oltre a test e debugger, il progetto mantiene alcuni strumenti locali per
+navigare il codice dal browser. Sono utili quando uno studente deve orientarsi
+in una codebase non piccola: invece di aprire file a caso, puo' cercare una
+funzione, una struttura dati o un evento e poi collegare i risultati alla
+documentazione in `docs/it`.
+
+Gli strumenti sono volutamente separati:
+
+- Bootlin Elixir in `docs/code-browser/`
+- Kythe in `docs/kythe-browser/`
+- Sourcebot in `docs/sourcebot-browser/`
+
+### Elixir
+
+Elixir e' il browser leggero e specifico per codice C/Linux. La guida si trova
+in:
+
+```text
+docs/code-browser/README.md
+```
+
+Uso tipico:
+
+```bash
+docs/code-browser/setup-elixir.sh
+docs/code-browser/reindex-elixir.sh
+docs/code-browser/start-elixir.sh
+```
+
+Elixir e' utile per leggere il codice in modo tradizionale: file, simboli,
+riferimenti e navigazione dal browser. E' una buona scelta quando serve uno
+strumento stabile e abbastanza semplice.
+
+### Kythe
+
+Kythe e' documentato in:
+
+```text
+docs/kythe-browser/README.md
+```
+
+Nel nostro progetto e' soprattutto un esperimento di backend semantico: riesce
+a indicizzare il codice C e a produrre dati interrogabili, ma la release binaria
+non fornisce una GUI pronta. Per questo non e' lo strumento consigliato agli
+studenti per leggere Alfred giorno per giorno.
+
+Resta utile per capire concetti piu' avanzati:
+
+- extractor
+- unita' `.kzip`
+- graphstore
+- serving tables
+- cross-reference semantiche
+
+Dal punto di vista pratico, Kythe puo' servire se vogliamo costruire strumenti
+automatici sopra il codice. Per esempio puo' aiutare a generare mappe
+`funzione -> chiamanti -> chiamati`, controllare se la documentazione cita
+funzioni ancora esistenti, produrre viste mirate sui simboli o ridurre il lavoro
+di esplorazione iniziale di un agente. Un agente puo' usare Kythe per
+interrogare definizioni e riferimenti prima di aprire molti file, risparmiando
+contesto e concentrando la lettura sui punti davvero rilevanti.
+
+Questo non sostituisce la revisione del codice sorgente: prima di modificare
+Alfred bisogna comunque leggere i file reali e lanciare i test. Kythe e' quindi
+uno strumento di orientamento e automazione, non una fonte unica di verita'.
+
+### Sourcebot
+
+Sourcebot e' documentato in:
+
+```text
+docs/sourcebot-browser/README.md
+```
+
+E' una alternativa moderna per leggere e cercare il codice via web. Si avvia
+con Docker:
+
+```bash
+docs/sourcebot-browser/start-sourcebot.sh
+```
+
+Poi si apre:
+
+```text
+http://127.0.0.1:3000
+```
+
+Comandi principali:
+
+```bash
+docs/sourcebot-browser/status-sourcebot.sh
+docker logs -f alfred-sourcebot
+docs/sourcebot-browser/stop-sourcebot.sh
+```
+
+Sourcebot usa un Docker named volume chiamato `alfred-sourcebot-data` per i dati
+interni. Il volume non viene cancellato dallo stop normale, cosi' il database e
+l'indice possono essere riusati al riavvio. Per cancellare tutto:
+
+```bash
+docs/sourcebot-browser/stop-sourcebot.sh
+docker volume rm alfred-sourcebot-data
+```
+
+Query utili da provare nella UI:
+
+```text
+app_run
+lang:c app_run
+sym:app_run
+path:app/src app_run
+recursive_create_nested_dir
+ALFRED_EVENT_RELOCATED
+```
+
+Sourcebot e' probabilmente lo strumento piu' comodo se l'obiettivo e' cercare
+rapidamente nel codice e aprire file dal browser. La sua code navigation
+completa, pero', richiede una licenza Enterprise; per il nostro uso didattico
+restano comunque molto utili file explorer, ricerca indicizzata, syntax
+highlighting e filtri.
+
+### Quale scegliere
+
+Per la lettura quotidiana del codice:
+
+- usa Sourcebot se vuoi una UI moderna e una ricerca comoda
+- usa Elixir se vuoi uno strumento piu' leggero e specifico per il codice C
+- usa Kythe solo per esperimenti avanzati su dati semantici e cross-reference
+
+Gli studenti non devono partire da Kythe. Prima devono imparare a seguire il
+codice con Elixir o Sourcebot, poi possono usare la documentazione italiana per
+capire responsabilita', strutture dati e flusso degli eventi.
+
 ## Test funzionali
 
 Il progetto contiene test in:

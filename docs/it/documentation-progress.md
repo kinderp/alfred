@@ -28,10 +28,33 @@ Stati usati:
 | Parziale | `15-todo-switch-core.md` |
 | Parziale | `16-mappa-codice-e-strutture.md` |
 | Completo | `../code-browser/README.md` |
+| Completo | `../sourcebot-browser/README.md` |
+| Parziale | `../kythe-browser/README.md` |
 | Parziale | `glossario.md` |
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md`: aggiunte regole operative per usare Kythe e un
+  futuro Graphify nel workflow: gli indici semantici servono a restringere il
+  campo e ridurre letture inutili, ma ogni risultato va verificato sui file
+  sorgente reali prima di modificare codice o documentazione. Aggiunti anche
+  principi di ragionamento ispirati alle guideline Karpathy-style:
+  assunzioni esplicite, semplicita', modifiche chirurgiche e obiettivi
+  verificabili.
+- `docs/sourcebot-browser/`: aggiunto setup locale per Sourcebot con script di
+  avvio, stop e stato, configurazione per indicizzare Alfred come repository
+  Git locale read-only, telemetria disabilitata, accesso anonimo locale e uso
+  di un Docker named volume per evitare problemi di ownership del database
+  embedded. Il README spiega avvio, log, reset completo, query utili, limiti
+  della code navigation Enterprise e confronto con Elixir/Kythe.
+- `docs/kythe-browser/README.md` e `10-debugging-test-e-strumenti.md`:
+  chiarito a cosa puo' servire Kythe in pratica anche senza GUI completa:
+  interrogazione di simboli e cross-reference, generazione futura di mappe,
+  controlli automatici sulla documentazione e riduzione del lavoro esplorativo
+  per agenti che devono leggere il codice senza aprire molti file irrilevanti.
+- `10-debugging-test-e-strumenti.md` e `README.md`: aggiunta una sezione sui
+  browser del codice, chiarendo quando usare Elixir, Sourcebot e Kythe e quali
+  comandi servono per avviarli, fermarli e verificarli.
 - `docs/code-browser/`: aggiunta una configurazione locale per Bootlin Elixir,
   con script di setup, reindex, avvio e stop. La guida spiega come usare il code
   browser per navigare Alfred dal browser e collegare la lettura del codice alla

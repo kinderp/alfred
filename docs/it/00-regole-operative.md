@@ -18,6 +18,98 @@ altro momento, leggere questo file prima di continuare.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
 
+## Principi di ragionamento dell'agente
+
+Queste regole valgono quando un agente AI aiuta a modificare o documentare il
+progetto. Sono ispirate anche alle guideline "Karpathy-inspired" raccolte nel
+repository `multica-ai/andrej-karpathy-skills`, ma adattate al nostro flusso di
+lavoro e alla documentazione didattica di Alfred.
+
+- Pensare prima di modificare: dichiarare assunzioni, dubbi e trade-off prima di
+  toccare codice o documentazione quando il passo non e' banale.
+- Non nascondere confusione: se una richiesta puo' essere interpretata in piu'
+  modi, fermarsi e proporre le interpretazioni invece di sceglierne una in
+  silenzio.
+- Semplicita' prima: implementare il minimo necessario per il passo concordato,
+  senza astrazioni speculative o opzioni configurabili non richieste.
+- Modifiche chirurgiche: toccare solo i file necessari al passo corrente. Se si
+  nota codice morto o migliorabile fuori contesto, segnalarlo o metterlo nel
+  TODO, ma non cambiarlo senza accordo.
+- Ogni riga modificata deve poter essere collegata alla richiesta corrente, a un
+  test, a un bug o a un aggiornamento documentale necessario.
+- Obiettivi verificabili: per ogni passo tecnico chiarire come si controlla il
+  risultato, per esempio con `make`, `make test-core`, uno scenario shadow o una
+  verifica mirata.
+- Prima di fare refactor, distinguere sempre:
+  - comportamento osservabile
+  - responsabilita' dei moduli
+  - pulizia interna
+  - compatibilita' temporanea legacy/shadow
+- Se una modifica serve solo a ridurre complessita' interna, documentare perche'
+  non cambia la semantica osservabile.
+
+Questi principi non devono rallentare correzioni ovvie o modifiche puramente
+documentali. Servono soprattutto nei passaggi non banali: refactor, semantica
+degli eventi, test, architettura, interfacce pubbliche e strumenti di sviluppo.
+
+## Uso di indici semantici e grafi del codice
+
+Alfred puo' essere esplorato con strumenti diversi, che hanno scopi diversi:
+
+- `rg` e lettura diretta dei file: percorso normale per modifiche piccole e
+  localizzate.
+- Sourcebot/Elixir: browser umani per cercare e leggere il codice.
+- Kythe: indice semantico e cross-reference C, utile per interrogazioni su
+  simboli, definizioni, riferimenti e possibili mappe automatiche.
+- Graphify: possibile knowledge graph piu' ampio, pensato per agenti AI e
+  capace di collegare codice, documentazione, diagrammi e decisioni progettuali.
+
+Regola pratica:
+
+```text
+Prima restringere il campo con indici/grafi quando il problema e' ampio;
+poi aprire e verificare sempre i file sorgente reali prima di modificare.
+```
+
+Non usare Kythe o Graphify per ogni task. Per un cambio locale e chiaro, `rg` e
+lettura diretta bastano. Usarli invece quando:
+
+- bisogna capire l'impatto di un refactor
+- bisogna sapere chi chiama o usa una funzione/struttura dati
+- bisogna aggiornare la mappa del codice o la documentazione architetturale
+- bisogna controllare se una spiegazione documentale e' ancora coerente con il
+  codice
+- un agente deve orientarsi nella codebase senza aprire molti file irrilevanti
+- si vuole generare o validare una vista `funzione -> chiamanti -> chiamati`
+
+Kythe va preferito per domande tecniche sui simboli C indicizzati, per esempio:
+
+```text
+dove e' definito questo simbolo?
+quali file vede l'indice?
+quali riferimenti conosce il grafo?
+```
+
+Graphify, se verra' integrato, andra' preferito per domande piu' larghe, per
+esempio:
+
+```text
+quali documenti spiegano questa parte del codice?
+quali moduli sono collegati a questa decisione architetturale?
+quale cluster di file partecipa al flusso inotify -> raw -> core?
+```
+
+Limite fondamentale: un indice puo' essere vecchio, incompleto o impreciso.
+Prima di usare una risposta di Kythe/Graphify per cambiare codice, controllare
+sempre:
+
+- che l'indice sia stato rigenerato dopo modifiche rilevanti
+- che i file sorgente reali confermino la relazione trovata
+- che i test o gli scenari documentati verifichino il comportamento atteso
+
+Quando una scelta o una mappa viene ricavata da Kythe o Graphify, indicarlo
+nella documentazione come supporto all'analisi, non come fonte unica di verita'.
+
 ## Commit
 
 I commit devono seguire sempre queste regole:

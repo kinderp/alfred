@@ -41,6 +41,17 @@ Per navigare il codice direttamente dal browser, usa anche la cartella
 Bootlin Elixir su Alfred e cercare funzioni, strutture dati, definizioni e
 riferimenti dal browser.
 
+Sono disponibili anche due esperimenti aggiuntivi:
+
+- [sourcebot-browser](../sourcebot-browser/README.md): Sourcebot, una UI web
+  moderna per ricerca indicizzata, file explorer e lettura del codice.
+- [kythe-browser](../kythe-browser/README.md): Kythe, utile come backend
+  semantico sperimentale, ma non come browser grafico principale.
+
+Per gli studenti, il percorso pratico consigliato e' partire da Sourcebot o
+Elixir e usare Kythe solo dopo aver capito perche' un grafo semantico puo'
+servire a costruire strumenti piu' avanzati.
+
 Ogni capitolo dovrebbe contenere:
 
 - contesto generale
