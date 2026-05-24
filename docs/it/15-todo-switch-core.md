@@ -190,7 +190,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
 | `inotify_backend_add_startup_watch()` | costruisce `inotify_backend_context_t`; legge `ctx.config->recursive`; passa `ctx` al watch manager | sceglie watch singolo o ricorsivo | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_shutdown()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`; legacy shadow globale resta esplicito | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere runtime/logger/config espliciti o rimuovere il ponte legacy |
-| `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; resta solo `legacy_events_dispatch(app, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | isolare o rimuovere il ponte legacy che richiede ancora `app_t` |
+| `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; il ponte legacy e' confinato in `backend_dispatch_legacy_shadow(app, &ctx, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere o spostare fuori dal backend il bridge legacy che richiede ancora `app_t` |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
@@ -371,6 +371,24 @@ Stato implementato del sesto micro-refactor:
 Il passo non cambia comportamento. Sposta solo una dipendenza di configurazione
 nel context, lasciando visibile il confine ancora aperto: il legacy dispatcher
 non e' stato ancora isolato o rimosso.
+
+Stato implementato del settimo micro-refactor:
+
+- il corpo principale di `inotify_backend_poll()` non chiama piu' direttamente
+  `legacy_events_dispatch(app, ev)`
+- la chiamata legacy e' confinata nel bridge interno
+  `backend_dispatch_legacy_shadow(app, &ctx, ev)`
+- il bridge legge la modalita' da `ctx.config->event_engine_mode`, usa
+  `ctx.logger` per l'errore di build senza legacy e passa `app_t` solo al
+  dispatcher storico
+- il comportamento osservabile non cambia: in `event_engine=core` il bridge non
+  fa nulla; in `event_engine=shadow` chiama il dispatcher legacy se compilato,
+  altrimenti restituisce `ERR_CONFIG`
+
+Questo passo e' didatticamente importante perche' trasforma un uso residuo di
+`app_t` in un confine nominato. Il backend poll path resta ancora compatibile
+con shadow mode, ma ora il debito legacy e' localizzato in una funzione che
+potra' essere rimossa o spostata quando il confronto shadow non servira' piu'.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

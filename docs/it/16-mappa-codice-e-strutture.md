@@ -444,14 +444,15 @@ inotify_backend_poll(app, on_event, userdata)
   logger_raw(ctx.logger, ...)
   on_event(raw, userdata)
   backend_handle_dir_create(&ctx, ev, on_event, userdata)
-  if ctx.config->event_engine_mode == shadow:
-    legacy_events_dispatch(app, ev)
+  backend_dispatch_legacy_shadow(app, &ctx, ev)
 ```
 
-La scelta core/shadow viene ormai letta dal context. Resta invece legata ad
-`app` la chiamata `legacy_events_dispatch(app, ev)`: il legacy usa ancora
-strutture e funzioni nate prima del core, quindi viene mantenuto come ponte
-temporaneo invece di forzare un refactor piu' grande nello stesso passo.
+La scelta core/shadow viene letta dal context. La chiamata diretta al
+dispatcher storico non e' piu' nel corpo principale del poll: passa da
+`backend_dispatch_legacy_shadow()`. Questa funzione e' un bridge temporaneo:
+riceve ancora `app_t` perche' `events.c` richiede l'app completa, ma rende
+esplicito che quella dipendenza appartiene solo al percorso legacy/shadow e non
+al percorso backend/raw/core.
 
 ## Struttura dati di configurazione
 

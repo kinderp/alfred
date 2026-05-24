@@ -35,6 +35,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: aggiunto
+  `backend_dispatch_legacy_shadow()` per confinare in un bridge interno la
+  chiamata residua a `legacy_events_dispatch(app, ev)`. Il poll path principale
+  resta invariato come comportamento, ma il debito legacy/shadow e' ora
+  localizzato e nominato.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  settimo micro-refactor del backend context, chiarendo che `app_t` resta
+  necessario solo per il bridge legacy e non per il percorso raw/core.
 - `tools/code-browsing/`: aggiunto uno strato operativo comune per i browser
   del codice, con controllo Docker, setup/start/stop/restart/status aggregati e
   un `docker-compose.yml` di riferimento per Sourcebot, Elixir e Kythe. Graphify

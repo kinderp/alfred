@@ -67,6 +67,10 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
 
+static int backend_dispatch_legacy_shadow(app_t *app,
+                                          const inotify_backend_context_t *ctx,
+                                          const struct inotify_event *ev);
+
 static uint64_t backend_now_ns(void);
 
 static int backend_emit_synthetic_dir_create(
@@ -246,6 +250,41 @@ void inotify_backend_shutdown(app_t *app)
  * ========================================================================== */
 
 /*
+ * backend_dispatch_legacy_shadow - run the temporary legacy comparison bridge
+ * @app: full application context still required by the legacy dispatcher
+ * @ctx: narrowed backend context used for configuration and diagnostics
+ * @ev: raw inotify event to pass to the historical dispatcher
+ *
+ * This helper deliberately isolates the remaining app_t dependency in the poll
+ * path. The backend/core path above it works with raw Alfred events and opaque
+ * callback userdata; only the legacy shadow dispatcher still needs the full app
+ * because events.c was written before the core/backend split.
+ *
+ * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
+ * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
+ */
+static int backend_dispatch_legacy_shadow(app_t *app,
+                                          const inotify_backend_context_t *ctx,
+                                          const struct inotify_event *ev)
+{
+    if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
+        return ERR_OK;
+
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+    legacy_events_dispatch(app, ev);
+    return ERR_OK;
+#else
+    (void)app;
+    (void)ev;
+
+    logger_error(ctx->logger,
+                 "shadow event engine reached poll without "
+                 "legacy shadow support");
+    return ERR_CONFIG;
+#endif
+}
+
+/*
  * inotify_backend_poll - process one nonblocking inotify read
  * @app: initialized application context
  * @on_event: callback used to deliver raw events to the application/core layer
@@ -355,16 +394,11 @@ int inotify_backend_poll(app_t *app,
         if (callback_status != ERR_OK)
             return callback_status;
 
-        if (ctx.config->event_engine_mode == EVENT_ENGINE_SHADOW) {
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-            legacy_events_dispatch(app, ev);
-#else
-            logger_error(ctx.logger,
-                         "shadow event engine reached poll without "
-                         "legacy shadow support");
-            return ERR_CONFIG;
-#endif
-        }
+        int legacy_status =
+            backend_dispatch_legacy_shadow(app, &ctx, ev);
+
+        if (legacy_status != ERR_OK)
+            return legacy_status;
 
         backend_handle_dir_create(&ctx, ev, on_event, userdata);
 
