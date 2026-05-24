@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: estratto `backend_shutdown()` come
+  forma interna context-shaped dello shutdown backend. La funzione pubblica
+  `inotify_backend_shutdown(app)` resta wrapper compatibile con `app.c`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  nono micro-refactor, spiegando che shutdown non richiede un bridge `app_t`
+  per il legacy perche' `legacy_events_shutdown()` non riceve l'app completa.
 - `modules/inotify/src/inotify_backend.c`: estratto
   `backend_add_startup_watch()` come forma interna context-shaped della API di
   startup watch. `inotify_backend_add_startup_watch(app, path)` resta wrapper

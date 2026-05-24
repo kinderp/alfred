@@ -397,6 +397,15 @@ watch_manager_add(&ctx, path):
   usa ctx.runtime->watchers
   usa ctx.config->watch_mask
   usa ctx.logger
+
+inotify_backend_shutdown(app):
+  backend_context_from_app(app, &ctx)
+  backend_shutdown(&ctx)
+
+backend_shutdown(ctx):
+  chiude ctx->runtime->fd
+  legacy_events_shutdown() se compilato
+  watcher_destroy(&ctx->runtime->watchers)
 ```
 
 Anche la discovery ricorsiva usa ora lo stesso context:

@@ -66,6 +66,8 @@ static void backend_context_from_app(app_t *app,
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path);
 
+static void backend_shutdown(inotify_backend_context_t *ctx);
+
 static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
@@ -254,15 +256,29 @@ void inotify_backend_shutdown(app_t *app)
 
     backend_context_from_app(app, &ctx);
 
-    if (ctx.runtime->fd >= 0) {
-        close(ctx.runtime->fd);
-        ctx.runtime->fd = -1;
+    backend_shutdown(&ctx);
+}
+
+/*
+ * backend_shutdown - release backend runtime resources through context
+ * @ctx: narrowed backend context with runtime state
+ *
+ * This is the context-shaped form of backend shutdown. Unlike the poll legacy
+ * bridge, shutdown does not need app_t: the legacy shutdown hook owns global
+ * temporary shadow state and the normal backend cleanup only needs fd and the
+ * watcher table.
+ */
+static void backend_shutdown(inotify_backend_context_t *ctx)
+{
+    if (ctx->runtime->fd >= 0) {
+        close(ctx->runtime->fd);
+        ctx->runtime->fd = -1;
     }
 
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
     legacy_events_shutdown();
 #endif
-    watcher_destroy(&ctx.runtime->watchers);
+    watcher_destroy(&ctx->runtime->watchers);
 }
 
 /* ============================================================================

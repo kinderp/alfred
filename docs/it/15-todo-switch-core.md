@@ -189,7 +189,7 @@ Dipendenze reali osservate oggi:
 | --- | --- | --- | --- |
 | `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
 | `inotify_backend_add_startup_watch()` | wrapper pubblico da `app_t` a context; delega a `backend_add_startup_watch(&ctx, path)` | sceglie watch singolo o ricorsivo tramite context | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
-| `inotify_backend_shutdown()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`; legacy shadow globale resta esplicito | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere runtime/logger/config espliciti o rimuovere il ponte legacy |
+| `inotify_backend_shutdown()` | wrapper pubblico da `app_t` a context; delega a `backend_shutdown(&ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; il ponte legacy e' confinato in `backend_dispatch_legacy_shadow(app, &ctx, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere o spostare fuori dal backend il bridge legacy che richiede ancora `app_t` |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
@@ -407,6 +407,23 @@ Questo e' un esempio utile di migrazione graduale di una API C. Prima si crea
 una funzione interna con la firma desiderata, poi si lascia la vecchia funzione
 pubblica come adattatore. Solo quando tutti i chiamanti saranno pronti si potra'
 cambiare la firma pubblica senza mescolare refactor e comportamento.
+
+Stato implementato del nono micro-refactor:
+
+- `inotify_backend_shutdown(app)` resta la funzione pubblica chiamata da
+  `app_shutdown()`
+- il wrapper pubblico controlla `app == NULL`, costruisce
+  `inotify_backend_context_t` e delega a `backend_shutdown(&ctx)`
+- `backend_shutdown()` chiude `ctx->runtime->fd`, lo riporta a `-1`, spegne il
+  legacy shadow opzionale con `legacy_events_shutdown()` e distrugge
+  `ctx->runtime->watchers`
+- a differenza del poll path, shutdown non ha bisogno di un bridge con `app_t`:
+  il cleanup legacy non riceve l'app completa e il cleanup backend lavora solo
+  sul runtime
+
+Questo rende startup watch e shutdown simmetrici: entrambi hanno una funzione
+pubblica compatibile con `app.c` e una funzione interna che mostra gia' il
+confine futuro basato su `inotify_backend_context_t`.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
