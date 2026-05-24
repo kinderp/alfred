@@ -479,16 +479,20 @@ legacy_shadow_bridge_t legacy:
   legacy.dispatch = app_legacy_shadow_dispatch
   legacy.userdata = app
 
-inotify_backend_poll(&ctx, &legacy, on_event, userdata)
-  backend_poll(ctx, legacy, on_event, userdata)
+legacy_shadow_bridge_t *legacy_bridge:
+  NULL in event_engine=core
+  &legacy in event_engine=shadow
 
-backend_poll(ctx, legacy, on_event, userdata)
+inotify_backend_poll(&ctx, legacy_bridge, on_event, userdata)
+  backend_poll(ctx, legacy_bridge, on_event, userdata)
+
+backend_poll(ctx, legacy_bridge, on_event, userdata)
   read(ctx->runtime->fd, ...)
   watcher_get_path(&ctx->runtime->watchers, wd)
   logger_raw(ctx->logger, ...)
   on_event(raw, userdata)
   backend_handle_dir_create(ctx, ev, on_event, userdata)
-  backend_dispatch_legacy_shadow(legacy, ctx, ev)
+  backend_dispatch_legacy_shadow(legacy_bridge, ctx, ev)
 ```
 
 La scelta core/shadow viene letta dal context. La chiamata diretta al
@@ -506,6 +510,11 @@ da `app.c`. `poll()` riceve lo stesso context, ma riceve anche un bridge
 separato per lo shadow legacy. Questo evita di mescolare nel context normale una
 dipendenza che appartiene solo al vecchio dispatcher e impedisce a `app_t` di
 entrare nella API pubblica del backend.
+
+Nel percorso normale `event_engine=core`, `legacy_bridge` e' `NULL`. Questa
+scelta e' didatticamente importante: il core path non ha bisogno del dispatcher
+legacy nemmeno come valore vuoto. Il bridge esiste solo quando si chiede
+esplicitamente shadow mode per confrontare il vecchio stream con quello core.
 
 ## Struttura dati di configurazione
 

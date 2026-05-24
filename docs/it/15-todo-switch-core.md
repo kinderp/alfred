@@ -80,7 +80,8 @@ Al momento:
   per usare runtime, configurazione e logger
 - `inotify_backend_poll()` riceve `inotify_backend_context_t *` e un
   `legacy_shadow_bridge_t *`; il bridge non espone piu' `app_t` al backend, ma
-  solo una callback legacy e un `userdata` opaco
+  solo una callback legacy e un `userdata` opaco; in `event_engine=core`
+  `app_run()` passa `NULL` al posto del bridge
 
 ## Mappa della logica legacy rimasta
 
@@ -196,7 +197,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione e logga errori | gia' fuori da `app_t`; non inizializza piu' legacy shadow |
 | `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd e distrugge watch table | gia' fuori da `app_t`; non spegne piu' legacy shadow |
-| `inotify_backend_poll()` | riceve `inotify_backend_context_t *` e `legacy_shadow_bridge_t *`; delega a `backend_poll(ctx, legacy, on_event, userdata)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca la callback shadow se attiva | rimuovere `legacy_shadow_bridge_t` quando shadow legacy non servira' piu' |
+| `inotify_backend_poll()` | riceve `inotify_backend_context_t *` e un bridge shadow opzionale, che puo' essere `NULL` in core mode | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca la callback shadow solo se attiva | rimuovere il parametro shadow quando shadow legacy non servira' piu' |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
@@ -556,6 +557,21 @@ Questa scelta separa due responsabilita' che prima erano mescolate:
 Il backend mantiene solo il punto di chiamata del confronto durante il poll,
 tramite callback opaca. Non inizializza, non spegne e non include piu' il codice
 semantico legacy.
+
+Stato implementato del sedicesimo micro-refactor:
+
+- `app_run()` costruisce ancora il valore `legacy_shadow_bridge_t`, ma passa al
+  backend un puntatore separato `legacy_bridge`
+- `legacy_bridge` resta `NULL` quando
+  `app->config.event_engine_mode == EVENT_ENGINE_CORE`
+- `legacy_bridge` punta al bridge opaco solo quando e' attivo
+  `EVENT_ENGINE_SHADOW`
+- `backend_dispatch_legacy_shadow()` continua ad accettare `NULL` quando il
+  mode e' core, perche' ritorna prima di guardare il bridge
+
+Questo chiarisce il percorso normale: core mode non usa nessun bridge legacy.
+Il parametro rimane nella firma di `inotify_backend_poll()` solo perche' shadow
+mode e' ancora disponibile come strumento temporaneo di confronto.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

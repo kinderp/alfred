@@ -390,10 +390,19 @@ int app_run(app_t *app)
 #endif
     };
 
+    /*
+     * Core mode does not need a legacy bridge at all. Passing NULL keeps the
+     * normal path visibly limited to backend context plus raw/core callback.
+     */
+    legacy_shadow_bridge_t *legacy_bridge = NULL;
+
+    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
+        legacy_bridge = &legacy;
+
     while (app->running) {
 
         if (inotify_backend_poll(&backend_ctx,
-                                 &legacy,
+                                 legacy_bridge,
                                  handle_backend_event,
                                  app) != ERR_OK) {
             break;

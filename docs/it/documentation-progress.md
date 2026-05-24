@@ -35,6 +35,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/src/app.c` e `modules/inotify/src/inotify_backend.c`: reso opzionale il
+  bridge shadow nel poll path. In `event_engine=core`, `app_run()` passa
+  `NULL`; in `event_engine=shadow`, passa il bridge opaco verso il dispatcher
+  legacy.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  sedicesimo micro-refactor, chiarendo che il percorso core normale non usa
+  alcun bridge legacy.
 - `00-regole-operative.md`: rimossa la regola rigida sulle righe entro 75
   caratteri. Le regole commit ora seguono il gist `Git Commit Best Practices`:
   commit monoscopo, subject imperativo, body esplicativo e wrapping circa 72

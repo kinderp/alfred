@@ -246,9 +246,9 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  *
  * This helper deliberately isolates the remaining legacy dependency in the
  * poll path. The backend/core path above it works with raw Alfred events and
- * opaque callback userdata; only the legacy shadow comparison path receives
- * this callback bridge because events.c was written before the core/backend
- * split.
+ * opaque callback userdata; in core mode @legacy is expected to be NULL. Only
+ * the legacy shadow comparison path receives this callback bridge because
+ * events.c was written before the core/backend split.
  *
  * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
  * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
