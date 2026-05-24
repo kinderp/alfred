@@ -226,15 +226,19 @@ void inotify_backend_shutdown(app_t *app)
     if (app == NULL)
         return;
 
-    if (app->inotify.fd >= 0) {
-        close(app->inotify.fd);
-        app->inotify.fd = -1;
+    inotify_backend_context_t ctx;
+
+    backend_context_from_app(app, &ctx);
+
+    if (ctx.runtime->fd >= 0) {
+        close(ctx.runtime->fd);
+        ctx.runtime->fd = -1;
     }
 
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
     legacy_events_shutdown();
 #endif
-    watcher_destroy(&app->inotify.watchers);
+    watcher_destroy(&ctx.runtime->watchers);
 }
 
 /* ============================================================================

@@ -34,6 +34,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: `inotify_backend_shutdown()` ora
+  costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` per
+  chiudere il file descriptor e distruggere la watcher table. Il cleanup legacy
+  shadow resta esplicito e condizionato dalla build.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  quinto micro-refactor del backend context, chiarendo la simmetria tra init e
+  shutdown e il fatto che il cleanup legacy non appartiene al backend core
+  finale.
 - `modules/inotify/src/inotify_backend.c`: `inotify_backend_init()` ora
   costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime`,
   `ctx.config` e `ctx.logger` per watcher table, file descriptor, configurazione

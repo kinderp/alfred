@@ -189,7 +189,7 @@ Dipendenze reali osservate oggi:
 | --- | --- | --- | --- |
 | `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
 | `inotify_backend_add_startup_watch()` | costruisce `inotify_backend_context_t`; legge `ctx.config->recursive`; passa `ctx` al watch manager | sceglie watch singolo o ricorsivo | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
-| `inotify_backend_shutdown()` | `app->inotify`, legacy shadow globale | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | chiusura su contesto backend; legacy separato o rimosso |
+| `inotify_backend_shutdown()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`; legacy shadow globale resta esplicito | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere runtime/logger/config espliciti o rimuovere il ponte legacy |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`/`ctx.logger`; resta su `app->config.event_engine_mode` e `legacy_events_dispatch(app, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | spostare anche la decisione shadow fuori dall'app completa oppure rimuoverla con il legacy |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
@@ -344,6 +344,20 @@ La firma pubblica e' ancora `inotify_backend_init(app_t *app)`: il passo non
 cambia l'API esterna e non cambia la semantica. Serve a restringere il corpo
 della funzione e a rendere evidente che init ha bisogno di runtime, config e
 logger, non dell'intera applicazione.
+
+Stato implementato del quinto micro-refactor:
+
+- `inotify_backend_shutdown()` costruisce un `inotify_backend_context_t` locale
+  dopo il controllo degli argomenti
+- la chiusura del file descriptor usa `ctx.runtime->fd`
+- la distruzione della watcher table usa `ctx.runtime->watchers`
+- `legacy_events_shutdown()` resta esplicito e condizionato da
+  `ALFRED_ENABLE_LEGACY_SHADOW`, perche' fa ancora parte del ponte temporaneo
+  verso il dispatcher legacy
+
+Questo rende simmetrici init e shutdown: entrambi ricevono ancora `app_t`, ma
+internamente lavorano sullo stato runtime del backend attraverso il context.
+La semantica osservabile e l'ordine di cleanup non cambiano.
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
 

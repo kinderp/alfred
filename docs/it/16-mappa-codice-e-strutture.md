@@ -279,6 +279,18 @@ Questa e' una distinzione didattica importante: anche se l'API pubblica non e'
 ancora cambiata, il corpo della funzione mostra gia' quali dati appartengono al
 backend e quali sono solo dipendenze prese in prestito dall'applicazione.
 
+Il micro-refactor su `inotify_backend_shutdown()` completa la simmetria con
+`init()`. Anche qui la funzione riceve ancora `app_t`, ma costruisce un
+`inotify_backend_context_t` locale e poi usa:
+
+- `ctx.runtime->fd` per controllare, chiudere e invalidare il file descriptor
+- `ctx.runtime->watchers` per distruggere la tabella dei watch
+
+`legacy_events_shutdown()` resta fuori dal context per scelta esplicita: e' un
+residuo del ponte legacy/shadow e non rappresenta stato del backend core
+finale. Quando shadow mode verra' rimosso, anche quel cleanup sparira' o verra'
+spostato in una struttura legacy dedicata.
+
 ### Context backend proposto
 
 La proposta scelta e' introdurre un context separato. In questo modo
