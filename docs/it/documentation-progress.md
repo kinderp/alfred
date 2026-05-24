@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `10-debugging-test-e-strumenti.md` e `00-regole-operative.md`: aggiunto un
+  esempio dettagliato e riproducibile di ricognizione prima di un micro-refactor
+  usando Kythe, `rg`, `sed` e lettura della documentazione collegata. La sezione
+  spiega opzioni CLI, sintassi delle regex e perche' ogni pattern viene cercato.
 - `00-regole-operative.md` e `10-debugging-test-e-strumenti.md`: collegata la
   procedura pre-commit alla fase precedente di consultazione del codice per
   contributori umani. Aggiunti rimandi operativi a Sourcebot, Elixir e Kythe,

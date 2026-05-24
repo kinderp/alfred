@@ -272,6 +272,215 @@ I browser del codice aiutano nella fase di comprensione, non nella validazione
 finale. Dopo ogni modifica restano necessari build e test descritti nella
 sezione successiva.
 
+## Esempio di ricognizione prima di un micro-refactor
+
+Questa sezione mostra un esempio concreto del metodo da usare prima di
+modificare codice. L'esempio riguarda il backend inotify, ma il metodo vale per
+qualunque parte della codebase.
+
+Obiettivo dell'esempio:
+
+```text
+capire quali dipendenze da app_t restano nel backend inotify
+```
+
+La sequenza e':
+
+```text
+Kythe -> rg -> sed/editor -> documentazione -> proposta di modifica
+```
+
+### 1. Controllare il perimetro con Kythe
+
+Se Kythe e' gia' stato configurato e il server e' avviato, si puo' chiedere
+quali file vede dentro il modulo inotify:
+
+```bash
+source docs/kythe-browser/.work/env.sh
+kythe --api=http://127.0.0.1:9898 ls 'kythe://alfred?path=modules/inotify/src'
+```
+
+Spiegazione:
+
+- `source docs/kythe-browser/.work/env.sh` carica nell'ambiente le variabili
+  generate dal setup Kythe, per esempio `KYTHE_DIR` e `PATH`. Senza questo
+  passaggio la shell potrebbe non trovare il comando `kythe`.
+- `kythe` e' il client CLI di Kythe.
+- `--api=http://127.0.0.1:9898` dice al client dove si trova il server HTTP/API
+  Kythe locale.
+- `ls` e' il sottocomando che lista directory o file conosciuti dall'indice.
+- `'kythe://alfred?path=modules/inotify/src'` e' una URI Kythe:
+  - `kythe://` e' lo schema
+  - `alfred` e' il corpus, cioe' il nome logico del progetto indicizzato
+  - `?path=modules/inotify/src` restringe la richiesta a quel path
+- Le virgolette singole proteggono `?` dalla shell. Senza virgolette, alcuni
+  caratteri possono essere interpretati dalla shell invece che passati a Kythe.
+
+Output atteso:
+
+```text
+inotify_adapter.c
+inotify_backend.c
+watch_manager.c
+watcher.c
+```
+
+Questo comando non decide cosa modificare. Serve solo a verificare che l'indice
+veda il perimetro giusto. Se Kythe non e' aggiornato o non risponde, si puo'
+continuare con `rg`, ma non bisogna basare decisioni su un indice vecchio.
+
+### 2. Cercare pattern architetturali con `rg`
+
+Per trovare le dipendenze residue da `app_t` nel backend si puo' usare:
+
+```bash
+rg -n "app->|app_t \*app|legacy_events|event_engine_mode|backend_context_from_app|inotify_backend_" \
+  modules/inotify/src/inotify_backend.c \
+  modules/inotify/include/inotify_backend.h \
+  app/src/app.c
+```
+
+`rg` significa ripgrep. E' uno strumento di ricerca testuale molto veloce, piu'
+adatto di `grep -R` su codebase grandi.
+
+Opzioni usate:
+
+- `-n`: mostra il numero di riga accanto a ogni match. Questo rende immediato
+  aprire il file nel punto giusto.
+
+La stringa tra virgolette e' una espressione regolare. Il carattere `|` significa
+"oppure". Quindi questa ricerca trova qualunque riga che contenga uno dei
+pattern indicati.
+
+Pattern usati:
+
+- `app->`
+  - trova accessi diretti ai campi di `app_t`
+  - esempio: `app->config`, `app->inotify`, `app->logger`
+  - utile per capire dove un modulo vede ancora troppo stato applicativo
+
+- `app_t \*app`
+  - trova firme o dichiarazioni che ricevono ancora un puntatore ad `app_t`
+  - `\*` significa asterisco letterale
+  - in regex, `*` da solo ha un significato speciale: "ripeti il token
+    precedente"; per cercare proprio il carattere `*` bisogna scrivere `\*`
+  - esempio trovato: `int inotify_backend_poll(app_t *app, ...)`
+
+- `legacy_events`
+  - trova il ponte verso il dispatcher legacy/shadow
+  - esempio: `legacy_events_init()`, `legacy_events_dispatch()`,
+    `legacy_events_shutdown()`
+  - utile per separare refactor backend core da compatibilita' legacy
+
+- `event_engine_mode`
+  - trova dove il codice sceglie tra core e shadow
+  - e' importante perche' questa scelta e' configurazione, non semantica del
+    backend inotify
+
+- `backend_context_from_app`
+  - trova i punti in cui il backend costruisce il context ristretto a partire da
+    `app_t`
+  - serve a capire quanto e' gia' avanzato il refactor
+
+- `inotify_backend_`
+  - trova funzioni e tipi pubblici del backend inotify
+  - utile per vedere il confine API del modulo
+
+I file passati dopo la regex restringono la ricerca:
+
+```text
+modules/inotify/src/inotify_backend.c
+modules/inotify/include/inotify_backend.h
+app/src/app.c
+```
+
+Questo evita rumore. Invece di cercare in tutto il repository, si cercano solo i
+file coinvolti dal problema:
+
+- implementazione del backend
+- header pubblico del backend
+- applicazione che chiama il backend
+
+### 3. Leggere il codice reale con `sed`
+
+Dopo `rg`, bisogna leggere il codice reale intorno ai match. Per esempio:
+
+```bash
+sed -n '250,390p' modules/inotify/src/inotify_backend.c
+```
+
+Spiegazione:
+
+- `sed` e' uno stream editor. Qui lo usiamo solo per stampare un intervallo di
+  righe.
+- `-n` disabilita la stampa automatica di tutte le righe.
+- `'250,390p'` significa:
+  - parti dalla riga `250`
+  - arriva alla riga `390`
+  - `p` significa print, cioe' stampa
+- Il path finale e' il file da leggere.
+
+Questo comando non modifica il file. Serve a leggere una finestra precisa senza
+aprire tutto il sorgente.
+
+Esempio di uso:
+
+```text
+rg trova un match a riga 358
+sed legge da 250 a 390
+lo sviluppatore vede tutto il contesto della funzione
+```
+
+Per modifiche reali, dopo aver identificato il blocco, si puo' usare l'editor
+abituale. `sed` qui e' solo uno strumento di lettura.
+
+### 4. Leggere la documentazione collegata
+
+Prima di proporre una modifica architetturale, bisogna confrontare il codice con
+la documentazione esistente. Per il refactor backend/core:
+
+```bash
+sed -n '185,375p' docs/it/15-todo-switch-core.md
+```
+
+Il significato del comando e' lo stesso visto sopra: stampa solo le righe da
+`185` a `375`.
+
+Questo passaggio evita un errore comune: modificare il codice dimenticando una
+decisione gia' discussa. Nel nostro caso, `15-todo-switch-core.md` contiene la
+mappa delle dipendenze residue, la strategia a micro-refactor e la distinzione
+tra backend core e ponte legacy/shadow.
+
+### 5. Formulare la proposta
+
+Dopo questi passaggi, la proposta deve essere piccola e verificabile.
+
+Esempio:
+
+```text
+Dentro inotify_backend_poll(), sostituire solo:
+app->config.event_engine_mode
+con:
+ctx.config->event_engine_mode
+
+Lasciare invariato:
+legacy_events_dispatch(app, ev)
+```
+
+Motivo:
+
+- `event_engine_mode` e' configurazione e puo' passare dal context
+- `legacy_events_dispatch(app, ev)` e' ancora il vero ponte legacy e richiede
+  `app_t`
+- il passo non cambia API pubblica
+- il passo non cambia comportamento osservabile
+- dopo il passo, l'unico uso sostanziale di `app` in `poll()` resta il ponte
+  legacy
+
+Questa e' la forma desiderata di una ricognizione tecnica: non basta trovare
+righe con `rg`; bisogna interpretarle, leggere il contesto e collegarle alla
+direzione architetturale documentata.
+
 ## Procedura manuale prima di un commit
 
 Ogni modifica al codice deve essere verificata con una procedura riproducibile

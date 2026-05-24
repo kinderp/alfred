@@ -188,6 +188,9 @@ Guide operative:
 
 Questi strumenti servono a capire il codice prima di modificarlo. Non
 sostituiscono build, test e lettura del sorgente reale.
+Per un esempio dettagliato di ricognizione con Kythe, `rg`, `sed` e lettura
+della documentazione collegata, vedere
+[Debugging, test e strumenti](10-debugging-test-e-strumenti.md).
 
 Dopo modifiche al codice eseguire normalmente la procedura standard pre-commit:
 
