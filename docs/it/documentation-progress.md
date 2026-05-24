@@ -36,10 +36,17 @@ Stati usati:
 ## Aggiornamenti recenti
 
 - `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
+  e `app/src/app.c`: reso opaco `legacy_shadow_bridge_t`. Il bridge non
+  contiene piu' `struct app *`; contiene una callback shadow e un `userdata`.
+  Il cast a `app_t` resta in `app_legacy_shadow_dispatch()`, dentro `app.c`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  quattordicesimo micro-refactor, chiarendo la differenza tra quarantena con
+  campo `app` e bridge realmente opaco.
+- `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
   e `app/src/app.c`: introdotto `legacy_shadow_bridge_t` e cambiata la firma di
   `inotify_backend_poll()`. Il poll riceve ora `inotify_backend_context_t *` e
-  un bridge legacy separato; `app_t` resta disponibile solo dentro il bridge per
-  `events.c`.
+  un bridge legacy separato. Questo passo e' stato poi completato rendendo il
+  bridge opaco, senza campo `app`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   tredicesimo micro-refactor, cioe' la quarantena esplicita della dipendenza
   shadow da `app_t`.

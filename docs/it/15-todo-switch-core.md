@@ -79,8 +79,8 @@ Al momento:
 - le funzioni lifecycle pulite del backend ricevono `inotify_backend_context_t *`
   per usare runtime, configurazione e logger
 - `inotify_backend_poll()` riceve `inotify_backend_context_t *` e un
-  `legacy_shadow_bridge_t *`; il bridge contiene ancora `app_t *` solo per il
-  percorso legacy/shadow
+  `legacy_shadow_bridge_t *`; il bridge non espone piu' `app_t` al backend, ma
+  solo una callback legacy e un `userdata` opaco
 
 ## Mappa della logica legacy rimasta
 
@@ -134,8 +134,8 @@ Responsabilita' attuali:
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve raw event reali e sintetici tramite callback
 - inoltra gli `alfred_raw_event_t` al core
-- non include piu' `events.h`: in shadow mode il backend inizializza, chiama e
-  spegne il dispatcher legacy
+- nella build shadow include `events.h` solo per adattare il bridge opaco alla
+  vecchia funzione `legacy_events_dispatch()`
 
 La catena ricorsiva non parte piu' da `app.c`. Ora e':
 
@@ -149,9 +149,9 @@ inotify_backend.c -> backend_handle_dir_create()
 
 Questa catena serve a non perdere le directory create rapidamente prima che il
 watch del padre sia installato. E' un miglioramento perche' la manutenzione dei
-watch sta nel backend, non nell'app. Resta da migliorare il fatto che il backend
-usa ancora `app_t` per raggiungere configurazione, logger e callback verso il
-core.
+watch sta nel backend, non nell'app. Il backend non riceve piu' l'intera
+`app_t`: riceve un context con runtime/config/logger, una callback raw/core e,
+solo per shadow mode, un bridge legacy opaco.
 
 ### `modules/inotify/src/inotify_backend.c`
 
@@ -174,17 +174,18 @@ Responsabilita' attuali:
 - `fd`: file descriptor inotify non bloccante
 - `watchers`: tabella `wd -> path`
 
-Limite intenzionale: le funzioni del backend ricevono ancora `app_t *`. Questo
-evita un grande refactor immediato, ma il target resta separare in modo piu'
-netto configurazione, logger e callback dal contesto applicativo completo.
+Limite intenzionale residuo: il backend contiene ancora il ponte verso il
+dispatcher legacy shadow, ma il ponte non espone piu' `app_t` nella API
+pubblica. La dipendenza reale da `app_t` resta localizzata tra `app.c` ed
+`events.c`, cioe' nel codice storico usato solo per il confronto.
 
 #### Mappa delle dipendenze residue da `app_t`
 
 Il backend inotify non accede direttamente al core: non chiama
 `alfred_process()` e non legge `app->core`. Il collegamento con il core passa
-solo dalla callback ricevuta da `inotify_backend_poll()`. Il problema residuo e'
-piu' sottile: molte funzioni backend ricevono comunque l'intero `app_t`, quindi
-possono vedere piu' stato di quanto serva davvero.
+solo dalla callback ricevuta da `inotify_backend_poll()`. La maggior parte delle
+funzioni backend non riceve piu' l'intero `app_t`; le dipendenze rimaste sono
+esplicite nel context backend e nel bridge shadow opaco.
 
 Dipendenze reali osservate oggi:
 
@@ -193,7 +194,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
-| `inotify_backend_poll()` | riceve `inotify_backend_context_t *` e `legacy_shadow_bridge_t *`; delega a `backend_poll(ctx, legacy, on_event, userdata)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere `legacy_shadow_bridge_t` quando shadow legacy non servira' piu' |
+| `inotify_backend_poll()` | riceve `inotify_backend_context_t *` e `legacy_shadow_bridge_t *`; delega a `backend_poll(ctx, legacy, on_event, userdata)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca la callback shadow se attiva | rimuovere `legacy_shadow_bridge_t` quando shadow legacy non servira' piu' |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
@@ -208,8 +209,8 @@ l'applicazione. Le dipendenze sono raggruppabili in quattro famiglie:
 - stato backend: `fd` e `watcher_table_t`
 - configurazione backend: `recursive`, `watch_mask`, `watcher_capacity`
 - diagnostica: `logger_t`
-- compatibilita' temporanea: legacy shadow e callback che ancora ricevono
-  `app_t`
+- compatibilita' temporanea: legacy shadow tramite callback opaca; il cast a
+  `app_t` resta fuori dal backend
 
 Il prossimo passo tecnico non deve ancora cambiare comportamento. Deve
 scegliere quale API renda esplicite queste quattro famiglie senza introdurre
@@ -510,6 +511,23 @@ Questo non rimuove ancora la dipendenza da `app_t`, ma la mette in quarantena:
 non e' piu' parte della firma normale del backend context e non e' piu' passata
 come parametro principale del poll. La presenza del bridge rende esplicito che
 il problema rimasto appartiene al confronto shadow, non al backend core.
+
+Stato implementato del quattordicesimo micro-refactor:
+
+- `legacy_shadow_bridge_t` non contiene piu' `struct app *`
+- il bridge contiene `legacy_shadow_dispatch_fn dispatch` e `void *userdata`
+- `app.c` costruisce il bridge con `app_legacy_shadow_dispatch()` e `app` come
+  userdata solo quando la build abilita `ALFRED_ENABLE_LEGACY_SHADOW`
+- `app_legacy_shadow_dispatch()` e' l'unico punto nuovo in cui il puntatore
+  opaco viene ricondotto ad `app_t` e passato a `legacy_events_dispatch()`
+- `inotify_backend.c` non sa piu' che cosa ci sia dentro `userdata`: controlla
+  solo se la callback shadow esiste e la invoca in `EVENT_ENGINE_SHADOW`
+
+Questo e' piu' pulito del tredicesimo passo perche' la quarantena non e' piu'
+"il backend contiene un campo `app` ma lo usa solo per shadow"; diventa "il
+backend conosce solo una callback opzionale". Il backend resta responsabile del
+momento in cui lo shadow viene chiamato, ma non conosce il tipo applicativo
+storico necessario a `events.c`.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

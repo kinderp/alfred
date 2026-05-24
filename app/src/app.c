@@ -15,6 +15,9 @@
 #include "core_logger.h"
 #include "errors.h"
 #include "inotify_backend.h"
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+#include "events.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +34,10 @@ static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 );
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+static void app_legacy_shadow_dispatch(void *userdata,
+                                       const struct inotify_event *ev);
+#endif
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -63,6 +70,23 @@ static void app_build_inotify_backend_context(
     ctx->config = &app->config;
     ctx->logger = &app->logger;
 }
+
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+/*
+ * app_legacy_shadow_dispatch - adapt the opaque bridge back to legacy app_t
+ * @userdata: application context supplied by app_run()
+ * @ev: kernel inotify event read by the backend
+ *
+ * The backend intentionally knows only callback + userdata. This adapter keeps
+ * the historical app_t requirement local to app.c and events.c, which makes the
+ * temporary shadow path visible without leaking app_t into the backend API.
+ */
+static void app_legacy_shadow_dispatch(void *userdata,
+                                       const struct inotify_event *ev)
+{
+    legacy_events_dispatch((app_t *)userdata, ev);
+}
+#endif
 
 /* ============================================================================
  * Signal Handling
@@ -297,7 +321,13 @@ int app_run(app_t *app)
     app_build_inotify_backend_context(app, &backend_ctx);
 
     legacy_shadow_bridge_t legacy = {
-        .app = app
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+        .dispatch = app_legacy_shadow_dispatch,
+        .userdata = app
+#else
+        .dispatch = NULL,
+        .userdata = NULL
+#endif
     };
 
     while (app->running) {

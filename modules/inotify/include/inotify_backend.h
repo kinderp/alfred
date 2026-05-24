@@ -22,8 +22,6 @@
 
 #include <sys/inotify.h>
 
-struct app;
-
 /*
  * inotify_backend_t - runtime state owned by the inotify backend
  * @fd: nonblocking inotify descriptor, or -1 when closed
@@ -56,15 +54,31 @@ typedef struct inotify_backend_context {
 } inotify_backend_context_t;
 
 /*
- * legacy_shadow_bridge_t - temporary bridge for the legacy shadow dispatcher
- * @app: full application context still required by events.c
+ * legacy_shadow_dispatch_fn - call the historical shadow dispatcher
+ * @userdata: opaque application-owned context
+ * @ev: kernel inotify event to compare through the legacy path
  *
- * This type quarantines the remaining app_t dependency. The normal backend
- * raw/core path must use inotify_backend_context_t; only the legacy shadow
- * comparison path may look through this bridge.
+ * The backend does not interpret @userdata. app.c owns the cast from the opaque
+ * pointer to its real type, keeping app_t out of the backend public boundary.
+ */
+typedef void (*legacy_shadow_dispatch_fn)(
+    void *userdata,
+    const struct inotify_event *ev
+);
+
+/*
+ * legacy_shadow_bridge_t - temporary bridge for the legacy shadow dispatcher
+ * @dispatch: optional legacy dispatch callback
+ * @userdata: opaque context passed to @dispatch
+ *
+ * This type quarantines the remaining legacy dependency without exposing app_t
+ * to the backend. The normal backend raw/core path must use
+ * inotify_backend_context_t; only the legacy shadow comparison path may call
+ * through this callback bridge.
  */
 typedef struct legacy_shadow_bridge {
-    struct app *app;
+    legacy_shadow_dispatch_fn dispatch;
+    void *userdata;
 } legacy_shadow_bridge_t;
 
 /*

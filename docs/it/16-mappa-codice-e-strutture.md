@@ -220,18 +220,19 @@ watch.
 ### Dipendenze backend da `app_t`
 
 Storicamente il backend riceveva `app_t *` in molte funzioni. Dopo i
-micro-refactor piu' recenti, le funzioni lifecycle pulite ricevono direttamente
-`inotify_backend_context_t *`; `poll()` resta l'eccezione temporanea perche'
-deve ancora alimentare il ponte legacy/shadow. La lettura del codice mostra che
-le dipendenze reali sono limitate e abbastanza regolari.
+micro-refactor piu' recenti, le funzioni lifecycle pulite e il poll ricevono
+direttamente `inotify_backend_context_t *`. `poll()` ha ancora una dipendenza
+temporanea dallo shadow legacy, ma non tramite `app_t`: riceve un bridge opaco
+con callback e `userdata`. La lettura del codice mostra che le dipendenze reali
+sono limitate e abbastanza regolari.
 
 ```mermaid
 flowchart TD
-    A["app_t passato al backend"] --> B["app->inotify"]
+    A["app_t ownership root"] --> B["app->inotify"]
     A --> C["app->config"]
     A --> D["app->logger"]
     A --> E["callback verso app/core"]
-    A --> F["legacy shadow<br/>solo ENABLE_LEGACY_SHADOW"]
+    A --> F["legacy shadow adapter<br/>solo app.c"]
 
     B --> B1["fd"]
     B --> B2["watcher_table_t"]
@@ -262,9 +263,12 @@ spesso vengono confuse:
 - ownership: chi possiede davvero il dato
 - accesso: chi ha bisogno di leggerlo o modificarlo durante una funzione
 
-Oggi `app_t` risolve entrambi i problemi in modo pratico ma largo. Il backend
-riceve tutto il contenitore, anche se usa solo una parte. Il refactor finale
-dovrebbe rendere visibili solo le dipendenze necessarie.
+Storicamente `app_t` risolveva entrambi i problemi in modo pratico ma largo: il
+backend riceveva tutto il contenitore, anche se usava solo una parte. Il
+refactor recente ha gia' corretto questo confine per il backend: ora il codice
+inotify riceve context esplicito, callback raw/core e bridge shadow opaco. Il
+refactor finale dovra' decidere se rimuovere del tutto il bridge quando shadow
+non sara' piu' necessario.
 
 Il micro-refactor iniziale su `inotify_backend_init()` ha seguito questa
 direzione restringendo prima il corpo della funzione. Dopo il successivo cambio
@@ -466,7 +470,8 @@ Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
 
 ```text
 legacy_shadow_bridge_t legacy:
-  legacy.app = app
+  legacy.dispatch = app_legacy_shadow_dispatch
+  legacy.userdata = app
 
 inotify_backend_poll(&ctx, &legacy, on_event, userdata)
   backend_poll(ctx, legacy, on_event, userdata)
@@ -483,15 +488,18 @@ backend_poll(ctx, legacy, on_event, userdata)
 La scelta core/shadow viene letta dal context. La chiamata diretta al
 dispatcher storico non e' piu' nel corpo principale del poll: passa da
 `backend_dispatch_legacy_shadow()`. Questa funzione riceve
-`legacy_shadow_bridge_t` perche' `events.c` richiede ancora l'app completa, ma
-rende esplicito che quella dipendenza appartiene solo al percorso legacy/shadow
-e non al percorso backend/raw/core.
+`legacy_shadow_bridge_t`, ma il bridge non contiene piu' `app_t`: contiene una
+callback e un `userdata` opaco. Il cast verso `app_t` vive in `app.c`, dentro
+`app_legacy_shadow_dispatch()`, perche' e' li' che il programma conosce il
+contesto applicativo completo. Il backend sa solo che, in shadow mode, deve
+invocare una callback di confronto.
 
 La differenza tra lifecycle e poll e' intenzionale. Le funzioni lifecycle
 pubbliche (`init`, startup watch, shutdown) ricevono gia' il context costruito
 da `app.c`. `poll()` riceve lo stesso context, ma riceve anche un bridge
 separato per lo shadow legacy. Questo evita di mescolare nel context normale una
-dipendenza che appartiene solo al vecchio dispatcher.
+dipendenza che appartiene solo al vecchio dispatcher e impedisce a `app_t` di
+entrare nella API pubblica del backend.
 
 ## Struttura dati di configurazione
 

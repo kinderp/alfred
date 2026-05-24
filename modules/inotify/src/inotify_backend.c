@@ -275,14 +275,15 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
 
 /*
  * backend_dispatch_legacy_shadow - run the temporary legacy comparison bridge
- * @legacy: optional bridge carrying app_t for the legacy dispatcher
+ * @legacy: optional callback bridge for the legacy dispatcher
  * @ctx: narrowed backend context used for configuration and diagnostics
  * @ev: raw inotify event to pass to the historical dispatcher
  *
- * This helper deliberately isolates the remaining app_t dependency in the poll
- * path. The backend/core path above it works with raw Alfred events and opaque
- * callback userdata; only the legacy shadow dispatcher receives this bridge
- * because events.c was written before the core/backend split.
+ * This helper deliberately isolates the remaining legacy dependency in the
+ * poll path. The backend/core path above it works with raw Alfred events and
+ * opaque callback userdata; only the legacy shadow comparison path receives
+ * this callback bridge because events.c was written before the core/backend
+ * split.
  *
  * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
  * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
@@ -294,14 +295,14 @@ static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
     if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
         return ERR_OK;
 
-    if (legacy == NULL || legacy->app == NULL) {
+#ifdef ALFRED_ENABLE_LEGACY_SHADOW
+    if (legacy == NULL || legacy->dispatch == NULL) {
         logger_error(ctx->logger,
                      "shadow event engine requires legacy bridge");
         return ERR_INVALID_ARG;
     }
 
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-    legacy_events_dispatch(legacy->app, ev);
+    legacy->dispatch(legacy->userdata, ev);
     return ERR_OK;
 #else
     (void)legacy;
@@ -353,8 +354,8 @@ int inotify_backend_poll(inotify_backend_context_t *ctx,
  * @userdata: opaque callback context passed through unchanged
  *
  * The main backend path uses @ctx for runtime, configuration, and diagnostics.
- * The @legacy parameter deliberately keeps the temporary app_t dependency out
- * of the normal backend context.
+ * The @legacy parameter deliberately keeps the temporary shadow dependency out
+ * of the normal backend context and out of the backend's public app boundary.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
