@@ -461,12 +461,15 @@ Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
 ```text
 inotify_backend_poll(app, on_event, userdata)
   backend_context_from_app(app, &ctx)
-  read(ctx.runtime->fd, ...)
-  watcher_get_path(&ctx.runtime->watchers, wd)
-  logger_raw(ctx.logger, ...)
+  backend_poll(&ctx, app, on_event, userdata)
+
+backend_poll(ctx, legacy_app, on_event, userdata)
+  read(ctx->runtime->fd, ...)
+  watcher_get_path(&ctx->runtime->watchers, wd)
+  logger_raw(ctx->logger, ...)
   on_event(raw, userdata)
-  backend_handle_dir_create(&ctx, ev, on_event, userdata)
-  backend_dispatch_legacy_shadow(app, &ctx, ev)
+  backend_handle_dir_create(ctx, ev, on_event, userdata)
+  backend_dispatch_legacy_shadow(legacy_app, ctx, ev)
 ```
 
 La scelta core/shadow viene letta dal context. La chiamata diretta al

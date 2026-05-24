@@ -190,7 +190,7 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | wrapper pubblico da `app_t` a context; delega a `backend_init(&ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_add_startup_watch()` | wrapper pubblico da `app_t` a context; delega a `backend_add_startup_watch(&ctx, path)` | sceglie watch singolo o ricorsivo tramite context | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_shutdown()` | wrapper pubblico da `app_t` a context; delega a `backend_shutdown(&ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
-| `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; il ponte legacy e' confinato in `backend_dispatch_legacy_shadow(app, &ctx, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere o spostare fuori dal backend il bridge legacy che richiede ancora `app_t` |
+| `inotify_backend_poll()` | wrapper pubblico da `app_t` a context; delega a `backend_poll(&ctx, app, on_event, userdata)` dove `app` e' il solo `legacy_app` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere il parametro `legacy_app` quando shadow legacy non servira' piu' |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
@@ -446,6 +446,28 @@ l'inizializzazione costruisce risorse in sequenza. In C, quando una funzione
 inizializza piu' risorse, ogni uscita di errore deve rilasciare solo le risorse
 gia' acquisite e lasciare lo stato in una forma prevedibile. Il refactor ha
 quindi cambiato la forma della funzione, non l'ordine di acquisizione e cleanup.
+
+Stato implementato dell'undicesimo micro-refactor:
+
+- `inotify_backend_poll(app, on_event, userdata)` resta la funzione pubblica
+  chiamata da `app_run()`
+- il wrapper pubblico controlla gli argomenti, costruisce
+  `inotify_backend_context_t` e delega a
+  `backend_poll(&ctx, app, on_event, userdata)`
+- `backend_poll()` contiene il corpo reale del polling e usa `ctx->runtime`,
+  `ctx->logger` e gli helper raw/core
+- il parametro `app_t *` viene rinominato semanticamente in `legacy_app`
+  all'interno di `backend_poll()`, per chiarire che serve solo a
+  `backend_dispatch_legacy_shadow(legacy_app, ctx, ev)`
+- il comportamento non cambia: il raw/core path lavora sul context; shadow mode
+  resta disponibile come ponte temporaneo
+
+Questo completa la forma interna context-shaped delle funzioni principali del
+backend. Le funzioni pubbliche ricevono ancora `app_t` per non cambiare subito
+`app.c`, ma `init`, startup watch, shutdown e poll hanno ormai un helper interno
+che mostra il confine futuro. Il nodo ancora aperto e' strategico: decidere se
+cambiare le firme pubbliche ora oppure aspettare la rimozione o quarantena
+definitiva dello shadow legacy.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

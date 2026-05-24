@@ -35,6 +35,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: estratto `backend_poll()` come forma
+  interna context-shaped del polling. `inotify_backend_poll(app, on_event,
+  userdata)` resta wrapper pubblico, mentre il corpo reale usa il context e
+  riceve `legacy_app` solo per il bridge shadow.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato
+  l'undicesimo micro-refactor, chiarendo che il parametro `app_t` nel poll path
+  ha ormai significato solo legacy/shadow.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_init()` come forma
   interna context-shaped dell'inizializzazione backend. La funzione pubblica
   `inotify_backend_init(app)` resta wrapper compatibile con `app_init()`.

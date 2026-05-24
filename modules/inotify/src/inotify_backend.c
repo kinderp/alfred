@@ -78,6 +78,11 @@ static int backend_dispatch_legacy_shadow(app_t *app,
                                           const inotify_backend_context_t *ctx,
                                           const struct inotify_event *ev);
 
+static int backend_poll(inotify_backend_context_t *ctx,
+                        app_t *legacy_app,
+                        inotify_backend_event_fn on_event,
+                        void *userdata);
+
 static uint64_t backend_now_ns(void);
 
 static int backend_emit_synthetic_dir_create(
@@ -366,10 +371,31 @@ int inotify_backend_poll(app_t *app,
     inotify_backend_context_t ctx;
     backend_context_from_app(app, &ctx);
 
+    return backend_poll(&ctx, app, on_event, userdata);
+}
+
+/*
+ * backend_poll - process one nonblocking inotify read through backend context
+ * @ctx: narrowed backend context used by the raw/core path
+ * @legacy_app: full app context needed only by the legacy shadow bridge
+ * @on_event: callback used to deliver raw events to the application/core layer
+ * @userdata: opaque callback context passed through unchanged
+ *
+ * The main backend path uses @ctx for runtime, configuration, and diagnostics.
+ * The @legacy_app parameter is deliberately named to show that app_t is still
+ * present only because shadow mode can call the historical events.c dispatcher.
+ *
+ * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
+ */
+static int backend_poll(inotify_backend_context_t *ctx,
+                        app_t *legacy_app,
+                        inotify_backend_event_fn on_event,
+                        void *userdata)
+{
     char buffer[EVENT_BUFFER_SIZE];
 
     ssize_t bytes =
-        read(ctx.runtime->fd,
+        read(ctx->runtime->fd,
              buffer,
              sizeof(buffer));
 
@@ -385,7 +411,7 @@ int inotify_backend_poll(app_t *app,
         if (errno == EINTR)
             return ERR_OK;
 
-        logger_error(ctx.logger,
+        logger_error(ctx->logger,
                      "read failed errno=%d (%s)",
                      errno,
                      strerror(errno));
@@ -394,12 +420,12 @@ int inotify_backend_poll(app_t *app,
     }
 
     if (bytes == 0) {
-        logger_error(ctx.logger,
+        logger_error(ctx->logger,
                      "unexpected EOF on inotify fd");
         return ERR_IO;
     }
 
-    logger_raw(ctx.logger,
+    logger_raw(ctx->logger,
                "read %zd bytes from inotify",
                bytes);
 
@@ -412,10 +438,10 @@ int inotify_backend_poll(app_t *app,
             (struct inotify_event *)ptr;
 
         const char *parent =
-            watcher_get_path(&ctx.runtime->watchers, ev->wd);
+            watcher_get_path(&ctx->runtime->watchers, ev->wd);
 
         raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
-        logger_raw(ctx.logger,
+        logger_raw(ctx->logger,
                    "%s wd=%d path=%s name=%s",
                    mask_str,
                    ev->wd,
@@ -435,7 +461,7 @@ int inotify_backend_poll(app_t *app,
                 raw_ptr = &raw;
             }
             else {
-                logger_error(ctx.logger,
+                logger_error(ctx->logger,
                              "failed to build core raw event wd=%d",
                              ev->wd);
             }
@@ -448,12 +474,12 @@ int inotify_backend_poll(app_t *app,
             return callback_status;
 
         int legacy_status =
-            backend_dispatch_legacy_shadow(app, &ctx, ev);
+            backend_dispatch_legacy_shadow(legacy_app, ctx, ev);
 
         if (legacy_status != ERR_OK)
             return legacy_status;
 
-        backend_handle_dir_create(&ctx, ev, on_event, userdata);
+        backend_handle_dir_create(ctx, ev, on_event, userdata);
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
