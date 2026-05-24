@@ -35,6 +35,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`: estratto
+  `backend_add_startup_watch()` come forma interna context-shaped della API di
+  startup watch. `inotify_backend_add_startup_watch(app, path)` resta wrapper
+  pubblico temporaneo per compatibilita' con `app.c`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato
+  l'ottavo micro-refactor, spiegando la tecnica di migrazione C in cui la firma
+  futura viene introdotta prima come helper interno e solo dopo potra'
+  sostituire la firma pubblica.
 - `modules/inotify/src/inotify_backend.c`: aggiunto
   `backend_dispatch_legacy_shadow()` per confinare in un bridge interno la
   chiamata residua a `legacy_events_dispatch(app, ev)`. Il poll path principale

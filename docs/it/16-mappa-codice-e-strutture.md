@@ -387,7 +387,10 @@ app_t app
 
 inotify_backend_add_startup_watch(app, path):
   backend_context_from_app(app, &ctx)
-  legge ctx.config->recursive
+  backend_add_startup_watch(&ctx, path)
+
+backend_add_startup_watch(ctx, path):
+  legge ctx->config->recursive
 
 watch_manager_add(&ctx, path):
   usa ctx.runtime->fd

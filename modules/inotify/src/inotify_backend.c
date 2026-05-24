@@ -63,6 +63,9 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
 static void backend_context_from_app(app_t *app,
                                      inotify_backend_context_t *ctx);
 
+static int backend_add_startup_watch(inotify_backend_context_t *ctx,
+                                     const char *path);
+
 static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
@@ -205,12 +208,29 @@ int inotify_backend_add_startup_watch(app_t *app,
 
     backend_context_from_app(app, &ctx);
 
-    if (ctx.config->recursive) {
-        if (watch_manager_add_recursive(&ctx, path) < 0)
+    return backend_add_startup_watch(&ctx, path);
+}
+
+/*
+ * backend_add_startup_watch - install one startup watch through backend context
+ * @ctx: narrowed backend context with runtime, config, and logger
+ * @path: path supplied on the command line
+ *
+ * This helper is the context-shaped form of the public startup-watch API. The
+ * current public wrapper still receives app_t for compatibility with app.c, but
+ * the actual backend decision only needs the context and the path.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+static int backend_add_startup_watch(inotify_backend_context_t *ctx,
+                                     const char *path)
+{
+    if (ctx->config->recursive) {
+        if (watch_manager_add_recursive(ctx, path) < 0)
             return ERR_INOTIFY;
     }
     else {
-        if (watch_manager_add(&ctx, path) < 0)
+        if (watch_manager_add(ctx, path) < 0)
             return ERR_INOTIFY;
     }
 

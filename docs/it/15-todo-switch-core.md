@@ -188,7 +188,7 @@ Dipendenze reali osservate oggi:
 | Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
 | --- | --- | --- | --- |
 | `inotify_backend_init()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`, `ctx.config` e `ctx.logger`; resta solo la firma pubblica `app_t *` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | cambiare in futuro la firma pubblica per ricevere runtime/config/logger espliciti o un context gia' costruito |
-| `inotify_backend_add_startup_watch()` | costruisce `inotify_backend_context_t`; legge `ctx.config->recursive`; passa `ctx` al watch manager | sceglie watch singolo o ricorsivo | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
+| `inotify_backend_add_startup_watch()` | wrapper pubblico da `app_t` a context; delega a `backend_add_startup_watch(&ctx, path)` | sceglie watch singolo o ricorsivo tramite context | cambiare in futuro la firma pubblica per ricevere direttamente il context backend |
 | `inotify_backend_shutdown()` | costruisce `inotify_backend_context_t`; usa `ctx.runtime`; legacy shadow globale resta esplicito | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | cambiare in futuro la firma pubblica per ricevere runtime/logger/config espliciti o rimuovere il ponte legacy |
 | `inotify_backend_poll()` | costruisce `inotify_backend_context_t` e usa `ctx.runtime`, `ctx.logger` e `ctx.config->event_engine_mode`; il ponte legacy e' confinato in `backend_dispatch_legacy_shadow(app, &ctx, ev)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca legacy shadow se attivo | rimuovere o spostare fuori dal backend il bridge legacy che richiede ancora `app_t` |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
@@ -389,6 +389,24 @@ Questo passo e' didatticamente importante perche' trasforma un uso residuo di
 `app_t` in un confine nominato. Il backend poll path resta ancora compatibile
 con shadow mode, ma ora il debito legacy e' localizzato in una funzione che
 potra' essere rimossa o spostata quando il confronto shadow non servira' piu'.
+
+Stato implementato dell'ottavo micro-refactor:
+
+- `inotify_backend_add_startup_watch(app, path)` resta la funzione pubblica
+  chiamata da `app.c`
+- il wrapper pubblico controlla gli argomenti, costruisce
+  `inotify_backend_context_t` con `backend_context_from_app()` e delega a
+  `backend_add_startup_watch(&ctx, path)`
+- `backend_add_startup_watch()` contiene la logica reale: legge
+  `ctx->config->recursive` e chiama `watch_manager_add_recursive(ctx, path)` o
+  `watch_manager_add(ctx, path)`
+- il comportamento non cambia, ma la forma interna mostra gia' la futura API
+  naturale: context backend piu' path, senza app completa
+
+Questo e' un esempio utile di migrazione graduale di una API C. Prima si crea
+una funzione interna con la firma desiderata, poi si lascia la vecchia funzione
+pubblica come adattatore. Solo quando tutti i chiamanti saranno pronti si potra'
+cambiare la firma pubblica senza mescolare refactor e comportamento.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
