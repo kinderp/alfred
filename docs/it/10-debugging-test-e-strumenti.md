@@ -261,6 +261,17 @@ Gli studenti non devono partire da Kythe. Prima devono imparare a seguire il
 codice con Elixir o Sourcebot, poi possono usare la documentazione italiana per
 capire responsabilita', strutture dati e flusso degli eventi.
 
+La sequenza umana consigliata e':
+
+```text
+leggi la documentazione -> cerca nel codice con Sourcebot/Elixir/rg
+-> apri i file reali -> fai la modifica -> esegui la procedura pre-commit
+```
+
+I browser del codice aiutano nella fase di comprensione, non nella validazione
+finale. Dopo ogni modifica restano necessari build e test descritti nella
+sezione successiva.
+
 ## Procedura manuale prima di un commit
 
 Ogni modifica al codice deve essere verificata con una procedura riproducibile

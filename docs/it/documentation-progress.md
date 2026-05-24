@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md` e `10-debugging-test-e-strumenti.md`: collegata la
+  procedura pre-commit alla fase precedente di consultazione del codice per
+  contributori umani. Aggiunti rimandi operativi a Sourcebot, Elixir e Kythe,
+  con indicazione degli URL locali e del ruolo degli strumenti prima della
+  modifica.
 - `17-roadmap-documentazione-avanzata.md` e `README.md`: aggiunta una roadmap
   per documentazione navigabile, grafi del codice e animazioni. La roadmap
   confronta Markdown/Mermaid, Graphviz, Doxygen, Sphinx+Breathe, Kythe,

@@ -169,6 +169,26 @@ Modified files:
 
 ## Verifiche
 
+Dopo aver discusso il passo e prima di modificare, consultare il codice come
+farebbe un contributore umano:
+
+- usare `rg` e lettura diretta dei file per cambi piccoli e localizzati
+- usare Sourcebot quando serve cercare simboli, path o parole chiave dal browser
+- usare Elixir quando serve navigare il codice C in modo piu' tradizionale
+- usare Kythe solo come supporto semantico per restringere il campo, poi
+  verificare sempre sui file reali
+
+Guide operative:
+
+- [Sourcebot](../sourcebot-browser/README.md): avvio, stop, log, reset e query
+  utili; URL locale predefinito `http://127.0.0.1:3000`
+- [Elixir](../code-browser/README.md): setup, reindex, avvio e stop; URL locale
+  predefinito `http://127.0.0.1:8080/alfred/workspace/source`
+- [Kythe](../kythe-browser/README.md): setup, reindex, server API e query CLI
+
+Questi strumenti servono a capire il codice prima di modificarlo. Non
+sostituiscono build, test e lettura del sorgente reale.
+
 Dopo modifiche al codice eseguire normalmente la procedura standard pre-commit:
 
 ```bash
