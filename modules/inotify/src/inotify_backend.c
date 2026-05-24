@@ -1,8 +1,8 @@
 /* ============================================================================
  * inotify_backend.c - inotify runtime backend
  *
- * This file owns the current inotify polling boundary. It keeps the descriptor
- * and watcher table in app->inotify while app.c remains responsible for
+ * This file owns the current inotify polling boundary. It operates on the
+ * backend context provided by app.c while app.c remains responsible for
  * high-level orchestration.
  *
  * The backend must stop at raw facts. It may know how to read inotify records,
@@ -15,7 +15,6 @@
 
 #include "inotify_backend.h"
 
-#include "app.h"
 #include "errors.h"
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
 #include "events.h"
@@ -60,9 +59,6 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
                                       inotify_backend_event_fn on_event,
                                       void *userdata);
 
-static void backend_context_from_app(app_t *app,
-                                     inotify_backend_context_t *ctx);
-
 static int backend_init(inotify_backend_context_t *ctx);
 
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
@@ -74,12 +70,12 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
 
-static int backend_dispatch_legacy_shadow(app_t *app,
+static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
                                           const inotify_backend_context_t *ctx,
                                           const struct inotify_event *ev);
 
 static int backend_poll(inotify_backend_context_t *ctx,
-                        app_t *legacy_app,
+                        legacy_shadow_bridge_t *legacy,
                         inotify_backend_event_fn on_event,
                         void *userdata);
 
@@ -91,24 +87,6 @@ static int backend_emit_synthetic_dir_create(
     inotify_backend_event_fn on_event,
     void *userdata
 );
-
-/*
- * backend_context_from_app - build the temporary narrowed backend context
- * @app: application context that still owns runtime/config/logger
- * @ctx: context object to fill
- *
- * Most clean lifecycle APIs now receive the context directly from app.c. This
- * helper remains only for the poll wrapper while legacy shadow still needs the
- * full app_t. The context borrows app-owned objects; it does not transfer
- * ownership.
- */
-static void backend_context_from_app(app_t *app,
-                                     inotify_backend_context_t *ctx)
-{
-    ctx->runtime = &app->inotify;
-    ctx->config = &app->config;
-    ctx->logger = &app->logger;
-}
 
 /* ============================================================================
  * Lifecycle
@@ -297,30 +275,36 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
 
 /*
  * backend_dispatch_legacy_shadow - run the temporary legacy comparison bridge
- * @app: full application context still required by the legacy dispatcher
+ * @legacy: optional bridge carrying app_t for the legacy dispatcher
  * @ctx: narrowed backend context used for configuration and diagnostics
  * @ev: raw inotify event to pass to the historical dispatcher
  *
  * This helper deliberately isolates the remaining app_t dependency in the poll
  * path. The backend/core path above it works with raw Alfred events and opaque
- * callback userdata; only the legacy shadow dispatcher still needs the full app
+ * callback userdata; only the legacy shadow dispatcher receives this bridge
  * because events.c was written before the core/backend split.
  *
  * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
  * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
  */
-static int backend_dispatch_legacy_shadow(app_t *app,
+static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
                                           const inotify_backend_context_t *ctx,
                                           const struct inotify_event *ev)
 {
     if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
         return ERR_OK;
 
+    if (legacy == NULL || legacy->app == NULL) {
+        logger_error(ctx->logger,
+                     "shadow event engine requires legacy bridge");
+        return ERR_INVALID_ARG;
+    }
+
 #ifdef ALFRED_ENABLE_LEGACY_SHADOW
-    legacy_events_dispatch(app, ev);
+    legacy_events_dispatch(legacy->app, ev);
     return ERR_OK;
 #else
-    (void)app;
+    (void)legacy;
     (void)ev;
 
     logger_error(ctx->logger,
@@ -332,7 +316,8 @@ static int backend_dispatch_legacy_shadow(app_t *app,
 
 /*
  * inotify_backend_poll - process one nonblocking inotify read
- * @app: initialized application context
+ * @ctx: backend context used by the raw/core path
+ * @legacy: optional bridge used only by legacy shadow mode
  * @on_event: callback used to deliver raw events to the application/core layer
  * @userdata: opaque callback context passed through unchanged
  *
@@ -349,34 +334,32 @@ static int backend_dispatch_legacy_shadow(app_t *app,
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
-int inotify_backend_poll(app_t *app,
+int inotify_backend_poll(inotify_backend_context_t *ctx,
+                         legacy_shadow_bridge_t *legacy,
                          inotify_backend_event_fn on_event,
                          void *userdata)
 {
-    if (app == NULL || on_event == NULL)
+    if (ctx == NULL || on_event == NULL)
         return ERR_INVALID_ARG;
 
-    inotify_backend_context_t ctx;
-    backend_context_from_app(app, &ctx);
-
-    return backend_poll(&ctx, app, on_event, userdata);
+    return backend_poll(ctx, legacy, on_event, userdata);
 }
 
 /*
  * backend_poll - process one nonblocking inotify read through backend context
  * @ctx: narrowed backend context used by the raw/core path
- * @legacy_app: full app context needed only by the legacy shadow bridge
+ * @legacy: optional bridge needed only by the legacy shadow path
  * @on_event: callback used to deliver raw events to the application/core layer
  * @userdata: opaque callback context passed through unchanged
  *
  * The main backend path uses @ctx for runtime, configuration, and diagnostics.
- * The @legacy_app parameter is deliberately named to show that app_t is still
- * present only because shadow mode can call the historical events.c dispatcher.
+ * The @legacy parameter deliberately keeps the temporary app_t dependency out
+ * of the normal backend context.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
 static int backend_poll(inotify_backend_context_t *ctx,
-                        app_t *legacy_app,
+                        legacy_shadow_bridge_t *legacy,
                         inotify_backend_event_fn on_event,
                         void *userdata)
 {
@@ -462,7 +445,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
             return callback_status;
 
         int legacy_status =
-            backend_dispatch_legacy_shadow(legacy_app, ctx, ev);
+            backend_dispatch_legacy_shadow(legacy, ctx, ev);
 
         if (legacy_status != ERR_OK)
             return legacy_status;

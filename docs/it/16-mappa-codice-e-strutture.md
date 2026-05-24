@@ -453,7 +453,7 @@ attuale `app_run()` passa `app` come `userdata`, e `handle_backend_event()` lo
 ricostruisce:
 
 ```text
-inotify_backend_poll(app, handle_backend_event, app)
+inotify_backend_poll(&ctx, &legacy, handle_backend_event, app)
 handle_backend_event(raw, userdata)
   app = userdata
   alfred_process(app->core, raw)
@@ -465,32 +465,33 @@ del raw event. Sa solo invocare una callback.
 Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
 
 ```text
-inotify_backend_poll(app, on_event, userdata)
-  backend_context_from_app(app, &ctx)
-  backend_poll(&ctx, app, on_event, userdata)
+legacy_shadow_bridge_t legacy:
+  legacy.app = app
 
-backend_poll(ctx, legacy_app, on_event, userdata)
+inotify_backend_poll(&ctx, &legacy, on_event, userdata)
+  backend_poll(ctx, legacy, on_event, userdata)
+
+backend_poll(ctx, legacy, on_event, userdata)
   read(ctx->runtime->fd, ...)
   watcher_get_path(&ctx->runtime->watchers, wd)
   logger_raw(ctx->logger, ...)
   on_event(raw, userdata)
   backend_handle_dir_create(ctx, ev, on_event, userdata)
-  backend_dispatch_legacy_shadow(legacy_app, ctx, ev)
+  backend_dispatch_legacy_shadow(legacy, ctx, ev)
 ```
 
 La scelta core/shadow viene letta dal context. La chiamata diretta al
 dispatcher storico non e' piu' nel corpo principale del poll: passa da
-`backend_dispatch_legacy_shadow()`. Questa funzione e' un bridge temporaneo:
-riceve ancora `app_t` perche' `events.c` richiede l'app completa, ma rende
-esplicito che quella dipendenza appartiene solo al percorso legacy/shadow e non
-al percorso backend/raw/core.
+`backend_dispatch_legacy_shadow()`. Questa funzione riceve
+`legacy_shadow_bridge_t` perche' `events.c` richiede ancora l'app completa, ma
+rende esplicito che quella dipendenza appartiene solo al percorso legacy/shadow
+e non al percorso backend/raw/core.
 
 La differenza tra lifecycle e poll e' intenzionale. Le funzioni lifecycle
 pubbliche (`init`, startup watch, shutdown) ricevono gia' il context costruito
-da `app.c`. `poll()` invece costruisce ancora il context dentro il backend
-perche' deve passare l'app completa al bridge legacy/shadow. Questo evita di
-nascondere dentro `app.c` una dipendenza che appartiene solo al vecchio
-dispatcher.
+da `app.c`. `poll()` riceve lo stesso context, ma riceve anche un bridge
+separato per lo shadow legacy. Questo evita di mescolare nel context normale una
+dipendenza che appartiene solo al vecchio dispatcher.
 
 ## Struttura dati di configurazione
 

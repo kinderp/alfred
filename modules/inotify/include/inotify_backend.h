@@ -2,9 +2,9 @@
  * inotify_backend.h - inotify backend boundary
  *
  * This interface is the first step toward moving backend-specific runtime
- * ownership out of app.c. Lifecycle operations receive an explicit backend
- * context; polling still accepts app_t only as a temporary legacy-shadow bridge
- * while the migration remains reversible.
+ * ownership out of app.c. Backend operations receive an explicit backend
+ * context; legacy shadow receives a separate bridge while the migration remains
+ * reversible.
  *
  * The backend contract is intentionally raw-oriented: callers receive
  * alfred_raw_event_t records and leave semantic classification to the core.
@@ -56,6 +56,18 @@ typedef struct inotify_backend_context {
 } inotify_backend_context_t;
 
 /*
+ * legacy_shadow_bridge_t - temporary bridge for the legacy shadow dispatcher
+ * @app: full application context still required by events.c
+ *
+ * This type quarantines the remaining app_t dependency. The normal backend
+ * raw/core path must use inotify_backend_context_t; only the legacy shadow
+ * comparison path may look through this bridge.
+ */
+typedef struct legacy_shadow_bridge {
+    struct app *app;
+} legacy_shadow_bridge_t;
+
+/*
  * inotify_backend_event_fn - deliver one raw backend event to the application
  * @raw: raw Alfred event, or NULL when the inotify record cannot be converted
  * @userdata: opaque pointer supplied to inotify_backend_poll()
@@ -93,7 +105,8 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
 
 /*
  * inotify_backend_poll - read and dispatch available inotify records
- * @app: initialized application context
+ * @ctx: backend context containing runtime, configuration, and logger
+ * @legacy: optional bridge used only by legacy shadow mode
  * @on_event: callback that forwards raw events to the app/core boundary
  * @userdata: opaque callback context
  *
@@ -104,7 +117,8 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
-int inotify_backend_poll(struct app *app,
+int inotify_backend_poll(inotify_backend_context_t *ctx,
+                         legacy_shadow_bridge_t *legacy,
                          inotify_backend_event_fn on_event,
                          void *userdata);
 

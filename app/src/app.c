@@ -293,9 +293,17 @@ int app_run(app_t *app)
     logger_info(&app->logger,
                 "event loop started");
 
+    inotify_backend_context_t backend_ctx;
+    app_build_inotify_backend_context(app, &backend_ctx);
+
+    legacy_shadow_bridge_t legacy = {
+        .app = app
+    };
+
     while (app->running) {
 
-        if (inotify_backend_poll(app,
+        if (inotify_backend_poll(&backend_ctx,
+                                 &legacy,
                                  handle_backend_event,
                                  app) != ERR_OK) {
             break;

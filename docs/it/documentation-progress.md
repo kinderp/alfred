@@ -36,17 +36,25 @@ Stati usati:
 ## Aggiornamenti recenti
 
 - `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
+  e `app/src/app.c`: introdotto `legacy_shadow_bridge_t` e cambiata la firma di
+  `inotify_backend_poll()`. Il poll riceve ora `inotify_backend_context_t *` e
+  un bridge legacy separato; `app_t` resta disponibile solo dentro il bridge per
+  `events.c`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  tredicesimo micro-refactor, cioe' la quarantena esplicita della dipendenza
+  shadow da `app_t`.
+- `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
   e `app/src/app.c`: cambiate le firme pubbliche pulite del backend. Init,
   startup watch e shutdown ricevono ora `inotify_backend_context_t *`; `app.c`
-  costruisce il context con `app_build_inotify_backend_context()`. Poll resta
-  temporaneamente su `app_t` per il bridge legacy/shadow.
+  costruisce il context con `app_build_inotify_backend_context()`. Questo passo
+  e' stato poi completato dalla quarantena di poll tramite
+  `legacy_shadow_bridge_t`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   dodicesimo micro-refactor, primo cambio reale del confine pubblico tra app e
   backend.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_poll()` come forma
-  interna context-shaped del polling. `inotify_backend_poll(app, on_event,
-  userdata)` resta wrapper pubblico, mentre il corpo reale usa il context e
-  riceve `legacy_app` solo per il bridge shadow.
+  interna context-shaped del polling. Questo passo e' stato poi completato
+  dalla firma pubblica `inotify_backend_poll(ctx, legacy, on_event, userdata)`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato
   l'undicesimo micro-refactor, chiarendo che il parametro `app_t` nel poll path
   ha ormai significato solo legacy/shadow.
