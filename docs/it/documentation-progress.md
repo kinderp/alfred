@@ -34,6 +34,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md` e `10-debugging-test-e-strumenti.md`: aggiunta la
+  procedura manuale pre-commit riproducibile senza strumenti di AI. La
+  documentazione spiega l'ordine `git diff --check`, `make`, `make test-core`,
+  `make test`, `make`, il motivo di ogni comando, cosa significa percorso core
+  end-to-end ufficiale e perche' il `make` finale riporta il workspace alla
+  build core-only dopo la suite legacy/shadow.
 - `modules/inotify/src/inotify_backend.c`: `inotify_backend_shutdown()` ora
   costruisce un `inotify_backend_context_t` locale e usa `ctx.runtime` per
   chiudere il file descriptor e distruggere la watcher table. Il cleanup legacy

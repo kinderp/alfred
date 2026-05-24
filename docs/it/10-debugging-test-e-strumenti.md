@@ -261,6 +261,163 @@ Gli studenti non devono partire da Kythe. Prima devono imparare a seguire il
 codice con Elixir o Sourcebot, poi possono usare la documentazione italiana per
 capire responsabilita', strutture dati e flusso degli eventi.
 
+## Procedura manuale prima di un commit
+
+Ogni modifica al codice deve essere verificata con una procedura riproducibile
+anche senza strumenti di AI. L'obiettivo e' permettere a studenti e
+contributori di fare gli stessi controlli manualmente, con gli stessi criteri
+usati durante lo sviluppo assistito.
+
+La sequenza standard e':
+
+```bash
+git diff --check
+make
+make test-core
+make test
+make
+```
+
+Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
+problemi piu' semplici, poi il comportamento core, poi la compatibilita'
+legacy/shadow, e infine a lasciare il workspace nella build normale.
+
+### 1. `git diff --check`
+
+Questo comando controlla il diff prima ancora di compilare.
+
+Serve a trovare problemi come:
+
+- spazi finali a fine riga
+- righe vuote con spazi
+- whitespace problematico introdotto dalla patch
+
+E' il controllo piu' economico. Se fallisce, correggi subito il diff e non
+passare alla build: non ha senso spendere tempo sui test se la patch contiene
+gia' difetti meccanici.
+
+### 2. Primo `make`
+
+Il primo `make` costruisce la build normale del progetto:
+
+```bash
+make
+```
+
+Questa build e' core-only: non compila `events.c` e `move_cache.c`, perche'
+questi file appartengono al confronto legacy/shadow. E' la build da considerare
+predefinita.
+
+Questo passo risponde alla domanda:
+
+```text
+il progetto compila nella configurazione normale?
+```
+
+Se fallisce, fermati. Prima bisogna correggere errori di compilazione, warning
+trattati come errori, include mancanti, firme incoerenti o problemi di linking.
+
+### 3. `make test-core`
+
+Il comando:
+
+```bash
+make test-core
+```
+
+ricostruisce il binario core-only ed esegue la suite in:
+
+```text
+tests/core/
+```
+
+Questa suite avvia Alfred reale, usa il backend inotify reale e controlla lo
+stream semantico prodotto dal core. Non e' un test unitario isolato: e' il test
+end-to-end del percorso core.
+
+Questo passo risponde alla domanda:
+
+```text
+il percorso ufficiale inotify -> raw -> core -> events.log funziona ancora?
+```
+
+E' importante eseguirlo prima dei funzionali storici perche' il core e' il
+runtime ufficiale di default.
+
+### 4. `make test`
+
+Il comando:
+
+```bash
+make test
+```
+
+esegue i test funzionali storici in:
+
+```text
+tests/functional/
+```
+
+Prima di lanciarli, il Makefile ricompila Alfred con:
+
+```text
+ENABLE_LEGACY_SHADOW=1
+```
+
+Questa variante include ancora il dispatcher legacy `events.c` e la
+`move_cache`, perche' i funzionali storici usano lo shadow mode come confronto.
+
+Questo passo risponde alla domanda:
+
+```text
+la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
+```
+
+Anche se il core e' il percorso ufficiale, questi test restano utili finche'
+shadow mode viene mantenuto come ponte di confronto.
+
+### 5. `make` finale
+
+Dopo `make test`, il binario nel workspace e' stato ricompilato nella variante:
+
+```text
+ENABLE_LEGACY_SHADOW=1
+```
+
+Per questo si esegue di nuovo:
+
+```bash
+make
+```
+
+Il `make` finale riporta il binario alla build normale core-only. Questo evita
+confusione nella prova successiva: chi lancia `./alfred` dopo i test deve usare
+il runtime predefinito, non una variante legacy-shadow rimasta dalla suite
+funzionale.
+
+### Cosa fare se un comando fallisce
+
+Non proseguire meccanicamente. La regola e':
+
+```text
+primo errore -> fermarsi -> capire -> correggere -> rilanciare la sequenza
+```
+
+Esempi:
+
+- se fallisce `git diff --check`, correggi whitespace o patch
+- se fallisce `make`, correggi compilazione o linking
+- se fallisce `make test-core`, analizza il comportamento semantico del core
+- se fallisce `make test`, controlla compatibilita' legacy/shadow o test
+  funzionali storici
+- se fallisce il `make` finale, il workspace non e' tornato alla build normale
+
+Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
+in quel caso almeno `git diff --check` resta obbligatorio. Se pero' la
+documentazione descrive codice, test, Makefile o comportamento runtime, conviene
+comunque eseguire i comandi rilevanti per evitare di documentare qualcosa di non
+piu' vero.
+
 ## Test funzionali
 
 Il progetto contiene test in:

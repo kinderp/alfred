@@ -169,13 +169,54 @@ Modified files:
 
 ## Verifiche
 
-Dopo modifiche al codice eseguire normalmente:
+Dopo modifiche al codice eseguire normalmente la procedura standard pre-commit:
 
 ```bash
+git diff --check
 make
 make test-core
 make test
+make
 ```
+
+L'ordine e' intenzionale:
+
+- `git diff --check` trova spazi finali, righe con whitespace problematico e
+  difetti banali nel diff prima di perdere tempo con build e test.
+- Il primo `make` verifica la build normale core-only, cioe' il percorso
+  predefinito del progetto.
+- `make test-core` verifica il percorso core end-to-end ufficiale.
+- `make test` verifica ancora la suite funzionale storica legacy/shadow.
+- Il `make` finale riporta il binario alla build core-only normale, perche'
+  `make test` ricompila con `ENABLE_LEGACY_SHADOW=1`.
+
+In queste regole, "core end-to-end ufficiale" significa che Alfred viene
+eseguito davvero, legge eventi dal backend inotify reale, li converte in
+`alfred_raw_event_t`, li passa al core e verifica lo stream semantico finale
+prodotto dal core. Non e' un test unitario isolato: e' il percorso runtime
+ufficiale `inotify -> raw -> core -> events.log`.
+
+`ENABLE_LEGACY_SHADOW=1` e' invece una variante di build temporanea: compila
+anche il dispatcher legacy (`events.c`) e la `move_cache`, cosi' il progetto
+puo' confrontare il vecchio comportamento legacy con il core. La build normale
+ottenuta con `make` resta core-only e non include quei file.
+
+Differenza minima da ricordare:
+
+- core: stream semantico ufficiale e default del progetto
+- shadow: modalita' diagnostica di confronto legacy/core, utile finche' lo
+  switch non e' completato
+
+Per i dettagli, leggere:
+
+- [Debugging, test e strumenti](10-debugging-test-e-strumenti.md)
+- [Makefile e build system](09-makefile-e-build-system.md)
+- [Confronto shadow mode](12-confronto-shadow-mode.md)
+
+Questa procedura deve essere riproducibile anche senza strumenti di AI: ogni contributore
+deve poterla eseguire manualmente prima di proporre o committare una modifica.
+Se un comando fallisce, fermarsi, leggere l'errore e non proseguire con i passi
+successivi finche' il problema non e' compreso.
 
 Se il passo tocca shadow mode, legacy, move/rename, watch ricorsivi o raw event
 sintetici, eseguire anche scenari mirati con:
