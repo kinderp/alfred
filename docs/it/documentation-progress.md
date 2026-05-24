@@ -27,6 +27,7 @@ Stati usati:
 | Completo | `14-scenari-test.md` |
 | Parziale | `15-todo-switch-core.md` |
 | Parziale | `16-mappa-codice-e-strutture.md` |
+| Parziale | `17-roadmap-documentazione-avanzata.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -34,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `17-roadmap-documentazione-avanzata.md` e `README.md`: aggiunta una roadmap
+  per documentazione navigabile, grafi del codice e animazioni. La roadmap
+  confronta Markdown/Mermaid, Graphviz, Doxygen, Sphinx+Breathe, Kythe,
+  Graphify, Kroki, D2, VHS e asciinema, indicando esempi online da studiare e
+  una sequenza di spike futuri a partire da Doxygen + Graphviz.
 - `00-regole-operative.md` e `10-debugging-test-e-strumenti.md`: aggiunta la
   procedura manuale pre-commit riproducibile senza strumenti di AI. La
   documentazione spiega l'ordine `git diff --check`, `make`, `make test-core`,

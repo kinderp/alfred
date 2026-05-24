@@ -23,7 +23,8 @@ piu' dettaglio.
 14. [Scenari di test](14-scenari-test.md)
 15. [TODO switch verso il core](15-todo-switch-core.md)
 16. [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md)
-17. [Glossario](glossario.md)
+17. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
+18. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 
