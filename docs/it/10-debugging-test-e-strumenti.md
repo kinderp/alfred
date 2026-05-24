@@ -140,6 +140,79 @@ Gli strumenti sono volutamente separati:
 - Kythe in `docs/kythe-browser/`
 - Sourcebot in `docs/sourcebot-browser/`
 
+Esiste anche uno strato comune per studenti e contributori:
+
+```text
+tools/code-browsing/
+```
+
+Questa cartella contiene script aggregati che chiamano gli script specifici dei
+singoli strumenti. L'obiettivo e' pratico: chi vuole solo preparare o avviare
+tutti i browser del codice non deve ricordare tre percorsi diversi.
+
+### Provisioning comune
+
+Il progetto usa container Docker per Sourcebot, Elixir e Kythe. Questo riduce i
+vincoli sulla distribuzione Linux usata dallo studente, ma non elimina il
+prerequisito Docker: Docker Engine o Docker Desktop devono essere gia'
+installati e funzionanti sull'host.
+
+Il progetto non installa Docker automaticamente. La scelta e' intenzionale:
+l'installazione del daemon dipende dalla distribuzione, dai permessi
+dell'utente, dal gruppo `docker`, da systemd o dal runtime usato nella macchina.
+Uno script del repository non dovrebbe modificare questi aspetti di sistema.
+
+Per controllare il prerequisito:
+
+```sh
+tools/code-browsing/check-docker.sh
+```
+
+Per preparare tutti gli strumenti:
+
+```sh
+tools/code-browsing/setup-all.sh
+```
+
+`setup-all.sh` esegue:
+
+1. controllo Docker
+2. setup Sourcebot, cioe' pull dell'immagine e controllo del repository Git
+3. setup Elixir, cioe' clone di Bootlin Elixir, build immagine e database
+4. setup Kythe e indicizzazione, cioe' download release, build immagine,
+   compilazione strumentata e generazione delle serving tables
+
+E' un comando volutamente pesante. Va usato alla prima preparazione o quando si
+vuole ricreare l'ambiente completo.
+
+Per avviare, fermare, riavviare e controllare tutti i servizi:
+
+```sh
+tools/code-browsing/start-all.sh
+tools/code-browsing/status-all.sh
+tools/code-browsing/restart-all.sh
+tools/code-browsing/stop-all.sh
+```
+
+URL predefiniti:
+
+```text
+Sourcebot: http://127.0.0.1:3000
+Elixir:    http://127.0.0.1:8080/alfred/workspace/source
+Kythe API: http://127.0.0.1:9898
+```
+
+Graphify non e' ancora incluso in questi script. Per ora resta una voce della
+roadmap: prima bisogna fare uno spike tecnico e decidere se produce davvero
+mappe utili del codice e della documentazione. Solo dopo avra' senso aggiungere
+container, setup e comandi aggregati.
+
+La cartella contiene anche `docker-compose.yml`. Compose e' utile per chi
+preferisce descrivere i tre server come servizi Docker, ma e' opzionale:
+richiede il plugin `docker compose` o il binario `docker-compose`. Gli script
+restano il percorso consigliato nella guida didattica perche' distinguono meglio
+setup, reindex, start, stop e diagnosi degli errori.
+
 ### Elixir
 
 Elixir e' il browser leggero e specifico per codice C/Linux. La guida si trova
@@ -155,6 +228,7 @@ Uso tipico:
 docs/code-browser/setup-elixir.sh
 docs/code-browser/reindex-elixir.sh
 docs/code-browser/start-elixir.sh
+docs/code-browser/status-elixir.sh
 ```
 
 Elixir e' utile per leggere il codice in modo tradizionale: file, simboli,
@@ -218,8 +292,10 @@ http://127.0.0.1:3000
 Comandi principali:
 
 ```bash
+docs/sourcebot-browser/setup-sourcebot.sh
 docs/sourcebot-browser/status-sourcebot.sh
 docker logs -f alfred-sourcebot
+docs/sourcebot-browser/restart-sourcebot.sh
 docs/sourcebot-browser/stop-sourcebot.sh
 ```
 

@@ -42,6 +42,11 @@ Per navigare il codice direttamente dal browser, usa anche la cartella
 Bootlin Elixir su Alfred e cercare funzioni, strutture dati, definizioni e
 riferimenti dal browser.
 
+Per preparare e gestire tutti i browser del codice insieme, usa invece
+[tools/code-browsing](../../tools/code-browsing/README.md). Contiene gli script
+aggregati per controllare Docker, fare setup, avviare, fermare, riavviare e
+controllare Sourcebot, Elixir e Kythe.
+
 Sono disponibili anche due esperimenti aggiuntivi:
 
 - [sourcebot-browser](../sourcebot-browser/README.md): Sourcebot, una UI web

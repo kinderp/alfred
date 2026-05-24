@@ -56,10 +56,29 @@ cache e job di indicizzazione.
 
 - `config.json`: configura Sourcebot per indicizzare il repository locale
   Alfred montato nel container come `/repos/alfred`.
+- `setup-sourcebot.sh`: controlla Docker, verifica che il repository abbia
+  `remote.origin.url` e scarica l'immagine Sourcebot.
 - `start-sourcebot.sh`: avvia Sourcebot su `127.0.0.1:3000`.
 - `stop-sourcebot.sh`: ferma e rimuove il container locale.
+- `restart-sourcebot.sh`: ferma e riavvia Sourcebot.
 - `status-sourcebot.sh`: mostra stato container e risposta HTTP.
 - `.work/`: appoggi locali eventuali, ignorati da Git.
+
+## Setup esplicito
+
+Dalla root del progetto:
+
+```sh
+docs/sourcebot-browser/setup-sourcebot.sh
+```
+
+Lo script non installa Docker sull'host. Controlla che Docker sia disponibile,
+che il daemon risponda e che il repository abbia un `remote.origin.url`, poi
+scarica l'immagine configurata da `SOURCEBOT_IMAGE`.
+
+Questo passaggio rende esplicito quello che `docker run` farebbe comunque al
+primo avvio: scaricare l'immagine se manca. Per uno studente e' piu' chiaro
+separare la preparazione dall'avvio del servizio.
 
 ## Avvio rapido
 
@@ -104,6 +123,14 @@ docs/sourcebot-browser/stop-sourcebot.sh
 Questo comando rimuove il container `alfred-sourcebot`, ma non cancella il
 volume dati `alfred-sourcebot-data`. La scelta e' intenzionale: in questo modo
 al riavvio Sourcebot non deve ricreare database e indice da zero.
+
+## Restart
+
+```sh
+docs/sourcebot-browser/restart-sourcebot.sh
+```
+
+Il restart esegue semplicemente stop e start. Non cancella il volume dati.
 
 ## Stato e log
 

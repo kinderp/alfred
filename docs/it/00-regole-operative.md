@@ -180,6 +180,9 @@ farebbe un contributore umano:
 
 Guide operative:
 
+- [Browser del codice](../../tools/code-browsing/README.md): script aggregati
+  per controllare Docker, fare setup, avviare, fermare, riavviare e controllare
+  Sourcebot, Elixir e Kythe insieme
 - [Sourcebot](../sourcebot-browser/README.md): avvio, stop, log, reset e query
   utili; URL locale predefinito `http://127.0.0.1:3000`
 - [Elixir](../code-browser/README.md): setup, reindex, avvio e stop; URL locale

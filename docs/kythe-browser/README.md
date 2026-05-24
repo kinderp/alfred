@@ -171,6 +171,22 @@ docker logs alfred-kythe-http-9898
 docs/kythe-browser/stop-kythe.sh
 ```
 
+## Restart e stato
+
+```sh
+docs/kythe-browser/restart-kythe.sh
+docs/kythe-browser/status-kythe.sh
+```
+
+`restart-kythe.sh` ferma e riavvia solo il server HTTP Kythe. Non rigenera le
+serving tables: se il codice e' cambiato e si vuole aggiornare l'indice, usare
+prima `reindex-kythe.sh`.
+
+`status-kythe.sh` mostra il container Docker atteso, l'eventuale id registrato
+in `.work/http_server.container` e una risposta HTTP locale. Un `404` sulla
+root del server non indica necessariamente un problema: Kythe espone soprattutto
+API e viste specifiche, non una homepage applicativa completa.
+
 ## Verifiche rapide
 
 Dopo l'avvio:

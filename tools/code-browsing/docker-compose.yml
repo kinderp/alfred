@@ -1,0 +1,47 @@
+services:
+  sourcebot:
+    image: ${SOURCEBOT_IMAGE:-ghcr.io/sourcebot-dev/sourcebot:v4.17.3}
+    container_name: ${SOURCEBOT_CONTAINER_NAME:-alfred-sourcebot}
+    ports:
+      - "127.0.0.1:${SOURCEBOT_PORT:-3000}:3000"
+    volumes:
+      - sourcebot-data:/data
+      - ${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}/docs/sourcebot-browser/config.json:/etc/sourcebot/config.json:ro
+      - ${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}:/repos/alfred:ro
+    environment:
+      CONFIG_PATH: /etc/sourcebot/config.json
+      DATA_DIR: /data
+      AUTH_URL: http://localhost:${SOURCEBOT_PORT:-3000}
+      AUTH_SECRET: alfred-sourcebot-local-development-secret
+      FORCE_ENABLE_ANONYMOUS_ACCESS: "true"
+      SOURCEBOT_TELEMETRY_DISABLED: "true"
+
+  elixir:
+    image: ${ALFRED_ELIXIR_IMAGE:-alfred-elixir:local}
+    container_name: ${ALFRED_ELIXIR_CONTAINER:-alfred-elixir}
+    ports:
+      - "${ALFRED_ELIXIR_PORT:-8080}:80"
+    volumes:
+      - ${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}/docs/code-browser/.work/elixir-data:/srv/elixir-data
+
+  kythe:
+    image: ${KYTHE_DOCKER_IMAGE:-alfred-kythe:local}
+    container_name: ${KYTHE_CONTAINER_NAME:-alfred-kythe-http-9898}
+    working_dir: ${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}
+    ports:
+      - "127.0.0.1:${KYTHE_PORT:-9898}:${KYTHE_PORT:-9898}"
+    volumes:
+      - ${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}:${PROJECT_ROOT:?set PROJECT_ROOT to the repository root}:ro
+    command:
+      - bash
+      - -lc
+      - >-
+        rm -rf /tmp/alfred-kythe-serving &&
+        cp -a '${PROJECT_ROOT}/docs/kythe-browser/.work/serving' /tmp/alfred-kythe-serving &&
+        '${PROJECT_ROOT}/docs/kythe-browser/.work/kythe/tools/http_server'
+        --serving_table /tmp/alfred-kythe-serving
+        --listen 0.0.0.0:${KYTHE_PORT:-9898}
+
+volumes:
+  sourcebot-data:
+    name: ${SOURCEBOT_DATA_VOLUME:-alfred-sourcebot-data}

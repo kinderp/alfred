@@ -35,6 +35,19 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tools/code-browsing/`: aggiunto uno strato operativo comune per i browser
+  del codice, con controllo Docker, setup/start/stop/restart/status aggregati e
+  un `docker-compose.yml` di riferimento per Sourcebot, Elixir e Kythe. Graphify
+  resta escluso finche' non viene completato uno spike tecnico dedicato.
+- `docs/sourcebot-browser/`, `docs/code-browser/`, `docs/kythe-browser/`:
+  aggiunti gli script mancanti di setup/status/restart per rendere uniforme il
+  ciclo operativo dei container.
+- `10-debugging-test-e-strumenti.md` e `00-regole-operative.md`: documentato il
+  provisioning Docker per contributori e studenti, chiarendo che Docker e' un
+  prerequisito host e che gli script del progetto preparano i container ma non
+  installano il daemon.
+- `README.md`: aggiunto il rimando agli script aggregati per la gestione dei
+  browser del codice.
 - `modules/inotify/src/inotify_backend.c`: nel poll path la scelta
   `event_engine_mode` viene ora letta da `ctx.config` invece che da
   `app->config`. Resta intenzionalmente legato ad `app_t` solo il dispatch

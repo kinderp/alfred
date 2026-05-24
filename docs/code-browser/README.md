@@ -119,6 +119,22 @@ non file temporanei non tracciati.
 docs/code-browser/stop-elixir.sh
 ```
 
+## Restart e stato
+
+```sh
+docs/code-browser/restart-elixir.sh
+docs/code-browser/status-elixir.sh
+```
+
+`restart-elixir.sh` ferma e riavvia il container senza rigenerare il database.
+Serve quando il processo web e' stato fermato o quando si vuole cambiare porta
+tramite `ALFRED_ELIXIR_PORT`.
+
+`status-elixir.sh` mostra lo stato Docker del container e prova una richiesta
+HTTP alla pagina principale del browser. Se il database non e' aggiornato, lo
+stato puo' essere corretto ma il codice mostrato puo' riferirsi all'ultimo
+commit indicizzato: in quel caso usare `reindex-elixir.sh`.
+
 ## Come usarlo per studiare Alfred
 
 Percorso consigliato:
