@@ -887,6 +887,21 @@ backend inotify reale e controlla l'`events.log` core. Quando lo shadow non
 servira' piu', dovremo decidere se `make test` diventera' un alias di
 `make test-core` oppure restera' un target storico separato.
 
+Roadmap per il cambio finale di `make test`:
+
+1. fase attuale: `make test` punta a `test-legacy-shadow`
+2. fase switch: `make test` punta a `test-core`
+3. fase post-switch: `test-legacy-shadow` resta come target diagnostico
+   esplicito oppure viene archiviato insieme al vecchio dispatcher
+
+Prima della fase switch devono essere vere queste condizioni:
+
+- `make test-core` copre tutti gli scenari semantici ufficiali
+- gli scenari legacy che controllano solo diagnostica backend sono classificati
+  come diagnostica, non come contratto utente
+- gli studenti sanno che `WATCH_ADDED` e `WATCH_REMOVED` sono log backend
+- la documentazione degli scenari indica quali test legacy sono storici
+
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non
 conoscere piu' con certezza lo stato del filesystem. Gestirlo bene significa

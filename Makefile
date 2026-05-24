@@ -223,6 +223,8 @@ run: all
 # test remains a temporary compatibility alias for test-legacy-shadow.
 # -----------------------------------------------------------------------------
 
+# Temporary compatibility alias. During the final core switch this target should
+# point to test-core, while test-legacy-shadow remains explicit if still useful.
 test: test-legacy-shadow
 
 test-legacy-shadow:

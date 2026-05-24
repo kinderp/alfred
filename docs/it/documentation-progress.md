@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile`, `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunta la
+  roadmap per il futuro cambio di `make test` da alias legacy/shadow ad alias
+  del percorso core, senza cambiare ancora il comportamento del target.
+- `14-scenari-test.md`: aggiunta tabella di decisione sugli scenari legacy,
+  distinguendo contratto core, diagnostica backend e memoria storica shadow.
 - `Makefile`: aggiunto il target esplicito `test-legacy-shadow`.
   `make test` resta un alias temporaneo dei funzionali storici, mentre
   `make test-core` resta la suite end-to-end ufficiale del percorso core.

@@ -170,6 +170,23 @@ Mappa corrente:
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
 | shadow senza build legacy | non presente nei funzionali storici | `tests/core/test_shadow_requires_legacy_build.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente quando il binario e' core-only. |
 
+### Decisione sugli scenari legacy
+
+Questa tabella prepara il momento in cui `make test` passera' al percorso core.
+Non cambia ancora i test: serve a classificare che cosa restera' nel prodotto e
+che cosa e' solo memoria diagnostica della migrazione.
+
+| Gruppo | Decisione futura | Motivo |
+| --- | --- | --- |
+| Create/delete/rename file e directory | Tenere nel core | Sono comportamento utente fondamentale. |
+| Move file e move directory | Tenere nel core | Fissano la differenza tra move e rename. |
+| Move + rename file/directory | Tenere nel core | Il core deve emettere un solo `RELOCATED`. |
+| Modify / close-write | Tenere nel core | Fissa `FILE_MODIFIED` e `FILE_READY`. |
+| Recursive fast nested directory | Tenere nel core | Protegge il recupero con raw sintetici. |
+| `WATCH_ADDED` / `WATCH_REMOVED` nei funzionali | Tenere come diagnostica o test mirati | Sono log backend, non eventi semantici utente. |
+| Doppia emissione legacy `MOVED + RENAMED` | Archiviare o mantenere solo shadow | Documenta il comportamento storico, non il target. |
+| Shadow senza build legacy | Tenere nel core | Protegge il contratto di configurazione runtime. |
+
 Conclusione operativa:
 
 - la suite `make test-core` e' oggi la sorgente piu' precisa per il
