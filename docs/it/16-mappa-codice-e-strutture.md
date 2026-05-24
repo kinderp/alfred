@@ -252,8 +252,8 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | init e poll tramite `ctx.config` | abilitare o rifiutare shadow mode | temporaneo, finche' shadow esiste |
-| `app->config.move_cache_size` | `legacy_events_init()` tramite `ctx.config` | dimensione cache move legacy | no nel percorso core finale |
+| `app->config.event_engine_mode` | `app_init_legacy_shadow()`, poll tramite `ctx.config` | abilitare o rifiutare shadow mode e decidere se invocare il bridge | temporaneo, finche' shadow esiste |
+| `app->config.move_cache_size` | `legacy_events_init()` tramite `app_init_legacy_shadow()` | dimensione cache move legacy | no nel percorso core finale |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -278,8 +278,8 @@ direttamente al backend. La funzione ora usa:
 - `ctx.runtime->watchers` per inizializzare e distruggere la tabella dei watch
 - `ctx.runtime->fd` per aprire, loggare e chiudere il file descriptor inotify
 - `ctx.config->watcher_capacity` per dimensionare la watcher table
-- `ctx.config->event_engine_mode` e `ctx.config->move_cache_size` per il ponte
-  legacy/shadow
+- `ctx.config->event_engine_mode` per decidere se invocare il bridge
+  legacy/shadow durante il poll
 - `ctx.logger` per diagnostica ed errori
 
 Questa e' una distinzione didattica importante: prima il corpo della funzione ha
@@ -294,10 +294,10 @@ Il micro-refactor su `inotify_backend_shutdown()` completa la simmetria con
 - `ctx.runtime->fd` per controllare, chiudere e invalidare il file descriptor
 - `ctx.runtime->watchers` per distruggere la tabella dei watch
 
-`legacy_events_shutdown()` resta fuori dal context per scelta esplicita: e' un
-residuo del ponte legacy/shadow e non rappresenta stato del backend core
-finale. Quando shadow mode verra' rimosso, anche quel cleanup sparira' o verra'
-spostato in una struttura legacy dedicata.
+`legacy_events_shutdown()` non appartiene piu' al backend: viene chiamata da
+`app_shutdown_legacy_shadow()`. Questa e' una scelta esplicita perche' il
+dispatcher legacy e' uno strumento di confronto dell'applicazione, non stato del
+backend core finale.
 
 ### Context backend proposto
 
@@ -405,7 +405,10 @@ backend_init(ctx):
   ctx->runtime->fd = -1
   watcher_init(&ctx->runtime->watchers, ctx->config->watcher_capacity)
   inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
-  legacy_events_init(ctx->config->move_cache_size) se shadow
+
+app_init_legacy_shadow(app):
+  se event_engine_mode=shadow:
+    legacy_events_init(app->config.move_cache_size)
 
 inotify_backend_add_startup_watch(&ctx, path):
   backend_add_startup_watch(ctx, path)
@@ -424,8 +427,11 @@ inotify_backend_shutdown(&ctx):
 
 backend_shutdown(ctx):
   chiude ctx->runtime->fd
-  legacy_events_shutdown() se compilato
   watcher_destroy(&ctx->runtime->watchers)
+
+app_shutdown_legacy_shadow(app):
+  se event_engine_mode=shadow:
+    legacy_events_shutdown()
 ```
 
 Anche la discovery ricorsiva usa ora lo stesso context:
@@ -526,10 +532,10 @@ Campi rilevanti:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
-| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | `legacy_events_init()` |
+| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | `app_init_legacy_shadow()` |
 | `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
 | `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
-| `event_engine_mode` | sceglie core o shadow | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `inotify_backend_init()`, `inotify_backend_poll()`, `core_logger_on_event()` |
+| `event_engine_mode` | sceglie core o shadow | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `app_init_legacy_shadow()`, `inotify_backend_poll()`, `core_logger_on_event()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` prende il valore da `watch_manager_default_mask()`, poi

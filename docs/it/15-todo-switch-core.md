@@ -130,12 +130,14 @@ e' ancora nella forma finale.
 Responsabilita' attuali:
 
 - inizializza configurazione, logger, core e backend inotify
+- inizializza e spegne il dispatcher legacy solo quando shadow mode e' attivo
 - inizializza il backend inotify
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve raw event reali e sintetici tramite callback
 - inoltra gli `alfred_raw_event_t` al core
 - nella build shadow include `events.h` solo per adattare il bridge opaco alla
-  vecchia funzione `legacy_events_dispatch()`
+  vecchia funzione `legacy_events_dispatch()` e per gestire init/shutdown del
+  dispatcher legacy
 
 La catena ricorsiva non parte piu' da `app.c`. Ora e':
 
@@ -191,9 +193,9 @@ Dipendenze reali osservate oggi:
 
 | Funzione | Campi di `app_t` usati | Motivo | Direzione futura |
 | --- | --- | --- | --- |
-| `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione, logga errori e inizializza legacy shadow se richiesto | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
+| `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione e logga errori | gia' fuori da `app_t`; non inizializza piu' legacy shadow |
 | `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
-| `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd, distrugge watch table, spegne legacy dispatcher opzionale | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
+| `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd e distrugge watch table | gia' fuori da `app_t`; non spegne piu' legacy shadow |
 | `inotify_backend_poll()` | riceve `inotify_backend_context_t *` e `legacy_shadow_bridge_t *`; delega a `backend_poll(ctx, legacy, on_event, userdata)` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca la callback shadow se attiva | rimuovere `legacy_shadow_bridge_t` quando shadow legacy non servira' piu' |
 | `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
@@ -528,6 +530,32 @@ Questo e' piu' pulito del tredicesimo passo perche' la quarantena non e' piu'
 backend conosce solo una callback opzionale". Il backend resta responsabile del
 momento in cui lo shadow viene chiamato, ma non conosce il tipo applicativo
 storico necessario a `events.c`.
+
+Stato implementato del quindicesimo micro-refactor:
+
+- `legacy_events_init()` e `legacy_events_shutdown()` sono stati spostati fuori
+  dal backend inotify
+- `app.c` possiede ora `app_init_legacy_shadow()` e
+  `app_shutdown_legacy_shadow()`
+- `inotify_backend.c` non include piu' `events.h`
+- `inotify_backend_init()` inizializza solo stato backend: watcher table e file
+  descriptor inotify
+- `inotify_backend_shutdown()` chiude solo il file descriptor e distrugge la
+  watcher table
+- la build senza `ALFRED_ENABLE_LEGACY_SHADOW` rifiuta `event_engine=shadow` in
+  `app_init_legacy_shadow()`, prima che il backend parta
+
+Questa scelta separa due responsabilita' che prima erano mescolate:
+
+- il backend inotify gestisce il collegamento tecnico con Linux e produce fatti
+  raw
+- l'applicazione orchestra la modalita' di confronto shadow, perche' shadow e'
+  una strategia di integrazione del progetto, non una responsabilita' del
+  backend
+
+Il backend mantiene solo il punto di chiamata del confronto durante il poll,
+tramite callback opaca. Non inizializza, non spegne e non include piu' il codice
+semantico legacy.
 
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`

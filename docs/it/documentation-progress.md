@@ -35,6 +35,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md`: aggiunta la regola stabile sulle righe entro 75
+  caratteri per codice, documentazione, commenti e messaggi di commit.
+  Eccezioni motivate: URL, path, comandi o tabelle Markdown.
+- `app/src/app.c` e `modules/inotify/src/inotify_backend.c`: spostato il
+  lifecycle del legacy shadow fuori dal backend. `app.c` inizializza e spegne
+  `events.c` tramite `app_init_legacy_shadow()` e
+  `app_shutdown_legacy_shadow()`, mentre il backend resta responsabile solo di
+  fd inotify, watcher table, raw event e callback shadow opaca.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  quindicesimo micro-refactor, chiarendo che shadow mode e' una strategia di
+  integrazione orchestrata dall'applicazione e non stato del backend.
 - `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
   e `app/src/app.c`: reso opaco `legacy_shadow_bridge_t`. Il bridge non
   contiene piu' `struct app *`; contiene una callback shadow e un `userdata`.
@@ -574,7 +585,9 @@ Stati usati:
   al core.
 - `modules/inotify/src/inotify_backend.c`, `app/src/app.c` e
   `15-todo-switch-core.md`: spostato nel backend anche il ciclo di vita del
-  dispatcher legacy, cosi' `app.c` non dipende piu' da `events.h`.
+  dispatcher legacy. Questo stato e' stato poi superato: il lifecycle shadow e'
+  tornato in `app.c` tramite helper dedicati, mentre il backend conserva solo il
+  bridge opaco di poll.
 - `app/src/config.c`, `tests/lib/test_lib.sh`, `04-livello-applicazione.md`,
   `10-debugging-test-e-strumenti.md` e `15-todo-switch-core.md`: cambiato il
   default runtime a `event_engine=core`, lasciando i test funzionali legacy in

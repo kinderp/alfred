@@ -17,6 +17,10 @@ altro momento, leggere questo file prima di continuare.
   quella spiegazione anche negli `.md` o nei commenti del codice.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
+- Mantenere le righe entro 75 caratteri quando si scrivono codice,
+  documentazione, commenti e messaggi di commit. Se una riga lunga e'
+  necessaria per tabelle Markdown, URL, comandi o path, preferire una
+  riformulazione o uno spezzamento leggibile appena possibile.
 
 ## Principi di ragionamento dell'agente
 
@@ -116,6 +120,7 @@ I commit devono seguire sempre queste regole:
 
 - messaggio in inglese
 - descrizione dettagliata in inglese
+- righe del messaggio entro 75 caratteri quando possibile
 - lista finale `Modified files:`
 - nessuna riga vuota tra gli elementi della lista dei file
 - includere solo i file del passo corrente

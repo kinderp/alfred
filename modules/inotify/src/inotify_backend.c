@@ -9,16 +9,13 @@
  * map watch descriptors to paths, keep recursive watches alive, and synthesize
  * raw directory-create facts discovered during a recursive scan. It must not
  * decide final FILE_* or DIR_* semantics; that belongs to the core. When the
- * binary is built with ALFRED_ENABLE_LEGACY_SHADOW, it can also run the
- * temporary legacy dispatcher for shadow comparison.
+ * application enables shadow mode, the backend can invoke an opaque comparison
+ * callback supplied by app.c, but it does not own legacy semantic state.
  * ========================================================================== */
 
 #include "inotify_backend.h"
 
 #include "errors.h"
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-#include "events.h"
-#endif
 #include "inotify_adapter.h"
 #include "logger.h"
 #include "utils.h"
@@ -97,11 +94,9 @@ static int backend_emit_synthetic_dir_create(
  * @ctx: backend context containing config, logger, and backend storage
  *
  * Initializes the watcher table first, then opens a nonblocking inotify file
- * descriptor. If the binary was built with ALFRED_ENABLE_LEGACY_SHADOW,
- * shadow mode also initializes the legacy semantic dispatcher so the backend
- * can produce both the official core stream and the comparison legacy stream.
- * Without that build flag, requesting event_engine=shadow fails clearly instead
- * of silently falling back to core mode.
+ * descriptor. Legacy shadow initialization is intentionally outside this
+ * module: app.c owns the optional semantic comparison path, while the backend
+ * owns only inotify runtime state.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -118,8 +113,9 @@ int inotify_backend_init(inotify_backend_context_t *ctx)
  * @ctx: narrowed backend context with runtime, config, and logger
  *
  * This helper is the context-shaped form of backend initialization. It keeps
- * the same cleanup order as the public function previously had: watcher table
- * first, inotify descriptor second, optional legacy shadow state last.
+ * the same backend cleanup order as the public function previously had:
+ * watcher table first, inotify descriptor second. Optional legacy shadow state
+ * is initialized by app.c before the backend starts.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -155,32 +151,6 @@ static int backend_init(inotify_backend_context_t *ctx)
     logger_info(ctx->logger,
                 "inotify backend initialized fd=%d",
                 ctx->runtime->fd);
-
-    if (ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW) {
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-        if (legacy_events_init(ctx->config->move_cache_size) != 0) {
-            logger_error(ctx->logger,
-                         "legacy_events_init failed");
-
-            close(ctx->runtime->fd);
-            ctx->runtime->fd = -1;
-            watcher_destroy(&ctx->runtime->watchers);
-            return ERR_ALLOC;
-        }
-
-        logger_info(ctx->logger,
-                    "legacy event dispatcher initialized");
-#else
-        logger_error(ctx->logger,
-                     "shadow event engine requires build with "
-                     "ENABLE_LEGACY_SHADOW=1");
-
-        close(ctx->runtime->fd);
-        ctx->runtime->fd = -1;
-        watcher_destroy(&ctx->runtime->watchers);
-        return ERR_CONFIG;
-#endif
-    }
 
     return ERR_OK;
 }
@@ -235,9 +205,8 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
  * inotify_backend_shutdown - release backend runtime resources
  * @ctx: backend context containing runtime state
  *
- * The function is safe for partial initialization paths. When legacy shadow is
- * compiled in, its shutdown stays here because the backend owns the temporary
- * bridge to events.c.
+ * The function is safe for partial initialization paths. Legacy shadow cleanup
+ * is owned by app.c, not by the inotify backend.
  */
 void inotify_backend_shutdown(inotify_backend_context_t *ctx)
 {
@@ -251,10 +220,9 @@ void inotify_backend_shutdown(inotify_backend_context_t *ctx)
  * backend_shutdown - release backend runtime resources through context
  * @ctx: narrowed backend context with runtime state
  *
- * This is the context-shaped form of backend shutdown. Unlike the poll legacy
- * bridge, shutdown does not need app_t: the legacy shutdown hook owns global
- * temporary shadow state and the normal backend cleanup only needs fd and the
- * watcher table.
+ * This is the context-shaped form of backend shutdown. The normal backend
+ * cleanup only needs fd and the watcher table. Shadow-only semantic state lives
+ * outside this module and is released by app.c.
  */
 static void backend_shutdown(inotify_backend_context_t *ctx)
 {
@@ -263,9 +231,6 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
         ctx->runtime->fd = -1;
     }
 
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-    legacy_events_shutdown();
-#endif
     watcher_destroy(&ctx->runtime->watchers);
 }
 
@@ -295,7 +260,6 @@ static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
     if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
         return ERR_OK;
 
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
     if (legacy == NULL || legacy->dispatch == NULL) {
         logger_error(ctx->logger,
                      "shadow event engine requires legacy bridge");
@@ -304,15 +268,6 @@ static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
 
     legacy->dispatch(legacy->userdata, ev);
     return ERR_OK;
-#else
-    (void)legacy;
-    (void)ev;
-
-    logger_error(ctx->logger,
-                 "shadow event engine reached poll without "
-                 "legacy shadow support");
-    return ERR_CONFIG;
-#endif
 }
 
 /*
