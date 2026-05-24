@@ -17,10 +17,6 @@ altro momento, leggere questo file prima di continuare.
   quella spiegazione anche negli `.md` o nei commenti del codice.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
-- Mantenere le righe entro 75 caratteri quando si scrivono codice,
-  documentazione, commenti e messaggi di commit. Se una riga lunga e'
-  necessaria per tabelle Markdown, URL, comandi o path, preferire una
-  riformulazione o uno spezzamento leggibile appena possibile.
 
 ## Principi di ragionamento dell'agente
 
@@ -120,17 +116,54 @@ I commit devono seguire sempre queste regole:
 
 - messaggio in inglese
 - descrizione dettagliata in inglese
-- righe del messaggio entro 75 caratteri quando possibile
 - lista finale `Modified files:`
 - nessuna riga vuota tra gli elementi della lista dei file
 - includere solo i file del passo corrente
 - non committare file locali non tracciati, log generati o esperimenti fuori
   task
 
+Le regole di stile del messaggio seguono le pratiche raccolte in
+`Git Commit Best Practices`:
+
+- fare commit puliti e monoscopo
+- committare spesso su feature branch, senza aspettare un cambio enorme
+- scrivere messaggi significativi, utili a reviewer e lettori futuri
+- usare il modo imperativo e il tempo presente nel subject:
+  `change`, non `changed` o `changes`
+- usare il body per spiegare che cosa e' cambiato e perche'
+- tenere il subject breve, idealmente intorno a 50 caratteri
+- spezzare il body intorno a 72 caratteri quando e' pratico
+- lasciare una riga vuota tra subject e body
+- non chiudere il subject con un punto
+- rimuovere punteggiatura non necessaria
+
+Quando il tipo e' utile, usare il formato:
+
+```text
+<type>(<optional scope>): <subject>
+```
+
+Tipi ammessi:
+
+- `feat`: nuova funzionalita' utente
+- `fix`: correzione di bug utente
+- `docs`: modifiche alla documentazione
+- `style`: formattazione senza cambio di comportamento
+- `refactor`: refactor del codice di produzione
+- `test`: aggiunta o refactor di test
+- `chore`: manutenzione ordinaria senza cambio di comportamento
+- `build`: modifiche a build, tooling o dipendenze
+- `perf`: miglioramento prestazionale
+
+Nel nostro progetto il prefisso `<type>` e' consigliato ma non obbligatorio
+per i commit gia' avviati con lo stile storico. Restano invece obbligatori il
+testo in inglese, la descrizione dettagliata e la lista finale dei file senza
+righe vuote tra gli elementi.
+
 Esempio di formato:
 
 ```text
-Short English title
+refactor: move legacy shadow lifecycle
 
 Detailed English explanation of what changed and why.
 

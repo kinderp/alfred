@@ -35,9 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
-- `00-regole-operative.md`: aggiunta la regola stabile sulle righe entro 75
-  caratteri per codice, documentazione, commenti e messaggi di commit.
-  Eccezioni motivate: URL, path, comandi o tabelle Markdown.
+- `00-regole-operative.md`: rimossa la regola rigida sulle righe entro 75
+  caratteri. Le regole commit ora seguono il gist `Git Commit Best Practices`:
+  commit monoscopo, subject imperativo, body esplicativo e wrapping circa 72
+  caratteri quando pratico. Restano obbligatori inglese e lista file senza
+  righe vuote tra gli item.
 - `app/src/app.c` e `modules/inotify/src/inotify_backend.c`: spostato il
   lifecycle del legacy shadow fuori dal backend. `app.c` inizializza e spegne
   `events.c` tramite `app_init_legacy_shadow()` e
