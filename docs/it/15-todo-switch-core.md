@@ -69,10 +69,8 @@ Al momento:
   `alfred_raw_event_t` e li consegna all'app tramite callback
 - l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato dal
   loop applicativo al backend inotify
-- `events.c` contiene ancora semantica legacy, ma non viene piu' compilato dal
-  Makefile
-- `move_cache.c` resta nel repository come file legacy, ma non esiste piu' una
-  variante Makefile che lo compili
+- `events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi
+  dal codice corrente
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -97,21 +95,20 @@ il modo in cui leggiamo i prossimi refactor:
 - bisogna prima verificare la copertura core e poi cancellare il confronto
   legacy in passi piccoli
 
-Il bridge shadow e' stato rimosso dal `inotify_backend_context_t`. La direzione
-successiva e' rimuovere anche init/shutdown legacy da `app.c`, poi eliminare la
-configurazione shadow e i file storici.
+Il bridge shadow e' stato rimosso dal `inotify_backend_context_t`, init/shutdown
+legacy sono stati rimossi da `app.c`, e i file storici del dispatcher legacy
+sono stati cancellati. Resta da archiviare o aggiornare la suite storica che
+dipendeva dallo shadow.
 
 ## Mappa della logica legacy rimasta
 
-Questa sezione fotografa dove si trova ancora la logica storica e dove dovrebbe
-finire dopo lo switch completo al core.
+Questa sezione conserva la mappa storica della logica legacy rimossa. Non
+descrive piu' file presenti nel codice corrente.
 
 ### `modules/inotify/src/events.c`
 
-Questo file e' ancora il dispatcher semantico legacy. Non viene piu' compilato
-dal Makefile e non partecipa al runtime corrente. Resta temporaneamente nel
-repository solo per rendere leggibile la storia della migrazione e per una
-rimozione fisica controllata.
+Questo file era il dispatcher semantico legacy. Non e' piu' presente nel codice
+corrente: la sua responsabilita' e' stata sostituita dal core.
 
 Responsabilita' ancora presenti:
 
@@ -839,13 +836,12 @@ Quando il core gestisce ufficialmente move e rename:
 - `modules/inotify/src/move_cache.c` non deve piu' servire al runtime core
 - `modules/inotify/include/move_cache.h` puo' essere rimosso dal modulo runtime
 - `app_t.moves` puo' essere eliminato: fatto
-- `move_cache_size` puo' essere rimosso dalla configurazione
+- `move_cache_size` puo' essere rimosso dalla configurazione: fatto
 
 La correlazione move deve restare nel core.
 
-Stato attuale: `move_cache` e' esclusa dal runtime corrente ed e' posseduta da
-`events.c`, non da `app_t`. Inoltre non viene piu' compilata dal Makefile:
-resta solo come file legacy da rimuovere fisicamente.
+Stato attuale: `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati
+rimossi. La correlazione move resta nel core.
 
 ### 5. Ridurre o rimuovere `events.c`
 
@@ -891,6 +887,7 @@ verifica e documentazione piu' estesa.
 | Passo | Effort | Perche' serve |
 | --- | --- | --- |
 | Rimuovere la variante build legacy-shadow | Fatto | `ENABLE_LEGACY_SHADOW`, `test-legacy-shadow`, `events.c` e `move_cache.c` non fanno piu' parte della build Makefile. |
+| Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core end-to-end | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
@@ -991,7 +988,8 @@ Ordine operativo consigliato per la rimozione:
 5. rimuovere init/shutdown legacy da `app.c`: fatto
 6. togliere `event_engine=shadow` dalla configurazione ordinaria: fatto a
    livello runtime, resta solo il valore riconosciuto per errore esplicito
-7. rimuovere fisicamente `events.c` e `move_cache.c`
+7. rimuovere fisicamente `events.c`, `events.h`, `move_cache.c`,
+   `move_cache.h` e `move_cache_size`: fatto
 8. archiviare nei documenti la vecchia semantica solo come storia della
    migrazione
 
@@ -1029,9 +1027,7 @@ Priorita' consigliata:
 | Alta | `app/src/app.c` | Ora deve essere descritto come orchestratore, non come luogo della semantica filesystem. |
 | Media | `modules/inotify/src/watch_manager.c` | Gestisce stato backend reale e discovery ricorsiva; e' delicato per il bug `mkdir -p`. |
 | Media | `modules/inotify/src/inotify_adapter.c` | Va mantenuto conversion-only; i commenti devono proteggere questo confine. |
-| Media | `app/src/config.c` | Contiene scelte importanti su default core, shadow mode e parsing sicuro dei numeri. |
-| Bassa/legacy | `modules/inotify/src/events.c` | Va commentato come legacy shadow, evitando di investirci troppo se verra' rimosso o quarantinato. |
-| Bassa/legacy | `modules/inotify/src/move_cache.c` | Serve ancora solo al dispatcher legacy; utile documentarlo per confronto storico. |
+| Media | `app/src/config.c` | Contiene scelte importanti su default core, rifiuto esplicito di shadow e parsing sicuro dei numeri. |
 
 Regola pratica: i commenti nel codice devono essere in inglese e vicini alle
 funzioni; le spiegazioni lunghe, didattiche e con contesto storico devono stare
@@ -1094,7 +1090,7 @@ Il legacy shadow non e' piu' una variante di build. La build normale:
 make
 ```
 
-non compila `events.c` e `move_cache.c`. Se Alfred riceve
+non contiene `events.c` e `move_cache.c`. Se Alfred riceve
 `ALFRED_EVENT_ENGINE=shadow`, fallisce con un errore esplicito invece di fare
 fallback silenzioso a core mode.
 

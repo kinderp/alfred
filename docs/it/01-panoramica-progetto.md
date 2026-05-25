@@ -74,8 +74,8 @@ Il progetto e' in fase di integrazione. Attualmente:
 - `modules/inotify/` contiene il backend inotify, cioe' lettura eventi,
   gestione watch e conversione verso eventi raw Alfred
 - `core/` e' lo stream semantico ufficiale di default
-- `events.c` e `move_cache.c` restano nel modulo inotify solo come codice
-  legacy da rimuovere; non vengono piu' compilati dal Makefile
+- il vecchio dispatcher legacy `events.c` e la sua `move_cache` sono stati
+  rimossi dal codice corrente
 
 Il flusso runtime normale e':
 
@@ -92,8 +92,8 @@ app/logger
 ```
 
 La direzione futura non e' cambiare questo flusso, ma renderlo piu' pulito:
-confinare o rimuovere il vecchio dispatcher legacy e progettare overflow/resync
-come feature separata.
+archiviare i test storici rimasti e progettare overflow/resync come feature
+separata.
 
 ## Diagramma generale
 

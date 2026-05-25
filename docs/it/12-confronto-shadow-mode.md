@@ -1,7 +1,11 @@
 # Confronto shadow mode
 
-Questo capitolo spiega come confrontare l'output del vecchio dispatcher inotify
-con l'output del core quando si abilita esplicitamente lo shadow mode.
+Questo capitolo e' storico. Spiega come abbiamo confrontato l'output del
+vecchio dispatcher inotify con l'output del core quando lo shadow mode era
+ancora disponibile durante la migrazione.
+
+Nel runtime corrente lo shadow mode e' stato rimosso: `ALFRED_EVENT_ENGINE=shadow`
+fallisce con un errore esplicito, e il percorso ufficiale e' `core`.
 
 ## Perche' confrontare i due output
 

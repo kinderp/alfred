@@ -260,12 +260,12 @@ Al momento:
 - la callback `core_logger_on_event()` compila
 - il core e' inizializzato dentro `app_t`
 - il runtime di default invia eventi al core come stream ufficiale
-- lo shadow mode puo' ancora attivare il vecchio dispatcher in `events.c` per
-  confronto
+- lo shadow mode non e' piu' attivabile: se richiesto, produce un errore
+  esplicito
 
-Shadow mode oggi significa: il core resta attivo, ma il backend esegue anche il
-dispatcher legacy per confrontare i due comportamenti. Non e' il percorso
-ordinario del runtime.
+Il backend non esegue piu' un dispatcher legacy per confrontare i due
+comportamenti. Il contratto ufficiale e' il percorso
+`inotify -> raw Alfred -> core -> logger`.
 
 ## Funzioni principali del core
 
@@ -302,6 +302,6 @@ riceve pochi eventi.
 il punto in cui svuotare anche debounce o altri stati pendenti prima dello
 shutdown.
 
-Il prossimo passo resta rimuovere gradualmente la vecchia logica semantica da
-`modules/inotify/src/events.c`, dopo aver reso il percorso legacy chiaramente
-opzionale o confinato.
+Il prossimo passo resta archiviare o aggiornare i test e i documenti storici che
+facevano riferimento al confronto legacy, mantenendo il core come unica sorgente
+semantica ufficiale.

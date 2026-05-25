@@ -158,8 +158,8 @@ La build non espone piu' `ENABLE_LEGACY_SHADOW`. Il comando:
 make
 ```
 
-compila il binario normale core-only. In questa build `events.c` e
-`move_cache.c` non vengono inclusi.
+compila il binario normale core-only. I vecchi file legacy `events.c` e
+`move_cache.c` sono stati rimossi dal codice corrente.
 
 Se Alfred viene avviato con:
 
@@ -693,9 +693,8 @@ MODULE_SRCS += \
     ...
 ```
 
-Nota: `events.c` e `move_cache.c` non vanno aggiunti al percorso normale. Sono
-codice legacy non piu' raggiungibile dal runtime e verranno rimossi in un passo
-successivo.
+Nota: `events.c` e `move_cache.c` non vanno reintrodotti nel percorso normale.
+La semantica finale appartiene al core, non al modulo inotify.
 
 ### Passo 5: controllare gli include path
 
@@ -849,9 +848,9 @@ fallira' con un errore simile a:
 No rule to make target 'modules/inotify/src/old_file.c'
 ```
 
-Nel nostro percorso di switch al core, questo sara' importante quando
-rimuoveremo fisicamente `events.c` e `move_cache.c`: non dovranno comparire in
-nessuna lista sorgenti del Makefile.
+Nel nostro percorso di switch al core, questo e' gia' successo con `events.c` e
+`move_cache.c`: dopo la rimozione fisica non devono comparire in nessuna lista
+sorgenti del Makefile.
 
 ### Caso 4: aggiungi una nuova directory di header
 

@@ -98,8 +98,9 @@ modules/inotify/src/watch_manager.c
 modules/inotify/src/watcher.c
 ```
 
-I file `events.c` e `move_cache.c` esistono ancora per lo shadow mode legacy:
-sono utili per confronto storico, ma non rappresentano il percorso target.
+Il vecchio dispatcher legacy `events.c` e la sua `move_cache` sono stati
+rimossi da questa cartella: il modulo inotify corrente produce solo raw event e
+diagnostica backend, non eventi semantici finali.
 
 ## tests/
 

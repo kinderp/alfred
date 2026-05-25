@@ -407,10 +407,11 @@ continuare con `rg`, ma non bisogna basare decisioni su un indice vecchio.
 
 ### 2. Cercare pattern architetturali con `rg`
 
-Per trovare le dipendenze residue da `app_t` nel backend si puo' usare:
+Durante i micro-refactor del backend, per trovare le dipendenze residue da
+`app_t` si usava:
 
 ```bash
-rg -n "app->|app_t \*app|legacy_events|event_engine_mode|backend_context_from_app|inotify_backend_" \
+rg -n "app->|app_t \*app|event_engine_mode|inotify_backend_context|inotify_backend_" \
   modules/inotify/src/inotify_backend.c \
   modules/inotify/include/inotify_backend.h \
   app/src/app.c
@@ -442,21 +443,16 @@ Pattern usati:
     precedente"; per cercare proprio il carattere `*` bisogna scrivere `\*`
   - esempio trovato: `int inotify_backend_poll(app_t *app, ...)`
 
-- `legacy_events`
-  - trova il ponte verso il dispatcher legacy/shadow
-  - esempio: `legacy_events_init()`, `legacy_events_dispatch()`,
-    `legacy_events_shutdown()`
-  - utile per separare refactor backend core da compatibilita' legacy
-
 - `event_engine_mode`
-  - trova dove il codice sceglie tra core e shadow
-  - e' importante perche' questa scelta e' configurazione, non semantica del
-    backend inotify
+  - trova dove il codice conserva ancora il valore `shadow` per rifiutarlo con
+    un errore esplicito
+  - e' importante perche' questa scelta appartiene alla configurazione
+    applicativa, non alla semantica del backend inotify
 
-- `backend_context_from_app`
-  - trova i punti in cui il backend costruisce il context ristretto a partire da
-    `app_t`
-  - serve a capire quanto e' gia' avanzato il refactor
+- `inotify_backend_context`
+  - trova il context ristretto passato al backend
+  - serve a verificare che il backend riceva solo runtime, configurazione e
+    logger, non l'intero `app_t`
 
 - `inotify_backend_`
   - trova funzioni e tipi pubblici del backend inotify
@@ -525,13 +521,13 @@ Il significato del comando e' lo stesso visto sopra: stampa solo le righe da
 Questo passaggio evita un errore comune: modificare il codice dimenticando una
 decisione gia' discussa. Nel nostro caso, `15-todo-switch-core.md` contiene la
 mappa delle dipendenze residue, la strategia a micro-refactor e la distinzione
-tra backend core e ponte legacy/shadow.
+tra backend core e vecchio ponte legacy ormai rimosso.
 
 ### 5. Formulare la proposta
 
 Dopo questi passaggi, la proposta deve essere piccola e verificabile.
 
-Esempio:
+Esempio storico, valido per capire la forma di un micro-refactor:
 
 ```text
 Dentro inotify_backend_poll(), sostituire solo:
@@ -539,19 +535,15 @@ app->config.event_engine_mode
 con:
 ctx.config->event_engine_mode
 
-Lasciare invariato:
-legacy_events_dispatch(app, ev)
 ```
 
 Motivo:
 
-- `event_engine_mode` e' configurazione e puo' passare dal context
-- `legacy_events_dispatch(app, ev)` e' ancora il vero ponte legacy e richiede
-  `app_t`
-- il passo non cambia API pubblica
-- il passo non cambia comportamento osservabile
-- dopo il passo, l'unico uso sostanziale di `app` in `poll()` resta il ponte
-  legacy
+- `event_engine_mode` era configurazione e poteva passare dal context
+- il passo non cambiava API pubblica
+- il passo non cambiava comportamento osservabile
+- oggi quel debito e' stato chiuso: il poll path non legge piu'
+  `event_engine_mode` e non contiene piu' un ponte legacy
 
 Questa e' la forma desiderata di una ricognizione tecnica: non basta trovare
 righe con `rg`; bisogna interpretarle, leggere il contesto e collegarle alla
@@ -863,23 +855,25 @@ come feature separata. Le opzioni da discutere sono:
 Per questo, nella suite core iniziale l'overflow resta documentato come lavoro
 futuro e non come test mancante.
 
-## Test shadow
+## Test shadow storici
 
-Durante l'integrazione del core esiste anche un tool diagnostico in:
+Durante l'integrazione del core e' esistito anche un tool diagnostico in:
 
 ```text
 tests/shadow/compare_shadow_output.py
 ```
 
-Questo tool non sostituisce i test funzionali. Serve a confrontare due percorsi
-interni:
+Questo tool non sostituisce i test ufficiali. Dopo la rimozione del dispatcher
+legacy, la modalita' shadow non e' piu' una verifica ordinaria: il tool resta
+utile solo come materiale storico e, dove possibile, come runner di scenari in
+core mode. Durante la migrazione serviva a confrontare due percorsi interni:
 
 ```text
 legacy dispatcher inotify -> events.log
 core in shadow mode       -> events.log con prefisso core
 ```
 
-Esempio:
+Esempio storico:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py move_rename_dir
@@ -896,17 +890,16 @@ Una differenza non e' automaticamente un bug. Durante shadow mode puo' essere
 una differenza attesa, per esempio quando il legacy emette `DIR_MOVED` piu'
 `DIR_RENAMED` ma il core emette un solo `DIR_RELOCATED`.
 
-Usa `--strict` solo quando una differenza deve davvero far fallire il comando:
+`--strict` appartiene alla fase storica di confronto legacy/core:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file --strict
 ```
 
-Per gli scenari in cui stiamo ancora discutendo la semantica, e' meglio partire
-senza `--strict`, leggere l'output e aggiornare la documentazione con la
-decisione presa.
+Per gli scenari correnti non bisogna piu' usare shadow come blocco di merge:
+aggiungere o aggiornare invece test in `tests/core/` o `tests/backend/`.
 
-Un esempio di scenario da usare in modo diagnostico e':
+Un esempio di scenario storico era:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir
@@ -916,7 +909,7 @@ Questo scenario riproduce una creazione rapida in stile `mkdir -p`. Serve a
 studiare quali directory vengono notificate come `DIR_CREATED` e quali vengono
 solo scoperte dopo, tramite aggiunta ricorsiva dei watch.
 
-Se devi controllare anche i log completi del backend, usa:
+La vecchia opzione per conservare i log completi era:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir --keep-logs
@@ -934,9 +927,8 @@ In particolare:
   `WATCH_ADDED`
 - `raw.log` contiene gli eventi grezzi arrivati davvero da inotify
 
-Questa distinzione aiuta a capire casi come `mkdir -p`: il backend puo' aver
-aggiunto i watch alle sottodirectory anche se non ha ricevuto, e quindi non ha
-potuto inoltrare al core, i relativi eventi `DIR_CREATED`.
+Questa distinzione resta didatticamente utile per capire casi come `mkdir -p`,
+ma la verifica corrente vive nella suite core e nella suite backend diagnostics.
 
 ## Provare il core come stream ufficiale
 

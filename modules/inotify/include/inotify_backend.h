@@ -64,7 +64,7 @@ typedef int (*inotify_backend_event_fn)(
 );
 
 /*
- * inotify_backend_init - initialize descriptor, watcher table, and shadow state
+ * inotify_backend_init - initialize descriptor and watcher table
  * @ctx: backend context containing runtime, configuration, and logger
  *
  * Return: ERR_OK on success, a negative error_t value on failure.

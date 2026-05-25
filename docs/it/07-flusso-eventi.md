@@ -19,10 +19,11 @@ flowchart TD
 Il modulo inotify produce eventi raw. Il core produce eventi semantici. Il
 livello app decide cosa farne.
 
-## Flusso diagnostico in shadow mode
+## Flusso storico shadow mode
 
-Durante l'integrazione lo shadow mode resta disponibile come modalita'
-diagnostica esplicita.
+Durante l'integrazione lo shadow mode e' stato usato come modalita'
+diagnostica esplicita. Oggi non e' piu' disponibile nel runtime corrente: resta
+solo come storia della migrazione.
 
 Significa che lo stesso evento inotify percorre due strade:
 
@@ -41,11 +42,12 @@ flowchart TD
     I --> J[logger_event core output]
 ```
 
-Il vecchio percorso resta attivo solo in questa modalita', cosi' si possono
-confrontare legacy e core senza far dipendere il runtime normale dal dispatcher
-storico.
+Il vecchio percorso non e' piu' attivo. Il diagramma serve a capire la fase di
+migrazione in cui legacy e core venivano confrontati senza far dipendere il
+runtime normale dal dispatcher storico.
 
-In shadow mode il percorso core produce output aggiuntivo con prefisso `core`.
+In quella fase il percorso core produceva output aggiuntivo con prefisso
+`core`.
 
 ## Flusso di default in core mode
 
@@ -75,8 +77,8 @@ flowchart TD
 ```
 
 Il vecchio dispatcher `legacy_events_dispatch()` non viene chiamato. Questo e'
-il punto chiave: `events.c` resta nel codice per il confronto in shadow mode, ma
-non produce lo stream ufficiale quando `event_engine=core`.
+il punto chiave: il runtime corrente non contiene piu' `events.c` e non ha un
+secondo stream legacy.
 
 L'aggiornamento dei watch resta invece attivo nel backend inotify. Non e'
 semantica legacy: e' manutenzione dello stato del backend. Senza questo
@@ -94,9 +96,9 @@ Esempio di output in core mode:
 Non c'e' prefisso `core` perche' il core non e' piu' un secondo stream di
 confronto: e' la sorgente ufficiale.
 
-## Perche' usare shadow mode
+## Perche' abbiamo usato shadow mode
 
-Shadow mode serve a confrontare due implementazioni:
+Shadow mode e' servito a confrontare due implementazioni:
 
 ```text
 vecchio dispatcher inotify
@@ -107,13 +109,14 @@ Vantaggi:
 
 - riduce il rischio di regressioni
 - permette di confrontare gli eventi prodotti
-- permette ai test funzionali storici di restare osservabili in legacy mode
+- ha permesso ai test funzionali storici di restare osservabili in legacy mode
 - rende visibili differenze tra vecchia e nuova logica
-- mantiene disponibile il vecchio dispatcher finche' serve come riferimento
+- ha mantenuto disponibile il vecchio dispatcher finche' serviva come
+  riferimento
 
 ## Esempio di output
 
-In shadow mode, un evento di creazione potrebbe produrre due righe:
+Nella vecchia fase shadow, un evento di creazione poteva produrre due righe:
 
 ```text
 [EVENT] FILE_CREATED path=/tmp/a.txt
@@ -132,10 +135,10 @@ Esempi:
 
 - `IN_Q_OVERFLOW` puo' non avere un path associato
 - `IN_IGNORED` resta diagnostica/backend state, non semantica core
-- il vecchio `move_cache` esiste ancora nel modulo inotify per shadow mode
+- il vecchio `move_cache` non esiste piu' nel runtime corrente
 
-Per questo il vecchio dispatcher resta disponibile come confronto, ma non e' il
-percorso ufficiale in `event_engine=core`.
+Per questo il vecchio dispatcher e' stato rimosso dal runtime corrente e non e'
+piu' un percorso di confronto eseguibile.
 
 ## Prossimo obiettivo
 
@@ -143,7 +146,7 @@ Il prossimo obiettivo non e' rimuovere alla cieca il vecchio codice. Prima
 bisogna:
 
 1. mantenere documentata la differenza tra stream core e stream legacy
-2. rendere il legacy shadow opzionale a livello build
-3. decidere quali test funzionali storici migrare al core
-4. confinare o rimuovere `events.c` e `move_cache.c`
+2. archiviare o aggiornare i test funzionali storici rimasti
+3. mantenere la suite core come contratto semantico ufficiale
+4. mantenere la suite backend diagnostics per i log tecnici dei watch
 5. progettare overflow/resync come passo separato

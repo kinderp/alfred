@@ -281,20 +281,9 @@ deve poterla eseguire manualmente prima di proporre o committare una modifica.
 Se un comando fallisce, fermarsi, leggere l'errore e non proseguire con i passi
 successivi finche' il problema non e' compreso.
 
-Se il passo tocca shadow mode, legacy, move/rename, watch ricorsivi o raw event
-sintetici, eseguire anche scenari mirati con:
-
-```bash
-python3 tests/shadow/compare_shadow_output.py <scenario>
-```
-
-Esempi utili:
-
-```bash
-python3 tests/shadow/compare_shadow_output.py move_rename_dir
-python3 tests/shadow/compare_shadow_output.py move_file
-python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir
-```
+Se il passo tocca move/rename, watch ricorsivi o raw event sintetici, eseguire
+test core o backend mirati. Gli script in `tests/shadow/` sono storici e non
+vanno usati come verifica ordinaria dopo la rimozione del dispatcher legacy.
 
 ## Stato semantico corrente
 
@@ -303,8 +292,7 @@ python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir
 - I test funzionali storici sono memoria della fase legacy/shadow, non verifica
   ordinaria del runtime corrente.
 - I test core verificano lo stream semantico plain del core.
-- `events.c` e' legacy shadow, non sorgente ufficiale degli eventi.
-- `move_cache` e' confinata al dispatcher legacy.
+- `events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi.
 - `WATCH_ADDED` e `WATCH_REMOVED` sono diagnostica backend, non semantica core.
 - `FILE_MODIFIED` e `FILE_READY` non sono duplicati: sono fasi diverse della
   vita del file.

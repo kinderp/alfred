@@ -11,22 +11,18 @@
 #define CORE_LOGGER_H
 
 #include "alfred_correlator.h"
-#include "config.h"
 #include "logger.h"
 
 /*
  * core_logger_context_t - application-owned core logging options
  * @logger: destination logger
- * @event_engine_mode: selected event stream mode
  *
- * The core itself emits structured alfred_event_t values. This context lets the
- * application format those values differently while integration is in progress.
- * Core mode writes the plain official event stream; the shadow format is legacy
- * compatibility that will disappear with the remaining shadow cleanup.
+ * The core itself emits structured alfred_event_t values. The application owns
+ * the destination logger and this tiny context adapts the core callback shape
+ * to logger_event().
  */
 typedef struct {
     logger_t *logger;
-    event_engine_mode_t event_engine_mode;
 } core_logger_context_t;
 
 /*

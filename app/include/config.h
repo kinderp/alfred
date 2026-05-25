@@ -22,8 +22,8 @@
  *
  * CORE is the normal runtime: backend raw events are processed by the core and
  * logged as the official plain semantic stream. SHADOW is kept only as a
- * recognized legacy value so startup can reject it with a clear error while
- * the remaining shadow files are being removed.
+ * recognized legacy value so startup can reject it with a clear error instead
+ * of silently accepting an unsupported mode.
  */
 typedef enum {
     EVENT_ENGINE_SHADOW = 0,
@@ -47,12 +47,6 @@ typedef struct {
 
     /* Flush log streams after each write for better crash visibility. */
     int flush_immediately;
-
-    /*
-     * Capacity of the temporary inotify move cache used only by the legacy
-     * shadow dispatcher. The core has its own move correlation state.
-     */
-    size_t move_cache_size;
 
     /*
      * Initial capacity of the backend watcher table. The table can grow when

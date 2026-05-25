@@ -38,7 +38,6 @@ void config_defaults(config_t *cfg)
     cfg->use_epoll          = 0;
     cfg->flush_immediately  = 1;
 
-    cfg->move_cache_size    = 128;
     cfg->watcher_capacity   = 128;
 
     cfg->watch_mask = watch_manager_default_mask();
@@ -199,7 +198,6 @@ const char *config_event_engine_name(event_engine_mode_t mode)
  *
  *   recursive=true
  *   use_epoll=false
- *   move_cache_size=256
  *   event_engine=core
  *   raw_log=myraw.log
  *
@@ -256,12 +254,6 @@ error_t config_load(config_t *cfg, const char *path)
 
             cfg->flush_immediately =
                 parse_bool(value);
-        }
-
-        else if (strcmp(key, "move_cache_size") == 0) {
-
-            cfg->move_cache_size =
-                parse_size_or_default(value, cfg->move_cache_size);
         }
 
         else if (strcmp(key, "watcher_capacity") == 0) {

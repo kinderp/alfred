@@ -221,8 +221,6 @@ int app_init(app_t *app, int argc, char **argv)
      */
     alfred_config_default(&app->core_config);
     app->core_logger_context.logger = &app->logger;
-    app->core_logger_context.event_engine_mode =
-        app->config.event_engine_mode;
 
     app->core = alfred_create(&app->core_config,
                               core_logger_on_event,

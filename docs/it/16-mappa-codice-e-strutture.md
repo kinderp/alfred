@@ -238,7 +238,6 @@ flowchart TD
     C --> C2["watch_mask"]
     C --> C3["watcher_capacity"]
     C --> C4["event_engine_mode"]
-    C --> C5["move_cache_size<br/>solo legacy"]
 ```
 
 Tabella di lettura:
@@ -250,8 +249,7 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | `app_init()`, `core_logger_on_event()` | rifiutare shadow rimosso e scegliere formato log core | temporaneo, finche' il valore shadow resta riconosciuto per errore esplicito |
-| `app->config.move_cache_size` | nessun percorso runtime core | vecchia dimensione cache move legacy | da rimuovere con `move_cache.c` |
+| `app->config.event_engine_mode` | `app_init()` | rifiutare shadow rimosso | temporaneo, finche' il valore shadow resta riconosciuto per errore esplicito |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -264,9 +262,8 @@ spesso vengono confuse:
 Storicamente `app_t` risolveva entrambi i problemi in modo pratico ma largo: il
 backend riceveva tutto il contenitore, anche se usava solo una parte. Il
 refactor recente ha gia' corretto questo confine per il backend: ora il codice
-inotify riceve context esplicito, callback raw/core e bridge shadow opaco. Il
-refactor finale dovra' decidere se rimuovere del tutto il bridge quando shadow
-non sara' piu' necessario.
+inotify riceve context esplicito e callback raw/core. Il bridge shadow non
+esiste piu'.
 
 Il micro-refactor iniziale su `inotify_backend_init()` ha seguito questa
 direzione restringendo prima il corpo della funzione. Dopo il successivo cambio
@@ -506,15 +503,14 @@ campi per sapere come comportarsi.
 ```mermaid
 flowchart TD
     A["config_t"] --> B["recursive"]
-    A --> C["move_cache_size"]
-    A --> D["watcher_capacity"]
-    A --> E["watch_mask"]
-    A --> F["event_engine_mode"]
-    A --> G["raw_log / event_log / error_log"]
+    A --> C["watcher_capacity"]
+    A --> D["watch_mask"]
+    A --> E["event_engine_mode"]
+    A --> F["raw_log / event_log / error_log"]
 
-    D --> H["watcher_init(capacity)"]
-    E --> I["inotify_add_watch(mask)"]
-    F --> L["core oppure shadow legacy"]
+    C --> G["watcher_init(capacity)"]
+    D --> H["inotify_add_watch(mask)"]
+    E --> I["core oppure errore shadow"]
 ```
 
 Campi rilevanti:
@@ -522,10 +518,9 @@ Campi rilevanti:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
-| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | nessun percorso runtime core |
 | `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
 | `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
-| `event_engine_mode` | sceglie core o shadow rimosso | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `core_logger_on_event()` |
+| `event_engine_mode` | sceglie core o shadow rimosso | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` prende il valore da `watch_manager_default_mask()`, poi
@@ -546,10 +541,10 @@ sequenceDiagram
 ```
 
 Il parsing delle capacita' usa una funzione dedicata invece di `atoi()`. Il
-motivo e' che campi come `move_cache_size` e `watcher_capacity` sono `size_t`:
-accettare per errore valori negativi o stringhe non numeriche potrebbe produrre
-valori enormi o ambigui. La funzione di parsing mantiene il valore precedente
-quando l'input non e' valido.
+motivo e' che campi come `watcher_capacity` sono `size_t`: accettare per errore
+valori negativi o stringhe non numeriche potrebbe produrre valori enormi o
+ambigui. La funzione di parsing mantiene il valore precedente quando l'input
+non e' valido.
 
 `event_engine_mode=shadow` e' ormai solo un valore riconosciuto per produrre un
 errore esplicito. Il Makefile non compila piu' una variante legacy-shadow, quindi
@@ -1428,94 +1423,13 @@ evento semantico del filesystem come `DIR_DELETED`.
 
 ## Strutture legacy shadow
 
-Il percorso legacy e' ancora presente per confronto, ma non e' l'architettura
-target. I file principali sono:
+Il percorso legacy non e' piu' presente nel codice corrente. I file
+`events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi:
+la semantica finale vive nel core e il backend inotify non emette piu' eventi
+utente.
 
-```text
-modules/inotify/src/events.c
-modules/inotify/src/move_cache.c
-```
-
-`events.c` riceve direttamente `struct inotify_event` e produce eventi
-semantici legacy. Questo era il vecchio centro della semantica, ma oggi deve
-essere letto come codice storico/shadow-only.
-
-Questi file non fanno parte della build Makefile corrente. Il binario contiene
-il backend inotify, l'adapter raw, il watch manager e il core, ma non contiene
-il dispatcher legacy.
-
-```mermaid
-flowchart TD
-    A["struct inotify_event"] --> B["legacy_events_dispatch()"]
-    B --> C["handle_create() / handle_delete()"]
-    B --> D["handle_move_from()"]
-    B --> E["handle_move_to()"]
-    D --> F["move_cache_store()"]
-    E --> G["move_cache_find()"]
-    E --> H["emit_event()"]
-    C --> H
-    H --> I["logger_event() legacy stream"]
-```
-
-### `move_cache_t`
-
-Definizione:
-
-```c
-typedef struct {
-    move_slot_t *slots;
-    size_t size;
-} move_cache_t;
-```
-
-Campi:
-
-| Campo | Significato | Scritto da | Letto da |
-| --- | --- | --- | --- |
-| `slots` | array dei `MOVED_FROM` legacy pendenti | `move_cache_init()`, `move_cache_destroy()` | `move_cache_store()`, `move_cache_find()`, `move_cache_clear()` |
-| `size` | numero massimo di slot | `move_cache_init()`, `move_cache_destroy()` | helper interni di ricerca |
-
-### `move_slot_t`
-
-Definizione:
-
-```c
-typedef struct {
-    uint32_t cookie;
-    int src_wd;
-    char src_name[NAME_MAX];
-    int used;
-} move_slot_t;
-```
-
-Campi:
-
-| Campo | Significato | Scritto da | Letto da |
-| --- | --- | --- | --- |
-| `cookie` | cookie inotify della coppia move | `move_cache_store()`, `move_cache_clear()` | `move_cache_find()`, `handle_move_to()` |
-| `src_wd` | watch descriptor sorgente | `move_cache_store()` | `handle_move_to()` |
-| `src_name` | basename sorgente | `move_cache_store()` | `handle_move_to()` |
-| `used` | slot occupato/libero | `move_cache_store()`, `move_cache_clear()` | helper interni e conteggi |
-
-Sequenza legacy move:
-
-```mermaid
-sequenceDiagram
-    participant Kernel as inotify
-    participant Legacy as legacy_events_dispatch()
-    participant Cache as move_cache_t
-    participant Logger as logger_event()
-
-    Kernel-->>Legacy: IN_MOVED_FROM cookie=10 src=a.txt
-    Legacy->>Cache: move_cache_store(cookie=10, src_wd, a.txt)
-    Kernel-->>Legacy: IN_MOVED_TO cookie=10 dst=b.txt
-    Legacy->>Cache: move_cache_find(cookie=10)
-    Cache-->>Legacy: src_wd + src_name
-    Legacy->>Logger: FILE_RENAMED or FILE_MOVED
-    Legacy->>Cache: move_cache_clear(cookie=10)
-```
-
-Differenza importante rispetto al core: se cambiano sia directory sia nome, il
-legacy puo' emettere due eventi (`MOVED` e poi `RENAMED`). Il core invece emette
-un solo evento `RELOCATED`. Per questo `move_cache_t` serve solo come confronto
-storico e non deve guidare la semantica futura.
+Questa sezione resta per fissare una differenza storica importante: quando
+cambiavano sia directory sia nome, il legacy poteva emettere due eventi
+(`MOVED` e poi `RENAMED`). Il core invece emette un solo evento `RELOCATED`.
+Questa scelta non dipende piu' da una `move_cache_t` nel modulo inotify: la
+correlazione dei move appartiene al core.

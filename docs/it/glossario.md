@@ -43,9 +43,10 @@ esempio `/tmp/a.txt -> /var/b.txt` diventa `FILE_RELOCATED`.
 
 ## Shadow mode
 
-Modalita' diagnostica in cui il vecchio dispatcher legacy e il core vengono
-eseguiti sugli stessi eventi per confrontare gli output. Il runtime normale usa
-`event_engine=core`; lo shadow mode resta uno strumento esplicito di confronto.
+Modalita' diagnostica storica in cui il vecchio dispatcher legacy e il core
+venivano eseguiti sugli stessi eventi per confrontare gli output. Il runtime
+corrente usa `event_engine=core`; se viene richiesto `shadow`, Alfred fallisce
+con un errore esplicito.
 
 ## Dedup
 

@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/include/config.h`, `app/src/config.c`, `app/include/core_logger.h`,
+  `app/src/core_logger.c`, `app/src/app.c`, `modules/inotify/` e
+  documentazione didattica: rimossi fisicamente il dispatcher legacy
+  `events.c`, gli header collegati, `move_cache.c`, `move_cache.h` e il campo
+  `move_cache_size`. Il core logger ora produce solo lo stream plain ufficiale.
 - `Makefile`, `00-regole-operative.md`, `01-panoramica-progetto.md`,
   `04-livello-applicazione.md`, `05-modulo-inotify.md`,
   `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,

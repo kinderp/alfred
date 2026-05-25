@@ -8,9 +8,7 @@
  * The backend must stop at raw facts. It may know how to read inotify records,
  * map watch descriptors to paths, keep recursive watches alive, and synthesize
  * raw directory-create facts discovered during a recursive scan. It must not
- * decide final FILE_* or DIR_* semantics; that belongs to the core. When the
- * application enables shadow mode, the backend can invoke an opaque comparison
- * callback supplied by app.c, but it does not own legacy semantic state.
+ * decide final FILE_* or DIR_* semantics; that belongs to the core.
  * ========================================================================== */
 
 #include "inotify_backend.h"
@@ -112,8 +110,7 @@ int inotify_backend_init(inotify_backend_context_t *ctx)
  *
  * This helper is the context-shaped form of backend initialization. It keeps
  * the same backend cleanup order as the public function previously had:
- * watcher table first, inotify descriptor second. Optional legacy shadow state
- * is initialized by app.c before the backend starts.
+ * watcher table first, inotify descriptor second.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -203,8 +200,7 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
  * inotify_backend_shutdown - release backend runtime resources
  * @ctx: backend context containing runtime state
  *
- * The function is safe for partial initialization paths. Legacy shadow cleanup
- * is owned by app.c, not by the inotify backend.
+ * The function is safe for partial initialization paths.
  */
 void inotify_backend_shutdown(inotify_backend_context_t *ctx)
 {
@@ -219,8 +215,7 @@ void inotify_backend_shutdown(inotify_backend_context_t *ctx)
  * @ctx: narrowed backend context with runtime state
  *
  * This is the context-shaped form of backend shutdown. The normal backend
- * cleanup only needs fd and the watcher table. Shadow-only semantic state lives
- * outside this module and is released by app.c.
+ * cleanup only needs fd and the watcher table.
  */
 static void backend_shutdown(inotify_backend_context_t *ctx)
 {
@@ -250,9 +245,7 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  * 4. update backend watch state
  * 5. update recursive watches and emit synthetic raw directory creates
  *
- * This keeps the core as the only semantic path. Historical legacy shadow code
- * may still be compiled temporarily, but it is no longer driven by backend
- * polling.
+ * This keeps the core as the only semantic path.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
@@ -382,9 +375,6 @@ static int backend_poll(inotify_backend_context_t *ctx,
  * semantics. The diagnostic WATCH_REMOVED log remains useful, but the core must
  * not turn it into a user-facing semantic event.
  *
- * Shadow mode still lets the legacy dispatcher consume this event first. That
- * keeps the historical comparison path stable while core mode gets the backend
- * cleanup previously hidden inside events.c.
  */
 static void backend_handle_ignored(inotify_backend_context_t *ctx,
                                    const struct inotify_event *ev)

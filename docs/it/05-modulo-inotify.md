@@ -43,19 +43,9 @@ Queste responsabilita' appartengono al `core` o al livello `app`.
 
 ## Stato attuale
 
-Il modulo e' ancora in transizione.
-
-Oggi contiene ancora file come:
-
-```text
-modules/inotify/src/events.c
-modules/inotify/src/move_cache.c
-```
-
-che fanno logica semantica. Questa e' una responsabilita' temporanea.
-Questi file non vengono piu' compilati dal Makefile: restano nel repository
-solo per rendere leggibile la storia della migrazione e per una rimozione
-fisica controllata.
+Il modulo e' ancora in transizione, ma il vecchio dispatcher semantico legacy e
+la sua `move_cache` sono stati rimossi. Il modulo inotify corrente deve fermarsi
+ai fatti raw e alla diagnostica backend.
 
 Il nuovo adapter:
 
@@ -345,8 +335,7 @@ semantica finale e' responsabilita' del core.
 2. scrivere il raw log diagnostico
 3. convertire `struct inotify_event` in `alfred_raw_event_t`
 4. consegnare il raw event alla callback dell'app, che lo inoltra al core
-5. eseguire il dispatcher legacy solo se e' compilato e `event_engine=shadow`
-6. aggiornare i watch ricorsivi e generare raw event sintetici se lo scan scopre
+5. aggiornare i watch ricorsivi e generare raw event sintetici se lo scan scopre
    directory create prima dell'aggiunta del watch
 
 Questa sequenza fissa un confine importante: il backend puo' scoprire fatti e
@@ -378,7 +367,7 @@ Il core e' ormai il runtime di default. Il prossimo passo tecnico non e' piu'
 "collegare" il core, ma rendere piu' pulito il confine:
 
 1. mantenere aggiornata la lettura guidata di backend, core e app
-2. ridurre o quarantinare ulteriormente `events.c` e `move_cache.c`
-3. mantenere nel backend solo lettura inotify, watch e raw event
-4. lasciare al core tutta la semantica finale
+2. mantenere nel backend solo lettura inotify, watch e raw event
+3. lasciare al core tutta la semantica finale
+4. archiviare o aggiornare i test storici che dipendevano dallo shadow
 5. progettare overflow/resync come passo separato

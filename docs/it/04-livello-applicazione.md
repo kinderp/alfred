@@ -76,10 +76,10 @@ Campi importanti:
 - `core`: istanza del motore semantico Alfred
 
 Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
-`app_t`; sono incapsulati in `inotify_backend_t`. Il backend riceve ancora
-`app_t *` per usare configurazione e logger, quindi non e' ancora del tutto
-autonomo. La cache move del legacy non e' piu' dentro `app_t`: appartiene a
-`events.c`, che oggi non viene piu' compilato dal Makefile.
+`app_t`; sono incapsulati in `inotify_backend_t`. Le funzioni del backend
+ricevono un `inotify_backend_context_t *`, cioe' un context stretto con runtime,
+configurazione e logger. La vecchia cache move legacy non esiste piu' nel
+runtime corrente.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
 Oggi e' lo stream semantico ufficiale di default. Lo shadow mode non e' piu'
@@ -118,10 +118,9 @@ Questo stile e' utile perche':
 2. configurazione di default
 3. logger
 4. core nella modalita' scelta da `event_engine`
-5. eventuale dispatcher legacy in shadow mode
-6. backend inotify
-8. signal handler
-9. watch sui percorsi passati da riga di comando
+5. backend inotify
+6. signal handler
+7. watch sui percorsi passati da riga di comando
 
 L'ordine e' importante. Per esempio, il logger viene inizializzato presto
 perche' gli altri sottosistemi possono usarlo per scrivere errori.
@@ -141,9 +140,6 @@ flowchart TD
     D --> E[raw event]
     E --> F[callback]
     F --> G[core]
-    F --> H{shadow?}
-    H -->|si| I[legacy]
-    H -->|no| J[skip]
     B --> K[watch repair]
     K --> A
 ```
@@ -161,13 +157,12 @@ Legenda del diagramma:
 - `raw event`: costruzione di `alfred_raw_event_t`
 - `callback`: ritorno verso `app.c`
 - `core`: chiamata a `alfred_process()`
-- `legacy`: vecchio dispatcher `events.c`, solo in shadow mode
 - `watch repair`: aggiornamento dei watch ricorsivi dopo directory create
 
-### Shadow mode
+### Shadow mode storico
 
-Quando si abilita esplicitamente lo shadow mode, lo stesso evento inotify viene
-osservato da due percorsi:
+Durante la migrazione, quando si abilitava esplicitamente lo shadow mode, lo
+stesso evento inotify veniva osservato da due percorsi:
 
 ```text
 struct inotify_event
@@ -191,9 +186,9 @@ per confrontare il nuovo motore con il comportamento storico.
 Quel percorso e' stato rimosso. Oggi `ALFRED_EVENT_ENGINE=shadow` fallisce con
 un errore esplicito invece di fingere un confronto.
 
-Questo approccio riduce il rischio quando si modificano regole semantiche:
-possiamo osservare differenze tra core e legacy senza confondere il percorso
-ufficiale `event_engine=core`.
+Questo approccio ha ridotto il rischio durante la migrazione. Oggi il confronto
+non e' piu' un runtime supportato: il contratto ufficiale e' solo
+`event_engine=core`.
 
 ### Aggiornamento watch backend
 
@@ -201,8 +196,8 @@ Il backend inotify gestisce anche un dettaglio importante: quando arriva un
 evento `IN_CREATE | IN_ISDIR`, Alfred deve aggiungere watch ricorsivi alla nuova
 directory.
 
-Questa operazione non deve dipendere da `events.c`, perche' `events.c` viene
-saltato in `event_engine=core`. Per questo il backend esegue sempre:
+Questa operazione non deve dipendere da semantica legacy. Per questo il backend
+esegue sempre:
 
 ```text
 IN_CREATE | IN_ISDIR
@@ -211,9 +206,8 @@ IN_CREATE | IN_ISDIR
     -> eventuali raw event sintetici verso il core
 ```
 
-In questo modo sia shadow mode sia core mode continuano a monitorare le nuove
-directory e il core puo' recuperare i `DIR_CREATED` mancanti negli scenari tipo
-`mkdir -p`.
+In questo modo core mode continua a monitorare le nuove directory e puo'
+recuperare i `DIR_CREATED` mancanti negli scenari tipo `mkdir -p`.
 
 ### Raw event sintetici
 
@@ -245,9 +239,8 @@ logger.
 
 1. file descriptor inotify
 2. tabella watcher
-3. eventuale dispatcher legacy
-4. core
-5. logger
+3. core
+4. logger
 
 Il logger viene chiuso per ultimo cosi' puo' registrare anche le fasi di
 shutdown.
@@ -293,7 +286,7 @@ Esempio:
 
 ```text
 recursive=true
-move_cache_size=256
+watcher_capacity=256
 event_engine=core
 raw_log=myraw.log
 ```
@@ -302,10 +295,10 @@ La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile
 o valori di configurazione non validi.
 
-I valori numerici come `move_cache_size` e `watcher_capacity` vengono letti come
-interi senza segno. Se il valore non e' valido, Alfred mantiene il default gia'
-presente nella configurazione invece di convertire stringhe negative o malformate
-in capacita' non sensate.
+I valori numerici come `watcher_capacity` vengono letti come interi senza segno.
+Se il valore non e' valido, Alfred mantiene il default gia' presente nella
+configurazione invece di convertire stringhe negative o malformate in capacita'
+non sensate.
 
 Il motivo e' pratico: questi campi sono `size_t`, quindi non possono
 rappresentare numeri negativi. La vecchia conversione con `atoi()` restituiva un
@@ -350,9 +343,9 @@ core -> evento ufficiale plain
 ```
 
 In `core` mode il vecchio dispatcher `events.c` non viene chiamato dal loop
-principale, quindi non produce eventi semantici legacy. Il modulo inotify
-continua comunque a produrre diagnostica backend come `WATCH_ADDED`, perche'
-quella diagnostica nasce dal watch manager, non dal dispatcher semantico legacy.
+principale ed e' stato rimosso dal codice corrente. Il modulo inotify continua
+comunque a produrre diagnostica backend come `WATCH_ADDED`, perche' quella
+diagnostica nasce dal watch manager, non da un dispatcher semantico legacy.
 
 Nota temporanea dell'integrazione: `config_load()` sa gia' leggere
 `event_engine`, ma l'avvio del programma non espone ancora un'opzione CLI per
@@ -363,8 +356,8 @@ core si usa l'override d'ambiente:
 ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare
 ```
 
-Senza override, Alfred usa `core`. Per riattivare il confronto si usa
-`ALFRED_EVENT_ENGINE=shadow`.
+Senza override, Alfred usa `core`. Se si prova a usare
+`ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con un errore esplicito.
 
 ## app/src/logger.c
 
@@ -432,7 +425,8 @@ un valore che il chiamante deve controllare.
 - `app_run()` legge e dispatcha eventi.
 - `app_shutdown()` libera le risorse.
 - Il core e' lo stream semantico ufficiale di default.
-- Lo shadow mode resta disponibile solo come confronto esplicito con il legacy.
+- Lo shadow mode e' storico: se richiesto, Alfred fallisce con un errore
+  esplicito.
 - La configurazione non possiede memoria dinamica.
 - Il logger possiede i suoi `FILE *`.
 - Alcune responsabilita' sono temporanee e verranno spostate nel core o nel

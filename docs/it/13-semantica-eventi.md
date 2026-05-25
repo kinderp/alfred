@@ -46,7 +46,7 @@ WATCH_REMOVED
 ```
 
 Lo fa in `modules/inotify/src/watch_manager.c` con `logger_event()`. Inoltre
-`modules/inotify/src/events.c` trasforma `IN_IGNORED` in `WATCH_REMOVED`.
+il backend inotify gestisce `IN_IGNORED` rimuovendo il watch dalla tabella.
 
 Decisione architetturale:
 
