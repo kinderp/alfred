@@ -925,7 +925,7 @@ chi rilegge la migrazione.
 | Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` non e' piu' un valore riconosciuto. |
 | Documentazione pesante del codice | Parziale avanzato | Backend inotify e watch manager sono stati rafforzati dopo lo switch; restano eventuali passate mirate su app/core se un refactor li tocca. |
 | Pulizia finale delle responsabilita' | Prossimo tecnico | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
-| Revisione completa della suite core end-to-end | Medio | I test core devono continuare a fissare il comportamento ufficiale dopo la rimozione del legacy. |
+| Revisione completa della suite core end-to-end | Fatto per lo stato corrente | La suite core copre il contratto utente post-switch; nuovi test vanno aggiunti solo quando nasce un nuovo scenario o una regressione. |
 | Allineamento scenari/eventi/documentazione | Parziale avanzato | Le mappe principali sono state riallineate al context backend; resta una revisione finale completa degli scenari. |
 | Decisione finale sui file storici di test | Basso/medio | Oggi restano come archivio; in futuro si puo' decidere se tenerli, spostarli o rimuoverli. |
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
@@ -970,6 +970,25 @@ Decisione: non c'e' un micro-refactor tecnico evidente da fare subito. Il
 prossimo passo pragmatico e' la revisione finale scenari/test, verificando che
 la suite core e la suite backend coprano tutti i contratti correnti e che i test
 storici rimangano chiaramente archivio.
+
+### Revisione finale scenari/test
+
+Revisione eseguita sullo stato corrente:
+
+- `tests/core/` copre il contratto semantico utente: create, delete, rename,
+  move, relocated, modify, ready, recursive fast e configurazione shadow
+  invalida
+- `tests/backend/` copre la diagnostica watch utile: `WATCH_ADDED`,
+  `WATCH_REMOVED` e watch ricorsivi lenti
+- `tests/functional/` e `tests/shadow/` restano archivio storico e non devono
+  tornare nella verifica ordinaria
+- non viene aggiunto per ora un test backend separato sui raw sintetici: il test
+  core `recursive_create_nested_dir` copre il risultato utente, mentre il
+  formato raw diagnostico non e' ancora un contratto stabile
+
+Decisione: nessun nuovo test immediato. La copertura corrente e' sufficiente
+per lo stato post-switch; i prossimi test devono nascere da un bug reale, da un
+nuovo scenario utente o dalla futura progettazione overflow/resync.
 
 ### Mappa test funzionali legacy e test core
 

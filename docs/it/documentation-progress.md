@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/14-scenari-test.md` e `docs/it/15-todo-switch-core.md`: completata
+  la revisione finale scenari/test per lo stato post-switch. La suite core
+  copre il contratto utente corrente, la suite backend copre la diagnostica
+  watch utile e non viene aggiunto per ora un test raw separato per i raw
+  sintetici.
 - `docs/it/15-todo-switch-core.md`: registrato l'audit delle responsabilita'
   residue. Non emerge un micro-refactor tecnico urgente: `path_join()` resta
   utility generica, il backend context esplicita correttamente config/logger

@@ -274,24 +274,22 @@ tests/backend/  -> diagnostica e manutenzione interna del backend inotify
 tests/functional/ -> storico legacy/shadow archiviato
 ```
 
-Gli scenari da migrare sono:
+Scenari diagnostici riesaminati:
 
 | Scenario diagnostico | Origine attuale | Cosa controlla | Perche' e' utile |
 | --- | --- | --- | --- |
 | create directory watch | `tests/backend/test_watch_added_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
 | delete directory watch | `tests/backend/test_watch_removed_delete_dir.sh` | `WATCH_REMOVED` dopo `IN_IGNORED` | verifica che il backend non lasci una voce watch valida per una directory sparita |
 | recursive slow watch tree | `tests/backend/test_recursive_slow_watch_tree.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
-| recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh`, da valutare | raw sintetici per directory scoperte dallo scan | utile solo se vogliamo testare esplicitamente il contratto raw/backend, non solo il risultato core |
+| recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
-I tre scenari diagnostici sui watch sono gia' stati migrati in
-`tests/backend/`. Resta da valutare solo l'eventuale controllo esplicito dei raw
-sintetici.
+I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
 
-La quarta riga va discussa prima di implementarla: il test core esistente
-verifica gia' l'effetto semantico finale (`DIR_CREATED` per tutta la catena).
-Un test backend sui raw sintetici avrebbe senso solo se decidiamo che anche il
-formato raw diagnostico e' un contratto interno abbastanza stabile da
-proteggere.
+Decisione attuale sui raw sintetici: non aggiungiamo un test backend separato
+solo sul formato raw. Il test core esistente verifica gia' il contratto utente:
+`DIR_CREATED` per tutta la catena `one/two/three`. Un test raw dedicato avrebbe
+senso solo se il formato raw diagnostico diventasse un contratto interno stabile
+da proteggere. Oggi resta uno strumento di diagnosi backend.
 
 La regola pratica e':
 
@@ -338,8 +336,13 @@ Strategia consigliata per i prossimi refactor dei test:
    dispatch legacy live e' stato spento
 4. non aggiungere per ora una terza suite `test-functional-core`, perche'
    `make test` e `make test-core` sono gia' end-to-end sul percorso core
-5. quando lo shadow sara' archiviato, spostare o rimuovere i funzionali
-   legacy invece di lasciarli mescolati alla suite ufficiale
+5. lasciare i funzionali legacy come archivio storico finche' servono alla
+   lettura della migrazione; non devono rientrare nella suite ufficiale
+
+Risultato della revisione finale scenari/test: non emerge un buco semantico
+immediato. La suite core copre il contratto utente corrente, la suite backend
+copre la diagnostica watch utile e i test funzionali/shadow restano archivio
+storico.
 
 ## Collegamento con la lettura guidata del codice
 
