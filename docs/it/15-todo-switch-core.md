@@ -387,8 +387,8 @@ Stato storico del quarto micro-refactor:
   `ctx.config->watcher_capacity`
 - l'apertura e il cleanup del file descriptor usano `ctx.runtime->fd`
 - i log di init, errore e shadow setup usano `ctx.logger`
-- il ponte legacy resta esplicito tramite `ctx.config->event_engine_mode` e
-  `ctx.config->move_cache_size`
+- nel codice di allora il ponte legacy restava esplicito tramite
+  `ctx.config->event_engine_mode` e `ctx.config->move_cache_size`
 
 In quel passo la firma pubblica era ancora `inotify_backend_init(app_t *app)`.
 Quella forma e' stata superata dal dodicesimo micro-refactor, che ha cambiato
@@ -432,9 +432,9 @@ Stato implementato allora:
   `legacy_events_dispatch(app, ev)`
 - la chiamata legacy e' confinata nel bridge interno
   `backend_dispatch_legacy_shadow(app, &ctx, ev)`
-- il bridge legge la modalita' da `ctx.config->event_engine_mode`, usa
-  `ctx.logger` per l'errore di build senza legacy e passa `app_t` solo al
-  dispatcher storico
+- nel codice di allora il bridge leggeva la modalita' da
+  `ctx.config->event_engine_mode`, usava `ctx.logger` per l'errore di build
+  senza legacy e passava `app_t` solo al dispatcher storico
 - il comportamento osservabile non cambia: in `event_engine=core` il bridge non
   fa nulla; in `event_engine=shadow` chiama il dispatcher legacy se compilato,
   altrimenti restituisce `ERR_CONFIG`
@@ -613,16 +613,16 @@ Stato storico del sedicesimo micro-refactor:
   `app->config.event_engine_mode == EVENT_ENGINE_CORE`
 - `legacy_bridge` puntava al bridge opaco solo quando era attivo
   `EVENT_ENGINE_SHADOW`
-- `backend_dispatch_legacy_shadow()` continua ad accettare `NULL` quando il
-  mode e' core, perche' ritorna prima di guardare il bridge
+- `backend_dispatch_legacy_shadow()` continuava ad accettare `NULL` quando il
+  mode era core, perche' ritornava prima di guardare il bridge
 
-Questo chiarisce il percorso normale: core mode non usa nessun bridge legacy.
-Il parametro rimane nella firma di `inotify_backend_poll()` solo perche' shadow
-mode e' ancora disponibile come strumento temporaneo di confronto.
+Quel passo chiariva il percorso normale: core mode non usava nessun bridge
+legacy. La firma e' stata poi semplificata ulteriormente quando shadow mode e'
+stato rimosso.
 
 Stato storico del diciassettesimo micro-refactor:
 
-- `inotify_backend_context_t` contiene ora
+- in quel momento `inotify_backend_context_t` conteneva
   `const legacy_shadow_bridge_t *legacy_shadow`
 - `app_build_inotify_backend_context()` inizializza sempre
   `ctx->legacy_shadow = NULL`

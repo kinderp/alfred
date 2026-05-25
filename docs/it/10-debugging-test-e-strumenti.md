@@ -530,10 +530,11 @@ tra backend core e vecchio ponte legacy ormai rimosso.
 
 Dopo questi passaggi, la proposta deve essere piccola e verificabile.
 
-Esempio storico, valido per capire la forma di un micro-refactor:
+Esempio storico, non piu' presente nel codice corrente, ma valido per capire la
+forma di un micro-refactor:
 
 ```text
-Dentro inotify_backend_poll(), sostituire solo:
+Durante la migrazione, dentro `inotify_backend_poll()`, il passo era:
 app->config.event_engine_mode
 con:
 ctx.config->event_engine_mode

@@ -352,24 +352,24 @@ servizi applicativi condivisi. Inserirli come puntatori permanenti nello stato
 runtime sarebbe possibile, ma renderebbe meno chiaro agli studenti quali campi
 devono essere liberati dal backend e quali invece sono solo riferimenti.
 
-Il primo candidato alla migrazione e' il watch manager:
+Il primo candidato alla migrazione era il watch manager:
 
 ```text
 prima:
   watch_manager_add(app, path)
 
-dopo il primo micro-refactor:
+dopo il micro-refactor:
   watch_manager_add(ctx, path)
 ```
 
-Questo passo e' abbastanza piccolo perche' il watch manager usa solo:
+Questo passo e' stato abbastanza piccolo perche' il watch manager usa solo:
 
 - fd
 - watcher table
 - watch mask
 - logger
 
-Non usa il core e non dovrebbe conoscere l'app completa.
+Non usa il core e non deve conoscere l'app completa.
 
 Lo stato attuale del codice segue questa direzione: `watch_manager.c` lavora con
 `inotify_backend_context_t`, mentre `inotify_backend.c` costruisce un context
@@ -1133,8 +1133,8 @@ frame 1 - configurazione pronta:
 frame 2 - backend inizializzato:
   app_build_inotify_backend_context(app, &ctx)
   inotify_backend_init(&ctx)
-  app.inotify.fd = <fd inotify>
-  watcher_init(&app.inotify.watchers, 128)
+  ctx.runtime->fd = <fd inotify>
+  watcher_init(&ctx.runtime->watchers, 128)
   watchers.count = 0
 
 frame 3 - richiesta watch:
@@ -1396,11 +1396,11 @@ frame 1 - stato iniziale:
   watchers.items[3].path = "/tmp/progetto"
 
 frame 2 - lookup per log:
-  watch_manager_remove(app, wd=3)
+  watch_manager_remove(ctx, wd=3)
   watcher_get_path(wd=3) -> "/tmp/progetto"
 
 frame 3 - rimozione kernel:
-  inotify_rm_watch(app.inotify.fd, 3)
+  inotify_rm_watch(ctx.runtime->fd, 3)
 
 frame 4 - rimozione tabella:
   watcher_remove(wd=3)

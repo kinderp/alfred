@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/16-mappa-codice-e-strutture.md`,
+  `docs/it/10-debugging-test-e-strumenti.md` e
+  `docs/it/15-todo-switch-core.md`: aggiornate mappe ed esempi didattici per
+  distinguere lo stato corrente basato su `inotify_backend_context_t` dagli
+  esempi storici con `app_t`, `event_engine_mode` e bridge shadow.
 - `modules/inotify/src/watch_manager.c`,
   `modules/inotify/include/watch_manager.h` e `docs/commenting-progress.md`:
   rafforzati i commenti sul ruolo del watch manager. `WATCH_ADDED` e
