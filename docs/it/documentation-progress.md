@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/src/utils.c`, `app/include/utils.h`,
+  `modules/inotify/src/inotify_backend.c` e documentazione didattica: spostata
+  la formattazione testuale delle mask inotify fuori dalle utility generiche e
+  dentro il backend come helper locale. `utils.c` resta per funzioni generiche,
+  mentre il backend conserva i dettagli Linux `IN_*`.
 - `modules/inotify/src/inotify_backend.c` e
   `docs/it/15-todo-switch-core.md`: puliti riferimenti ambigui allo shadow
   legacy dopo la rimozione completa del percorso. I vecchi micro-refactor

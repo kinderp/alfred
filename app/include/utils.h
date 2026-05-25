@@ -111,17 +111,4 @@ int clamp_int(int value,
  */
 void mem_zero(void *ptr, size_t size);
 
-/*
- * raw_event_name_from_mask - render an inotify mask as text
- * @mask: inotify event mask
- * @dest: destination buffer
- * @dest_size: destination buffer length
- *
- * TODO(core-integration): this helper is inotify-specific and should move to
- * the inotify module when the backend boundary is cleaned up.
- */
-void raw_event_name_from_mask(uint32_t mask,
-                              char *dest,
-                              size_t dest_size);
-
 #endif

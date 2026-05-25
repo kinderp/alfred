@@ -397,11 +397,13 @@ logger_error(&app->logger, "read failed errno=%d", errno);
 - join di path
 - copia sicura di stringhe
 - conversione di valori in testo
-- renderizzazione temporanea di mask inotify
 
 Una regola importante: `utils.c` non dovrebbe diventare un contenitore generico
-di logica business. Se una funzione riguarda solo inotify, in futuro dovrebbe
-stare in `modules/inotify`.
+di logica business. Se una funzione riguarda solo inotify, deve stare in
+`modules/inotify`. Per questo la renderizzazione testuale delle mask inotify e'
+stata spostata nel backend come helper locale: `utils.c` deve restare generico,
+mentre il backend puo' conoscere nomi Linux come `IN_CREATE` e
+`IN_CLOSE_WRITE`.
 
 ## Error handling
 

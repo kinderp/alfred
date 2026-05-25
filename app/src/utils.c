@@ -10,7 +10,7 @@
  * Used by:
  *   logger.c
  *   app.c
- *   modules/inotify event handling
+ *   modules that need generic path/string helpers
  * ========================================================================== */
 
 #include "utils.h"
@@ -20,7 +20,6 @@
 #include <time.h>
 #include <sys/time.h>
 #include <limits.h>
-#include <sys/inotify.h>
 
 /* ============================================================================
  * Time Formatting
@@ -288,56 +287,4 @@ void mem_zero(void *ptr, size_t size)
         return;
 
     memset(ptr, 0, size);
-}
-
-/* ============================================================================
- * inotify Formatting
- * ========================================================================== */
-
-/*
- * raw_event_name_from_mask - render an inotify mask as text
- * @mask: inotify event mask
- * @dest: destination buffer
- * @dest_size: destination buffer length
- *
- * Appends known inotify flag names into @dest. Unknown masks are rendered as
- * "UNRECOGNIZED".
- *
- * TODO(core-integration): this helper belongs in modules/inotify because it is
- * specific to Linux inotify masks.
- */
-void raw_event_name_from_mask(uint32_t mask,
-                              char *dest,
-                              size_t dest_size)
-{
-    if (dest == NULL || dest_size == 0)
-        return;
-
-    dest[0] = '\0';
-
-    if (mask & IN_CREATE)
-        strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
-    if (mask & IN_DELETE)
-        strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
-    if (mask & IN_MODIFY)
-        strncat(dest, "IN_MODIFY ", dest_size - strlen(dest) - 1);
-    if (mask & IN_CLOSE_WRITE)
-        strncat(dest, "IN_CLOSE_WRITE ", dest_size - strlen(dest) - 1);
-    if (mask & IN_MOVED_FROM)
-        strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
-    if (mask & IN_MOVED_TO)
-        strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
-    if (mask & IN_ISDIR)
-        strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
-    if (mask & IN_DELETE_SELF)
-        strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
-    if (mask & IN_IGNORED)
-        strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
-    if (mask & IN_Q_OVERFLOW)
-        strncat(dest, "IN_Q_OVERFLOW ", dest_size - strlen(dest) - 1);
-
-    if (dest[0] == '\0') {
-        strncpy(dest, "UNRECOGNIZED", dest_size - 1);
-        dest[dest_size - 1] = '\0';
-    }
 }

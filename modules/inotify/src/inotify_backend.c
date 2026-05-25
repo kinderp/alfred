@@ -68,6 +68,10 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
 static void backend_handle_ignored(inotify_backend_context_t *ctx,
                                    const struct inotify_event *ev);
 
+static void backend_raw_event_name_from_mask(uint32_t mask,
+                                             char *dest,
+                                             size_t dest_size);
+
 static int backend_poll(inotify_backend_context_t *ctx,
                         inotify_backend_event_fn on_event,
                         void *userdata);
@@ -321,7 +325,9 @@ static int backend_poll(inotify_backend_context_t *ctx,
         const char *parent =
             watcher_get_path(&ctx->runtime->watchers, ev->wd);
 
-        raw_event_name_from_mask(ev->mask, mask_str, sizeof(mask_str));
+        backend_raw_event_name_from_mask(ev->mask,
+                                         mask_str,
+                                         sizeof(mask_str));
         logger_raw(ctx->logger,
                    "%s wd=%d path=%s name=%s",
                    mask_str,
@@ -489,6 +495,52 @@ static uint64_t backend_now_ns(void)
 
     return ((uint64_t)ts.tv_sec * 1000000000ULL) +
            (uint64_t)ts.tv_nsec;
+}
+
+/*
+ * backend_raw_event_name_from_mask - render an inotify mask for raw logging
+ * @mask: Linux inotify event mask
+ * @dest: destination buffer
+ * @dest_size: destination buffer length
+ *
+ * This helper is intentionally local to the inotify backend because the names
+ * are Linux inotify flags, not Alfred semantic events and not generic app
+ * utilities.
+ */
+static void backend_raw_event_name_from_mask(uint32_t mask,
+                                             char *dest,
+                                             size_t dest_size)
+{
+    if (dest == NULL || dest_size == 0)
+        return;
+
+    dest[0] = '\0';
+
+    if (mask & IN_CREATE)
+        strncat(dest, "IN_CREATE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE)
+        strncat(dest, "IN_DELETE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MODIFY)
+        strncat(dest, "IN_MODIFY ", dest_size - strlen(dest) - 1);
+    if (mask & IN_CLOSE_WRITE)
+        strncat(dest, "IN_CLOSE_WRITE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_FROM)
+        strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVED_TO)
+        strncat(dest, "IN_MOVED_TO ", dest_size - strlen(dest) - 1);
+    if (mask & IN_ISDIR)
+        strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
+    if (mask & IN_DELETE_SELF)
+        strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_IGNORED)
+        strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
+    if (mask & IN_Q_OVERFLOW)
+        strncat(dest, "IN_Q_OVERFLOW ", dest_size - strlen(dest) - 1);
+
+    if (dest[0] == '\0') {
+        strncpy(dest, "UNRECOGNIZED", dest_size - 1);
+        dest[dest_size - 1] = '\0';
+    }
 }
 
 /*
