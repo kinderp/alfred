@@ -923,34 +923,31 @@ chi rilegge la migrazione.
 | Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
 | Archiviare suite functional/shadow | Temporaneo | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti; la direzione finale e' eliminarli quando la loro utilita' didattica sara' migrata nella documentazione. |
 | Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` non e' piu' un valore riconosciuto. |
-| Documentazione pesante del codice | Parziale avanzato | Backend inotify e watch manager sono stati rafforzati dopo lo switch; restano eventuali passate mirate su app/core se un refactor li tocca. |
-| Pulizia finale delle responsabilita' | Prossimo tecnico | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
+| Documentazione pesante del codice | Fatto per lo stato corrente | Backend inotify e watch manager sono stati rafforzati dopo lo switch; eventuali nuove passate saranno collegate a refactor futuri. |
+| Pulizia finale delle responsabilita' | Fatto per lo stato corrente | L'audit non ha trovato un micro-refactor tecnico urgente: backend, app e core hanno confini sufficientemente chiari per chiudere questa fase. |
 | Revisione completa della suite core end-to-end | Fatto per lo stato corrente | La suite core copre il contratto utente post-switch; nuovi test vanno aggiunti solo quando nasce un nuovo scenario o una regressione. |
-| Allineamento scenari/eventi/documentazione | Parziale avanzato | Le mappe principali sono state riallineate al context backend; resta una revisione finale completa degli scenari. |
+| Allineamento scenari/eventi/documentazione | Fatto per lo stato corrente | Le mappe principali sono state riallineate al context backend e la revisione finale scenari/test e' stata eseguita. |
 | Decisione finale sui file storici di test | Decisa, non eseguita | Per ora restano come archivio didattico, ma il target finale e' eliminarli completamente dopo aver salvato le parti utili nella documentazione. |
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
-### Prossimi passi concreti
+### Stato di chiusura della fase post-switch
 
-Lo stato attuale suggerisce tre passi distinti:
+Per lo stato corrente, la fase post-switch core e' chiusa. Non risultano
+micro-refactor tecnici urgenti e non risultano buchi immediati nella copertura
+dei test core/backend.
 
-1. Audit delle responsabilita' residue nel codice corrente.
-   Cercare dove app, backend e core si attraversano ancora in modo poco chiaro.
-   Questo passo deve produrre una lista piccola di candidati, non un refactor
-   grande.
-2. Micro-refactor solo se l'audit trova un confine evidente.
-   Esempi possibili: ridurre una dipendenza da `utils.h`, spostare un helper
-   nel modulo che lo possiede davvero, oppure rendere piu' esplicita una
-   callback.
-3. Revisione finale scenari/test.
-   Dopo la pulizia delle responsabilita', controllare che ogni scenario utente
-   importante abbia un test core o backend coerente e una spiegazione nella
-   documentazione italiana.
+Restano aperti solo lavori futuri separati:
 
-Overflow/resync resta fuori da questi tre passi. Va progettato separatamente
-perche' riguarda la perdita di affidabilita' dello stream, non una semplice
-traduzione di evento.
+1. eliminare completamente `tests/functional/` e `tests/shadow/` quando la loro
+   utilita' didattica sara' stata migrata nella documentazione
+2. progettare overflow/resync come tema autonomo
+3. aggiungere nuove passate di documentazione o test solo quando un refactor,
+   un bug reale o un nuovo scenario utente lo richiedono
+
+Questa chiusura non significa che il progetto sia finito. Significa che lo
+switch totale al core non ha piu' debiti tecnici immediati da chiudere prima di
+passare a temi nuovi.
 
 ### Audit responsabilita' residue
 
@@ -966,10 +963,8 @@ Risultato sintetico:
 | `app.c` passa `app_t` come `userdata` della callback raw | Basso | No | Il backend non interpreta `userdata`. Il cast resta nel livello applicativo e serve a collegare raw event, core e logger. |
 | `utils.h` espone molte utility generiche | Basso | Solo se cresce ancora | Dopo lo spostamento della mask inotify non contiene piu' dettagli backend-specific. Una divisione prematura aumenterebbe file piccoli senza beneficio immediato. |
 
-Decisione: non c'e' un micro-refactor tecnico evidente da fare subito. Il
-prossimo passo pragmatico e' la revisione finale scenari/test, verificando che
-la suite core e la suite backend coprano tutti i contratti correnti e che i test
-storici rimangano chiaramente archivio.
+Decisione: non c'e' un micro-refactor tecnico evidente da fare subito. La
+revisione finale scenari/test e' stata eseguita nel passo successivo.
 
 ### Revisione finale scenari/test
 

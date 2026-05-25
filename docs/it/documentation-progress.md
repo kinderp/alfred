@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/15-todo-switch-core.md`: chiusa formalmente la fase post-switch core
+  per lo stato corrente. Restano separati solo l'eliminazione futura degli
+  archivi storici `tests/functional/` e `tests/shadow/`, la progettazione
+  overflow/resync e nuove passate legate a bug o refactor futuri.
 - `tests/functional/README.md`, `tests/shadow/README.md` e
   `docs/it/15-todo-switch-core.md`: chiarita la decisione sui file storici di
   test. Le directory restano temporaneamente come archivio didattico, ma la
