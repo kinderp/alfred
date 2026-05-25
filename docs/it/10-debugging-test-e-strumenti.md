@@ -664,11 +664,14 @@ il backend inotify mantiene correttamente il proprio stato interno?
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
 storici in `tests/functional/` restano nel repository come memoria della fase
-legacy/shadow, ma non sono piu' la verifica ordinaria prima del commit.
+legacy/shadow, ma non sono piu' una verifica corrente.
 
 Da questo punto della migrazione i controlli diagnostici utili sono stati
 migrati in `tests/backend/` e il contratto semantico ufficiale vive in
 `tests/core/`.
+
+Per evitare uso accidentale, `tests/lib/test_lib.sh` fallisce subito con un
+messaggio esplicito se qualcuno prova a lanciare la vecchia suite funzionale.
 
 ### Cosa fare se un comando fallisce
 
@@ -701,11 +704,10 @@ tests/functional/
 ```
 
 `make test` non esegue piu' questi test: ora punta alla suite core ufficiale.
-Per studiarli o rieseguirli manualmente durante un audit storico:
+Per studiarli durante un audit storico:
 
 ```bash
-cd tests/functional
-bash run_all.sh
+tests/functional/README.md
 ```
 
 I test funzionali verificano il comportamento del programma dall'esterno.
@@ -747,7 +749,7 @@ Il target `make test-core` ricostruisce prima il binario core-only. Oggi questa
 e' l'unica variante di build supportata dal Makefile.
 
 e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
-righe `core seq=...`, perche' quelle appartengono allo shadow mode.
+righe `core seq=...`, perche' quelle appartenevano allo shadow mode storico.
 
 Importante: `make test-core` non e' un test unitario isolato del solo core.
 Esegue Alfred reale su una directory temporanea, usa il kernel inotify reale,
@@ -930,6 +932,14 @@ In particolare:
 Questa distinzione resta didatticamente utile per capire casi come `mkdir -p`,
 ma la verifica corrente vive nella suite core e nella suite backend diagnostics.
 
+La sola modalita' ancora utile per ispezione manuale e':
+
+```bash
+python3 tests/shadow/compare_shadow_output.py <scenario> --event-engine core
+```
+
+La verifica ufficiale resta `make test` e `make test-backend-diagnostics`.
+
 ## Provare il core come stream ufficiale
 
 Il core e' lo stream ufficiale di default. Per forzare esplicitamente la stessa
@@ -981,11 +991,11 @@ FILE_READY path=...
 ```
 
 Il prefisso `core seq=...` non compare perche' non stiamo piu' scrivendo un
-secondo stream shadow. Il vecchio dispatcher semantico non viene chiamato dal
-loop principale, quindi le differenze rispetto al legacy vanno osservate
-confrontando run separate oppure tornando al tool shadow.
+secondo stream shadow. Il vecchio dispatcher semantico e' stato rimosso, quindi
+le differenze rispetto al legacy restano solo materiale storico documentato.
 
-Lo stesso runner diagnostico degli scenari puo' avviare Alfred in core mode:
+Il runner storico degli scenari puo' ancora avviare Alfred in core mode per
+ispezione manuale:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file --event-engine core

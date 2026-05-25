@@ -1131,8 +1131,8 @@ Non fare uno switch grande e cieco.
 Per ogni passo:
 
 1. documentare la decisione
-2. aggiungere o aggiornare scenario shadow
-3. verificare output legacy/core
+2. aggiungere o aggiornare test core/backend
+3. verificare output semantico core e diagnostica backend
 4. modificare codice in modo piccolo
 5. aggiornare documentazione e progressi
 6. solo dopo passare al punto successivo

@@ -18,6 +18,10 @@ reset_env() {
 start_alfred() {
     reset_env
 
+    echo "tests/functional is a historical legacy/shadow suite." >&2
+    echo "It is not runnable after legacy shadow removal; use make test." >&2
+    exit 1
+
     ALFRED_EVENT_ENGINE=shadow "$ALFRED_BIN" "$TEST_ROOT" > "$LOG_FILE" 2>&1 &
     ALFRED_PID=$!
 

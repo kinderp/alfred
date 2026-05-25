@@ -4,11 +4,11 @@ Questo capitolo descrive gli scenari usati nei test del progetto. L'obiettivo
 non e' solo sapere "quale comando eseguire", ma capire quali eventi ci aspettiamo
 nel `raw.log` e nell'`events.log`.
 
-I test sono divisi in due famiglie:
+I test sono divisi in tre famiglie:
 
-- test funzionali: verificano il comportamento esterno del programma
-- test shadow: confrontano il vecchio dispatcher inotify con il nuovo core
 - test core: verificano il core come stream semantico ufficiale plain
+- test backend diagnostics: verificano log tecnici del backend, come i watch
+- test storici: documentano la fase legacy/shadow e non sono verifica corrente
 
 ## File di log
 
@@ -28,8 +28,7 @@ IN_CREATE IN_ISDIR wd=1 path=/tmp/root name=dir
 
 `events.log` contiene:
 
-- eventi semantici legacy, per esempio `DIR_CREATED`
-- eventi semantici core in shadow mode, con prefisso `core`
+- eventi semantici core, per esempio `DIR_CREATED`
 - diagnostica backend, per esempio `WATCH_ADDED`
 
 Esempio:
@@ -37,7 +36,6 @@ Esempio:
 ```text
 DIR_CREATED path=/tmp/root/dir
 WATCH_ADDED wd=2 path=/tmp/root/dir
-core seq=1 type=DIR_CREATED path=/tmp/root/dir pid=0
 ```
 
 `errors.log` contiene errori e diagnostica di fallimento.
@@ -57,19 +55,20 @@ tests/functional/
 ```
 
 `make test` non esegue piu' questa suite: ora punta al percorso core ufficiale.
-Gli script si possono leggere o lanciare manualmente durante un audit storico:
+Gli script non vanno lanciati come verifica corrente. Sono archivio storico:
 
 ```bash
-cd tests/functional
-bash run_all.sh
+tests/functional/README.md
 ```
 
 Questi test usano `tests/lib/test_lib.sh`, avviano `alfred` su una directory
-temporanea e cercano pattern nell'output.
+temporanea e cercano pattern nell'output. Il loro helper storico chiedeva
+`ALFRED_EVENT_ENGINE=shadow`; oggi questo percorso fallisce intenzionalmente
+per evitare confronti finti.
 
-Importante: i test funzionali storici controllano soprattutto il comportamento
-legacy visibile in `events.log`. Durante l'integrazione core/shadow mode, lo
-stesso file puo' contenere anche righe `core ...`.
+Importante: i test funzionali storici controllavano soprattutto il comportamento
+legacy visibile in `events.log`. Se uno scenario descrive ancora comportamento
+utente utile, va portato in `tests/core/` o `tests/backend/`.
 
 ## Test core end-to-end
 
@@ -1036,22 +1035,25 @@ FILE_CREATED path=$ROOT/a/b/c/file.txt
 Questo scenario non riproduce il bug `mkdir -p`: per quello usiamo lo scenario
 shadow `recursive_create_nested_dir`.
 
-## Test shadow
+## Test shadow storici
 
-Il tool shadow si trova in:
+Il tool shadow storico si trova in:
 
 ```text
 tests/shadow/compare_shadow_output.py
 ```
 
-Comando base:
+La modalita' shadow non e' piu' eseguibile. Il comando storico:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py <scenario>
 ```
 
-Il tool crea una directory temporanea, avvia `alfred`, esegue lo scenario e
-separa l'output in quattro sezioni:
+fallisce con un errore esplicito perche' il confronto legacy/core e' stato
+rimosso.
+
+Durante la migrazione il tool creava una directory temporanea, avviava
+`alfred`, eseguiva lo scenario e separava l'output in quattro sezioni:
 
 ```text
 Legacy
@@ -1060,13 +1062,13 @@ Only in legacy
 Only in core
 ```
 
-Le differenze non fanno fallire il comando, a meno che non si usi:
+Le differenze non facevano fallire il comando, a meno che non si usasse:
 
 ```bash
 --strict
 ```
 
-Per conservare i log completi:
+La vecchia opzione per conservare i log completi era:
 
 ```bash
 --keep-logs
@@ -1078,7 +1080,7 @@ I log vengono copiati in:
 tests/shadow/last-run/
 ```
 
-Per provare il core come stream ufficiale plain, usare:
+Per ispezione manuale storica, il runner puo' ancora avviare il core plain:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py <scenario> --event-engine core
@@ -1092,7 +1094,7 @@ Core official
 ```
 
 Non c'e' confronto con il legacy nella stessa run, perche' il vecchio dispatcher
-non viene chiamato.
+non esiste piu' nel codice corrente. Questo runner non sostituisce `make test`.
 
 Nota importante: anche in core mode l'app continua ad aggiornare i watch del
 backend quando vede `IN_CREATE | IN_ISDIR`. Questa logica non appartiene a
@@ -1100,7 +1102,7 @@ backend quando vede `IN_CREATE | IN_ISDIR`. Questa logica non appartiene a
 questo aggiornamento, scenari come `move_dir` o `recursive_create_nested_dir`
 perderebbero eventi dentro directory create da poco.
 
-## Mappa a tre livelli degli scenari shadow
+## Mappa a tre livelli degli scenari core
 
 Questa tabella riassume il percorso piu' importante per l'integrazione:
 

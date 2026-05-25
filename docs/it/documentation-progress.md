@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/functional/README.md`, `tests/shadow/README.md`,
+  `tests/lib/test_lib.sh`, `tests/shadow/compare_shadow_output.py` e
+  documentazione didattica: marcate le vecchie suite functional/shadow come
+  archivio storico. L'uso accidentale del confronto shadow ora fallisce con un
+  messaggio esplicito; le verifiche correnti restano `make test` e
+  `make test-backend-diagnostics`.
 - `app/include/config.h`, `app/src/config.c`, `app/include/core_logger.h`,
   `app/src/core_logger.c`, `app/src/app.c`, `modules/inotify/` e
   documentazione didattica: rimossi fisicamente il dispatcher legacy

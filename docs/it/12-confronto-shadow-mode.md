@@ -20,20 +20,21 @@ struct inotify_event -> inotify_adapter -> alfred_process()
                     -> core_logger_on_event() -> logger_event()
 ```
 
-Il core e' il comportamento ufficiale di default. Lo shadow mode serve a
-osservare anche il vecchio path, cosi' possiamo capire se il core interpreta gli
-eventi nello stesso modo, meglio o peggio rispetto al legacy.
+Il core e' il comportamento ufficiale di default. Lo shadow mode serviva a
+osservare anche il vecchio path, cosi' potevamo capire se il core interpretava
+gli eventi nello stesso modo, meglio o peggio rispetto al legacy.
 
 ## Tool diagnostico
 
-Il tool si trova in:
+Il tool storico si trova in:
 
 ```text
 tests/shadow/compare_shadow_output.py
 ```
 
-Esegue uno scenario piccolo, legge `events.log`, separa righe legacy e righe
-core, normalizza i path temporanei e stampa le differenze.
+La modalita' shadow del tool non e' piu' una verifica corrente. Oggi il comando
+senza `--event-engine core` fallisce con un errore esplicito; resta possibile
+usarlo solo come runner manuale di scenario core.
 
 ## Prerequisito
 

@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 """
-Compare legacy inotify semantic output with core shadow-mode output.
+Historical scenario runner for the removed legacy shadow comparison.
 
-The tool runs alfred against a temporary directory, executes one small
-filesystem scenario, reads events.log, normalizes both output streams, and
-prints the differences.
+The original tool compared the legacy inotify semantic dispatcher with the
+core shadow-mode output. That runtime path has been removed from Alfred.
 
-This is a diagnostic tool for the integration phase. By default it exits with
-status 0 even when differences are found. Use --strict when a non-empty diff
-should fail the command.
-
-Use --event-engine core to run the same scenario with the core as the official
-plain event stream. In that mode the tool prints the core output only instead
-of comparing legacy and shadow streams.
+Only --event-engine core remains useful as a historical scenario runner. The
+official verification paths are make test and make test-backend-diagnostics.
 """
 
 from __future__ import annotations
@@ -422,14 +416,14 @@ def run_scenario(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run Alfred filesystem scenarios in shadow or core event mode.",
+        description="Run historical Alfred filesystem scenarios in core mode.",
         epilog=(
-            "Default event engine is shadow: legacy and prefixed core output "
-            "are compared and differences are printed without failing unless "
-            "--strict is used. With --event-engine core, Alfred runs with "
-            "ALFRED_EVENT_ENGINE=core and the tool prints the official plain "
-            "core stream. Use --keep-logs to preserve events.log, raw.log, "
-            "and the watched tree under tests/shadow/last-run."
+            "Legacy shadow comparison has been removed from Alfred. Use "
+            "--event-engine core if this historical runner is still useful "
+            "for manual inspection. Official verification is make test and "
+            "make test-backend-diagnostics. Use --keep-logs to preserve "
+            "events.log, raw.log, and the watched tree under "
+            "tests/shadow/last-run."
         ),
     )
     parser.add_argument(
@@ -457,13 +451,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="in shadow mode, exit with status 1 when legacy/core output differs",
+        help="historical option kept for CLI compatibility; unused in core mode",
     )
     parser.add_argument(
         "--event-engine",
         choices=("shadow", "core"),
         default="shadow",
-        help="run the scenario in shadow comparison mode or core official mode",
+        help="core runs the scenario; shadow exits with an explanatory error",
     )
     parser.add_argument(
         "--keep-logs",
@@ -476,6 +470,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+
+    if args.event_engine == "shadow":
+        print(
+            "shadow comparison was removed; use --event-engine core or "
+            "the official make test targets",
+            file=sys.stderr,
+        )
+        return 1
+
     return run_scenario(args)
 
 
