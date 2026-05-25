@@ -868,6 +868,8 @@ La copertura iniziale include:
   aggiunga un watch diagnostico con `WATCH_ADDED`
 - `test_watch_removed_delete_dir.sh`: crea e rimuove una directory osservata e
   verifica che il backend registri `WATCH_REMOVED`
+- `test_recursive_slow_watch_tree.sh`: crea lentamente `a`, `a/b` e `a/b/c` e
+  verifica che ogni directory riceva il proprio `WATCH_ADDED`
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

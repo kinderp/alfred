@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/backend/test_recursive_slow_watch_tree.sh`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `15-todo-switch-core.md`: migrata anche la diagnostica dei watch ricorsivi
+  lenti, salvando lo scenario utile prima della futura rimozione della suite
+  legacy/shadow.
 - `Makefile`, `tests/backend/`, `modules/inotify/src/inotify_backend.c`,
   `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
   `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunta la prima suite

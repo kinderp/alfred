@@ -189,7 +189,7 @@ Mappa corrente:
 | move directory | non presente nei funzionali storici | `tests/core/test_move_dir.sh` | Coperto solo dal core; utile mantenerlo come contratto semantico ufficiale. |
 | move + rename file | `tests/functional/test_move_rename_file.sh` | `tests/core/test_move_rename_file.sh` | Coperto da entrambe, ma con semantica diversa: legacy emette `FILE_MOVED + FILE_RENAMED`, core emette un solo `FILE_RELOCATED`. |
 | move + rename directory | `tests/functional/test_move_rename_dir.sh` | `tests/core/test_move_rename_dir.sh` | Coperto da entrambe, ma con semantica diversa: legacy emette `MOVED + RENAMED`, core emette un solo `RELOCATED`. |
-| recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Funzionale utile per diagnostica watch e creazione lenta; non riproduce il bug `mkdir -p`. |
+| recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Lo scenario diagnostico watch e' stato migrato in `tests/backend/test_recursive_slow_watch_tree.sh`; il funzionale storico resta legacy/shadow. |
 | recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
 | shadow senza build legacy | non presente nei funzionali storici | `tests/core/test_shadow_requires_legacy_build.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente quando il binario e' core-only. |
@@ -286,11 +286,11 @@ Gli scenari da migrare sono:
 | --- | --- | --- | --- |
 | create directory watch | `tests/backend/test_watch_added_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
 | delete directory watch | `tests/backend/test_watch_removed_delete_dir.sh` | `WATCH_REMOVED` dopo `IN_IGNORED` | verifica che il backend non lasci una voce watch valida per una directory sparita |
-| recursive slow watch tree | `tests/functional/test_recursive.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
+| recursive slow watch tree | `tests/backend/test_recursive_slow_watch_tree.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh`, da valutare | raw sintetici per directory scoperte dallo scan | utile solo se vogliamo testare esplicitamente il contratto raw/backend, non solo il risultato core |
 
-I primi due scenari sono gia' stati migrati in `tests/backend/`. Restano da
-valutare il caso ricorsivo lento e l'eventuale controllo esplicito dei raw
+I tre scenari diagnostici sui watch sono gia' stati migrati in
+`tests/backend/`. Resta da valutare solo l'eventuale controllo esplicito dei raw
 sintetici.
 
 La quarta riga va discussa prima di implementarla: il test core esistente
