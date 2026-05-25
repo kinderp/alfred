@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/15-todo-switch-core.md`: aggiornata la roadmap post-switch con lo
+  stato reale dopo le ultime passate documentali. Documentazione pesante e
+  allineamento mappe sono ora "parziale avanzato"; il prossimo passo tecnico e'
+  un audit delle responsabilita' residue prima di altri refactor.
 - `docs/it/16-mappa-codice-e-strutture.md`,
   `docs/it/10-debugging-test-e-strumenti.md` e
   `docs/it/15-todo-switch-core.md`: aggiornate mappe ed esempi didattici per

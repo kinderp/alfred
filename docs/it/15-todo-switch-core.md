@@ -923,13 +923,34 @@ chi rilegge la migrazione.
 | Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
 | Archiviare suite functional/shadow | Fatto | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti. |
 | Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` non e' piu' un valore riconosciuto. |
-| Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
-| Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
+| Documentazione pesante del codice | Parziale avanzato | Backend inotify e watch manager sono stati rafforzati dopo lo switch; restano eventuali passate mirate su app/core se un refactor li tocca. |
+| Pulizia finale delle responsabilita' | Prossimo tecnico | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core end-to-end | Medio | I test core devono continuare a fissare il comportamento ufficiale dopo la rimozione del legacy. |
-| Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
+| Allineamento scenari/eventi/documentazione | Parziale avanzato | Le mappe principali sono state riallineate al context backend; resta una revisione finale completa degli scenari. |
 | Decisione finale sui file storici di test | Basso/medio | Oggi restano come archivio; in futuro si puo' decidere se tenerli, spostarli o rimuoverli. |
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
+
+### Prossimi passi concreti
+
+Lo stato attuale suggerisce tre passi distinti:
+
+1. Audit delle responsabilita' residue nel codice corrente.
+   Cercare dove app, backend e core si attraversano ancora in modo poco chiaro.
+   Questo passo deve produrre una lista piccola di candidati, non un refactor
+   grande.
+2. Micro-refactor solo se l'audit trova un confine evidente.
+   Esempi possibili: ridurre una dipendenza da `utils.h`, spostare un helper
+   nel modulo che lo possiede davvero, oppure rendere piu' esplicita una
+   callback.
+3. Revisione finale scenari/test.
+   Dopo la pulizia delle responsabilita', controllare che ogni scenario utente
+   importante abbia un test core o backend coerente e una spiegazione nella
+   documentazione italiana.
+
+Overflow/resync resta fuori da questi tre passi. Va progettato separatamente
+perche' riguarda la perdita di affidabilita' dello stream, non una semplice
+traduzione di evento.
 
 ### Mappa test funzionali legacy e test core
 
