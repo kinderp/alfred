@@ -67,6 +67,9 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
 
+static void backend_handle_ignored(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev);
+
 static int backend_dispatch_legacy_shadow(
     const inotify_backend_context_t *ctx,
     const struct inotify_event *ev);
@@ -403,12 +406,40 @@ static int backend_poll(inotify_backend_context_t *ctx,
         if (legacy_status != ERR_OK)
             return legacy_status;
 
+        backend_handle_ignored(ctx, ev);
+
         backend_handle_dir_create(ctx, ev, on_event, userdata);
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
 
     return ERR_OK;
+}
+
+/*
+ * backend_handle_ignored - remove a watch after an IN_IGNORED notification
+ * @ctx: narrowed backend context used by the poll path
+ * @ev: raw inotify event currently being processed
+ *
+ * IN_IGNORED means the kernel removed a watch, commonly because the watched
+ * directory disappeared. This is backend state maintenance, not filesystem
+ * semantics. The diagnostic WATCH_REMOVED log remains useful, but the core must
+ * not turn it into a user-facing semantic event.
+ *
+ * Shadow mode still lets the legacy dispatcher consume this event first. That
+ * keeps the historical comparison path stable while core mode gets the backend
+ * cleanup previously hidden inside events.c.
+ */
+static void backend_handle_ignored(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev)
+{
+    if (ctx == NULL || ev == NULL)
+        return;
+
+    if ((ev->mask & IN_IGNORED) == 0)
+        return;
+
+    watch_manager_remove(ctx, ev->wd);
 }
 
 /* ============================================================================

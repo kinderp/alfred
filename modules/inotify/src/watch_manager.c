@@ -159,6 +159,13 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
     if (path == NULL)
         return -1;
 
+    char removed_path[PATH_MAX];
+
+    snprintf(removed_path,
+             sizeof(removed_path),
+             "%s",
+             path);
+
     inotify_rm_watch(ctx->runtime->fd,
                      wd);
 
@@ -168,7 +175,7 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
     logger_event(ctx->logger,
                  "WATCH_REMOVED wd=%d path=%s",
                  wd,
-                 path);
+                 removed_path);
 
     return 0;
 }

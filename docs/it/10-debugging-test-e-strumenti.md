@@ -642,7 +642,33 @@ runtime ufficiale di default.
 
 `make test-core` resta disponibile come nome esplicito della stessa suite.
 
-### 4. `make test-legacy-shadow`
+### 4. `make test-backend-diagnostics`
+
+Il comando:
+
+```bash
+make test-backend-diagnostics
+```
+
+ricostruisce il binario core-only ed esegue la suite in:
+
+```text
+tests/backend/
+```
+
+Questa suite controlla diagnostica del backend inotify. Per esempio verifica
+che la creazione di una directory aggiunga un watch (`WATCH_ADDED`) e che la
+rimozione di una directory osservata pulisca il watch (`WATCH_REMOVED`). Queste
+righe sono log diagnostici: aiutano a capire se il backend mantiene
+correttamente la tabella dei watch, ma non sono eventi semantici del core.
+
+Questo passo risponde alla domanda:
+
+```text
+il backend inotify mantiene correttamente il proprio stato interno?
+```
+
+### 5. `make test-legacy-shadow`
 
 Il comando:
 
@@ -674,7 +700,7 @@ la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
 Anche se il core e' il percorso ufficiale, questi test restano utili finche'
 shadow mode viene mantenuto come ponte di confronto.
 
-### 5. `make` finale
+### 6. `make` finale
 
 Dopo `make test-legacy-shadow`, il binario nel workspace e' stato ricompilato
 nella variante:
@@ -707,6 +733,8 @@ Esempi:
 - se fallisce `git diff --check`, correggi whitespace o patch
 - se fallisce `make`, correggi compilazione o linking
 - se fallisce `make test`, analizza il comportamento semantico del core
+- se fallisce `make test-backend-diagnostics`, controlla log diagnostici,
+  watch descriptor e manutenzione della tabella dei watch
 - se fallisce `make test-legacy-shadow`, controlla compatibilita'
   legacy/shadow o test funzionali storici
 - se fallisce il `make` finale, il workspace non e' tornato alla build normale
@@ -817,6 +845,33 @@ La copertura iniziale include scenari base e alcuni casi semantici critici:
 
 Questa suite fissa il comportamento end-to-end futuro del percorso core senza
 cambiare subito i test funzionali storici.
+
+## Test backend diagnostics
+
+```text
+tests/backend/
+```
+
+Si esegue con:
+
+```bash
+make test-backend-diagnostics
+```
+
+Questi test avviano Alfred in `ALFRED_EVENT_ENGINE=core`, ma non controllano il
+contratto semantico utente. Controllano invece la diagnostica del backend
+inotify che oggi viene ancora scritta in `events.log` tramite `logger_event()`.
+
+La copertura iniziale include:
+
+- `test_watch_added_create_dir.sh`: crea una directory e verifica che il backend
+  aggiunga un watch diagnostico con `WATCH_ADDED`
+- `test_watch_removed_delete_dir.sh`: crea e rimuove una directory osservata e
+  verifica che il backend registri `WATCH_REMOVED`
+
+Questi test sono separati dalla suite core per evitare un equivoco: una riga
+`WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che
+il core dovrebbe esporre come semantica filesystem.
 
 La libreria `tests/core/test_lib.sh` include anche `assert_count`, usato quando
 uno scenario deve fissare quante volte un evento puo' comparire. Per esempio,

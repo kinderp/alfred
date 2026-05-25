@@ -219,6 +219,7 @@ run: all
 # -----------------------------------------------------------------------------
 # TEST
 # test-core is the official core end-to-end suite.
+# test-backend-diagnostics checks backend health logs that are not semantics.
 # test-legacy-shadow keeps the historical functional shadow suite explicit.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
@@ -232,6 +233,10 @@ test-legacy-shadow:
 test-core:
 	$(MAKE) ENABLE_LEGACY_SHADOW=0 all
 	cd tests/core && bash run_all.sh
+
+test-backend-diagnostics:
+	$(MAKE) ENABLE_LEGACY_SHADOW=0 all
+	cd tests/backend && bash run_all.sh
 
 # -----------------------------------------------------------------------------
 # VALGRIND

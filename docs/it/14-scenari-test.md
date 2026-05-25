@@ -264,15 +264,15 @@ Conclusione operativa:
 
 Prima di rimuovere `test-legacy-shadow`, conviene salvare gli scenari che non
 sono semantica core ma descrivono la salute del backend inotify. Questi test non
-dovrebbero vivere nella suite core, perche' non controllano il contratto utente
-di Alfred. Dovrebbero vivere in una suite separata, per esempio:
+vivono nella suite core, perche' non controllano il contratto utente di Alfred.
+Vivono in una suite separata:
 
 ```text
 tests/backend/
 make test-backend-diagnostics
 ```
 
-Questa suite avrebbe un obiettivo diverso:
+Questa suite ha un obiettivo diverso:
 
 ```text
 tests/core/     -> eventi semantici ufficiali
@@ -284,10 +284,14 @@ Gli scenari da migrare sono:
 
 | Scenario diagnostico | Origine attuale | Cosa controlla | Perche' e' utile |
 | --- | --- | --- | --- |
-| create directory watch | `tests/functional/test_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
-| delete directory watch | `tests/functional/test_delete_dir.sh` | `WATCH_REMOVED` o rimozione diagnostica equivalente | verifica che il backend non lasci una voce watch valida per una directory sparita |
+| create directory watch | `tests/backend/test_watch_added_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
+| delete directory watch | `tests/backend/test_watch_removed_delete_dir.sh` | `WATCH_REMOVED` dopo `IN_IGNORED` | verifica che il backend non lasci una voce watch valida per una directory sparita |
 | recursive slow watch tree | `tests/functional/test_recursive.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh`, da valutare | raw sintetici per directory scoperte dallo scan | utile solo se vogliamo testare esplicitamente il contratto raw/backend, non solo il risultato core |
+
+I primi due scenari sono gia' stati migrati in `tests/backend/`. Restano da
+valutare il caso ricorsivo lento e l'eventuale controllo esplicito dei raw
+sintetici.
 
 La quarta riga va discussa prima di implementarla: il test core esistente
 verifica gia' l'effetto semantico finale (`DIR_CREATED` per tutta la catena).

@@ -954,8 +954,9 @@ del prodotto finale:
 
 La suite legacy copre ancora due categorie che non devono bloccare lo switch:
 
-- diagnostica backend: `WATCH_ADDED`, `WATCH_REMOVED` e aggiunta progressiva
-  dei watch nelle directory ricorsive lente
+- diagnostica backend: `WATCH_ADDED` e `WATCH_REMOVED` sono gia' coperti da
+  `tests/backend/`; resta da migrare l'aggiunta progressiva dei watch nelle
+  directory ricorsive lente
 - comportamento storico diverso dal target: doppia emissione
   `MOVED + RENAMED` invece di un solo `RELOCATED`
 
@@ -967,7 +968,8 @@ step corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
 Ordine operativo consigliato per la rimozione:
 
 1. documentare che `ENABLE_LEGACY_SHADOW` e' temporaneo
-2. creare una suite `tests/backend/` per la diagnostica utile dei watch
+2. creare una suite `tests/backend/` per la diagnostica utile dei watch: fatto
+   per `WATCH_ADDED` e `WATCH_REMOVED`
 3. eliminare il bridge shadow da `inotify_backend_context_t`
 4. eliminare `backend_dispatch_legacy_shadow()` dal poll path
 5. rimuovere init/shutdown legacy da `app.c`

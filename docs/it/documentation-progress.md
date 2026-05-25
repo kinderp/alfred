@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile`, `tests/backend/`, `modules/inotify/src/inotify_backend.c`,
+  `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunta la prima suite
+  backend diagnostics per `WATCH_ADDED` e `WATCH_REMOVED`; il backend core ora
+  pulisce i watch su `IN_IGNORED`.
 - `14-scenari-test.md` e `15-todo-switch-core.md`: pianificata la nuova
   categoria `tests/backend/` per preservare diagnostica utile come
   `WATCH_ADDED`, `WATCH_REMOVED` e watch ricorsivi lenti prima di rimuovere

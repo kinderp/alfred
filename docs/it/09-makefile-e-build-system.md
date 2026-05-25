@@ -941,6 +941,23 @@ Nonostante il nome, `test-core` non salta il backend: gli script creano file e
 directory reali, Alfred riceve eventi inotify reali e il core produce
 `events.log`. Questa e' la suite end-to-end ufficiale del percorso core.
 
+### test-backend-diagnostics
+
+```bash
+make test-backend-diagnostics
+```
+
+Il target ricostruisce il binario core-only e lancia:
+
+```text
+tests/backend/
+```
+
+Questa suite non controlla la semantica utente finale. Controlla log e stato
+diagnostico del backend inotify, per esempio `WATCH_ADDED` e `WATCH_REMOVED`.
+Sono righe utili per capire se la tabella dei watch viene aggiornata
+correttamente, ma non devono essere confuse con eventi semantici del core.
+
 ### test-legacy-shadow
 
 ```bash
@@ -1025,6 +1042,7 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Build ottimizzata | `make release` |
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
+| Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
 | Eseguire test funzionali legacy/shadow | `make test-legacy-shadow` |
 | Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
