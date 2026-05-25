@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/include/config.h`, `app/src/config.c`, `app/src/app.c`,
+  `tests/core/test_invalid_event_engine_shadow.sh` e documentazione didattica:
+  rimosso `EVENT_ENGINE_SHADOW`. `ALFRED_EVENT_ENGINE=shadow` e' ora un valore
+  invalido generico; l'unico valore accettato e' `core`.
 - `tests/functional/README.md`, `tests/shadow/README.md`,
   `tests/lib/test_lib.sh`, `tests/shadow/compare_shadow_output.py` e
   documentazione didattica: marcate le vecchie suite functional/shadow come

@@ -181,7 +181,7 @@ int app_init(app_t *app, int argc, char **argv)
         config_set_event_engine(&app->config, event_engine_env) != ERR_OK) {
 
         fprintf(stderr,
-                "invalid ALFRED_EVENT_ENGINE=%s (expected shadow or core)\n",
+                "invalid ALFRED_EVENT_ENGINE=%s (expected core)\n",
                 event_engine_env);
         error = ERR_INVALID_ARG;
         goto fail;
@@ -202,18 +202,6 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     logger_info(&app->logger, "logger initialized");
-
-    /*
-     * Shadow mode is no longer a supported runtime path. The parser still
-     * recognizes the old value briefly so startup can fail with a clear log
-     * message instead of treating the environment variable as a typo.
-     */
-    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
-        logger_error(&app->logger,
-                     "shadow event engine has been removed; use core");
-        error = ERR_CONFIG;
-        goto fail;
-    }
 
     /*
      * The core is initialized after the logger because its emit callback writes

@@ -184,7 +184,7 @@ Mappa corrente:
 | recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Lo scenario diagnostico watch e' stato migrato in `tests/backend/test_recursive_slow_watch_tree.sh`; il funzionale storico resta legacy/shadow. |
 | recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
-| shadow mode rimosso | non presente nei funzionali storici | `tests/core/test_shadow_mode_removed.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente perche' il runtime shadow e' stato rimosso. |
+| engine shadow invalido | non presente nei funzionali storici | `tests/core/test_invalid_event_engine_shadow.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` sia un valore non valido e non faccia fallback a core. |
 
 ### Risultato dell'audit storico
 
@@ -302,12 +302,12 @@ La regola pratica e':
 - se il test parla di differenze legacy/core, va archiviato con la storia dello
   shadow e non deve sopravvivere come controllo automatico ordinario
 
-### Scenario core: shadow mode rimosso
+### Scenario core: engine shadow invalido
 
 File:
 
 ```text
-tests/core/test_shadow_mode_removed.sh
+tests/core/test_invalid_event_engine_shadow.sh
 ```
 
 Questo scenario non controlla eventi filesystem. Controlla invece un contratto
@@ -317,17 +317,18 @@ di configurazione runtime nato durante lo switch al core:
 runtime: ALFRED_EVENT_ENGINE=shadow
 ```
 
-Il risultato atteso e' un fallimento esplicito di startup. Alfred non deve fare
-fallback silenzioso a `event_engine=core`, perche' in quel caso lo sviluppatore
+Il risultato atteso e' un fallimento di startup. Alfred non deve fare fallback
+silenzioso a `event_engine=core`, perche' in quel caso lo sviluppatore
 crederebbe di stare usando una modalita' che non esiste piu'.
 
 Il test verifica due cose:
 
 - il processo esce con status diverso da zero
-- `errors.log` contiene il messaggio che shadow mode e' stato rimosso
+- `startup.log` contiene il messaggio di valore invalido e indica che l'unico
+  valore ammesso e' `core`
 
-Il test vive in `tests/core/` perche' il rifiuto di shadow mode fa parte del
-contratto runtime ufficiale del percorso core.
+Il test vive in `tests/core/` perche' il rifiuto di engine non supportati fa
+parte del contratto runtime ufficiale del percorso core.
 
 Strategia consigliata per i prossimi refactor dei test:
 

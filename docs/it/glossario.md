@@ -45,8 +45,7 @@ esempio `/tmp/a.txt -> /var/b.txt` diventa `FILE_RELOCATED`.
 
 Modalita' diagnostica storica in cui il vecchio dispatcher legacy e il core
 venivano eseguiti sugli stessi eventi per confrontare gli output. Il runtime
-corrente usa `event_engine=core`; se viene richiesto `shadow`, Alfred fallisce
-con un errore esplicito.
+corrente usa `event_engine=core`; `shadow` non e' piu' un valore valido.
 
 ## Dedup
 

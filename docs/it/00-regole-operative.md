@@ -288,7 +288,8 @@ vanno usati come verifica ordinaria dopo la rimozione del dispatcher legacy.
 ## Stato semantico corrente
 
 - Il runtime di default e' `event_engine=core`.
-- `ALFRED_EVENT_ENGINE=shadow` viene rifiutato con un errore esplicito.
+- `ALFRED_EVENT_ENGINE=shadow` e' un valore invalido; l'unico valore valido e'
+  `core`.
 - I test funzionali storici sono memoria della fase legacy/shadow, non verifica
   ordinaria del runtime corrente.
 - I test core verificano lo stream semantico plain del core.

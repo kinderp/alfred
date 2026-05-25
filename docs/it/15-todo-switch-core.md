@@ -32,23 +32,20 @@ Lo switch previsto era totale, e dal punto di vista runtime e' stato completato:
 - `make test` verifica il percorso core end-to-end ufficiale
 - `make test-backend-diagnostics` verifica la diagnostica tecnica del backend
 
-### Perche' `EVENT_ENGINE_SHADOW` esiste ancora
+### `EVENT_ENGINE_SHADOW` rimosso
 
-`EVENT_ENGINE_SHADOW` e il parsing di `ALFRED_EVENT_ENGINE=shadow` restano solo
-come guard rail interno durante questa fase. Non sono una feature per utenti o
-contributori: oggi li usiamo solo noi per ottenere un errore esplicito quando
-qualcuno prova ad avviare una modalita' rimossa.
+`EVENT_ENGINE_SHADOW` e il parsing speciale di `ALFRED_EVENT_ENGINE=shadow` sono
+stati rimossi. Per noi erano solo un guard rail interno durante la migrazione,
+non una feature per utenti o contributori.
 
 Il test:
 
 ```text
-tests/core/test_shadow_mode_removed.sh
+tests/core/test_invalid_event_engine_shadow.sh
 ```
 
-protegge proprio questo contratto temporaneo. In futuro potremo decidere di
-eliminare anche il valore `EVENT_ENGINE_SHADOW` e trattare `shadow` come un
-normale valore di configurazione non valido. Per ora lo manteniamo perche'
-rende piu' chiara la fase di transizione.
+protegge il nuovo contratto: `shadow` e' un normale valore non valido e il
+messaggio indica che l'unico valore ammesso e' `core`.
 
 ## Responsabilita' migrate fuori da `events.c`
 
@@ -916,13 +913,13 @@ chi rilegge la migrazione.
 | Rimuovere la variante build legacy-shadow | Fatto | `ENABLE_LEGACY_SHADOW`, `test-legacy-shadow`, `events.c` e `move_cache.c` non fanno piu' parte della build Makefile. |
 | Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
 | Archiviare suite functional/shadow | Fatto | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti. |
-| Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` viene riconosciuto solo per produrre un errore esplicito temporaneo. |
+| Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` non e' piu' un valore riconosciuto. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core end-to-end | Medio | I test core devono continuare a fissare il comportamento ufficiale dopo la rimozione del legacy. |
 | Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
 | Decisione finale sui file storici di test | Basso/medio | Oggi restano come archivio; in futuro si puo' decidere se tenerli, spostarli o rimuoverli. |
-| Rimuovere `EVENT_ENGINE_SHADOW` | Basso/medio | Per ora resta come errore esplicito interno; quando non servira' piu', `shadow` potra' diventare un valore invalido generico. |
+| Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
 ### Mappa test funzionali legacy e test core
@@ -991,7 +988,7 @@ del prodotto finale:
 - move+rename file e directory come singolo evento `RELOCATED`
 - modify e close-write come `FILE_MODIFIED` e `FILE_READY`
 - creazione ricorsiva veloce con raw sintetici per directory scoperte
-- errore esplicito se si chiede shadow in una build core-only
+- errore se si chiede `shadow` come valore di `ALFRED_EVENT_ENGINE`
 
 La suite legacy copre ancora due categorie che non devono bloccare lo switch:
 
@@ -1013,8 +1010,8 @@ Ordine operativo consigliato per la rimozione:
 3. eliminare il bridge shadow da `inotify_backend_context_t`: fatto
 4. eliminare `backend_dispatch_legacy_shadow()` dal poll path: fatto
 5. rimuovere init/shutdown legacy da `app.c`: fatto
-6. togliere `event_engine=shadow` dalla configurazione ordinaria: fatto a
-   livello runtime, resta solo il valore riconosciuto per errore esplicito
+6. togliere `event_engine=shadow` dalla configurazione ordinaria: fatto; oggi
+   `shadow` e' un valore invalido generico
 7. rimuovere fisicamente `events.c`, `events.h`, `move_cache.c`,
    `move_cache.h` e `move_cache_size`: fatto
 8. archiviare nei documenti la vecchia semantica solo come storia della
@@ -1118,17 +1115,17 @@ make
 ```
 
 non contiene `events.c` e `move_cache.c`. Se Alfred riceve
-`ALFRED_EVENT_ENGINE=shadow`, fallisce con un errore esplicito invece di fare
-fallback silenzioso a core mode.
+`ALFRED_EVENT_ENGINE=shadow`, fallisce come valore di configurazione non valido
+invece di fare fallback silenzioso a core mode.
 
 Questo contratto e' fissato da:
 
 ```text
-tests/core/test_shadow_mode_removed.sh
+tests/core/test_invalid_event_engine_shadow.sh
 ```
 
-Il test appartiene alla suite core perche' il rifiuto di shadow mode e' ormai
-parte del contratto runtime ufficiale.
+Il test appartiene alla suite core perche' il rifiuto di valori engine non
+supportati fa parte del contratto runtime ufficiale.
 
 I target di test sono separati:
 

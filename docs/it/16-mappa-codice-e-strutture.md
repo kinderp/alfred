@@ -249,7 +249,7 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | `app_init()` | rifiutare shadow rimosso | temporaneo, finche' il valore shadow resta riconosciuto per errore esplicito |
+| `app->config.event_engine_mode` | `app_init()` e log di startup | registrare il runtime core selezionato | potrebbe sparire se non prevediamo altri engine |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -520,7 +520,7 @@ Campi rilevanti:
 | `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
 | `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
-| `event_engine_mode` | sceglie core o shadow rimosso | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()` |
+| `event_engine_mode` | seleziona il runtime core | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` prende il valore da `watch_manager_default_mask()`, poi
@@ -546,9 +546,9 @@ valori negativi o stringhe non numeriche potrebbe produrre valori enormi o
 ambigui. La funzione di parsing mantiene il valore precedente quando l'input
 non e' valido.
 
-`event_engine_mode=shadow` e' ormai solo un valore riconosciuto per produrre un
-errore esplicito. Il Makefile non compila piu' una variante legacy-shadow, quindi
-non esiste un dispatcher legacy supportato con cui confrontare il core.
+`event_engine_mode=shadow` non e' piu' un valore riconosciuto. Il Makefile non
+compila piu' una variante legacy-shadow, quindi l'unico valore valido e'
+`core`.
 
 ### `inotify_backend_t`
 

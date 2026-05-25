@@ -956,7 +956,7 @@ flusso:
 ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
 
-fallisce con un errore esplicito. Questo evita un confronto finto: il dispatch
+fallisce per valore non valido. Questo evita un confronto finto: il dispatch
 live legacy/core e' stato spento, quindi il percorso supportato e'
 `event_engine=core`.
 

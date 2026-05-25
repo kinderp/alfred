@@ -136,12 +136,11 @@ static size_t parse_size_or_default(const char *value, size_t fallback)
 /*
  * config_set_event_engine - parse the event engine mode option
  * @cfg: configuration object to update
- * @value: expected value, either "shadow" or "core"
+ * @value: expected value, currently only "core"
  *
- * The parser still accepts the legacy "shadow" value so app_init() can reject
- * it with a clear runtime error. Keeping this parser centralized lets config
- * files and temporary environment overrides use exactly the same accepted
- * values while the old mode is being removed.
+ * Shadow mode is no longer a recognized configuration value. During the
+ * migration it was kept long enough to emit a specialized removal error; now it
+ * is treated like any other invalid value.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -149,11 +148,6 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
 {
     if (cfg == NULL || value == NULL)
         return ERR_INVALID_ARG;
-
-    if (strcmp(value, "shadow") == 0) {
-        cfg->event_engine_mode = EVENT_ENGINE_SHADOW;
-        return ERR_OK;
-    }
 
     if (strcmp(value, "core") == 0) {
         cfg->event_engine_mode = EVENT_ENGINE_CORE;
@@ -172,8 +166,6 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
 const char *config_event_engine_name(event_engine_mode_t mode)
 {
     switch (mode) {
-        case EVENT_ENGINE_SHADOW:
-            return "shadow";
         case EVENT_ENGINE_CORE:
             return "core";
         default:

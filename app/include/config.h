@@ -21,13 +21,12 @@
  * event_engine_mode_t - semantic event engine selection
  *
  * CORE is the normal runtime: backend raw events are processed by the core and
- * logged as the official plain semantic stream. SHADOW is kept only as a
- * recognized legacy value so startup can reject it with a clear error instead
- * of silently accepting an unsupported mode.
+ * logged as the official plain semantic stream. The enum remains even though
+ * it has one value because it documents the configuration field and leaves a
+ * narrow place for future engine choices.
  */
 typedef enum {
-    EVENT_ENGINE_SHADOW = 0,
-    EVENT_ENGINE_CORE
+    EVENT_ENGINE_CORE = 0
 } event_engine_mode_t;
 
 /*
@@ -86,7 +85,7 @@ error_t config_load(config_t *cfg, const char *path);
 /*
  * config_set_event_engine - parse and set the semantic event engine mode
  * @cfg: configuration object to update
- * @value: expected value, either "shadow" or "core"
+ * @value: expected value, currently only "core"
  *
  * Return: ERR_OK on success, ERR_INVALID_ARG or ERR_CONFIG on failure.
  */

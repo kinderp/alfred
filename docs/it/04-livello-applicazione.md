@@ -357,7 +357,8 @@ ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare
 ```
 
 Senza override, Alfred usa `core`. Se si prova a usare
-`ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con un errore esplicito.
+`ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce per valore di configurazione non
+valido.
 
 ## app/src/logger.c
 
