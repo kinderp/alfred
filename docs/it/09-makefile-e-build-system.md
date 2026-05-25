@@ -179,15 +179,15 @@ In questa variante il Makefile:
 - compila `modules/inotify/src/events.c`
 - compila `modules/inotify/src/move_cache.c`
 
-Se un binario core-only viene avviato con:
+Se Alfred viene avviato con:
 
 ```bash
 ALFRED_EVENT_ENGINE=shadow ./alfred /path
 ```
 
-Alfred deve fallire in modo esplicito, perche' lo shadow mode richiede il
-dispatcher legacy compilato. Non sarebbe corretto fare fallback silenzioso al
-core: chi chiede shadow vuole un confronto reale.
+Alfred deve fallire in modo esplicito, perche' lo shadow mode e' stato rimosso
+dal runtime. Non sarebbe corretto fare fallback silenzioso al core: chi chiede
+shadow crederebbe di usare un confronto che non esiste piu'.
 
 Il Makefile usa directory oggetto separate per le varianti di build:
 

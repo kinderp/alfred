@@ -15,9 +15,6 @@
 #include "core_logger.h"
 #include "errors.h"
 #include "inotify_backend.h"
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-#include "events.h"
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,8 +31,6 @@ static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 );
-static int app_init_legacy_shadow(app_t *app);
-static void app_shutdown_legacy_shadow(app_t *app);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -67,61 +62,6 @@ static void app_build_inotify_backend_context(
     ctx->runtime = &app->inotify;
     ctx->config = &app->config;
     ctx->logger = &app->logger;
-}
-
-/*
- * app_init_legacy_shadow - initialize the optional legacy comparison path
- * @app: application context that owns configuration and logger
- *
- * The inotify backend is raw-oriented and no longer calls the semantic legacy
- * dispatcher from its poll path. Until shadow mode is removed completely, app.c
- * still owns the build/runtime check that rejects shadow requests in core-only
- * binaries and the temporary lifetime of events.c in legacy-shadow builds.
- *
- * Return: ERR_OK when shadow is disabled or initialized, otherwise ERR_CONFIG
- * for an unavailable shadow build or ERR_ALLOC on legacy allocation failure.
- */
-static int app_init_legacy_shadow(app_t *app)
-{
-    if (app->config.event_engine_mode != EVENT_ENGINE_SHADOW)
-        return ERR_OK;
-
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-    if (legacy_events_init(app->config.move_cache_size) != 0) {
-        logger_error(&app->logger,
-                     "legacy_events_init failed");
-        return ERR_ALLOC;
-    }
-
-    logger_info(&app->logger,
-                "legacy event dispatcher initialized");
-    return ERR_OK;
-#else
-    logger_error(&app->logger,
-                 "shadow event engine requires build with "
-                 "ENABLE_LEGACY_SHADOW=1");
-    return ERR_CONFIG;
-#endif
-}
-
-/*
- * app_shutdown_legacy_shadow - release optional legacy comparison state
- * @app: application context used to inspect the selected event engine
- *
- * legacy_events_shutdown() is idempotent, but the runtime mode check keeps the
- * ownership rule clear for readers: app.c releases the shadow-only semantic
- * dispatcher only when shadow was requested.
- */
-static void app_shutdown_legacy_shadow(app_t *app)
-{
-    if (app->config.event_engine_mode != EVENT_ENGINE_SHADOW)
-        return;
-
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-    legacy_events_shutdown();
-#else
-    (void)app;
-#endif
 }
 
 /* ============================================================================
@@ -174,9 +114,8 @@ static void setup_signals(void)
  * @userdata: application context supplied by app_run()
  *
  * The backend owns inotify parsing, raw conversion, and recursive watch repair.
- * Shadow lifecycle is owned by app.c; during polling the backend may invoke the
- * opaque shadow callback separately. The app callback remains deliberately
- * small: it bridges "backend raw fact" to "core semantic processing".
+ * The app callback remains deliberately small: it bridges "backend raw fact"
+ * to "core semantic processing".
  */
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata)
@@ -265,10 +204,20 @@ int app_init(app_t *app, int argc, char **argv)
     logger_info(&app->logger, "logger initialized");
 
     /*
+     * Shadow mode is no longer a supported runtime path. The parser still
+     * recognizes the old value briefly so startup can fail with a clear log
+     * message instead of treating the environment variable as a typo.
+     */
+    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW) {
+        logger_error(&app->logger,
+                     "shadow event engine has been removed; use core");
+        error = ERR_CONFIG;
+        goto fail;
+    }
+
+    /*
      * The core is initialized after the logger because its emit callback writes
-     * semantic events through logger_event(). In core mode this is the official
-     * stream. In shadow mode app.c also initializes the legacy dispatcher so
-     * the two streams can be compared.
+     * semantic events through logger_event(). Core mode is the official stream.
      */
     alfred_config_default(&app->core_config);
     app->core_logger_context.logger = &app->logger;
@@ -290,10 +239,6 @@ int app_init(app_t *app, int argc, char **argv)
     logger_info(&app->logger,
                 "alfred core initialized event_engine=%s",
                 config_event_engine_name(app->config.event_engine_mode));
-
-    error = app_init_legacy_shadow(app);
-    if (error != ERR_OK)
-        goto fail;
 
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);
@@ -393,8 +338,6 @@ void app_shutdown(app_t *app)
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);
     inotify_backend_shutdown(&backend_ctx);
-
-    app_shutdown_legacy_shadow(app);
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may

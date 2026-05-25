@@ -139,10 +139,10 @@ static size_t parse_size_or_default(const char *value, size_t fallback)
  * @cfg: configuration object to update
  * @value: expected value, either "shadow" or "core"
  *
- * The mode controls whether the runtime uses only the core semantic stream or
- * also runs the legacy dispatcher for comparison. Keeping this parser
- * centralized lets config files and temporary environment overrides use exactly
- * the same accepted values.
+ * The parser still accepts the legacy "shadow" value so app_init() can reject
+ * it with a clear runtime error. Keeping this parser centralized lets config
+ * files and temporary environment overrides use exactly the same accepted
+ * values while the old mode is being removed.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */

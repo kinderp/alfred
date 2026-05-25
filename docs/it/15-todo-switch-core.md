@@ -61,9 +61,8 @@ Al momento:
 - il core e' inizializzato in `app_t`
 - il runtime manda eventi inotify al core
 - `event_engine=core` e' il default e usa il core come stream ufficiale plain
-- `ALFRED_EVENT_ENGINE=shadow` e `ENABLE_LEGACY_SHADOW=1` esistono ancora come
-  residuo temporaneo, ma il backend non chiama piu' il dispatcher legacy nel
-  poll path
+- `ALFRED_EVENT_ENGINE=shadow` viene riconosciuto solo per fallire con un errore
+  esplicito: il runtime shadow e' stato rimosso
 - esiste un primo backend inotify esplicito in
   `modules/inotify/src/inotify_backend.c`
 - il backend legge il fd inotify, logga gli eventi raw, costruisce
@@ -73,8 +72,8 @@ Al momento:
 - `events.c` contiene ancora semantica legacy, ma non viene compilato nella
   build core-only normale
 - `move_cache.c` resta compilabile nella variante `ENABLE_LEGACY_SHADOW=1`, ma
-  non partecipa piu' al poll path del backend dopo lo spegnimento del dispatch
-  live legacy/core
+  non partecipa piu' al runtime perche' app.c non inizializza piu' il lifecycle
+  legacy
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -987,8 +986,9 @@ Ordine operativo consigliato per la rimozione:
    per `WATCH_ADDED`, `WATCH_REMOVED` e watch ricorsivi lenti
 3. eliminare il bridge shadow da `inotify_backend_context_t`: fatto
 4. eliminare `backend_dispatch_legacy_shadow()` dal poll path: fatto
-5. rimuovere init/shutdown legacy da `app.c`
-6. togliere `event_engine=shadow` dalla configurazione ordinaria
+5. rimuovere init/shutdown legacy da `app.c`: fatto
+6. togliere `event_engine=shadow` dalla configurazione ordinaria: fatto a
+   livello runtime, resta solo il valore riconosciuto per errore esplicito
 7. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`
 8. archiviare nei documenti la vecchia semantica solo come storia della
    migrazione
@@ -1098,20 +1098,18 @@ La build normale:
 make
 ```
 
-non compila `events.c` e `move_cache.c`. Se un binario core-only riceve
-`ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con un errore esplicito invece di
-fare fallback silenzioso a core mode.
+non compila `events.c` e `move_cache.c`. Se Alfred riceve
+`ALFRED_EVENT_ENGINE=shadow`, fallisce con un errore esplicito invece di fare
+fallback silenzioso a core mode.
 
 Questo contratto e' fissato da:
 
 ```text
-tests/core/test_shadow_requires_legacy_build.sh
+tests/core/test_shadow_mode_removed.sh
 ```
 
-Il test appartiene alla suite core perche' `make test-core` ricostruisce Alfred
-con `ENABLE_LEGACY_SHADOW=0`. In questo modo controlliamo proprio il caso che ci
-interessa: shadow mode richiesto a runtime, ma dispatcher legacy assente dalla
-build.
+Il test appartiene alla suite core perche' il rifiuto di shadow mode e' ormai
+parte del contratto runtime ufficiale.
 
 I target di test sono separati:
 

@@ -14,7 +14,7 @@ status=$?
 set -e
 
 if [[ "$status" == "0" ]]; then
-    echo "FAIL: shadow mode succeeded without legacy build"
+    echo "FAIL: removed shadow mode succeeded"
     echo "----- startup.log -----"
     cat "$STARTUP_LOG" || true
     echo "----- errors.log -----"
@@ -29,11 +29,11 @@ if ! grep -Eq "startup failed" "$STARTUP_LOG"; then
     exit 1
 fi
 
-if ! grep -Eq "shadow event engine requires build" ./errors.log; then
-    echo "FAIL: missing explicit shadow build error"
+if ! grep -Eq "shadow event engine has been removed; use core" ./errors.log; then
+    echo "FAIL: missing explicit shadow removed error"
     echo "----- errors.log -----"
     cat ./errors.log || true
     exit 1
 fi
 
-echo "PASS shadow requires legacy build"
+echo "PASS shadow mode removed"

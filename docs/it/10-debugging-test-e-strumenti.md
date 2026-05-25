@@ -1004,17 +1004,17 @@ modalita', usare l'override d'ambiente:
 ALFRED_EVENT_ENGINE=core ./alfred /tmp/cartella-da-osservare
 ```
 
-Per riattivare il confronto shadow legacy/core si usa invece:
+Il confronto shadow legacy/core non e' piu' riattivabile a runtime. Il vecchio
+comando:
 
 ```bash
 make ENABLE_LEGACY_SHADOW=1
 ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
 
-Se si prova a usare `ALFRED_EVENT_ENGINE=shadow` con un binario compilato senza
-`ENABLE_LEGACY_SHADOW=1`, Alfred fallisce con un errore esplicito. Questo evita
-un confronto finto: shadow mode ha senso solo se il dispatcher legacy e' davvero
-presente nel binario.
+fallisce con un errore esplicito anche se la variante legacy-shadow compila
+ancora. Questo evita un confronto finto: il dispatch live legacy/core e' stato
+spento, quindi il percorso supportato e' `event_engine=core`.
 
 ## Strumenti futuri per la documentazione dinamica
 

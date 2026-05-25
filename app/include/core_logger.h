@@ -20,9 +20,9 @@
  * @event_engine_mode: selected event stream mode
  *
  * The core itself emits structured alfred_event_t values. This context lets the
- * application format those values differently while integration is in progress:
- * shadow mode uses an explicit `core ...` prefix, while core mode writes the
- * plain official event stream.
+ * application format those values differently while integration is in progress.
+ * Core mode writes the plain official event stream; the shadow format is legacy
+ * compatibility that will disappear with the remaining shadow cleanup.
  */
 typedef struct {
     logger_t *logger;

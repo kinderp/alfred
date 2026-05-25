@@ -21,9 +21,9 @@
  * event_engine_mode_t - semantic event engine selection
  *
  * CORE is the normal runtime: backend raw events are processed by the core and
- * logged as the official plain semantic stream. SHADOW is a temporary
- * integration mode that also runs the legacy dispatcher so differences can be
- * inspected while the old code is being phased out.
+ * logged as the official plain semantic stream. SHADOW is kept only as a
+ * recognized legacy value so startup can reject it with a clear error while
+ * the remaining shadow files are being removed.
  */
 typedef enum {
     EVENT_ENGINE_SHADOW = 0,
@@ -66,7 +66,7 @@ typedef struct {
      */
     uint32_t watch_mask;
 
-    /* Selects whether semantic events come from legacy shadow mode or core. */
+    /* Selects the event engine; only core is currently supported at runtime. */
     event_engine_mode_t event_engine_mode;
 
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */

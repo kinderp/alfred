@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/src/app.c`, `app/include/app.h`, `app/include/config.h`,
+  `app/include/core_logger.h`, `app/src/config.c`,
+  `tests/core/test_shadow_mode_removed.sh`, `14-scenari-test.md`,
+  `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: rimosso il
+  lifecycle legacy da app.c e trasformato `ALFRED_EVENT_ENGINE=shadow` in un
+  errore runtime esplicito.
 - `modules/inotify/include/inotify_backend.h`,
   `modules/inotify/src/inotify_backend.c`, `app/src/app.c`,
   `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: rimosso il

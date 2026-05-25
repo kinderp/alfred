@@ -86,7 +86,7 @@ int app_init(app_t *app, int argc, char **argv);
  * @app: initialized application context
  *
  * Polls the active inotify backend and dispatches resulting raw events to the
- * core and, in shadow mode, the legacy dispatcher.
+ * core.
  *
  * Return: ERR_OK on normal termination, a negative error_t value on invalid
  * input.

@@ -250,8 +250,8 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | `app_init_legacy_shadow()`, `core_logger_on_event()` | abilitare/rifiutare shadow residuo e scegliere formato log core | temporaneo, finche' shadow esiste |
-| `app->config.move_cache_size` | `legacy_events_init()` tramite `app_init_legacy_shadow()` | dimensione cache move legacy | no nel percorso core finale |
+| `app->config.event_engine_mode` | `app_init()`, `core_logger_on_event()` | rifiutare shadow rimosso e scegliere formato log core | temporaneo, finche' il valore shadow resta riconosciuto per errore esplicito |
+| `app->config.move_cache_size` | nessun percorso runtime core | vecchia dimensione cache move legacy | da rimuovere con `move_cache.c` |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -292,10 +292,10 @@ Il micro-refactor su `inotify_backend_shutdown()` completa la simmetria con
 - `ctx.runtime->fd` per controllare, chiudere e invalidare il file descriptor
 - `ctx.runtime->watchers` per distruggere la tabella dei watch
 
-`legacy_events_shutdown()` non appartiene piu' al backend: viene chiamata da
-`app_shutdown_legacy_shadow()`. Questa e' una scelta esplicita perche' il
-dispatcher legacy e' uno strumento di confronto dell'applicazione, non stato del
-backend core finale.
+Il lifecycle legacy non appartiene piu' al backend e non appartiene piu' nemmeno
+al runtime applicativo corrente. `app.c` rifiuta `event_engine=shadow` con un
+errore esplicito; i file legacy rimasti sono solo codice storico da rimuovere in
+un passo successivo.
 
 ### Context backend proposto
 
@@ -404,9 +404,9 @@ backend_init(ctx):
   watcher_init(&ctx->runtime->watchers, ctx->config->watcher_capacity)
   inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
 
-app_init_legacy_shadow(app):
+app_init(app):
   se event_engine_mode=shadow:
-    legacy_events_init(app->config.move_cache_size)
+    errore esplicito: shadow rimosso
 
 inotify_backend_add_startup_watch(&ctx, path):
   backend_add_startup_watch(ctx, path)
@@ -427,9 +427,9 @@ backend_shutdown(ctx):
   chiude ctx->runtime->fd
   watcher_destroy(&ctx->runtime->watchers)
 
-app_shutdown_legacy_shadow(app):
-  se event_engine_mode=shadow:
-    legacy_events_shutdown()
+app_shutdown(app):
+  distrugge core
+  chiude logger
 ```
 
 Anche la discovery ricorsiva usa ora lo stesso context:
@@ -522,10 +522,10 @@ Campi rilevanti:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
-| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | `app_init_legacy_shadow()` |
+| `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | nessun percorso runtime core |
 | `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
 | `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
-| `event_engine_mode` | sceglie core o shadow residuo | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `app_init_legacy_shadow()`, `core_logger_on_event()` |
+| `event_engine_mode` | sceglie core o shadow rimosso | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `core_logger_on_event()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` prende il valore da `watch_manager_default_mask()`, poi

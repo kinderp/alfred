@@ -192,7 +192,7 @@ Mappa corrente:
 | recursive slow directory tree | `tests/functional/test_recursive.sh` | non identico | Lo scenario diagnostico watch e' stato migrato in `tests/backend/test_recursive_slow_watch_tree.sh`; il funzionale storico resta legacy/shadow. |
 | recursive fast nested directory | non presente nei funzionali storici | `tests/core/test_recursive_create_nested_dir.sh` | Coperto dal core; verifica raw sintetici e recupero delle directory create prima dei watch. |
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
-| shadow senza build legacy | non presente nei funzionali storici | `tests/core/test_shadow_requires_legacy_build.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente quando il binario e' core-only. |
+| shadow mode rimosso | non presente nei funzionali storici | `tests/core/test_shadow_mode_removed.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente perche' il runtime shadow e' stato rimosso. |
 
 ### Risultato dell'audit
 
@@ -245,7 +245,7 @@ della migrazione.
 | Recursive fast nested directory | Tenere nel core | Protegge il recupero con raw sintetici. |
 | `WATCH_ADDED` / `WATCH_REMOVED` nei funzionali | Tenere come diagnostica o test mirati | Sono log backend, non eventi semantici utente. |
 | Doppia emissione legacy `MOVED + RENAMED` | Archiviare con lo shadow | Documenta il comportamento storico, non il target. |
-| Shadow senza build legacy | Tenere nel core | Protegge il contratto di configurazione runtime. |
+| Shadow mode rimosso | Tenere nel core | Protegge il contratto di configurazione runtime. |
 
 Conclusione operativa:
 
@@ -310,36 +310,32 @@ La regola pratica e':
 - se il test parla di differenze legacy/core, va archiviato con la storia dello
   shadow e non deve sopravvivere come controllo automatico ordinario
 
-### Scenario core: shadow richiesto senza build legacy
+### Scenario core: shadow mode rimosso
 
 File:
 
 ```text
-tests/core/test_shadow_requires_legacy_build.sh
+tests/core/test_shadow_mode_removed.sh
 ```
 
 Questo scenario non controlla eventi filesystem. Controlla invece un contratto
 di configurazione runtime nato durante lo switch al core:
 
 ```text
-build: ENABLE_LEGACY_SHADOW=0
 runtime: ALFRED_EVENT_ENGINE=shadow
 ```
 
 Il risultato atteso e' un fallimento esplicito di startup. Alfred non deve fare
 fallback silenzioso a `event_engine=core`, perche' in quel caso lo sviluppatore
-crederebbe di stare confrontando legacy e core mentre in realta' il dispatcher
-legacy non e' compilato.
+crederebbe di stare usando una modalita' che non esiste piu'.
 
 Il test verifica due cose:
 
 - il processo esce con status diverso da zero
-- `errors.log` contiene il messaggio che shadow mode richiede una build con
-  `ENABLE_LEGACY_SHADOW=1`
+- `errors.log` contiene il messaggio che shadow mode e' stato rimosso
 
-Il test vive in `tests/core/` per un motivo preciso: `make test-core`
-ricostruisce il binario core-only. Quindi e' il posto naturale per fissare il
-comportamento di errore quando si chiede shadow mode senza supporto legacy.
+Il test vive in `tests/core/` perche' il rifiuto di shadow mode fa parte del
+contratto runtime ufficiale del percorso core.
 
 Strategia consigliata per i prossimi refactor dei test:
 
