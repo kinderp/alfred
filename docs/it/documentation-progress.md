@@ -35,14 +35,22 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile`: cambiato `make test` in alias del percorso core ufficiale.
+  `make test-core` resta il nome esplicito della stessa suite, mentre
+  `make test-legacy-shadow` resta disponibile per diagnostica legacy/shadow.
+- `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md` e `15-todo-switch-core.md`: aggiornata la
+  documentazione per indicare che `make test` ora verifica il core e non piu'
+  i funzionali storici legacy/shadow.
 - `Makefile`, `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunta la
   roadmap per il futuro cambio di `make test` da alias legacy/shadow ad alias
-  del percorso core, senza cambiare ancora il comportamento del target.
+  del percorso core. Questa roadmap e' stata poi completata: oggi `make test`
+  punta al core.
 - `14-scenari-test.md`: aggiunta tabella di decisione sugli scenari legacy,
   distinguendo contratto core, diagnostica backend e memoria storica shadow.
 - `Makefile`: aggiunto il target esplicito `test-legacy-shadow`.
-  `make test` resta un alias temporaneo dei funzionali storici, mentre
-  `make test-core` resta la suite end-to-end ufficiale del percorso core.
+  In quel passo `make test` restava temporaneamente sui funzionali storici; oggi
+  invece punta al core.
 - `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
   `14-scenari-test.md` e `15-todo-switch-core.md`: aggiornata la
   documentazione dei target di test per distinguere core ufficiale e
@@ -276,9 +284,9 @@ Stati usati:
   differenza semantica intenzionale tra doppio evento legacy e singolo
   `FILE_RELOCATED` del core.
 - `15-todo-switch-core.md`: documentata la decisione provvisoria sui test:
-  `make test` resta per ora legacy-shadow, mentre `make test-core` resta il
-  percorso end-to-end ufficiale del core; piu' avanti si decidera' se `make
-  test` dovra' diventare alias del percorso core o restare legacy.
+  in quel momento `make test` restava legacy-shadow e `make test-core` era il
+  percorso ufficiale. Decisione superata: oggi `make test` punta al core e
+  `make test-legacy-shadow` conserva la suite storica esplicita.
 - `16-mappa-codice-e-strutture.md`: aggiunto un call graph guidato
   `main -> app -> backend -> core -> logger`, piu' due sezioni discorsive sul
   ciclo backend inotify e sul ciclo core. Le nuove sezioni spiegano quali

@@ -871,30 +871,28 @@ Risultato della revisione:
   `WATCH_ADDED` e `WATCH_REMOVED`; questi log non devono diventare eventi
   semantici core
 
-Decisione provvisoria:
+Decisione attuale:
 
 ```text
-make test-core          -> end-to-end ufficiale del percorso core
+make test               -> alias ufficiale del percorso core
+make test-core          -> nome esplicito della stessa suite core
 make test-legacy-shadow -> funzionali storici legacy/shadow
-make test               -> alias temporaneo di test-legacy-shadow
 ```
 
 Il nome esplicito `test-legacy-shadow` riduce l'ambiguita' per studenti e
 contributori: la suite storica resta disponibile, ma non e' piu' presentata come
 il contratto futuro del prodotto. Non serve creare ora una suite
-`test-functional-core`: `make test-core` avvia gia' Alfred reale, passa dal
-backend inotify reale e controlla l'`events.log` core. Quando lo shadow non
-servira' piu', dovremo decidere se `make test` diventera' un alias di
-`make test-core` oppure restera' un target storico separato.
+`test-functional-core`: `make test` e `make test-core` avviano gia' Alfred
+reale, passano dal backend inotify reale e controllano l'`events.log` core.
 
-Roadmap per il cambio finale di `make test`:
+Roadmap completata per il cambio di `make test`:
 
-1. fase attuale: `make test` punta a `test-legacy-shadow`
+1. fase precedente: `make test` puntava a `test-legacy-shadow`
 2. fase switch: `make test` punta a `test-core`
-3. fase post-switch: `test-legacy-shadow` resta come target diagnostico
+3. fase successiva: `test-legacy-shadow` resta come target diagnostico
    esplicito oppure viene archiviato insieme al vecchio dispatcher
 
-Prima della fase switch devono essere vere queste condizioni:
+Prima di archiviare `test-legacy-shadow` devono essere vere queste condizioni:
 
 - `make test-core` copre tutti gli scenari semantici ufficiali
 - gli scenari legacy che controllano solo diagnostica backend sono classificati
@@ -1028,13 +1026,13 @@ I target di test sono separati:
 make test-core
 ```
 
-ricostruisce il binario core-only ed esegue la suite `tests/core/`.
+ricostruisce il binario core-only ed esegue la suite `tests/core/`. Il target:
 
 ```bash
 make test
 ```
 
-per ora e' un alias di:
+punta alla stessa suite core. Il target:
 
 ```bash
 make test-legacy-shadow

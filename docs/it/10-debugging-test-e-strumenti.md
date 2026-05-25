@@ -569,16 +569,14 @@ La sequenza standard e':
 ```bash
 git diff --check
 make
-make test-core
-make test-legacy-shadow
 make test
+make test-legacy-shadow
 make
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
 problemi piu' semplici, poi il comportamento core, poi la compatibilita'
-legacy/shadow, controllare l'alias storico `make test`, e infine lasciare il
-workspace nella build normale.
+legacy/shadow, e infine lasciare il workspace nella build normale.
 
 ### 1. `git diff --check`
 
@@ -615,12 +613,12 @@ il progetto compila nella configurazione normale?
 Se fallisce, fermati. Prima bisogna correggere errori di compilazione, warning
 trattati come errori, include mancanti, firme incoerenti o problemi di linking.
 
-### 3. `make test-core`
+### 3. `make test`
 
 Il comando:
 
 ```bash
-make test-core
+make test
 ```
 
 ricostruisce il binario core-only ed esegue la suite in:
@@ -641,6 +639,8 @@ il percorso ufficiale inotify -> raw -> core -> events.log funziona ancora?
 
 E' importante eseguirlo prima dei funzionali storici perche' il core e' il
 runtime ufficiale di default.
+
+`make test-core` resta disponibile come nome esplicito della stessa suite.
 
 ### 4. `make test-legacy-shadow`
 
@@ -674,28 +674,10 @@ la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
 Anche se il core e' il percorso ufficiale, questi test restano utili finche'
 shadow mode viene mantenuto come ponte di confronto.
 
-### 5. `make test`
+### 5. `make` finale
 
-Il comando:
-
-```bash
-make test
-```
-
-oggi e' un alias temporaneo di `make test-legacy-shadow`. Viene mantenuto per
-compatibilita' con il nome storico, ma non va confuso con la suite ufficiale del
-core. Per il percorso core usare sempre `make test-core`.
-
-Questo passo risponde alla domanda:
-
-```text
-l'alias storico usato dai contributori funziona ancora?
-```
-
-### 6. `make` finale
-
-Dopo `make test-legacy-shadow` o `make test`, il binario nel workspace e' stato
-ricompilato nella variante:
+Dopo `make test-legacy-shadow`, il binario nel workspace e' stato ricompilato
+nella variante:
 
 ```text
 ENABLE_LEGACY_SHADOW=1
@@ -724,10 +706,9 @@ Esempi:
 
 - se fallisce `git diff --check`, correggi whitespace o patch
 - se fallisce `make`, correggi compilazione o linking
-- se fallisce `make test-core`, analizza il comportamento semantico del core
+- se fallisce `make test`, analizza il comportamento semantico del core
 - se fallisce `make test-legacy-shadow`, controlla compatibilita'
   legacy/shadow o test funzionali storici
-- se fallisce `make test`, controlla l'alias storico nel Makefile
 - se fallisce il `make` finale, il workspace non e' tornato alla build normale
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
@@ -750,7 +731,7 @@ Per eseguirli:
 make test-legacy-shadow
 ```
 
-`make test` resta un alias storico dello stesso target.
+`make test` non esegue piu' questi test: ora punta alla suite core ufficiale.
 
 Oppure direttamente:
 
@@ -764,9 +745,9 @@ Per esempio possono creare, spostare o cancellare file e poi controllare che il
 programma abbia registrato gli eventi corretti.
 
 Nota importante: i test funzionali storici richiedono ancora il confronto
-legacy/shadow. Il target `make test` costruisce quindi il binario con
-`ENABLE_LEGACY_SHADOW=1` prima di eseguire gli script. La build normale ottenuta
-con `make` resta invece core-only.
+legacy/shadow. Per questo bisogna usare `make test-legacy-shadow`, che costruisce
+il binario con `ENABLE_LEGACY_SHADOW=1` prima di eseguire gli script. La build
+normale ottenuta con `make` resta invece core-only.
 
 La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
 attesi nei log, e' raccolta in
@@ -786,6 +767,8 @@ Si esegue con:
 make test-core
 ```
 
+Il comando storico `make test` e' ora un alias di questa suite.
+
 Questi test avviano Alfred con:
 
 ```text
@@ -793,8 +776,9 @@ ALFRED_EVENT_ENGINE=core
 ```
 
 Il target `make test-core` ricostruisce prima il binario core-only. Questo e'
-importante dopo aver eseguito `make test`, perche' i test funzionali storici
-costruiscono invece la variante con `ENABLE_LEGACY_SHADOW=1`.
+importante dopo aver eseguito `make test-legacy-shadow`, perche' i test
+funzionali storici costruiscono invece la variante con
+`ENABLE_LEGACY_SHADOW=1`.
 
 e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
 righe `core seq=...`, perche' quelle appartengono allo shadow mode.

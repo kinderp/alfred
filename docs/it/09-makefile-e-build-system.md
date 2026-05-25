@@ -966,10 +966,13 @@ ENABLE_LEGACY_SHADOW=1
 make test
 ```
 
-Per compatibilita', `make test` resta un alias temporaneo di
-`make test-legacy-shadow`. Il nome storico continua quindi a eseguire la suite
-legacy/shadow, mentre `make test-core` resta la suite ufficiale del percorso
-core.
+`make test` e' ora l'alias ufficiale di `make test-core`. Il nome storico del
+target punta quindi al contratto end-to-end del percorso core. Chi deve eseguire
+i controlli storici legacy/shadow deve usare esplicitamente:
+
+```bash
+make test-legacy-shadow
+```
 
 ### valgrind
 
@@ -1020,9 +1023,9 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Pulire tutto | `make fclean` |
 | Ricompilare da zero | `make re` |
 | Build ottimizzata | `make release` |
-| Eseguire test end-to-end del percorso core | `make test-core` |
+| Eseguire test ufficiali core | `make test` |
+| Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire test funzionali legacy/shadow | `make test-legacy-shadow` |
-| Eseguire alias storico dei test legacy/shadow | `make test` |
 | Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |

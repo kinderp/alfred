@@ -220,12 +220,10 @@ run: all
 # TEST
 # test-core is the official core end-to-end suite.
 # test-legacy-shadow keeps the historical functional shadow suite explicit.
-# test remains a temporary compatibility alias for test-legacy-shadow.
+# test is the official core alias.
 # -----------------------------------------------------------------------------
 
-# Temporary compatibility alias. During the final core switch this target should
-# point to test-core, while test-legacy-shadow remains explicit if still useful.
-test: test-legacy-shadow
+test: test-core
 
 test-legacy-shadow:
 	$(MAKE) ENABLE_LEGACY_SHADOW=1 all
@@ -311,6 +309,7 @@ banner:
 	release \
 	run \
 	test \
+	test-legacy-shadow \
 	test-core \
 	valgrind \
 	gdb \
