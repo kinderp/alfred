@@ -18,6 +18,11 @@ inotify
 
 Il modulo inotify deve produrre fatti raw. Il core deve produrre semantica.
 
+Lo switch previsto e' totale: lo shadow legacy non e' una feature da mantenere
+nel prodotto finale. Deve restare solo il tempo necessario a verificare la
+migrazione e poi deve sparire dal percorso runtime, dal Makefile ordinario e
+dalla configurazione utente.
+
 ## Cosa deve uscire da `events.c`
 
 `modules/inotify/src/events.c` oggi contiene ancora logica semantica legacy.
@@ -81,6 +86,22 @@ Al momento:
 - `inotify_backend_poll()` riceve `inotify_backend_context_t *`, callback
   raw/core e `userdata`; l'eventuale bridge legacy shadow vive nel context come
   campo opzionale e resta `NULL` in `event_engine=core`
+
+### Decisione: nessuna sopravvivenza dello shadow
+
+La direzione scelta e' rimuovere completamente lo shadow legacy. Questo cambia
+il modo in cui leggiamo i prossimi refactor:
+
+- non conviene trasformare il bridge shadow in una API observer stabile
+- non conviene rendere `events.c` un secondo backend semantico supportato
+- non conviene mantenere `ALFRED_EVENT_ENGINE=shadow` come opzione utente
+- bisogna prima verificare la copertura core e poi cancellare il confronto
+  legacy in passi piccoli
+
+Il bridge rimasto in `inotify_backend_context_t` e' quindi debito temporaneo,
+non un punto di estensione futuro. Va eliminato quando la suite core e la
+documentazione degli scenari sono sufficienti a sostituire il vecchio
+riferimento legacy.
 
 ## Mappa della logica legacy rimasta
 
@@ -861,8 +882,8 @@ verifica e documentazione piu' estesa.
 | Revisione completa della suite core end-to-end | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
 | Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
 | Decisione sui test funzionali legacy | Medio | Dopo lo switch bisogna scegliere se mantenerli come shadow, migrarli al core o archiviarne una parte. |
-| Spegnere shadow come modalita' ordinaria | Medio | `core` e' gia' il default, ma shadow deve diventare chiaramente una modalita' di debug/confronto e non un requisito operativo. |
-| Quarantena o rimozione finale del legacy | Medio/alto | A fine migrazione bisogna decidere se eliminare `events.c`/`move_cache.c` o spostarli in un'area legacy esplicita. |
+| Spegnere shadow come modalita' ordinaria | Medio | `core` e' gia' il default; shadow non deve sopravvivere come modalita' utente. |
+| Rimozione finale del legacy | Medio/alto | La decisione e' eliminare il percorso legacy/shadow dopo aver verificato copertura core e documentazione. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
 ### Mappa test funzionali legacy e test core
@@ -915,6 +936,41 @@ Prima di archiviare `test-legacy-shadow` devono essere vere queste condizioni:
   come diagnostica, non come contratto utente
 - gli studenti sanno che `WATCH_ADDED` e `WATCH_REMOVED` sono log backend
 - la documentazione degli scenari indica quali test legacy sono storici
+
+### Audit di copertura prima della rimozione legacy
+
+L'audit corrente dice che il core copre gia' il comportamento semantico utile
+del prodotto finale:
+
+- create/delete file e directory
+- rename file e directory
+- move file e directory
+- move+rename file e directory come singolo evento `RELOCATED`
+- modify e close-write come `FILE_MODIFIED` e `FILE_READY`
+- creazione ricorsiva veloce con raw sintetici per directory scoperte
+- errore esplicito se si chiede shadow in una build core-only
+
+La suite legacy copre ancora due categorie che non devono bloccare lo switch:
+
+- diagnostica backend: `WATCH_ADDED` e `WATCH_REMOVED`
+- comportamento storico diverso dal target: doppia emissione
+  `MOVED + RENAMED` invece di un solo `RELOCATED`
+
+Questa distinzione autorizza la prossima fase: rimuovere progressivamente lo
+shadow dal percorso runtime, mantenendo il core come unico contratto
+semantico. Se durante la rimozione emerge uno scenario utente non coperto, lo
+step corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
+
+Ordine operativo consigliato per la rimozione:
+
+1. documentare che `ENABLE_LEGACY_SHADOW` e' temporaneo
+2. eliminare il bridge shadow da `inotify_backend_context_t`
+3. eliminare `backend_dispatch_legacy_shadow()` dal poll path
+4. rimuovere init/shutdown legacy da `app.c`
+5. togliere `event_engine=shadow` dalla configurazione ordinaria
+6. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`
+7. archiviare nei documenti la vecchia semantica solo come storia della
+   migrazione
 
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non

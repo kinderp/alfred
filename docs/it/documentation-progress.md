@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunto l'audit
+  pre-rimozione dello shadow legacy. La documentazione chiarisce che lo switch
+  deve essere totale, che lo shadow non e' una feature futura, e che la suite
+  core copre gia' il contratto semantico da preservare.
 - `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
   e `app/src/app.c`: spostato il bridge shadow opzionale dentro
   `inotify_backend_context_t`. `inotify_backend_poll()` non riceve piu' il

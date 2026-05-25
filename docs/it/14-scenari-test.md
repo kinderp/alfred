@@ -130,6 +130,30 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
+## Audit pre-rimozione dello shadow legacy
+
+Lo switch deve essere totale: lo shadow legacy non e' una modalita' da
+conservare nel prodotto finale. Prima di cancellarlo, pero', bisogna usare i
+test esistenti come inventario. L'idea e':
+
+```text
+prima si dimostra che il core copre il comportamento utile,
+poi si rimuove il confronto legacy,
+non il contrario.
+```
+
+La suite legacy/shadow ha ancora valore come fotografia storica durante la
+migrazione, ma non definisce piu' la semantica target. La semantica target e'
+quella della suite core end-to-end.
+
+I criteri usati nell'audit sono tre:
+
+- se uno scenario rappresenta comportamento utente, deve avere un test core
+- se uno scenario controlla solo diagnostica backend, non deve bloccare lo
+  switch semantico
+- se uno scenario documenta una differenza legacy/core, deve essere spiegato
+  come comportamento storico, non come requisito futuro
+
 ## Mappa funzionali legacy e core
 
 Questa mappa serve a decidere cosa fare dei test funzionali storici durante lo
@@ -170,6 +194,41 @@ Mappa corrente:
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
 | shadow senza build legacy | non presente nei funzionali storici | `tests/core/test_shadow_requires_legacy_build.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente quando il binario e' core-only. |
 
+### Risultato dell'audit
+
+La copertura core e' sufficiente per preparare la rimozione dello shadow
+legacy, con una distinzione importante: la suite core copre il contratto
+semantico finale, mentre alcuni test funzionali storici coprono anche log
+diagnostici del backend.
+
+Scenari semantici gia' coperti dal core:
+
+- create/delete file
+- create/delete directory
+- rename file/directory
+- move file/directory
+- move+rename file/directory come singolo evento `RELOCATED`
+- modify e close-write come `FILE_MODIFIED` e `FILE_READY`
+- recursive fast nested directory con recupero tramite raw sintetici
+
+Scenari legacy che non devono sopravvivere come contratto finale:
+
+- doppia emissione legacy `MOVED + RENAMED` quando cambia sia directory sia nome
+- dipendenza da `events.c` per costruire eventi semantici finali
+- uso di `move_cache.c` nel modulo inotify legacy
+
+Scenari diagnostici da ricollocare o tenere solo se servono davvero:
+
+- controllo di `WATCH_ADDED`
+- controllo di `WATCH_REMOVED`
+- smoke test del vecchio comando `make test-legacy-shadow`
+
+Questa distinzione e' essenziale per gli studenti: un test puo' essere utile
+durante una migrazione senza essere parte del contratto futuro del programma.
+Nel nostro caso, `WATCH_ADDED` e `WATCH_REMOVED` descrivono il lavoro interno
+del backend inotify; non sono eventi semantici prodotti dal core per chi usa
+Alfred.
+
 ### Decisione sugli scenari legacy
 
 Questa tabella spiega perche' `make test` ora punta al percorso core. Serve a
@@ -184,18 +243,18 @@ della migrazione.
 | Modify / close-write | Tenere nel core | Fissa `FILE_MODIFIED` e `FILE_READY`. |
 | Recursive fast nested directory | Tenere nel core | Protegge il recupero con raw sintetici. |
 | `WATCH_ADDED` / `WATCH_REMOVED` nei funzionali | Tenere come diagnostica o test mirati | Sono log backend, non eventi semantici utente. |
-| Doppia emissione legacy `MOVED + RENAMED` | Archiviare o mantenere solo shadow | Documenta il comportamento storico, non il target. |
+| Doppia emissione legacy `MOVED + RENAMED` | Archiviare con lo shadow | Documenta il comportamento storico, non il target. |
 | Shadow senza build legacy | Tenere nel core | Protegge il contratto di configurazione runtime. |
 
 Conclusione operativa:
 
 - la suite `make test` / `make test-core` e' oggi la sorgente piu' precisa per
   il comportamento end-to-end futuro del percorso core
-- la suite funzionale storica resta utile come smoke test end-to-end legacy
-  shadow, soprattutto per watch diagnostici e compatibilita' durante la
-  migrazione
+- la suite funzionale storica resta utile solo finche' serve come smoke test
+  end-to-end legacy/shadow durante la migrazione
 - `make test-legacy-shadow` resta esplicito per i controlli storici su
-  `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core
+  `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core, ma non e' destinato
+  a sopravvivere allo switch totale
 - `tests/functional/test_move_rename_file.sh` resta utile come scenario
   legacy/shadow esplicito per mostrare la vecchia doppia emissione
   `FILE_MOVED + FILE_RENAMED`
