@@ -921,13 +921,13 @@ chi rilegge la migrazione.
 | --- | --- | --- |
 | Rimuovere la variante build legacy-shadow | Fatto | `ENABLE_LEGACY_SHADOW`, `test-legacy-shadow`, `events.c` e `move_cache.c` non fanno piu' parte della build Makefile. |
 | Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
-| Archiviare suite functional/shadow | Fatto | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti. |
+| Archiviare suite functional/shadow | Temporaneo | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti; la direzione finale e' eliminarli quando la loro utilita' didattica sara' migrata nella documentazione. |
 | Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` non e' piu' un valore riconosciuto. |
 | Documentazione pesante del codice | Parziale avanzato | Backend inotify e watch manager sono stati rafforzati dopo lo switch; restano eventuali passate mirate su app/core se un refactor li tocca. |
 | Pulizia finale delle responsabilita' | Prossimo tecnico | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core end-to-end | Fatto per lo stato corrente | La suite core copre il contratto utente post-switch; nuovi test vanno aggiunti solo quando nasce un nuovo scenario o una regressione. |
 | Allineamento scenari/eventi/documentazione | Parziale avanzato | Le mappe principali sono state riallineate al context backend; resta una revisione finale completa degli scenari. |
-| Decisione finale sui file storici di test | Basso/medio | Oggi restano come archivio; in futuro si puo' decidere se tenerli, spostarli o rimuoverli. |
+| Decisione finale sui file storici di test | Decisa, non eseguita | Per ora restano come archivio didattico, ma il target finale e' eliminarli completamente dopo aver salvato le parti utili nella documentazione. |
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
@@ -1044,6 +1044,19 @@ vere queste condizioni:
 - la documentazione degli scenari indica quali test legacy sono storici
 - gli scenari diagnostici utili sono migrati in una suite backend separata,
   senza dipendere da `events.c` o dallo shadow legacy
+
+Decisione aggiornata: "archiviare" qui e' una fase temporanea. Il target finale
+non e' mantenere per sempre `tests/functional/` e `tests/shadow/`, ma eliminarli
+completamente quando:
+
+- le parti didatticamente utili sono state riportate negli `.md`
+- eventuali scenari ancora utili sono stati portati in `tests/core/` o
+  `tests/backend/`
+- studenti e contributori non hanno piu' bisogno di leggere direttamente gli
+  script legacy per capire la migrazione
+
+Fino a quel momento le directory restano nel repository solo come archivio
+storico esplicitamente non eseguibile come verifica ordinaria.
 
 ### Audit di copertura prima della rimozione legacy
 

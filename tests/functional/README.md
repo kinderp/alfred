@@ -7,6 +7,10 @@ current verification workflow because `tests/lib/test_lib.sh` starts Alfred
 with `ALFRED_EVENT_ENGINE=shadow`, and shadow mode has been removed from the
 runtime.
 
+Long-term direction: delete this directory completely once its historical value
+has been migrated into the Italian documentation or into supported tests. Do
+not add new tests here.
+
 Use the supported suites instead:
 
 ```bash

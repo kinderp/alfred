@@ -7,6 +7,10 @@ Shadow mode has been removed from Alfred. The default comparison mode of
 `compare_shadow_output.py` now exits with an explanatory error instead of
 starting a fake legacy/core comparison.
 
+Long-term direction: delete this directory completely once the useful migration
+history has been preserved in documentation. Do not add new shadow scenarios or
+use this tool to justify reintroducing a live legacy comparison path.
+
 For the current product checks, use:
 
 ```bash

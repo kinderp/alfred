@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/functional/README.md`, `tests/shadow/README.md` e
+  `docs/it/15-todo-switch-core.md`: chiarita la decisione sui file storici di
+  test. Le directory restano temporaneamente come archivio didattico, ma la
+  direzione finale e' eliminarle completamente dopo aver migrato negli `.md` le
+  parti ancora utili.
 - `docs/it/14-scenari-test.md` e `docs/it/15-todo-switch-core.md`: completata
   la revisione finale scenari/test per lo stato post-switch. La suite core
   copre il contratto utente corrente, la suite backend copre la diagnostica
