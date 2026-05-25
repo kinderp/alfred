@@ -570,13 +570,12 @@ La sequenza standard e':
 git diff --check
 make
 make test
-make test-legacy-shadow
-make
+make test-backend-diagnostics
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
-problemi piu' semplici, poi il comportamento core, poi la compatibilita'
-legacy/shadow, e infine lasciare il workspace nella build normale.
+problemi piu' semplici, poi il comportamento core e infine la diagnostica
+backend che non fa parte dello stream semantico.
 
 ### 1. `git diff --check`
 
@@ -668,60 +667,16 @@ Questo passo risponde alla domanda:
 il backend inotify mantiene correttamente il proprio stato interno?
 ```
 
-### 5. `make test-legacy-shadow`
+### 5. Nessun `test-legacy-shadow`
 
-Il comando:
+Il target `make test-legacy-shadow` e la variante
+`ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
+storici in `tests/functional/` restano nel repository come memoria della fase
+legacy/shadow, ma non sono piu' la verifica ordinaria prima del commit.
 
-```bash
-make test-legacy-shadow
-```
-
-esegue i test funzionali storici in:
-
-```text
-tests/functional/
-```
-
-Prima di lanciarli, il Makefile ricompila Alfred con:
-
-```text
-ENABLE_LEGACY_SHADOW=1
-```
-
-Questa variante include ancora il dispatcher legacy `events.c` e la
-`move_cache`, ma il poll path del backend non chiama piu'
-`legacy_events_dispatch()`. Il target e' quindi storico: non va piu' usato come
-verifica ordinaria dello switch al core.
-
-Questo passo rispondeva alla domanda:
-
-```text
-la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
-```
-
-Da questo punto della migrazione la risposta non e' piu' necessaria per
-procedere: i controlli diagnostici utili sono stati migrati in `tests/backend/`
-e il contratto semantico ufficiale vive in `tests/core/`.
-
-### 6. `make` finale
-
-Dopo `make test-legacy-shadow`, il binario nel workspace e' stato ricompilato
-nella variante:
-
-```text
-ENABLE_LEGACY_SHADOW=1
-```
-
-Per questo si esegue di nuovo:
-
-```bash
-make
-```
-
-Il `make` finale riporta il binario alla build normale core-only. Questo evita
-confusione nella prova successiva: chi lancia `./alfred` dopo i test deve usare
-il runtime predefinito, non una variante legacy-shadow rimasta dalla suite
-funzionale.
+Da questo punto della migrazione i controlli diagnostici utili sono stati
+migrati in `tests/backend/` e il contratto semantico ufficiale vive in
+`tests/core/`.
 
 ### Cosa fare se un comando fallisce
 
@@ -738,9 +693,6 @@ Esempi:
 - se fallisce `make test`, analizza il comportamento semantico del core
 - se fallisce `make test-backend-diagnostics`, controlla log diagnostici,
   watch descriptor e manutenzione della tabella dei watch
-- `make test-legacy-shadow` e' storico dopo lo spegnimento del dispatch legacy:
-  non usarlo come blocco per i nuovi refactor del core
-- se fallisce il `make` finale, il workspace non e' tornato alla build normale
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
 in quel caso almeno `git diff --check` resta obbligatorio. Se pero' la
@@ -756,15 +708,8 @@ Il progetto contiene test in:
 tests/functional/
 ```
 
-Per eseguirli:
-
-```bash
-make test-legacy-shadow
-```
-
 `make test` non esegue piu' questi test: ora punta alla suite core ufficiale.
-
-Oppure direttamente:
+Per studiarli o rieseguirli manualmente durante un audit storico:
 
 ```bash
 cd tests/functional
@@ -775,10 +720,10 @@ I test funzionali verificano il comportamento del programma dall'esterno.
 Per esempio possono creare, spostare o cancellare file e poi controllare che il
 programma abbia registrato gli eventi corretti.
 
-Nota importante: i test funzionali storici richiedono ancora il confronto
-legacy/shadow. Per questo bisogna usare `make test-legacy-shadow`, che costruisce
-il binario con `ENABLE_LEGACY_SHADOW=1` prima di eseguire gli script. La build
-normale ottenuta con `make` resta invece core-only.
+Nota importante: i test funzionali storici sono nati quando lo stream legacy era
+ancora il riferimento. Alcuni script possono quindi cercare eventi o diagnostica
+che non rappresentano piu' il contratto semantico ufficiale. Il percorso
+supportato per il prodotto finale e' la suite core.
 
 La descrizione dettagliata degli scenari, con operazioni filesystem ed eventi
 attesi nei log, e' raccolta in
@@ -806,10 +751,8 @@ Questi test avviano Alfred con:
 ALFRED_EVENT_ENGINE=core
 ```
 
-Il target `make test-core` ricostruisce prima il binario core-only. Questo e'
-importante dopo aver eseguito `make test-legacy-shadow`, perche' i test
-funzionali storici costruiscono invece la variante con
-`ENABLE_LEGACY_SHADOW=1`.
+Il target `make test-core` ricostruisce prima il binario core-only. Oggi questa
+e' l'unica variante di build supportata dal Makefile.
 
 e verificano lo stream semantico ufficiale plain prodotto dal core. Non cercano
 righe `core seq=...`, perche' quelle appartengono allo shadow mode.
@@ -1005,16 +948,15 @@ ALFRED_EVENT_ENGINE=core ./alfred /tmp/cartella-da-osservare
 ```
 
 Il confronto shadow legacy/core non e' piu' riattivabile a runtime. Il vecchio
-comando:
+flusso:
 
 ```bash
-make ENABLE_LEGACY_SHADOW=1
 ALFRED_EVENT_ENGINE=shadow ./alfred /tmp/cartella-da-osservare
 ```
 
-fallisce con un errore esplicito anche se la variante legacy-shadow compila
-ancora. Questo evita un confronto finto: il dispatch live legacy/core e' stato
-spento, quindi il percorso supportato e' `event_engine=core`.
+fallisce con un errore esplicito. Questo evita un confronto finto: il dispatch
+live legacy/core e' stato spento, quindi il percorso supportato e'
+`event_engine=core`.
 
 ## Strumenti futuri per la documentazione dinamica
 

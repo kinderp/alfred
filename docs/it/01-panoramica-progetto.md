@@ -74,9 +74,8 @@ Il progetto e' in fase di integrazione. Attualmente:
 - `modules/inotify/` contiene il backend inotify, cioe' lettura eventi,
   gestione watch e conversione verso eventi raw Alfred
 - `core/` e' lo stream semantico ufficiale di default
-- `events.c` e `move_cache.c` restano nel modulo inotify solo come supporto
-  legacy per lo shadow mode e vengono compilati solo con
-  `ENABLE_LEGACY_SHADOW=1`
+- `events.c` e `move_cache.c` restano nel modulo inotify solo come codice
+  legacy da rimuovere; non vengono piu' compilati dal Makefile
 
 Il flusso runtime normale e':
 

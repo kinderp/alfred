@@ -150,15 +150,9 @@ make MODULES=fanotify
 make MODULES="inotify replay"
 ```
 
-### ENABLE_LEGACY_SHADOW
+### Variante legacy-shadow rimossa
 
-```make
-ENABLE_LEGACY_SHADOW ?= 0
-```
-
-Controlla se il dispatcher legacy di shadow mode viene compilato.
-
-Default:
+La build non espone piu' `ENABLE_LEGACY_SHADOW`. Il comando:
 
 ```bash
 make
@@ -166,18 +160,6 @@ make
 
 compila il binario normale core-only. In questa build `events.c` e
 `move_cache.c` non vengono inclusi.
-
-Per costruire un binario che supporta il confronto legacy/core:
-
-```bash
-make ENABLE_LEGACY_SHADOW=1
-```
-
-In questa variante il Makefile:
-
-- aggiunge `-DALFRED_ENABLE_LEGACY_SHADOW`
-- compila `modules/inotify/src/events.c`
-- compila `modules/inotify/src/move_cache.c`
 
 Se Alfred viene avviato con:
 
@@ -189,18 +171,18 @@ Alfred deve fallire in modo esplicito, perche' lo shadow mode e' stato rimosso
 dal runtime. Non sarebbe corretto fare fallback silenzioso al core: chi chiede
 shadow crederebbe di usare un confronto che non esiste piu'.
 
-Il Makefile usa directory oggetto separate per le varianti di build:
+Il Makefile usa una directory oggetto dedicata al runtime core:
 
 ```text
 build/obj/core/
-build/obj/legacy-shadow/
 ```
 
-Questo evita di riusare per errore `.o` compilati con flag diversi.
+La vecchia directory `build/obj/legacy-shadow/` non serve piu', perche' non
+esistono piu' due varianti compilabili del runtime.
 
 Le macro `-D...` sono raccolte nella variabile `DEFINES`, usata sia dalla build
-di sviluppo sia dalla build `release`. Questo evita che una variante release
-perda per errore macro importanti come `ALFRED_ENABLE_LEGACY_SHADOW`.
+di sviluppo sia dalla build `release`. Oggi contiene macro di modulo, per
+esempio `ALFRED_ENABLE_INOTIFY`.
 
 ### Directory
 
@@ -712,8 +694,8 @@ MODULE_SRCS += \
 ```
 
 Nota: `events.c` e `move_cache.c` non vanno aggiunti al percorso normale. Sono
-compilati solo dentro il blocco `ENABLE_LEGACY_SHADOW=1`, perche' servono al
-confronto legacy e non al runtime core-only.
+codice legacy non piu' raggiungibile dal runtime e verranno rimossi in un passo
+successivo.
 
 ### Passo 5: controllare gli include path
 
@@ -790,6 +772,246 @@ Quando aggiungi una coppia `.h/.c`, controlla:
 - `make` compila il nuovo file?
 - hai aggiornato `docs/commenting-progress.md`?
 - serve aggiornare anche `docs/it/`?
+
+## Quando bisogna aggiornare il Makefile
+
+Un errore frequente nei progetti C e' pensare che il Makefile si aggiorni da
+solo. Non e' cosi': il Makefile descrive esplicitamente quali file compilare,
+quali directory usare per gli header, quali test eseguire e quali strumenti
+rendere disponibili con comandi come `make test` o `make format`.
+
+La regola pratica e':
+
+```text
+se la modifica cambia come il progetto si compila, si testa o si automatizza,
+allora bisogna controllare il Makefile.
+```
+
+### Caso 1: aggiungi un nuovo file `.c`
+
+Questo e' il caso piu' comune. Se crei solo un header `.h`, spesso non serve
+modificare il Makefile, perche' gli header vengono inclusi da altri `.c`. Se
+crei un nuovo file `.c`, invece, il compilatore non lo vede automaticamente.
+
+Esempio:
+
+```text
+core/src/alfred_new_rule.c
+```
+
+Devi aggiungerlo alla lista giusta:
+
+```make
+CORE_SRCS := \
+    $(CORE_DIR)/src/alfred_correlator.c \
+    $(CORE_DIR)/src/alfred_tables.c \
+    $(CORE_DIR)/src/alfred_utils.c \
+    $(CORE_DIR)/src/alfred_new_rule.c
+```
+
+Se dimentichi questo passo, il file esiste nel repository ma non entra nel
+binario finale. Il risultato puo' essere:
+
+- funzioni non trovate in fase di link, se altri file le chiamano
+- codice mai eseguito, se nessuno lo collega direttamente
+- test che non coprono davvero la modifica che pensavi di aver compilato
+
+### Caso 2: sposti un file `.c`
+
+Se sposti un file da una directory a un'altra, il vecchio percorso nel Makefile
+non e' piu' valido.
+
+Esempio:
+
+```text
+modules/inotify/src/foo.c
+```
+
+spostato in:
+
+```text
+core/src/foo.c
+```
+
+Non basta muovere il file con `git mv`: bisogna togliere il vecchio percorso da
+`MODULE_SRCS` e aggiungere il nuovo percorso a `CORE_SRCS`. Questo e' anche un
+segnale architetturale: stai dicendo che quella logica non appartiene piu' al
+backend inotify, ma al core.
+
+### Caso 3: rimuovi un file `.c`
+
+Se elimini un file sorgente, devi rimuoverlo anche dalla lista sorgenti.
+
+Se non lo fai, `make` provera' ancora a compilare un file che non esiste e
+fallira' con un errore simile a:
+
+```text
+No rule to make target 'modules/inotify/src/old_file.c'
+```
+
+Nel nostro percorso di switch al core, questo sara' importante quando
+rimuoveremo fisicamente `events.c` e `move_cache.c`: non dovranno comparire in
+nessuna lista sorgenti del Makefile.
+
+### Caso 4: aggiungi una nuova directory di header
+
+Se metti un header in una directory gia' nota, per esempio:
+
+```text
+core/include/
+modules/inotify/include/
+app/include/
+```
+
+di solito non devi cambiare `INCLUDES`.
+
+Se invece crei una nuova directory pubblica o privata, per esempio:
+
+```text
+modules/fanotify/include/
+```
+
+devi aggiungere il relativo `-I`:
+
+```make
+INCLUDES += -I$(MODULE_DIR)/fanotify/include
+```
+
+Senza questo percorso, una riga come:
+
+```c
+#include "fanotify_backend.h"
+```
+
+potrebbe fallire perche' il compilatore non sa dove cercare il file.
+
+### Caso 5: aggiungi un modulo
+
+Il progetto usa la variabile `MODULES` per decidere quali backend compilare.
+Oggi il modulo supportato e':
+
+```make
+MODULES ?= inotify
+```
+
+Se un giorno aggiungiamo `fanotify`, non basta creare la cartella
+`modules/fanotify/`. Bisogna aggiungere un blocco simile a quello di inotify:
+
+```make
+ifneq ($(filter fanotify,$(MODULES)),)
+INCLUDES += -I$(MODULE_DIR)/fanotify/include
+DEFINES += -DALFRED_ENABLE_FANOTIFY
+MODULE_SRCS += \
+    $(MODULE_DIR)/fanotify/src/fanotify_backend.c
+endif
+```
+
+Questo blocco dice tre cose:
+
+- dove cercare gli header del modulo
+- quale macro di compilazione definire
+- quali file `.c` del modulo compilare
+
+### Caso 6: aggiungi un nuovo test ufficiale
+
+Se aggiungi un nuovo script dentro una suite gia' esistente, per esempio:
+
+```text
+tests/core/test_new_scenario.sh
+```
+
+potrebbe bastare aggiornare:
+
+```text
+tests/core/run_all.sh
+```
+
+In questo caso il Makefile non cambia, perche' `make test` entra gia' in
+`tests/core/` ed esegue `run_all.sh`.
+
+Se invece aggiungi una nuova categoria di test, per esempio:
+
+```text
+tests/performance/
+```
+
+allora ha senso aggiungere un nuovo target:
+
+```make
+test-performance:
+    $(MAKE) all
+    cd tests/performance && bash run_all.sh
+```
+
+e aggiungerlo anche a `.PHONY`.
+
+### Caso 7: aggiungi un nuovo comando di automazione
+
+Se vuoi rendere riproducibile un'operazione manuale, puoi aggiungere un target.
+Esempi possibili:
+
+```make
+docs-graphs:
+    ./tools/docs/render_graphs.sh
+```
+
+oppure:
+
+```make
+check:
+    $(MAKE) test
+    $(MAKE) test-backend-diagnostics
+```
+
+Un target di questo tipo va documentato e aggiunto a `.PHONY`, perche' e' un
+comando da eseguire, non un file da produrre.
+
+### Caso 8: cambi flag di compilazione o linking
+
+Se una modifica richiede un flag del compilatore, devi capire in quale variabile
+metterlo:
+
+- `CFLAGS`: flag usati quando si compilano i `.c`
+- `LDFLAGS`: flag usati quando si collega il binario finale
+- `DEFINES`: macro `-D...`
+- `INCLUDES`: directory `-I...`
+
+Esempio: se aggiungi una macro usata dal preprocessore:
+
+```make
+DEFINES += -DALFRED_ENABLE_FEATURE_X
+```
+
+Se invece devi collegare una libreria esterna, il flag di solito appartiene a
+`LDFLAGS`.
+
+### Caso 9: cambi la build supportata
+
+Quando una variante di build nasce o viene rimossa, il Makefile deve essere
+aggiornato insieme alla documentazione. In questo progetto e' successo con la
+vecchia variante `ENABLE_LEGACY_SHADOW`: durante la migrazione serviva per
+confrontare legacy e core, ma ora e' stata rimossa perche' lo switch deve essere
+totale.
+
+Questo tipo di modifica richiede sempre tre controlli:
+
+- il Makefile non deve piu' accettare comandi obsoleti come se fossero validi
+- la documentazione non deve suggerire al contributore di usarli
+- i test ufficiali devono riflettere la build realmente supportata
+
+### Checklist: devo toccare il Makefile?
+
+Prima di chiudere una modifica, chiediti:
+
+- ho aggiunto, spostato o rimosso un file `.c`?
+- ho creato una nuova directory di header?
+- ho aggiunto un modulo o una macro di modulo?
+- ho aggiunto una nuova categoria di test?
+- ho creato un comando che gli altri dovranno eseguire con `make ...`?
+- ho cambiato flag del compilatore, del linker o macro `-D...`?
+- ho rimosso una variante di build o un vecchio target?
+
+Se la risposta e' si', il Makefile va almeno letto e quasi sempre aggiornato.
 
 ## Regola per gli object file
 
@@ -934,8 +1156,8 @@ core-only prima di lanciare:
 tests/core/
 ```
 
-In questo modo non dipende da un eventuale binario legacy-shadow prodotto da un
-test precedente.
+In questo modo il test ricostruisce sempre il binario ufficiale prima di
+partire.
 
 Nonostante il nome, `test-core` non salta il backend: gli script creano file e
 directory reali, Alfred riceve eventi inotify reali e il core produce
@@ -958,30 +1180,6 @@ diagnostico del backend inotify, per esempio `WATCH_ADDED` e `WATCH_REMOVED`.
 Sono righe utili per capire se la tabella dei watch viene aggiornata
 correttamente, ma non devono essere confuse con eventi semantici del core.
 
-### test-legacy-shadow
-
-```bash
-make test-legacy-shadow
-```
-
-Esegue gli script in:
-
-```text
-tests/functional/
-```
-
-Questi test funzionali storici appartengono al vecchio confronto legacy/shadow.
-Il target costruisce prima il binario con:
-
-```bash
-ENABLE_LEGACY_SHADOW=1
-```
-
-Dopo lo spegnimento del dispatch legacy nel poll path, questo target non e' piu'
-una verifica ordinaria dello switch. Resta temporaneamente nel Makefile solo
-finche' `events.c`, `move_cache.c` e la configurazione `shadow` non saranno
-rimossi o archiviati.
-
 ### test
 
 ```bash
@@ -989,12 +1187,40 @@ make test
 ```
 
 `make test` e' ora l'alias ufficiale di `make test-core`. Il nome storico del
-target punta quindi al contratto end-to-end del percorso core. Chi deve eseguire
-i controlli storici legacy/shadow deve usare esplicitamente:
+target punta quindi al contratto end-to-end del percorso core.
 
-```bash
-make test-legacy-shadow
+### .PHONY
+
+Alla fine del Makefile c'e' una sezione:
+
+```make
+.PHONY: \
+    all \
+    clean \
+    test \
+    ...
 ```
+
+`.PHONY` dice a `make` che quei nomi sono comandi, non file da produrre. Senza
+questa dichiarazione, se nella cartella esistesse per errore un file chiamato
+`clean`, `make clean` potrebbe pensare che il target sia gia' aggiornato e non
+eseguire la ricetta. Con `.PHONY`, invece, `make clean` resta sempre un comando.
+
+Nel progetto sono phony target come:
+
+- `all`
+- `clean`
+- `fclean`
+- `test`
+- `test-core`
+- `test-backend-diagnostics`
+- `format`
+- `scan`
+- `tidy`
+
+Anche `FORCE` e' phony: serve a forzare il relink del binario quando lanciamo
+`make`, cosi' il target `alfred` esegue sempre la fase di link dopo aver
+controllato gli object file.
 
 ### valgrind
 
@@ -1048,8 +1274,6 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
-| Eseguire test funzionali legacy/shadow | `make test-legacy-shadow` |
-| Build con confronto legacy/core | `make ENABLE_LEGACY_SHADOW=1` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
 | Formattare codice | `make format` |

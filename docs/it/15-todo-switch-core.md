@@ -69,11 +69,10 @@ Al momento:
   `alfred_raw_event_t` e li consegna all'app tramite callback
 - l'aggiornamento dei watch per `IN_CREATE | IN_ISDIR` e' stato spostato dal
   loop applicativo al backend inotify
-- `events.c` contiene ancora semantica legacy, ma non viene compilato nella
-  build core-only normale
-- `move_cache.c` resta compilabile nella variante `ENABLE_LEGACY_SHADOW=1`, ma
-  non partecipa piu' al runtime perche' app.c non inizializza piu' il lifecycle
-  legacy
+- `events.c` contiene ancora semantica legacy, ma non viene piu' compilato dal
+  Makefile
+- `move_cache.c` resta nel repository come file legacy, ma non esiste piu' una
+  variante Makefile che lo compili
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -109,10 +108,10 @@ finire dopo lo switch completo al core.
 
 ### `modules/inotify/src/events.c`
 
-Questo file e' ancora il dispatcher semantico legacy. Viene compilato solo con
-`ENABLE_LEGACY_SHADOW=1` e viene chiamato solo in `event_engine=shadow`; nel
-default `event_engine=core` e nella build core-only normale non partecipa al
-runtime.
+Questo file e' ancora il dispatcher semantico legacy. Non viene piu' compilato
+dal Makefile e non partecipa al runtime corrente. Resta temporaneamente nel
+repository solo per rendere leggibile la storia della migrazione e per una
+rimozione fisica controllata.
 
 Responsabilita' ancora presenti:
 
@@ -378,9 +377,9 @@ Stato implementato del quinto micro-refactor:
   dopo il controllo degli argomenti
 - la chiusura del file descriptor usa `ctx.runtime->fd`
 - la distruzione della watcher table usa `ctx.runtime->watchers`
-- `legacy_events_shutdown()` resta esplicito e condizionato da
-  `ALFRED_ENABLE_LEGACY_SHADOW`, perche' fa ancora parte del ponte temporaneo
-  verso il dispatcher legacy
+- in quel momento `legacy_events_shutdown()` restava esplicito e condizionato
+  da `ALFRED_ENABLE_LEGACY_SHADOW`, perche' faceva ancora parte del ponte
+  temporaneo verso il dispatcher legacy
 
 In quel momento init e shutdown ricevevano ancora `app_t`, ma internamente
 lavoravano gia' sullo stato runtime del backend attraverso il context. Dopo il
@@ -538,8 +537,9 @@ Stato implementato del quattordicesimo micro-refactor:
 
 - `legacy_shadow_bridge_t` non contiene piu' `struct app *`
 - il bridge contiene `legacy_shadow_dispatch_fn dispatch` e `void *userdata`
-- `app.c` costruisce il bridge con `app_legacy_shadow_dispatch()` e `app` come
-  userdata solo quando la build abilita `ALFRED_ENABLE_LEGACY_SHADOW`
+- in quel momento `app.c` costruiva il bridge con
+  `app_legacy_shadow_dispatch()` e `app` come userdata solo quando la build
+  abilitava `ALFRED_ENABLE_LEGACY_SHADOW`
 - `app_legacy_shadow_dispatch()` e' l'unico punto nuovo in cui il puntatore
   opaco viene ricondotto ad `app_t` e passato a `legacy_events_dispatch()`
 - `inotify_backend.c` non sa piu' che cosa ci sia dentro `userdata`: controlla
@@ -562,8 +562,9 @@ Stato implementato del quindicesimo micro-refactor:
   descriptor inotify
 - `inotify_backend_shutdown()` chiude solo il file descriptor e distrugge la
   watcher table
-- la build senza `ALFRED_ENABLE_LEGACY_SHADOW` rifiuta `event_engine=shadow` in
-  `app_init_legacy_shadow()`, prima che il backend parta
+- in quel momento la build senza `ALFRED_ENABLE_LEGACY_SHADOW` rifiutava
+  `event_engine=shadow` in `app_init_legacy_shadow()`, prima che il backend
+  partisse
 
 Questa scelta separa due responsabilita' che prima erano mescolate:
 
@@ -619,8 +620,8 @@ Stato implementato del diciottesimo micro-refactor:
 - `inotify_backend_poll()` consegna raw event al core e mantiene diagnostica
   watch, ma non invoca piu' `legacy_events_dispatch()`
 
-Da questo punto `make test-legacy-shadow` e' storico e non va piu' usato come
-verifica ordinaria. I controlli utili sui watch sono in
+Da questo punto il vecchio `make test-legacy-shadow` e' storico e non va piu'
+usato come verifica ordinaria. I controlli utili sui watch sono in
 `make test-backend-diagnostics`; il contratto semantico ufficiale resta
 `make test` / `make test-core`.
 
@@ -842,10 +843,9 @@ Quando il core gestisce ufficialmente move e rename:
 
 La correlazione move deve restare nel core.
 
-Stato attuale: `move_cache` e' gia' esclusa da `event_engine=core` ed e'
-posseduta da `events.c`, non da `app_t`. Inoltre non viene compilata nella
-build core-only normale: resta solo nella variante
-`ENABLE_LEGACY_SHADOW=1`, dove `events.c` produce ancora il confronto legacy.
+Stato attuale: `move_cache` e' esclusa dal runtime corrente ed e' posseduta da
+`events.c`, non da `app_t`. Inoltre non viene piu' compilata dal Makefile:
+resta solo come file legacy da rimuovere fisicamente.
 
 ### 5. Ridurre o rimuovere `events.c`
 
@@ -890,7 +890,7 @@ verifica e documentazione piu' estesa.
 
 | Passo | Effort | Perche' serve |
 | --- | --- | --- |
-| Rendere legacy shadow opzionale a livello build | Fatto | `events.c` e `move_cache.c` restano disponibili con `ENABLE_LEGACY_SHADOW=1`, ma non fanno parte del binario core normale. |
+| Rimuovere la variante build legacy-shadow | Fatto | `ENABLE_LEGACY_SHADOW`, `test-legacy-shadow`, `events.c` e `move_cache.c` non fanno piu' parte della build Makefile. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
 | Revisione completa della suite core end-to-end | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
@@ -927,12 +927,13 @@ Decisione attuale:
 ```text
 make test               -> alias ufficiale del percorso core
 make test-core          -> nome esplicito della stessa suite core
-make test-legacy-shadow -> target storico legacy/shadow, non verifica ordinaria
+test-legacy-shadow      -> target storico rimosso dal Makefile
 ```
 
 Il nome esplicito `test-legacy-shadow` riduceva l'ambiguita' per studenti e
-contributori. Dopo lo spegnimento del dispatch legacy nel poll path, la suite
-storica resta solo transitoria e non deve bloccare i refactor. Non serve creare ora una suite
+contributori durante la migrazione. Ora e' stato rimosso dal Makefile: la suite
+storica resta solo come codice da leggere o archiviare e non deve bloccare i
+refactor. Non serve creare ora una suite
 `test-functional-core`: `make test` e `make test-core` avviano gia' Alfred
 reale, passano dal backend inotify reale e controllano l'`events.log` core.
 
@@ -941,9 +942,10 @@ Roadmap completata per il cambio di `make test`:
 1. fase precedente: `make test` puntava a `test-legacy-shadow`
 2. fase switch: `make test` punta a `test-core`
 3. fase attuale: la diagnostica utile e' stata spostata in `tests/backend/`
-   e `test-legacy-shadow` puo' essere archiviato insieme al vecchio dispatcher
+   e `test-legacy-shadow` e' stato rimosso dal Makefile
 
-Prima di archiviare `test-legacy-shadow` devono essere vere queste condizioni:
+Prima di archiviare fisicamente gli script funzionali storici devono essere
+vere queste condizioni:
 
 - `make test-core` copre tutti gli scenari semantici ufficiali
 - gli scenari legacy che controllano solo diagnostica backend sono classificati
@@ -981,7 +983,7 @@ step corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
 
 Ordine operativo consigliato per la rimozione:
 
-1. documentare che `ENABLE_LEGACY_SHADOW` e' temporaneo
+1. documentare che `ENABLE_LEGACY_SHADOW` e' stato rimosso dal Makefile
 2. creare una suite `tests/backend/` per la diagnostica utile dei watch: fatto
    per `WATCH_ADDED`, `WATCH_REMOVED` e watch ricorsivi lenti
 3. eliminare il bridge shadow da `inotify_backend_context_t`: fatto
@@ -989,7 +991,7 @@ Ordine operativo consigliato per la rimozione:
 5. rimuovere init/shutdown legacy da `app.c`: fatto
 6. togliere `event_engine=shadow` dalla configurazione ordinaria: fatto a
    livello runtime, resta solo il valore riconosciuto per errore esplicito
-7. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`
+7. rimuovere fisicamente `events.c` e `move_cache.c`
 8. archiviare nei documenti la vecchia semantica solo come storia della
    migrazione
 
@@ -1084,15 +1086,9 @@ Questa mappa va progettata dopo la fase A, perche' i commenti strutturati nel
 codice renderanno piu' facile generare o collegare un indice affidabile delle
 funzioni.
 
-## Stato build legacy shadow
+## Stato build core-only
 
-Il legacy shadow e' ora una variante di build esplicita:
-
-```bash
-make ENABLE_LEGACY_SHADOW=1
-```
-
-La build normale:
+Il legacy shadow non e' piu' una variante di build. La build normale:
 
 ```bash
 make
@@ -1129,9 +1125,8 @@ punta alla stessa suite core. Il target:
 make test-legacy-shadow
 ```
 
-`make test-legacy-shadow` ricostruisce il binario con
-`ENABLE_LEGACY_SHADOW=1` ed esegue i test funzionali storici, che usano ancora
-il confronto shadow/legacy.
+non esiste piu' nel Makefile. I test funzionali storici restano nel repository
+solo come materiale di audit finche' non vengono archiviati o rimossi.
 
 ## Regola di avanzamento
 

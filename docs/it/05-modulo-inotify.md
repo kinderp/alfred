@@ -53,9 +53,9 @@ modules/inotify/src/move_cache.c
 ```
 
 che fanno logica semantica. Questa e' una responsabilita' temporanea.
-Nella build normale core-only questi file non vengono compilati: servono solo
-quando si costruisce Alfred con `ENABLE_LEGACY_SHADOW=1` per confrontare core e
-legacy.
+Questi file non vengono piu' compilati dal Makefile: restano nel repository
+solo per rendere leggibile la storia della migrazione e per una rimozione
+fisica controllata.
 
 Il nuovo adapter:
 
@@ -335,10 +335,9 @@ La prima passata pesante sui commenti ha documentato il contratto delle funzioni
 principali del backend inotify.
 
 `inotify_backend_init()` inizializza la tabella dei watch e apre il file
-descriptor inotify non bloccante. Se il binario e' stato compilato con
-`ENABLE_LEGACY_SHADOW=1` e la configurazione chiede `event_engine=shadow`,
-inizializza anche il dispatcher legacy. Questo e' importante: il legacy non e'
-piu' il percorso ordinario, ma uno strumento di confronto.
+descriptor inotify non bloccante. Non inizializza piu' un dispatcher legacy:
+il backend corrente produce raw event Alfred e li consegna all'app, mentre la
+semantica finale e' responsabilita' del core.
 
 `inotify_backend_poll()` e' il punto centrale del flusso runtime. L'ordine e':
 

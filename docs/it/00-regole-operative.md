@@ -238,9 +238,8 @@ Dopo modifiche al codice eseguire normalmente la procedura standard pre-commit:
 ```bash
 git diff --check
 make
-make test-core
 make test
-make
+make test-backend-diagnostics
 ```
 
 L'ordine e' intenzionale:
@@ -249,10 +248,9 @@ L'ordine e' intenzionale:
   difetti banali nel diff prima di perdere tempo con build e test.
 - Il primo `make` verifica la build normale core-only, cioe' il percorso
   predefinito del progetto.
-- `make test-core` verifica il percorso core end-to-end ufficiale.
-- `make test` verifica ancora la suite funzionale storica legacy/shadow.
-- Il `make` finale riporta il binario alla build core-only normale, perche'
-  `make test` ricompila con `ENABLE_LEGACY_SHADOW=1`.
+- `make test` verifica il percorso core end-to-end ufficiale.
+- `make test-backend-diagnostics` verifica i log diagnostici del backend
+  inotify, per esempio `WATCH_ADDED` e `WATCH_REMOVED`.
 
 In queste regole, "core end-to-end ufficiale" significa che Alfred viene
 eseguito davvero, legge eventi dal backend inotify reale, li converte in
@@ -260,16 +258,17 @@ eseguito davvero, legge eventi dal backend inotify reale, li converte in
 prodotto dal core. Non e' un test unitario isolato: e' il percorso runtime
 ufficiale `inotify -> raw -> core -> events.log`.
 
-`ENABLE_LEGACY_SHADOW=1` e' invece una variante di build temporanea: compila
-anche il dispatcher legacy (`events.c`) e la `move_cache`, cosi' il progetto
-puo' confrontare il vecchio comportamento legacy con il core. La build normale
-ottenuta con `make` resta core-only e non include quei file.
+`ENABLE_LEGACY_SHADOW=1` era una variante di build temporanea usata durante la
+migrazione: compilava anche il dispatcher legacy (`events.c`) e la
+`move_cache`, cosi' il progetto poteva confrontare il vecchio comportamento
+legacy con il core. La variante e' stata rimossa dal Makefile: la build
+ottenuta con `make` e' l'unica build supportata e non include quei file.
 
 Differenza minima da ricordare:
 
 - core: stream semantico ufficiale e default del progetto
-- shadow: modalita' diagnostica di confronto legacy/core, utile finche' lo
-  switch non e' completato
+- shadow: modalita' diagnostica storica di confronto legacy/core, non piu'
+  supportata dal runtime corrente
 
 Per i dettagli, leggere:
 
@@ -300,8 +299,9 @@ python3 tests/shadow/compare_shadow_output.py recursive_create_nested_dir
 ## Stato semantico corrente
 
 - Il runtime di default e' `event_engine=core`.
-- `ALFRED_EVENT_ENGINE=shadow` serve ancora per confronto legacy/core.
-- I test funzionali storici forzano shadow esplicito.
+- `ALFRED_EVENT_ENGINE=shadow` viene rifiutato con un errore esplicito.
+- I test funzionali storici sono memoria della fase legacy/shadow, non verifica
+  ordinaria del runtime corrente.
 - I test core verificano lo stream semantico plain del core.
 - `events.c` e' legacy shadow, non sorgente ufficiale degli eventi.
 - `move_cache` e' confinata al dispatcher legacy.

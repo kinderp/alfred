@@ -9,7 +9,6 @@
 
 TARGET      := alfred
 MODULES     ?= inotify
-ENABLE_LEGACY_SHADOW ?= 0
 
 # -----------------------------------------------------------------------------
 # DIRECTORIES
@@ -20,12 +19,7 @@ CORE_DIR    := core
 MODULE_DIR  := modules
 BUILD_DIR   := build
 
-BUILD_VARIANT := core
-ifeq ($(ENABLE_LEGACY_SHADOW),1)
-BUILD_VARIANT := legacy-shadow
-endif
-
-OBJ_DIR     := $(BUILD_DIR)/obj/$(BUILD_VARIANT)
+OBJ_DIR     := $(BUILD_DIR)/obj/core
 
 APP_INC_DIR := $(APP_DIR)/include
 CORE_INC_DIR := $(CORE_DIR)/include
@@ -117,13 +111,6 @@ MODULE_SRCS += \
 	$(MODULE_DIR)/inotify/src/inotify_backend.c \
 	$(MODULE_DIR)/inotify/src/watch_manager.c \
 	$(MODULE_DIR)/inotify/src/watcher.c
-
-ifeq ($(ENABLE_LEGACY_SHADOW),1)
-DEFINES += -DALFRED_ENABLE_LEGACY_SHADOW
-MODULE_SRCS += \
-	$(MODULE_DIR)/inotify/src/events.c \
-	$(MODULE_DIR)/inotify/src/move_cache.c
-endif
 endif
 
 SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
@@ -220,22 +207,17 @@ run: all
 # TEST
 # test-core is the official core end-to-end suite.
 # test-backend-diagnostics checks backend health logs that are not semantics.
-# test-legacy-shadow keeps the historical functional shadow suite explicit.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
 
 test: test-core
 
-test-legacy-shadow:
-	$(MAKE) ENABLE_LEGACY_SHADOW=1 all
-	cd tests/functional && bash run_all.sh
-
 test-core:
-	$(MAKE) ENABLE_LEGACY_SHADOW=0 all
+	$(MAKE) all
 	cd tests/core && bash run_all.sh
 
 test-backend-diagnostics:
-	$(MAKE) ENABLE_LEGACY_SHADOW=0 all
+	$(MAKE) all
 	cd tests/backend && bash run_all.sh
 
 # -----------------------------------------------------------------------------
@@ -314,14 +296,15 @@ banner:
 	release \
 	run \
 	test \
-	test-legacy-shadow \
 	test-core \
+	test-backend-diagnostics \
 	valgrind \
 	gdb \
 	format \
 	scan \
 	tidy \
 	banner \
-	directories
+	directories \
+	FORCE
 
 -include $(DEPS)

@@ -56,15 +56,8 @@ I test funzionali si trovano in:
 tests/functional/
 ```
 
-Si eseguono con:
-
-```bash
-make test-legacy-shadow
-```
-
 `make test` non esegue piu' questa suite: ora punta al percorso core ufficiale.
-
-Oppure direttamente:
+Gli script si possono leggere o lanciare manualmente durante un audit storico:
 
 ```bash
 cd tests/functional
@@ -160,8 +153,8 @@ Questa mappa serve a decidere cosa fare dei test funzionali storici durante lo
 switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
 
 - `tests/functional/` nasce quando il dispatcher legacy era lo stream
-  principale e oggi viene eseguito da `make test-legacy-shadow` con
-  `ENABLE_LEGACY_SHADOW=1`
+  principale; oggi resta come memoria storica e non ha piu' un target Makefile
+  ufficiale
 - `tests/core/` nasce per fissare lo stream semantico ufficiale del core e oggi
   viene eseguito da `make test` e `make test-core` in build core-only, usando
   comunque filesystem, inotify e backend reali
@@ -222,7 +215,7 @@ Scenari diagnostici da ricollocare o tenere solo se servono davvero:
 - controllo di `WATCH_ADDED`
 - controllo di `WATCH_REMOVED`
 - controllo dell'aggiunta progressiva dei watch in una creazione ricorsiva lenta
-- smoke test del vecchio comando `make test-legacy-shadow`
+- smoke test del vecchio percorso legacy/shadow
 
 Questa distinzione e' essenziale per gli studenti: un test puo' essere utile
 durante una migrazione senza essere parte del contratto futuro del programma.
@@ -254,9 +247,9 @@ Conclusione operativa:
 - la suite funzionale storica resta solo memoria della fase legacy/shadow; dopo
   lo spegnimento del dispatch legacy nel poll path non e' piu' una verifica
   ordinaria
-- `make test-legacy-shadow` resta esplicito per i controlli storici su
-  `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core, ma non e' destinato
-  a sopravvivere allo switch totale; i controlli watch utili sono gia' in
+- il vecchio target `make test-legacy-shadow` e' stato rimosso; i controlli
+  storici su `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core non sono
+  piu' verifica ordinaria; i controlli watch utili sono gia' in
   `tests/backend/`
 - `tests/functional/test_move_rename_file.sh` resta utile come scenario
   legacy/shadow esplicito per mostrare la vecchia doppia emissione
@@ -264,10 +257,10 @@ Conclusione operativa:
 
 ## Test backend diagnostics
 
-Prima di rimuovere `test-legacy-shadow`, conviene salvare gli scenari che non
-sono semantica core ma descrivono la salute del backend inotify. Questi test non
-vivono nella suite core, perche' non controllano il contratto utente di Alfred.
-Vivono in una suite separata:
+Prima di archiviare la suite funzionale storica, conviene salvare gli scenari
+che non sono semantica core ma descrivono la salute del backend inotify. Questi
+test non vivono nella suite core, perche' non controllano il contratto utente di
+Alfred. Vivono in una suite separata:
 
 ```text
 tests/backend/

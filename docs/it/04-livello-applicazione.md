@@ -79,12 +79,12 @@ Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
 `app_t`; sono incapsulati in `inotify_backend_t`. Il backend riceve ancora
 `app_t *` per usare configurazione e logger, quindi non e' ancora del tutto
 autonomo. La cache move del legacy non e' piu' dentro `app_t`: appartiene a
-`events.c`, che viene compilato solo nella variante
-`ENABLE_LEGACY_SHADOW=1`, e viene inizializzata solo in shadow mode.
+`events.c`, che oggi non viene piu' compilato dal Makefile.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
-Oggi e' lo stream semantico ufficiale di default. Lo shadow mode puo' ancora
-attivare il vecchio dispatcher per confronto, ma non e' il percorso ordinario.
+Oggi e' lo stream semantico ufficiale di default. Lo shadow mode non e' piu'
+una modalita' supportata: se viene richiesto, Alfred fallisce con un errore
+esplicito.
 
 ## app/src/main.c
 
@@ -185,17 +185,11 @@ struct inotify_event
 ```
 
 Il runtime normale usa il core. In shadow mode, invece, il vecchio dispatcher
-produce lo stream legacy e il core produce righe con prefisso `core`, utili per
-confrontare il nuovo motore con il comportamento storico.
+produceva lo stream legacy e il core produceva righe con prefisso `core`, utili
+per confrontare il nuovo motore con il comportamento storico.
 
-Questo richiede un binario compilato con:
-
-```bash
-make ENABLE_LEGACY_SHADOW=1
-```
-
-Se il binario e' core-only, `ALFRED_EVENT_ENGINE=shadow` fallisce con un errore
-esplicito invece di fingere un confronto.
+Quel percorso e' stato rimosso. Oggi `ALFRED_EVENT_ENGINE=shadow` fallisce con
+un errore esplicito invece di fingere un confronto.
 
 Questo approccio riduce il rischio quando si modificano regole semantiche:
 possiamo osservare differenze tra core e legacy senza confondere il percorso
@@ -339,9 +333,8 @@ core
 ```
 
 `core` e' il default. In questa modalita' Alfred produce lo stream ufficiale
-plain dal core e non chiama il dispatcher legacy. Per riattivare il confronto si
-usa `ALFRED_EVENT_ENGINE=shadow`, ma solo su un binario compilato con
-`ENABLE_LEGACY_SHADOW=1`.
+plain dal core e non chiama il dispatcher legacy. Il confronto shadow non e'
+piu' riattivabile nella build corrente.
 
 In shadow mode:
 

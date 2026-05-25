@@ -35,6 +35,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `Makefile`, `00-regole-operative.md`, `01-panoramica-progetto.md`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`,
+  `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `15-todo-switch-core.md` e
+  `16-mappa-codice-e-strutture.md`: rimossa la variante build
+  legacy-shadow dal Makefile. `ENABLE_LEGACY_SHADOW` e
+  `test-legacy-shadow` non sono piu' comandi supportati; `.PHONY` e' ora
+  spiegato nel capitolo sul Makefile.
 - `app/src/app.c`, `app/include/app.h`, `app/include/config.h`,
   `app/include/core_logger.h`, `app/src/config.c`,
   `tests/core/test_shadow_mode_removed.sh`, `14-scenari-test.md`,
@@ -74,8 +82,9 @@ Stati usati:
   diciassettesimo micro-refactor, chiarendo che shadow resta nel context come
   dipendenza diagnostica opzionale.
 - `Makefile`: cambiato `make test` in alias del percorso core ufficiale.
-  `make test-core` resta il nome esplicito della stessa suite, mentre
-  `make test-legacy-shadow` resta disponibile per diagnostica legacy/shadow.
+  `make test-core` resta il nome esplicito della stessa suite. In quel momento
+  `make test-legacy-shadow` restava disponibile per diagnostica legacy/shadow;
+  oggi e' stato rimosso dal Makefile.
 - `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
   `14-scenari-test.md` e `15-todo-switch-core.md`: aggiornata la
   documentazione per indicare che `make test` ora verifica il core e non piu'
@@ -326,7 +335,7 @@ Stati usati:
 - `15-todo-switch-core.md`: documentata la decisione provvisoria sui test:
   in quel momento `make test` restava legacy-shadow e `make test-core` era il
   percorso ufficiale. Decisione superata: oggi `make test` punta al core e
-  `make test-legacy-shadow` conserva la suite storica esplicita.
+  `make test-legacy-shadow` e' stato rimosso dal Makefile.
 - `16-mappa-codice-e-strutture.md`: aggiunto un call graph guidato
   `main -> app -> backend -> core -> logger`, piu' due sezioni discorsive sul
   ciclo backend inotify e sul ciclo core. Le nuove sezioni spiegano quali
@@ -342,7 +351,8 @@ Stati usati:
 - `Makefile` e `modules/inotify/src/inotify_backend.c`: reso il legacy shadow
   opzionale a livello build con `ENABLE_LEGACY_SHADOW=1`; la build normale non
   compila piu' `events.c` e `move_cache.c`, mentre shadow mode fallisce con
-  errore esplicito se il binario non contiene il legacy.
+  errore esplicito se il binario non contiene il legacy. Decisione superata:
+  oggi la variante legacy-shadow e' stata rimossa dal Makefile.
 - `09-makefile-e-build-system.md`, `10-debugging-test-e-strumenti.md`,
   `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
   flag `ENABLE_LEGACY_SHADOW`, la separazione fra build core-only e build
