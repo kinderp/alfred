@@ -38,13 +38,14 @@ lavoro e alla documentazione didattica di Alfred.
 - Ogni riga modificata deve poter essere collegata alla richiesta corrente, a un
   test, a un bug o a un aggiornamento documentale necessario.
 - Obiettivi verificabili: per ogni passo tecnico chiarire come si controlla il
-  risultato, per esempio con `make`, `make test-core`, uno scenario shadow o una
-  verifica mirata.
+  risultato, per esempio con `make`, `make test-core`, un test backend o una
+  verifica mirata. Gli scenari shadow sono storici e non sono piu' verifiche
+  correnti.
 - Prima di fare refactor, distinguere sempre:
   - comportamento osservabile
   - responsabilita' dei moduli
   - pulizia interna
-  - compatibilita' temporanea legacy/shadow
+  - compatibilita' storica rimasta solo nella documentazione
 - Se una modifica serve solo a ridurre complessita' interna, documentare perche'
   non cambia la semantica osservabile.
 

@@ -86,8 +86,8 @@ Al momento:
 - il core e' inizializzato in `app_t`
 - il runtime manda eventi inotify al core
 - `event_engine=core` e' il default e usa il core come stream ufficiale plain
-- `ALFRED_EVENT_ENGINE=shadow` viene riconosciuto solo per fallire con un errore
-  esplicito: il runtime shadow e' stato rimosso
+- `ALFRED_EVENT_ENGINE=shadow` non e' piu' una modalita' riconosciuta: fallisce
+  come normale valore di configurazione non valido
 - esiste un primo backend inotify esplicito in
   `modules/inotify/src/inotify_backend.c`
 - il backend legge il fd inotify, logga gli eventi raw, costruisce
@@ -134,7 +134,7 @@ descrive piu' file presenti nel codice corrente.
 Questo file era il dispatcher semantico legacy. Non e' piu' presente nel codice
 corrente: la sua responsabilita' e' stata sostituita dal core.
 
-Responsabilita' ancora presenti:
+Responsabilita' storiche che appartenevano a quel file:
 
 - `legacy_events_dispatch()`: riceve direttamente `struct inotify_event` e
   decide quale handler legacy chiamare
@@ -155,11 +155,11 @@ Classificazione:
   finali
 - diagnostica/backend state da preservare altrove: `IN_IGNORED`, rimozione del
   watch, overflow
-- supporto legacy da eliminare quando il core sara' ufficiale: `move_cache`
+- supporto legacy gia' eliminato dopo lo switch: `move_cache`
 
-Nota importante: oggi il legacy non conosce `FILE_RELOCATED` o
-`DIR_RELOCATED`. Quando cambiano sia contenitore sia nome, `events.c` emette due
-eventi (`MOVED` + `RENAMED`). Il core invece deve emettere un solo evento
+Nota storica importante: il legacy non conosceva `FILE_RELOCATED` o
+`DIR_RELOCATED`. Quando cambiavano sia contenitore sia nome, `events.c`
+emetteva due eventi (`MOVED` + `RENAMED`). Il core invece emette un solo evento
 `RELOCATED`.
 
 ### `app/src/app.c`
@@ -170,14 +170,16 @@ e' ancora nella forma finale.
 Responsabilita' attuali:
 
 - inizializza configurazione, logger, core e backend inotify
-- inizializza e spegne il dispatcher legacy solo quando shadow mode e' attivo
 - inizializza il backend inotify
 - chiama `inotify_backend_poll()` nel loop principale
 - riceve raw event reali e sintetici tramite callback
 - inoltra gli `alfred_raw_event_t` al core
-- nella build shadow include `events.h` solo per adattare il bridge opaco alla
-  vecchia funzione `legacy_events_dispatch()` e per gestire init/shutdown del
-  dispatcher legacy
+
+Responsabilita' storiche rimosse:
+
+- inizializzare e spegnere il dispatcher legacy quando shadow mode era attivo
+- includere `events.h` per adattare il bridge opaco alla vecchia funzione
+  `legacy_events_dispatch()`
 
 La catena ricorsiva non parte piu' da `app.c`. Ora e':
 
@@ -251,8 +253,7 @@ l'applicazione. Le dipendenze sono raggruppabili in quattro famiglie:
 - stato backend: `fd` e `watcher_table_t`
 - configurazione backend: `recursive`, `watch_mask`, `watcher_capacity`
 - diagnostica: `logger_t`
-- compatibilita' temporanea: legacy shadow tramite callback opaca; il cast a
-  `app_t` resta fuori dal backend
+- callback raw/core: funzione `on_event` e puntatore opaco `userdata`
 
 Il prossimo passo tecnico non deve ancora cambiare comportamento. Deve
 scegliere quale API renda esplicite queste quattro famiglie senza introdurre
@@ -316,8 +317,8 @@ Svantaggi e attenzioni:
 - introduce un tipo in piu'
 - richiede disciplina sui puntatori presi in prestito
 - non va applicato in modo massivo senza test intermedi
-- finche' legacy shadow esiste, alcune funzioni potranno ancora avere bisogno
-  di un ponte temporaneo verso `app_t` o verso una struttura legacy dedicata
+- durante la migrazione il bridge shadow richiedeva ancora attenzione; oggi
+  quel ponte e' rimosso e il context non deve reintrodurlo
 
 Migrazione consigliata:
 
@@ -417,11 +418,12 @@ Stato implementato del sesto micro-refactor:
 - dopo questo passo, l'uso sostanziale residuo di `app_t` nel poll path e' il
   solo ponte legacy/shadow
 
-Il passo non cambia comportamento. Sposta solo una dipendenza di configurazione
-nel context, lasciando visibile il confine ancora aperto: il legacy dispatcher
-non e' stato ancora isolato o rimosso.
+Questo era un passo storico della migrazione. Non cambiava comportamento:
+spostava solo una dipendenza di configurazione nel context, lasciando visibile
+il confine ancora aperto. In quel momento il legacy dispatcher non era ancora
+stato isolato o rimosso.
 
-Stato implementato del settimo micro-refactor:
+Stato implementato allora:
 
 - il corpo principale di `inotify_backend_poll()` non chiama piu' direttamente
   `legacy_events_dispatch(app, ev)`
@@ -434,10 +436,9 @@ Stato implementato del settimo micro-refactor:
   fa nulla; in `event_engine=shadow` chiama il dispatcher legacy se compilato,
   altrimenti restituisce `ERR_CONFIG`
 
-Questo passo e' didatticamente importante perche' trasforma un uso residuo di
-`app_t` in un confine nominato. Il backend poll path resta ancora compatibile
-con shadow mode, ma ora il debito legacy e' localizzato in una funzione che
-potra' essere rimossa o spostata quando il confronto shadow non servira' piu'.
+Questo passo e' didatticamente importante perche' trasformava un uso residuo di
+`app_t` in un confine nominato. Quella funzione e' stata poi rimossa insieme al
+confronto shadow.
 
 Stato implementato dell'ottavo micro-refactor:
 
@@ -685,41 +686,43 @@ generare raw event sintetici verso il core.
 
 ### `app_t`
 
-`app_t` contiene ancora un campo specifico inotify:
+`app_t` contiene ancora lo stato runtime del backend inotify:
 
 - `inotify`
-- `moves`
 
-`inotify` e' il backend runtime. `moves` resta nel contesto applicativo solo per
-il dispatcher legacy in shadow mode; in `event_engine=core` non viene
-inizializzato.
+La vecchia cache `moves` non esiste piu' nel contesto applicativo. Era uno
+stato del dispatcher legacy e non deve tornare nel percorso core.
 
-## Ordine consigliato per lo switch
+## Ordine storico dello switch
 
-L'ordine piu' pulito e':
+Questa era la strategia usata durante la migrazione. Resta utile per capire
+perche' il lavoro e' stato spezzato in micro-refactor, ma non descrive piu'
+azioni da eseguire oggi.
 
-1. mantenere `ALFRED_EVENT_ENGINE=shadow` finche' serve per confronto e prove
-   manuali
+1. mantenere temporaneamente `ALFRED_EVENT_ENGINE=shadow` per confronto e prove
+   manuali: fatto nella fase di migrazione, poi rimosso
 2. spostare il codice di lettura inotify e manutenzione watch fuori da `app.c`
    verso un backend inotify esplicito: fatto
 3. far emettere al backend solo `alfred_raw_event_t`, includendo eventuali raw
-   sintetici per directory scoperte dallo scan
+   sintetici per directory scoperte dallo scan: fatto
 4. lasciare al core tutta la semantica: create, delete, modify, close-write,
-   move, rename, relocated
-5. rimuovere `move_cache` dal percorso runtime core: fatto; resta confinata al
-   dispatcher legacy
-6. rimuovere `events.c` dal percorso ufficiale, conservandolo solo se serve
-   ancora come strumento temporaneo di confronto
-7. solo dopo progettare overflow/resync come feature separata
+   move, rename, relocated: fatto per il percorso ufficiale
+5. rimuovere `move_cache` dal percorso runtime core: fatto; il file legacy e'
+   stato poi cancellato
+6. rimuovere `events.c` dal percorso ufficiale e poi dal codice corrente: fatto
+7. progettare overflow/resync come feature separata: rimandato
 
 ## Passi consigliati
 
-### 1. Stabilizzare lo shadow mode
+### 1. Stabilizzare lo shadow mode storico
 
-Continuare ad aggiungere scenari in `tests/shadow/compare_shadow_output.py` e
-documentare differenze attese.
+Durante la migrazione abbiamo aggiunto scenari in
+`tests/shadow/compare_shadow_output.py` e documentato le differenze attese.
+Oggi non bisogna aggiungere nuovi test shadow: i nuovi scenari devono entrare in
+`tests/core/` se verificano il contratto semantico, oppure in `tests/backend/`
+se verificano diagnostica tecnica del backend.
 
-Scenari ancora utili:
+Scenari gia' usati durante quella fase:
 
 - move directory semplice: aggiunto come `move_dir`, allineato tra legacy e core
 - modify file: aggiunto come `modify_close_write_file`; ora il backend consegna
@@ -727,7 +730,8 @@ Scenari ancora utili:
 - close-write / file ready: il backend consegna `IN_CLOSE_WRITE` e il core
   produce `FILE_READY`; `FILE_MODIFIED` e `FILE_READY` sono semantica target
   ufficiale del core
-- overflow, se riproducibile
+- overflow: non risolto in shadow mode, rimandato alla progettazione
+  post-switch
 
 ### 1b. Stabilizzare la suite core end-to-end
 
@@ -783,10 +787,11 @@ Esempi gia' decisi:
 
 ### 3. Spostare il logging semantico ufficiale sul core
 
-Quando gli scenari principali sono documentati, l'app dovrebbe usare l'output
-del core come evento ufficiale.
+Questo passo e' concluso: l'app usa l'output del core come evento ufficiale.
+La tabella seguente descrive lo stato intermedio che avevamo durante la
+migrazione, non il runtime corrente.
 
-Stato attuale:
+Stato intermedio storico:
 
 ```text
 event_engine=core
@@ -807,11 +812,11 @@ Disegno finale:
 
 ```text
 core_logger_on_event -> logger_event ufficiale
-legacy events.c      -> solo confronto o rimozione
+legacy events.c      -> rimosso
 ```
 
-Durante questa fase bisogna decidere se mantenere temporaneamente un prefisso
-`core` oppure rimuoverlo quando il core diventa sorgente ufficiale.
+Il prefisso `core` dello shadow mode non fa parte dello stream ufficiale. Lo
+stream corrente resta plain.
 
 Decisione documentata:
 
@@ -835,15 +840,15 @@ seq=17 FILE_CREATED path=...
 seq=18 DIR_MOVED from=... to=...
 ```
 
-Formato shadow temporaneo attuale:
+Formato shadow temporaneo storico:
 
 ```text
 core seq=17 type=FILE_CREATED path=... pid=...
 ```
 
-Il formato shadow attuale serve al confronto legacy/core e puo' restare finche'
-lo shadow mode e' attivo. Quando il core diventera' sorgente ufficiale, conviene
-aggiungere un'opzione di configurazione esplicita, per esempio:
+Quel formato serviva al confronto legacy/core. Se in futuro servira' uno stream
+piu' ricco per debug o lezioni, conviene aggiungere un'opzione di
+configurazione esplicita, per esempio:
 
 ```text
 event_log_format=plain
@@ -1094,13 +1099,13 @@ in cui il backend smette di parlare inotify e inizia a produrre fatti raw Alfred
 Il capitolo italiano dovrebbe avere sezioni come:
 
 - avvio dell'applicazione
-- configurazione e scelta `event_engine`
+- configurazione e validazione di `event_engine=core`
 - inizializzazione backend inotify
 - loop di polling
 - conversione `struct inotify_event` -> `alfred_raw_event_t`
 - ingresso nel core
 - emissione degli eventi semantici
-- percorso shadow legacy, se compilato
+- percorso shadow legacy storico, per capire cosa e' stato rimosso
 
 Questa mappa va progettata dopo la fase A, perche' i commenti strutturati nel
 codice renderanno piu' facile generare o collegare un indice affidabile delle

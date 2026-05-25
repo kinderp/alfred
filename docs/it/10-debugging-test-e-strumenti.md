@@ -411,7 +411,7 @@ Durante i micro-refactor del backend, per trovare le dipendenze residue da
 `app_t` si usava:
 
 ```bash
-rg -n "app->|app_t \*app|event_engine_mode|inotify_backend_context|inotify_backend_" \
+rg -n "app->|app_t \*app|config_set_event_engine|inotify_backend_context|inotify_backend_" \
   modules/inotify/src/inotify_backend.c \
   modules/inotify/include/inotify_backend.h \
   app/src/app.c
@@ -443,11 +443,14 @@ Pattern usati:
     precedente"; per cercare proprio il carattere `*` bisogna scrivere `\*`
   - esempio trovato: `int inotify_backend_poll(app_t *app, ...)`
 
-- `event_engine_mode`
-  - trova dove il codice conserva ancora il valore `shadow` per rifiutarlo con
-    un errore esplicito
-  - e' importante perche' questa scelta appartiene alla configurazione
-    applicativa, non alla semantica del backend inotify
+- `config_set_event_engine`
+  - trova il punto che valida `ALFRED_EVENT_ENGINE` e la chiave
+    `event_engine=...` nei file di configurazione
+  - oggi non salva piu' un modo runtime: accetta solo `core` e rifiuta valori
+    storici come `shadow`
+  - e' importante perche' l'accettazione o il rifiuto di un valore
+    `ALFRED_EVENT_ENGINE` appartiene alla configurazione applicativa, non alla
+    semantica del backend inotify
 
 - `inotify_backend_context`
   - trova il context ristretto passato al backend
@@ -543,7 +546,8 @@ Motivo:
 - il passo non cambiava API pubblica
 - il passo non cambiava comportamento osservabile
 - oggi quel debito e' stato chiuso: il poll path non legge piu'
-  `event_engine_mode` e non contiene piu' un ponte legacy
+  `event_engine_mode`, il campo e' stato rimosso da `config_t` e il backend non
+  contiene piu' un ponte legacy
 
 Questa e' la forma desiderata di una ricognizione tecnica: non basta trovare
 righe con `rg`; bisogna interpretarle, leggere il contesto e collegarle alla

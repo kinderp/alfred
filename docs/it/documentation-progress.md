@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/include/config.h`, `app/src/config.c`, `app/src/app.c` e
+  documentazione didattica: rimosso `event_engine_mode_t` e il campo
+  `config_t.event_engine_mode`. Il runtime non conserva piu' una scelta engine
+  perche' il core e' l'unico percorso supportato; `config_set_event_engine()`
+  resta solo come validazione per accettare `core` e rifiutare valori storici
+  come `shadow`.
 - `app/include/config.h`, `app/src/config.c`, `app/src/app.c`,
   `tests/core/test_invalid_event_engine_shadow.sh` e documentazione didattica:
   rimosso `EVENT_ENGINE_SHADOW`. `ALFRED_EVENT_ENGINE=shadow` e' ora un valore

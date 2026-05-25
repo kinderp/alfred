@@ -117,7 +117,7 @@ Questo stile e' utile perche':
 1. reset della struct `app_t`
 2. configurazione di default
 3. logger
-4. core nella modalita' scelta da `event_engine`
+4. core come unico engine semantico supportato
 5. backend inotify
 6. signal handler
 7. watch sui percorsi passati da riga di comando

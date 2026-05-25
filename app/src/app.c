@@ -223,8 +223,7 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     logger_info(&app->logger,
-                "alfred core initialized event_engine=%s",
-                config_event_engine_name(app->config.event_engine_mode));
+                "alfred core initialized event_engine=core");
 
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);

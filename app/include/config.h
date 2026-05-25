@@ -18,18 +18,6 @@
 #include "errors.h"
 
 /*
- * event_engine_mode_t - semantic event engine selection
- *
- * CORE is the normal runtime: backend raw events are processed by the core and
- * logged as the official plain semantic stream. The enum remains even though
- * it has one value because it documents the configuration field and leaves a
- * narrow place for future engine choices.
- */
-typedef enum {
-    EVENT_ENGINE_CORE = 0
-} event_engine_mode_t;
-
-/*
  * config_t - runtime configuration values
  *
  * The struct intentionally stores plain values instead of owning dynamic
@@ -59,9 +47,6 @@ typedef struct {
      */
     uint32_t watch_mask;
 
-    /* Selects the event engine; only core is currently supported at runtime. */
-    event_engine_mode_t event_engine_mode;
-
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];
     char event_log[PATH_MAX];
@@ -83,21 +68,17 @@ typedef struct {
 error_t config_load(config_t *cfg, const char *path);
 
 /*
- * config_set_event_engine - parse and set the semantic event engine mode
+ * config_set_event_engine - validate the semantic event engine option
  * @cfg: configuration object to update
  * @value: expected value, currently only "core"
+ *
+ * The runtime no longer stores an engine selector because the core is the only
+ * supported engine. This helper remains so config files and ALFRED_EVENT_ENGINE
+ * can reject stale values such as "shadow" explicitly.
  *
  * Return: ERR_OK on success, ERR_INVALID_ARG or ERR_CONFIG on failure.
  */
 error_t config_set_event_engine(config_t *cfg, const char *value);
-
-/*
- * config_event_engine_name - render an event engine mode for logs/docs
- * @mode: event engine mode to render
- *
- * Return: stable string name for @mode.
- */
-const char *config_event_engine_name(event_engine_mode_t mode);
 
 /*
  * config_defaults - initialize configuration with safe defaults
