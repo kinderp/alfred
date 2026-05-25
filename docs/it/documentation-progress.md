@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/include/watch_manager.h` e `docs/commenting-progress.md`:
+  rafforzati i commenti sul ruolo del watch manager. `WATCH_ADDED` e
+  `WATCH_REMOVED` restano diagnostica backend; la discovery ricorsiva segnala
+  fatti al backend, ma non emette direttamente raw sintetici o eventi
+  semantici.
 - `modules/inotify/src/inotify_backend.c` e `docs/commenting-progress.md`:
   rafforzati i commenti in inglese sul confine backend/core. Il backend
   produce fatti raw, ripara lo stato dei watch ricorsivi e puo' generare raw

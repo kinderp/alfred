@@ -30,6 +30,10 @@ Latest refresh:
   `modules/inotify/src/inotify_backend.c`, especially the boundary between raw
   facts, recursive watch recovery, synthetic raw directory creates, and core
   semantic/deduplication policy
+- reinforced `modules/inotify/src/watch_manager.c` and
+  `modules/inotify/include/watch_manager.h` comments so WATCH_ADDED,
+  WATCH_REMOVED, recursive discovery facts, synthetic raw events, and core
+  semantics remain separate concepts
 - strengthened app/core/backend boundary comments in `app/include/app.h` and
   `app/src/app.c`
 - clarified raw path lifetime, sequence-number purpose, and private core state

@@ -5,9 +5,10 @@
  * removes kernel watches, stores the wd -> path mapping through watcher.c, and
  * can recursively discover directories that need watches.
  *
- * Recursive discovery may report already-existing child directories through a
- * callback. The callback consumer decides what to do with that fact; the watch
- * manager itself must not emit semantic FILE_* or DIR_* events.
+ * WATCH_ADDED and WATCH_REMOVED are diagnostics about the watch table, not core
+ * events. Recursive discovery may report already-existing child directories
+ * through a callback. The callback consumer decides what to do with that fact;
+ * the watch manager itself must not emit raw or semantic FILE_* or DIR_* events.
  * ========================================================================== */
 
 #ifndef WATCH_MANAGER_H
@@ -23,8 +24,9 @@
  * @path: discovered directory path
  * @userdata: opaque pointer supplied by the caller
  *
- * The callback is used by the inotify backend to turn discovery facts into
- * synthetic raw directory-create events for the core.
+ * The callback reports observation facts, not semantic decisions. The inotify
+ * backend currently turns those facts into synthetic raw directory-create
+ * events for the core.
  */
 typedef void (*watch_manager_discovered_dir_fn)(
     inotify_backend_context_t *ctx,
@@ -74,7 +76,8 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
  * The root is watched but not reported as discovered. Child directories found
  * during the recursive walk are reported after their watch is added. This lets
  * the backend repair missed create notifications from fast recursive mkdir
- * scenarios without moving semantic decisions into the watch manager.
+ * scenarios without moving raw-event emission or semantic decisions into the
+ * watch manager.
  *
  * Return: 0 on success, -1 on failure.
  */

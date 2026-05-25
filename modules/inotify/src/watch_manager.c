@@ -7,9 +7,10 @@
  *   inotify_rm_watch()  -> watcher_remove()
  *
  * It deliberately does not classify filesystem events. WATCH_ADDED and
- * WATCH_REMOVED are backend diagnostics. Recursive discovery reports directory
- * facts to the backend through a callback; the core later decides whether those
- * facts become DIR_CREATED events.
+ * WATCH_REMOVED are backend diagnostics about Alfred's observation state, not
+ * semantic filesystem events. Recursive discovery reports directory facts to
+ * the backend through a callback; the core later decides whether those facts
+ * become DIR_CREATED events.
  * ========================================================================== */
 
 #include "watch_manager.h"
@@ -85,6 +86,9 @@ uint32_t watch_manager_default_mask(void)
  * as an index into watcher_table_t, where watcher_store() saves the path needed
  * later to reconstruct full event paths from inotify records.
  *
+ * The WATCH_ADDED log documents that Alfred can now observe @path. It is not a
+ * substitute for DIR_CREATED and must not be consumed as a semantic core event.
+ *
  * Return: watch descriptor on success, -1 on failure.
  */
 int watch_manager_add(inotify_backend_context_t *ctx,
@@ -144,6 +148,10 @@ int watch_manager_add(inotify_backend_context_t *ctx,
  * The path is looked up before table removal so the diagnostic log can still
  * identify which watched directory disappeared.
  *
+ * The WATCH_REMOVED log documents that Alfred stopped observing a path. The
+ * delete or move semantics, if any, come from the inotify event stream and the
+ * core, not from this watch-table cleanup.
+ *
  * Return: 0 on success, -1 when @wd is not known.
  */
 int watch_manager_remove(inotify_backend_context_t *ctx,
@@ -198,6 +206,10 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
  * existed on their parent, which means the kernel could not deliver their
  * create event to Alfred.
  *
+ * This function mutates backend observation state only. It never emits raw or
+ * semantic events directly; the optional callback lets the backend decide how
+ * to represent discovered directories to the core.
+ *
  * Return: 0 on success, -1 on opendir failure.
  */
 static int recursive_walk(inotify_backend_context_t *ctx,
@@ -218,9 +230,9 @@ static int recursive_walk(inotify_backend_context_t *ctx,
     }
 
     /*
-     * Add the watch before reporting discovery. This ordering means a synthetic
-     * raw create emitted by the backend describes a directory that is already
-     * watched for subsequent changes.
+     * Add the watch before reporting discovery. This ordering means any
+     * synthetic raw create emitted by the backend describes a directory that is
+     * already watched for subsequent changes.
      */
     watch_manager_add(ctx, root);
 
@@ -297,6 +309,10 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
  * The backend already has the real create event for @root. The discovery
  * callback reports nested directories that may have been missed in fast
  * recursive creation scenarios such as `mkdir -p one/two/three`.
+ *
+ * The callback receives discovery facts, not final events. In the current
+ * backend those facts become synthetic ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR
+ * records, and the core still owns deduplication and semantic emission.
  *
  * Return: 0 on success, -1 on failure.
  */
