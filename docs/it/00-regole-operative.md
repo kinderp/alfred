@@ -312,4 +312,5 @@ vanno usati come verifica ordinaria dopo la rimozione del dispatcher legacy.
 - `93d210a Make core event engine the default`
 
 Questi commit descrivono il passaggio dal legacy dispatcher al core come stream
-ufficiale, mantenendo lo shadow mode come strumento di confronto.
+ufficiale. Lo shadow mode non e' piu' uno strumento di confronto corrente: resta
+solo come storia della migrazione.

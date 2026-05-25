@@ -90,13 +90,14 @@ rename_file
 La descrizione completa degli scenari funzionali e shadow, compresi raw log ed
 event log attesi, e' raccolta in [Scenari di test](14-scenari-test.md).
 
-## Esempio di uso
+## Esempio storico di uso
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file
 ```
 
-Output tipico:
+Oggi questo comando fallisce perche' la modalita' shadow e' stata rimossa. In
+passato l'output tipico era:
 
 ```text
 Scenario: create_file
@@ -116,24 +117,25 @@ Only in core:
 
 In questo esempio legacy e core coincidono.
 
-## Modalita' diagnostica e modalita' strict
+## Modalita' diagnostica e modalita' strict storiche
 
-Per default il tool non fallisce se trova differenze. Serve a osservare.
+Durante la migrazione il tool non falliva se trovava differenze. Serviva a
+osservare.
 
-Se vuoi usarlo come test bloccante:
+La vecchia forma bloccante era:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file --strict
 ```
 
-Con `--strict`, il comando restituisce errore se legacy e core differiscono.
+Con `--strict`, il comando restituiva errore se legacy e core differivano.
 
-In questa fase iniziale e' meglio non usare `--strict` nei test ufficiali,
-perche' sappiamo gia' che alcune differenze sono attese.
+Oggi `--strict` non e' una verifica ufficiale. Le verifiche ufficiali sono
+`make test` e `make test-backend-diagnostics`.
 
 ## Conservare i log
 
-Per copiare i log dell'ultima esecuzione:
+La vecchia forma per copiare i log dell'ultima esecuzione era:
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file --keep-logs
@@ -145,8 +147,7 @@ I file vengono copiati in:
 tests/shadow/last-run/
 ```
 
-Questa cartella e' utile per ispezionare manualmente `events.log`, `raw.log` ed
-eventuali errori.
+Questa cartella resta utile solo come archivio o per ispezione manuale.
 
 `--keep-logs` e' importante quando il confronto normalizzato non basta. Il tool
 mostra solo gli eventi legacy e core riconosciuti dal parser, mentre il file
@@ -209,16 +210,16 @@ FILE_RENAMED from=/tmp/a.txt to=/tmp/b.txt
 Quella modalita' serve a provare lo switch, non a confrontare legacy e core nello
 stesso `events.log`.
 
-Il runner supporta entrambe le modalita':
+Storicamente il runner supportava entrambe le modalita':
 
 ```bash
 python3 tests/shadow/compare_shadow_output.py create_file
 python3 tests/shadow/compare_shadow_output.py create_file --event-engine core
 ```
 
-La prima forma usa `event_engine=shadow` e mostra `Legacy`, `Core`,
-`Only in legacy` e `Only in core`. La seconda forma usa
-`ALFRED_EVENT_ENGINE=core` e mostra solo `Core official`.
+La prima forma oggi fallisce perche' `event_engine=shadow` e' stato rimosso. La
+seconda forma usa `ALFRED_EVENT_ENGINE=core` e mostra solo `Core official`; puo'
+servire per ispezione manuale, ma non sostituisce `make test`.
 
 ## Come leggere le differenze
 
@@ -488,7 +489,7 @@ IN_MODIFY wd=1 path=$ROOT name=editable.txt
 IN_CLOSE_WRITE wd=1 path=$ROOT name=editable.txt
 ```
 
-Il legacy non cambia perche' `modules/inotify/src/events.c` ignora ancora
+Il legacy non cambiava perche' `modules/inotify/src/events.c` ignorava
 `IN_MODIFY` e `IN_CLOSE_WRITE`. Il core invece riceve quei raw event attraverso
 `inotify_adapter.c` e li trasforma in eventi semantici.
 
@@ -585,8 +586,8 @@ Only in core:
   DIR_CREATED path=$ROOT/one/two/three
 ```
 
-Questa differenza e' voluta durante lo shadow mode: il core sta diventando piu'
-completo del legacy per questo caso.
+Questa differenza era voluta durante lo shadow mode: il core stava diventando
+piu' completo del legacy per questo caso.
 
 Questa e' la distinzione importante:
 
@@ -600,8 +601,8 @@ mancanti. Il recupero sintetico aggiunge il pezzo mancante: quando lo scan
 ricorsivo scopre una directory gia' presente, l'app invia al core un raw event
 sintetico `CREATE | ISDIR`.
 
-Per questo scenario non usiamo `--strict`: prima osserviamo l'output legacy e
-core, poi decidiamo la semantica e la strategia di recupero.
+Per questo scenario non usavamo `--strict`: prima osservavamo l'output legacy e
+core, poi decidevamo la semantica e la strategia di recupero.
 
 Domande da discutere dopo l'osservazione:
 
@@ -622,10 +623,8 @@ risincronizzazione periodica generale o per recuperare da `OVERFLOW`, ma per
 questo bug lo scan avviene gia' nel punto giusto: subito dopo la scoperta della
 prima directory creata.
 
-Nel primo passo non aggiungiamo una cache di dedup. Osserviamo il comportamento
-in shadow mode. Se compaiono doppi `DIR_CREATED`, aggiungeremo una deduplica
-piccola e localizzata nel layer backend/app, cioe' vicino al codice che genera
-gli eventi sintetici.
+Nel primo passo non abbiamo aggiunto una cache di dedup. Abbiamo osservato il
+comportamento e protetto il risultato con test core/backend mirati.
 
 ### Controllo dedup: recursive create slow nested directory
 

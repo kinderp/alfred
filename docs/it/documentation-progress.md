@@ -374,9 +374,8 @@ Stati usati:
   `app_t`, shadow mode ed `event_engine`, chiarendo che il core e' il percorso
   ufficiale di default e che il legacy e' solo confronto esplicito.
 - `01-panoramica-progetto.md`: aggiornato lo stato corrente per indicare che il
-  core e' lo stream semantico ufficiale di default, mentre `events.c` e
-  `move_cache.c` restano supporto legacy per shadow mode; aggiunto rimando alla
-  lettura guidata della codebase.
+  core e' lo stream semantico ufficiale di default. Decisione superata: oggi
+  `events.c` e `move_cache.c` sono stati rimossi dal codice corrente.
 - `16-mappa-codice-e-strutture.md`: chiarito anche nel capitolo della lettura
   guidata che `make docs-animations` e' un nome ipotetico futuro e non un target
   gia' presente nel Makefile.

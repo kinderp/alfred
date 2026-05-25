@@ -122,11 +122,11 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
-## Audit pre-rimozione dello shadow legacy
+## Audit storico pre-rimozione dello shadow legacy
 
-Lo switch deve essere totale: lo shadow legacy non e' una modalita' da
-conservare nel prodotto finale. Prima di cancellarlo, pero', bisogna usare i
-test esistenti come inventario. L'idea e':
+Lo switch e' stato totale: lo shadow legacy non e' una modalita' conservata nel
+prodotto finale. Prima di cancellarlo, abbiamo usato i test esistenti come
+inventario. L'idea era:
 
 ```text
 prima si dimostra che il core copre il comportamento utile,
@@ -134,7 +134,7 @@ poi si rimuove il confronto legacy,
 non il contrario.
 ```
 
-La suite legacy/shadow ha ancora valore come fotografia storica durante la
+La suite legacy/shadow ha ancora valore solo come fotografia storica della
 migrazione, ma non definisce piu' la semantica target. La semantica target e'
 quella della suite core end-to-end.
 
@@ -146,10 +146,10 @@ I criteri usati nell'audit sono tre:
 - se uno scenario documenta una differenza legacy/core, deve essere spiegato
   come comportamento storico, non come requisito futuro
 
-## Mappa funzionali legacy e core
+## Mappa storica funzionali legacy e core
 
-Questa mappa serve a decidere cosa fare dei test funzionali storici durante lo
-switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
+Questa mappa documenta l'audit fatto prima della rimozione del legacy. I due
+gruppi di test non avevano lo stesso scopo:
 
 - `tests/functional/` nasce quando il dispatcher legacy era lo stream
   principale; oggi resta come memoria storica e non ha piu' un target Makefile
@@ -158,8 +158,8 @@ switch definitivo al core. I due gruppi di test non hanno lo stesso scopo:
   viene eseguito da `make test` e `make test-core` in build core-only, usando
   comunque filesystem, inotify e backend reali
 
-Per questo la domanda non e': "quale suite e' migliore?". La domanda corretta
-e':
+Per questo la domanda non era: "quale suite e' migliore?". La domanda corretta
+era:
 
 ```text
 quale scenario deve restare test end-to-end del prodotto finale,
@@ -186,12 +186,12 @@ Mappa corrente:
 | modify / close-write | non presente nei funzionali storici | `tests/core/test_modify_file.sh` | Coperto solo dal core; fissa `FILE_MODIFIED` e `FILE_READY`. |
 | shadow mode rimosso | non presente nei funzionali storici | `tests/core/test_shadow_mode_removed.sh` | Coperto dal core; verifica che `ALFRED_EVENT_ENGINE=shadow` fallisca esplicitamente perche' il runtime shadow e' stato rimosso. |
 
-### Risultato dell'audit
+### Risultato dell'audit storico
 
-La copertura core e' sufficiente per preparare la rimozione dello shadow
-legacy, con una distinzione importante: la suite core copre il contratto
-semantico finale, mentre alcuni test funzionali storici coprono anche log
-diagnostici del backend.
+La copertura core e' stata sufficiente per rimuovere lo shadow legacy, con una
+distinzione importante: la suite core copre il contratto semantico finale,
+mentre alcuni test funzionali storici coprivano anche log diagnostici del
+backend.
 
 Scenari semantici gia' coperti dal core:
 
@@ -209,7 +209,7 @@ Scenari legacy che non devono sopravvivere come contratto finale:
 - dipendenza da `events.c` per costruire eventi semantici finali
 - uso di `move_cache.c` nel modulo inotify legacy
 
-Scenari diagnostici da ricollocare o tenere solo se servono davvero:
+Scenari diagnostici ricollocati o archiviati:
 
 - controllo di `WATCH_ADDED`
 - controllo di `WATCH_REMOVED`
@@ -222,11 +222,11 @@ Nel nostro caso, `WATCH_ADDED` e `WATCH_REMOVED` descrivono il lavoro interno
 del backend inotify; non sono eventi semantici prodotti dal core per chi usa
 Alfred.
 
-### Decisione sugli scenari legacy
+### Decisione storica sugli scenari legacy
 
-Questa tabella spiega perche' `make test` ora punta al percorso core. Serve a
-classificare che cosa resta nel prodotto e che cosa e' solo memoria diagnostica
-della migrazione.
+Questa tabella spiega perche' `make test` ora punta al percorso core. Classifica
+che cosa resta nel prodotto e che cosa e' solo memoria diagnostica della
+migrazione.
 
 | Gruppo | Decisione futura | Motivo |
 | --- | --- | --- |
@@ -250,15 +250,15 @@ Conclusione operativa:
   storici su `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core non sono
   piu' verifica ordinaria; i controlli watch utili sono gia' in
   `tests/backend/`
-- `tests/functional/test_move_rename_file.sh` resta utile come scenario
-  legacy/shadow esplicito per mostrare la vecchia doppia emissione
-  `FILE_MOVED + FILE_RENAMED`
+- `tests/functional/test_move_rename_file.sh` resta materiale storico per
+  mostrare la vecchia doppia emissione `FILE_MOVED + FILE_RENAMED`, non una
+  verifica corrente
 
 ## Test backend diagnostics
 
-Prima di archiviare la suite funzionale storica, conviene salvare gli scenari
-che non sono semantica core ma descrivono la salute del backend inotify. Questi
-test non vivono nella suite core, perche' non controllano il contratto utente di
+Prima di archiviare la suite funzionale storica, abbiamo salvato gli scenari che
+non sono semantica core ma descrivono la salute del backend inotify. Questi test
+non vivono nella suite core, perche' non controllano il contratto utente di
 Alfred. Vivono in una suite separata:
 
 ```text
@@ -271,7 +271,7 @@ Questa suite ha un obiettivo diverso:
 ```text
 tests/core/     -> eventi semantici ufficiali
 tests/backend/  -> diagnostica e manutenzione interna del backend inotify
-tests/functional/ -> storico legacy/shadow da rimuovere
+tests/functional/ -> storico legacy/shadow archiviato
 ```
 
 Gli scenari da migrare sono:

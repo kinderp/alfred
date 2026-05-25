@@ -1,11 +1,16 @@
-# TODO switch verso il core
+# TODO post-switch core
 
-Questo documento raccoglie i passi ancora aperti per passare dallo shadow mode
-al core come sorgente ufficiale degli eventi semantici.
+Questo documento raccoglie lo stato dopo lo switch runtime dal dispatcher
+legacy al core. La migrazione principale e' conclusa: Alfred usa il core come
+unica sorgente ufficiale degli eventi semantici, mentre il vecchio shadow mode
+resta solo storia della migrazione.
 
-## Obiettivo finale
+Le sezioni storiche restano per gli studenti perche' spiegano perche' certe
+scelte sono state fatte. Non vanno lette come istruzioni operative correnti.
 
-Il flusso finale deve essere:
+## Stato post-switch
+
+Il flusso runtime corrente e':
 
 ```text
 inotify
@@ -18,15 +23,37 @@ inotify
 
 Il modulo inotify deve produrre fatti raw. Il core deve produrre semantica.
 
-Lo switch previsto e' totale: lo shadow legacy non e' una feature da mantenere
-nel prodotto finale. Deve restare solo il tempo necessario a verificare la
-migrazione e poi deve sparire dal percorso runtime, dal Makefile ordinario e
-dalla configurazione utente.
+Lo switch previsto era totale, e dal punto di vista runtime e' stato completato:
 
-## Cosa deve uscire da `events.c`
+- `events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi
+- `ENABLE_LEGACY_SHADOW` e `test-legacy-shadow` sono stati rimossi dal Makefile
+- `tests/functional/` e `tests/shadow/` sono archivi storici, non verifiche
+  correnti
+- `make test` verifica il percorso core end-to-end ufficiale
+- `make test-backend-diagnostics` verifica la diagnostica tecnica del backend
 
-`modules/inotify/src/events.c` oggi contiene ancora logica semantica legacy.
-Queste responsabilita' devono uscire dal modulo:
+### Perche' `EVENT_ENGINE_SHADOW` esiste ancora
+
+`EVENT_ENGINE_SHADOW` e il parsing di `ALFRED_EVENT_ENGINE=shadow` restano solo
+come guard rail interno durante questa fase. Non sono una feature per utenti o
+contributori: oggi li usiamo solo noi per ottenere un errore esplicito quando
+qualcuno prova ad avviare una modalita' rimossa.
+
+Il test:
+
+```text
+tests/core/test_shadow_mode_removed.sh
+```
+
+protegge proprio questo contratto temporaneo. In futuro potremo decidere di
+eliminare anche il valore `EVENT_ENGINE_SHADOW` e trattare `shadow` come un
+normale valore di configurazione non valido. Per ora lo manteniamo perche'
+rende piu' chiara la fase di transizione.
+
+## Responsabilita' migrate fuori da `events.c`
+
+`modules/inotify/src/events.c` conteneva logica semantica legacy. Queste
+responsabilita' sono state spostate fuori dal modulo inotify o eliminate:
 
 - conversione `IN_CREATE` in `FILE_CREATED` o `DIR_CREATED`
 - conversione `IN_DELETE` in `FILE_DELETED` o `DIR_DELETED`
@@ -35,7 +62,8 @@ Queste responsabilita' devono uscire dal modulo:
 - gestione del `move_cache`
 - emissione di eventi semantici finali con `logger_event`
 
-Questa logica appartiene al core oppure a un adattatore app/core temporaneo.
+Questa logica ora appartiene al core. Il backend inotify non deve ricreare un
+dispatcher semantico parallelo.
 
 ## Cosa deve restare nel backend inotify
 
@@ -54,7 +82,7 @@ Nel backend devono restare:
 
 Il backend puo' scoprire fatti. Non deve decidere la semantica finale.
 
-## Stato attuale
+## Stato corrente
 
 Al momento:
 
@@ -75,7 +103,7 @@ Al momento:
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
 - il core recupera `DIR_CREATED` mancanti in scenari tipo
-  `recursive_create_nested_dir`, mentre il legacy resta incompleto
+  `recursive_create_nested_dir`
 - `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`: vivono in
   `inotify_backend_t`, contenuto nel campo `app_t.inotify`
 - le funzioni lifecycle pulite del backend ricevono `inotify_backend_context_t *`
@@ -97,8 +125,7 @@ il modo in cui leggiamo i prossimi refactor:
 
 Il bridge shadow e' stato rimosso dal `inotify_backend_context_t`, init/shutdown
 legacy sono stati rimossi da `app.c`, e i file storici del dispatcher legacy
-sono stati cancellati. Resta da archiviare o aggiornare la suite storica che
-dipendeva dallo shadow.
+sono stati cancellati. Le suite storiche sono state marcate come archivio.
 
 ## Mappa della logica legacy rimasta
 
@@ -485,7 +512,7 @@ Stato implementato dell'undicesimo micro-refactor:
   all'interno di `backend_poll()`, per chiarire che serviva solo a
   `backend_dispatch_legacy_shadow(legacy_app, ctx, ev)`
 - il comportamento non cambia: il raw/core path lavora sul context; shadow mode
-  resta disponibile come ponte temporaneo
+  in quel momento restava disponibile come ponte temporaneo
 
 Questo completava la forma interna context-shaped delle funzioni principali del
 backend. Nel dodicesimo micro-refactor le firme pubbliche pulite di init,
@@ -774,9 +801,10 @@ ALFRED_EVENT_ENGINE=shadow
     legacy events.c      -> logger_event ufficiale storico
 ```
 
-Quindi lo switch del default e' gia' avvenuto senza rimuovere subito
-`events.c`. Questa e' una scelta prudente: il core e' la sorgente ufficiale, ma
-il confronto shadow resta disponibile con override esplicito.
+In quella fase lo switch del default era gia' avvenuto senza rimuovere subito
+`events.c`. Era una scelta prudente: il core diventava la sorgente ufficiale,
+ma il confronto shadow restava disponibile con override esplicito. Questo stato
+e' stato poi superato dalla rimozione completa del legacy.
 
 Disegno finale:
 
@@ -877,24 +905,24 @@ Da rivedere:
 - `watchers`
 - eventuali campi temporanei legacy
 
-## Roadmap orientativa allo switch definitivo
+## Roadmap post-switch
 
-Questa lista riassume i passi ancora necessari prima di considerare concluso lo
-switch dal dispatcher legacy al core. L'effort e' indicativo: serve a capire
-quali punti sono semplici pulizie e quali invece richiedono discussione,
-verifica e documentazione piu' estesa.
+Questa lista riassume cosa resta dopo lo switch runtime. I punti marcati
+`Fatto` non sono piu' lavoro aperto: servono a dare contesto agli studenti e a
+chi rilegge la migrazione.
 
 | Passo | Effort | Perche' serve |
 | --- | --- | --- |
 | Rimuovere la variante build legacy-shadow | Fatto | `ENABLE_LEGACY_SHADOW`, `test-legacy-shadow`, `events.c` e `move_cache.c` non fanno piu' parte della build Makefile. |
 | Rimuovere fisicamente il legacy morto | Fatto | `events.c`, `events.h`, `move_cache.c`, `move_cache.h` e `move_cache_size` sono stati rimossi dal codice corrente. |
+| Archiviare suite functional/shadow | Fatto | `tests/functional/` e `tests/shadow/` sono marcati come storici e non sono verifiche correnti. |
+| Spegnere shadow come modalita' ordinaria | Fatto | `core` e' il runtime ufficiale; `shadow` viene riconosciuto solo per produrre un errore esplicito temporaneo. |
 | Documentazione pesante del codice | Alto | Prima di altri refactor bisogna rendere leggibili responsabilita', confini, invarianti e motivazioni direttamente vicino alle funzioni C. |
 | Pulizia finale delle responsabilita' | Medio/alto | Backend, app e core devono avere ruoli netti: raw nel backend, orchestrazione nell'app, semantica nel core. |
-| Revisione completa della suite core end-to-end | Medio | I test core devono fissare il comportamento ufficiale prima di archiviare o ridurre i test legacy. |
+| Revisione completa della suite core end-to-end | Medio | I test core devono continuare a fissare il comportamento ufficiale dopo la rimozione del legacy. |
 | Allineamento scenari/eventi/documentazione | Alto | Per ogni scenario importante deve essere chiaro il passaggio `filesystem -> inotify -> raw Alfred -> evento semantico`. |
-| Decisione sui test funzionali legacy | Medio | Dopo lo switch bisogna scegliere se mantenerli come shadow, migrarli al core o archiviarne una parte. |
-| Spegnere shadow come modalita' ordinaria | Medio | `core` e' gia' il default; shadow non deve sopravvivere come modalita' utente. |
-| Rimozione finale del legacy | Medio/alto | La decisione e' eliminare il percorso legacy/shadow dopo aver verificato copertura core e documentazione. |
+| Decisione finale sui file storici di test | Basso/medio | Oggi restano come archivio; in futuro si puo' decidere se tenerli, spostarli o rimuoverli. |
+| Rimuovere `EVENT_ENGINE_SHADOW` | Basso/medio | Per ora resta come errore esplicito interno; quando non servira' piu', `shadow` potra' diventare un valore invalido generico. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 
 ### Mappa test funzionali legacy e test core
@@ -973,10 +1001,9 @@ La suite legacy copre ancora due categorie che non devono bloccare lo switch:
 - comportamento storico diverso dal target: doppia emissione
   `MOVED + RENAMED` invece di un solo `RELOCATED`
 
-Questa distinzione autorizza la prossima fase: rimuovere progressivamente lo
-shadow dal percorso runtime, mantenendo il core come unico contratto
-semantico. Se durante la rimozione emerge uno scenario utente non coperto, lo
-step corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
+Questa distinzione ha autorizzato la rimozione dello shadow dal percorso
+runtime. Da questo punto, se emerge uno scenario utente non coperto, lo step
+corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
 
 Ordine operativo consigliato per la rimozione:
 
@@ -991,7 +1018,7 @@ Ordine operativo consigliato per la rimozione:
 7. rimuovere fisicamente `events.c`, `events.h`, `move_cache.c`,
    `move_cache.h` e `move_cache_size`: fatto
 8. archiviare nei documenti la vecchia semantica solo come storia della
-   migrazione
+   migrazione: fatto
 
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'
 solo un evento da tradurre, ma una condizione in cui il backend ammette di non
