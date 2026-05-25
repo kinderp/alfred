@@ -365,7 +365,7 @@ Il punto residuo e' ora piu' piccolo: `inotify_backend_poll()` riceve ancora
 backend. La callback raw/core invece e' gia' diventata generica: il consumer
 applicativo arriva da `userdata`.
 
-Stato implementato del terzo micro-refactor:
+Stato storico del terzo micro-refactor:
 
 - `inotify_backend_poll()` costruisce un `inotify_backend_context_t` locale
   all'inizio della funzione
@@ -373,10 +373,13 @@ Stato implementato del terzo micro-refactor:
 - il lookup del path padre usa `ctx.runtime->watchers`
 - i log raw e gli errori interni al poll usano `ctx.logger`
 - restavano volutamente su `app_t` solo la scelta `event_engine_mode` e la
-  chiamata legacy `legacy_events_dispatch(app, ev)`, perche' appartenevano al
-  ponte shadow temporaneo e non al backend core finale
+  chiamata legacy `legacy_events_dispatch(app, ev)`, perche' allora
+  appartenevano al ponte shadow temporaneo e non al backend core finale
 
-Stato implementato del quarto micro-refactor:
+Questo non e' piu' lo stato corrente: `event_engine_mode` e il ponte shadow
+sono stati rimossi.
+
+Stato storico del quarto micro-refactor:
 
 - `inotify_backend_init()` costruisce un `inotify_backend_context_t` locale
   subito dopo il controllo degli argomenti
@@ -409,7 +412,7 @@ dodicesimo micro-refactor, anche le firme pubbliche pulite ricevono direttamente
 `inotify_backend_context_t *`. La semantica osservabile e l'ordine di cleanup
 non sono cambiati.
 
-Stato implementato del sesto micro-refactor:
+Stato storico del sesto micro-refactor:
 
 - dentro `inotify_backend_poll()`, la lettura di `event_engine_mode` passa da
   `app->config.event_engine_mode` a `ctx.config->event_engine_mode`
@@ -475,15 +478,16 @@ Questo rende startup watch e shutdown simmetrici: entrambi hanno una funzione
 pubblica compatibile con `app.c` e una funzione interna che mostra gia' il
 confine futuro basato su `inotify_backend_context_t`.
 
-Stato implementato del decimo micro-refactor:
+Stato storico del decimo micro-refactor:
 
 - in quel passo `inotify_backend_init(app)` restava ancora la funzione pubblica
   chiamata da `app_init()`
 - il wrapper pubblico controllava `app == NULL`, costruiva
   `inotify_backend_context_t` e delegava a `backend_init(&ctx)`
-- `backend_init()` contiene tutta la logica reale di inizializzazione:
-  imposta `ctx->runtime->fd = -1`, inizializza la watcher table, apre il file
-  descriptor inotify non bloccante e inizializza il legacy shadow solo se
+- `backend_init()` conteneva tutta la logica reale di inizializzazione:
+  impostava `ctx->runtime->fd = -1`, inizializzava la watcher table, apriva il
+  file descriptor inotify non bloccante e, nel codice di allora,
+  inizializzava il legacy shadow solo se
   `ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW`
 - gli error path restano invariati: fallimento di `watcher_init()` ritorna
   `ERR_ALLOC`; fallimento di `inotify_init1()` distrugge la watcher table e
@@ -537,7 +541,7 @@ questo passo non viene applicata ancora a `poll()` per non nascondere il
 problema residuo: `events.c` richiede ancora `app_t` durante il confronto
 legacy/shadow.
 
-Stato implementato del tredicesimo micro-refactor:
+Stato storico del tredicesimo micro-refactor:
 
 - introdotto `legacy_shadow_bridge_t`, un piccolo bridge che contiene il
   puntatore `struct app *` richiesto dal dispatcher storico `events.c`
@@ -545,8 +549,9 @@ Stato implementato del tredicesimo micro-refactor:
   `inotify_backend_context_t *ctx`, `legacy_shadow_bridge_t *legacy`, callback
   raw/core e `userdata`
 - `app_run()` costruisce sia `backend_ctx` sia `legacy_shadow_bridge_t`
-- `backend_dispatch_legacy_shadow()` riceve il bridge e legge `legacy->app`
-  solo quando `ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW`
+- `backend_dispatch_legacy_shadow()` riceveva il bridge e leggeva
+  `legacy->app` solo quando, nel codice di allora,
+  `ctx->config->event_engine_mode == EVENT_ENGINE_SHADOW`
 - il percorso raw/core usa solo `ctx`; il ponte legacy/shadow e' confinato nel
   tipo dedicato
 
@@ -555,7 +560,7 @@ non e' piu' parte della firma normale del backend context e non e' piu' passata
 come parametro principale del poll. La presenza del bridge rende esplicito che
 il problema rimasto appartiene al confronto shadow, non al backend core.
 
-Stato implementato del quattordicesimo micro-refactor:
+Stato storico del quattordicesimo micro-refactor:
 
 - `legacy_shadow_bridge_t` non contiene piu' `struct app *`
 - il bridge contiene `legacy_shadow_dispatch_fn dispatch` e `void *userdata`
@@ -600,13 +605,13 @@ Il backend mantiene solo il punto di chiamata del confronto durante il poll,
 tramite callback opaca. Non inizializza, non spegne e non include piu' il codice
 semantico legacy.
 
-Stato implementato del sedicesimo micro-refactor:
+Stato storico del sedicesimo micro-refactor:
 
 - `app_run()` costruisce ancora il valore `legacy_shadow_bridge_t`, ma passa al
   backend un puntatore separato `legacy_bridge`
-- `legacy_bridge` resta `NULL` quando
+- `legacy_bridge` restava `NULL` quando, nel codice di allora,
   `app->config.event_engine_mode == EVENT_ENGINE_CORE`
-- `legacy_bridge` punta al bridge opaco solo quando e' attivo
+- `legacy_bridge` puntava al bridge opaco solo quando era attivo
   `EVENT_ENGINE_SHADOW`
 - `backend_dispatch_legacy_shadow()` continua ad accettare `NULL` quando il
   mode e' core, perche' ritorna prima di guardare il bridge
@@ -615,7 +620,7 @@ Questo chiarisce il percorso normale: core mode non usa nessun bridge legacy.
 Il parametro rimane nella firma di `inotify_backend_poll()` solo perche' shadow
 mode e' ancora disponibile come strumento temporaneo di confronto.
 
-Stato implementato del diciassettesimo micro-refactor:
+Stato storico del diciassettesimo micro-refactor:
 
 - `inotify_backend_context_t` contiene ora
   `const legacy_shadow_bridge_t *legacy_shadow`
@@ -627,10 +632,9 @@ Stato implementato del diciassettesimo micro-refactor:
   la firma pubblica torna a `ctx`, callback raw/core e `userdata`
 - `backend_dispatch_legacy_shadow()` legge il bridge da `ctx->legacy_shadow`
 
-Questo passo non rimuove shadow mode, ma lo rende meno invasivo nella API
-pubblica del backend. Il percorso core ufficiale vede una firma normale:
-context piu' callback. Il ponte legacy resta confinato in un campo opzionale
-del context, da eliminare quando il confronto shadow non servira' piu'.
+Quel passo non rimuoveva ancora shadow mode, ma lo rendeva meno invasivo nella
+API pubblica del backend. E' stato poi seguito dalla rimozione del bridge e
+dalla cancellazione del dispatcher legacy.
 
 Stato implementato del diciottesimo micro-refactor:
 
@@ -1049,14 +1053,14 @@ Priorita' consigliata:
 
 | Priorita' | File | Motivo |
 | --- | --- | --- |
-| Alta | `modules/inotify/src/inotify_backend.c` | E' il confine piu' importante tra inotify, raw event, watch ricorsivi, raw sintetici e shadow legacy. |
+| Alta | `modules/inotify/src/inotify_backend.c` | E' il confine piu' importante tra inotify, raw event, watch ricorsivi e raw sintetici. |
 | Alta | `modules/inotify/include/inotify_backend.h` | Deve spiegare che cosa possiede il backend e quale contratto offre all'app. |
 | Alta | `core/src/alfred_correlator.c` | Contiene la logica che trasforma raw event in eventi semantici, inclusa la correlazione move/rename. |
 | Alta | `core/include/alfred_correlator.h` | Deve rendere chiaro il contratto pubblico del core. |
 | Alta | `app/src/app.c` | Ora deve essere descritto come orchestratore, non come luogo della semantica filesystem. |
 | Media | `modules/inotify/src/watch_manager.c` | Gestisce stato backend reale e discovery ricorsiva; e' delicato per il bug `mkdir -p`. |
 | Media | `modules/inotify/src/inotify_adapter.c` | Va mantenuto conversion-only; i commenti devono proteggere questo confine. |
-| Media | `app/src/config.c` | Contiene scelte importanti su default core, rifiuto esplicito di shadow e parsing sicuro dei numeri. |
+| Media | `app/src/config.c` | Contiene scelte importanti su default core, validazione di `event_engine=core` e parsing sicuro dei numeri. |
 
 Regola pratica: i commenti nel codice devono essere in inglese e vicini alle
 funzioni; le spiegazioni lunghe, didattiche e con contesto storico devono stare

@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c` e
+  `docs/it/15-todo-switch-core.md`: puliti riferimenti ambigui allo shadow
+  legacy dopo la rimozione completa del percorso. I vecchi micro-refactor
+  restano documentati come storia della migrazione, ma non sono piu' descritti
+  come stato operativo corrente.
 - `app/include/config.h`, `app/src/config.c`, `app/src/app.c` e
   documentazione didattica: rimosso `event_engine_mode_t` e il campo
   `config_t.event_engine_mode`. Il runtime non conserva piu' una scelta engine

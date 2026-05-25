@@ -90,9 +90,8 @@ static int backend_emit_synthetic_dir_create(
  * @ctx: backend context containing config, logger, and backend storage
  *
  * Initializes the watcher table first, then opens a nonblocking inotify file
- * descriptor. Legacy shadow initialization is intentionally outside this
- * module: app.c owns the optional semantic comparison path, while the backend
- * owns only inotify runtime state.
+ * descriptor. The removed legacy shadow path deliberately does not appear
+ * here: the backend owns only inotify runtime state and raw-event production.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
