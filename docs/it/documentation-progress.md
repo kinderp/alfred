@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/15-todo-switch-core.md`: registrato l'audit delle responsabilita'
+  residue. Non emerge un micro-refactor tecnico urgente: `path_join()` resta
+  utility generica, il backend context esplicita correttamente config/logger
+  presi in prestito e `userdata` resta opaco per il backend.
 - `docs/it/15-todo-switch-core.md`: aggiornata la roadmap post-switch con lo
   stato reale dopo le ultime passate documentali. Documentazione pesante e
   allineamento mappe sono ora "parziale avanzato"; il prossimo passo tecnico e'

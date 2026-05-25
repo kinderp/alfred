@@ -952,6 +952,25 @@ Overflow/resync resta fuori da questi tre passi. Va progettato separatamente
 perche' riguarda la perdita di affidabilita' dello stream, non una semplice
 traduzione di evento.
 
+### Audit responsabilita' residue
+
+Audit eseguito dopo la rimozione dello shadow e le passate sui commenti di
+backend e watch manager.
+
+Risultato sintetico:
+
+| Candidato | Rischio | Conviene ora? | Motivo |
+| --- | --- | --- | --- |
+| `path_join()` in `app/src/utils.c` usata solo da `modules/inotify` | Basso/medio | Non subito | La funzione e' generica sui path, non specifica di inotify. Spostarla ora ridurrebbe un include ma rischierebbe di creare una utility duplicata o troppo locale. |
+| `inotify_backend_context_t` prende ancora `config_t` e `logger_t` applicativi | Basso | No | Sono dipendenze prese in prestito e documentate. Il backend non possiede quei dati e il context rende esplicita la lifetime. |
+| `app.c` passa `app_t` come `userdata` della callback raw | Basso | No | Il backend non interpreta `userdata`. Il cast resta nel livello applicativo e serve a collegare raw event, core e logger. |
+| `utils.h` espone molte utility generiche | Basso | Solo se cresce ancora | Dopo lo spostamento della mask inotify non contiene piu' dettagli backend-specific. Una divisione prematura aumenterebbe file piccoli senza beneficio immediato. |
+
+Decisione: non c'e' un micro-refactor tecnico evidente da fare subito. Il
+prossimo passo pragmatico e' la revisione finale scenari/test, verificando che
+la suite core e la suite backend coprano tutti i contratti correnti e che i test
+storici rimangano chiaramente archivio.
+
 ### Mappa test funzionali legacy e test core
 
 La mappa dettagliata e' in
