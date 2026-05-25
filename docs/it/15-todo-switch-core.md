@@ -61,8 +61,9 @@ Al momento:
 - il core e' inizializzato in `app_t`
 - il runtime manda eventi inotify al core
 - `event_engine=core` e' il default e usa il core come stream ufficiale plain
-- `ALFRED_EVENT_ENGINE=shadow` abilita il confronto legacy/core solo se il
-  binario e' stato compilato con `ENABLE_LEGACY_SHADOW=1`
+- `ALFRED_EVENT_ENGINE=shadow` e `ENABLE_LEGACY_SHADOW=1` esistono ancora come
+  residuo temporaneo, ma il backend non chiama piu' il dispatcher legacy nel
+  poll path
 - esiste un primo backend inotify esplicito in
   `modules/inotify/src/inotify_backend.c`
 - il backend legge il fd inotify, logga gli eventi raw, costruisce
@@ -71,9 +72,9 @@ Al momento:
   loop applicativo al backend inotify
 - `events.c` contiene ancora semantica legacy, ma non viene compilato nella
   build core-only normale
-- `move_cache.c` e' ancora usato dal legacy dispatcher quando
-  `ENABLE_LEGACY_SHADOW=1`; la cache e' posseduta da `events.c` e viene
-  inizializzata solo in `event_engine=shadow`
+- `move_cache.c` resta compilabile nella variante `ENABLE_LEGACY_SHADOW=1`, ma
+  non partecipa piu' al poll path del backend dopo lo spegnimento del dispatch
+  live legacy/core
 - `watch_manager_add_recursive_with_discovery()` puo' notificare directory
   scoperte dallo scan ricorsivo
 - il backend trasforma directory scoperte in raw event sintetici per il core
@@ -84,8 +85,8 @@ Al momento:
 - le funzioni lifecycle pulite del backend ricevono `inotify_backend_context_t *`
   per usare runtime, configurazione e logger
 - `inotify_backend_poll()` riceve `inotify_backend_context_t *`, callback
-  raw/core e `userdata`; l'eventuale bridge legacy shadow vive nel context come
-  campo opzionale e resta `NULL` in `event_engine=core`
+  raw/core e `userdata`; non contiene piu' bridge shadow e non chiama piu'
+  `legacy_events_dispatch()`
 
 ### Decisione: nessuna sopravvivenza dello shadow
 
@@ -98,10 +99,9 @@ il modo in cui leggiamo i prossimi refactor:
 - bisogna prima verificare la copertura core e poi cancellare il confronto
   legacy in passi piccoli
 
-Il bridge rimasto in `inotify_backend_context_t` e' quindi debito temporaneo,
-non un punto di estensione futuro. Va eliminato quando la suite core e la
-documentazione degli scenari sono sufficienti a sostituire il vecchio
-riferimento legacy.
+Il bridge shadow e' stato rimosso dal `inotify_backend_context_t`. La direzione
+successiva e' rimuovere anche init/shutdown legacy da `app.c`, poi eliminare la
+configurazione shadow e i file storici.
 
 ## Mappa della logica legacy rimasta
 
@@ -208,7 +208,7 @@ Il backend inotify non accede direttamente al core: non chiama
 `alfred_process()` e non legge `app->core`. Il collegamento con il core passa
 solo dalla callback ricevuta da `inotify_backend_poll()`. La maggior parte delle
 funzioni backend non riceve piu' l'intero `app_t`; le dipendenze rimaste sono
-esplicite nel context backend e nel bridge shadow opaco.
+esplicite nel context backend.
 
 Dipendenze reali osservate oggi:
 
@@ -217,8 +217,8 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_init()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_init(ctx)` | inizializza fd/watch table, legge configurazione e logga errori | gia' fuori da `app_t`; non inizializza piu' legacy shadow |
 | `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd e distrugge watch table | gia' fuori da `app_t`; non spegne piu' legacy shadow |
-| `inotify_backend_poll()` | riceve `inotify_backend_context_t *`, callback raw/core e `userdata`; il bridge shadow opzionale e' in `ctx->legacy_shadow` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, invoca la callback shadow solo se attiva | rimuovere `ctx->legacy_shadow` quando shadow legacy non servira' piu' |
-| `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context; resta da rimuovere il ponte shadow dal poll |
+| `inotify_backend_poll()` | riceve `inotify_backend_context_t *`, callback raw/core e `userdata` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, aggiorna diagnostica watch e discovery ricorsiva | gia' fuori da `app_t` e fuori dal dispatch legacy |
+| `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context |
 | `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
 | `watch_manager_add()` | `app->inotify.fd`, `app->config.watch_mask`, `app->inotify.watchers`, `app->logger` | installa watch kernel, salva mapping, logga `WATCH_ADDED` | ricevere fd/watchers/mask/logger espliciti o un contesto backend |
@@ -610,6 +610,21 @@ pubblica del backend. Il percorso core ufficiale vede una firma normale:
 context piu' callback. Il ponte legacy resta confinato in un campo opzionale
 del context, da eliminare quando il confronto shadow non servira' piu'.
 
+Stato implementato del diciottesimo micro-refactor:
+
+- `legacy_shadow_bridge_t` e `legacy_shadow_dispatch_fn` sono stati rimossi
+  dalla API pubblica del backend
+- `inotify_backend_context_t` non contiene piu' `ctx->legacy_shadow`
+- `app_run()` non costruisce piu' un bridge shadow e non lo passa al backend
+- `backend_dispatch_legacy_shadow()` e' stato eliminato dal poll path
+- `inotify_backend_poll()` consegna raw event al core e mantiene diagnostica
+  watch, ma non invoca piu' `legacy_events_dispatch()`
+
+Da questo punto `make test-legacy-shadow` e' storico e non va piu' usato come
+verifica ordinaria. I controlli utili sui watch sono in
+`make test-backend-diagnostics`; il contratto semantico ufficiale resta
+`make test` / `make test-core`.
+
 - `backend_handle_dir_create()` riceve lo stesso context gia' costruito dal
   poll path, quindi non ricostruisce piu' un context da `app_t`
 
@@ -913,12 +928,12 @@ Decisione attuale:
 ```text
 make test               -> alias ufficiale del percorso core
 make test-core          -> nome esplicito della stessa suite core
-make test-legacy-shadow -> funzionali storici legacy/shadow
+make test-legacy-shadow -> target storico legacy/shadow, non verifica ordinaria
 ```
 
-Il nome esplicito `test-legacy-shadow` riduce l'ambiguita' per studenti e
-contributori: la suite storica resta disponibile, ma non e' piu' presentata come
-il contratto futuro del prodotto. Non serve creare ora una suite
+Il nome esplicito `test-legacy-shadow` riduceva l'ambiguita' per studenti e
+contributori. Dopo lo spegnimento del dispatch legacy nel poll path, la suite
+storica resta solo transitoria e non deve bloccare i refactor. Non serve creare ora una suite
 `test-functional-core`: `make test` e `make test-core` avviano gia' Alfred
 reale, passano dal backend inotify reale e controllano l'`events.log` core.
 
@@ -926,8 +941,8 @@ Roadmap completata per il cambio di `make test`:
 
 1. fase precedente: `make test` puntava a `test-legacy-shadow`
 2. fase switch: `make test` punta a `test-core`
-3. fase successiva: `test-legacy-shadow` resta come target diagnostico
-   esplicito oppure viene archiviato insieme al vecchio dispatcher
+3. fase attuale: la diagnostica utile e' stata spostata in `tests/backend/`
+   e `test-legacy-shadow` puo' essere archiviato insieme al vecchio dispatcher
 
 Prima di archiviare `test-legacy-shadow` devono essere vere queste condizioni:
 
@@ -970,8 +985,8 @@ Ordine operativo consigliato per la rimozione:
 1. documentare che `ENABLE_LEGACY_SHADOW` e' temporaneo
 2. creare una suite `tests/backend/` per la diagnostica utile dei watch: fatto
    per `WATCH_ADDED`, `WATCH_REMOVED` e watch ricorsivi lenti
-3. eliminare il bridge shadow da `inotify_backend_context_t`
-4. eliminare `backend_dispatch_legacy_shadow()` dal poll path
+3. eliminare il bridge shadow da `inotify_backend_context_t`: fatto
+4. eliminare `backend_dispatch_legacy_shadow()` dal poll path: fatto
 5. rimuovere init/shutdown legacy da `app.c`
 6. togliere `event_engine=shadow` dalla configurazione ordinaria
 7. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`

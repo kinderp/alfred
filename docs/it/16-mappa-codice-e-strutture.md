@@ -221,10 +221,9 @@ watch.
 
 Storicamente il backend riceveva `app_t *` in molte funzioni. Dopo i
 micro-refactor piu' recenti, le funzioni lifecycle pulite e il poll ricevono
-direttamente `inotify_backend_context_t *`. `poll()` ha ancora una dipendenza
-temporanea dallo shadow legacy, ma non tramite `app_t`: riceve un bridge opaco
-con callback e `userdata`. La lettura del codice mostra che le dipendenze reali
-sono limitate e abbastanza regolari.
+direttamente `inotify_backend_context_t *`. Il poll path non contiene piu' il
+bridge shadow e non chiama piu' il dispatcher legacy: produce raw event, aggiorna
+watch e lascia la semantica al core.
 
 ```mermaid
 flowchart TD
@@ -232,7 +231,6 @@ flowchart TD
     A --> C["app->config"]
     A --> D["app->logger"]
     A --> E["callback verso app/core"]
-    A --> F["legacy shadow adapter<br/>solo app.c"]
 
     B --> B1["fd"]
     B --> B2["watcher_table_t"]
@@ -252,7 +250,7 @@ Tabella di lettura:
 | `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
-| `app->config.event_engine_mode` | `app_init_legacy_shadow()`, poll tramite `ctx.config` | abilitare o rifiutare shadow mode e decidere se invocare il bridge | temporaneo, finche' shadow esiste |
+| `app->config.event_engine_mode` | `app_init_legacy_shadow()`, `core_logger_on_event()` | abilitare/rifiutare shadow residuo e scegliere formato log core | temporaneo, finche' shadow esiste |
 | `app->config.move_cache_size` | `legacy_events_init()` tramite `app_init_legacy_shadow()` | dimensione cache move legacy | no nel percorso core finale |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
@@ -470,21 +468,12 @@ handle_backend_event(raw, userdata)
 ```
 
 Questo e' piu' pulito perche' il backend non deve conoscere il tipo del consumer
-del raw event. Sa solo invocare una callback. L'eventuale confronto legacy
-shadow non e' piu' un parametro ordinario del poll: vive nel context come campo
-temporaneo e viene letto solo dal percorso diagnostico.
+del raw event. Sa solo invocare una callback. Il confronto legacy live e' stato
+spento: non esiste piu' un bridge shadow nel context backend.
 
 Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
 
 ```text
-legacy_shadow_bridge_t legacy:
-  legacy.dispatch = app_legacy_shadow_dispatch
-  legacy.userdata = app
-
-ctx.legacy_shadow:
-  NULL in event_engine=core
-  &legacy in event_engine=shadow
-
 inotify_backend_poll(&ctx, on_event, userdata)
   backend_poll(ctx, on_event, userdata)
 
@@ -493,29 +482,20 @@ backend_poll(ctx, on_event, userdata)
   watcher_get_path(&ctx->runtime->watchers, wd)
   logger_raw(ctx->logger, ...)
   on_event(raw, userdata)
+  backend_handle_ignored(ctx, ev)
   backend_handle_dir_create(ctx, ev, on_event, userdata)
-  backend_dispatch_legacy_shadow(ctx, ev)
 ```
 
-La scelta core/shadow viene letta dal context. La chiamata diretta al
-dispatcher storico non e' piu' nel corpo principale del poll: passa da
-`backend_dispatch_legacy_shadow()`. Questa funzione riceve
-il context e legge `ctx->legacy_shadow`. Il bridge non contiene piu' `app_t`:
-contiene una callback e un `userdata` opaco. Il cast verso `app_t` vive in
-`app.c`, dentro `app_legacy_shadow_dispatch()`, perche' e' li' che il programma
-conosce il contesto applicativo completo. Il backend sa solo che, in shadow
-mode, deve invocare una callback di confronto.
+Il backend non legge piu' la scelta core/shadow nel poll path. La scelta
+`event_engine` resta temporaneamente nell'applicazione per rifiutare shadow
+nelle build core-only e per scegliere il formato di log del core, ma non serve
+piu' a invocare `legacy_events_dispatch()`.
 
-La differenza tra lifecycle e poll e' intenzionale. Le funzioni lifecycle
-pubbliche (`init`, startup watch, poll, shutdown) ricevono il context costruito
-da `app.c`. Il bridge shadow e' un campo opzionale del context, non un parametro
-ordinario del poll. Questo impedisce a `app_t` di entrare nella API pubblica del
-backend e rende la firma del percorso core piu' pulita.
-
-Nel percorso normale `event_engine=core`, `ctx.legacy_shadow` e' `NULL`. Questa
-scelta e' didatticamente importante: il core path non ha bisogno del dispatcher
-legacy nemmeno come valore vuoto. Il bridge esiste solo quando si chiede
-esplicitamente shadow mode per confrontare il vecchio stream con quello core.
+Le funzioni lifecycle pubbliche (`init`, startup watch, poll, shutdown) ricevono
+il context costruito da `app.c`. Il context contiene solo runtime, config e
+logger: non contiene piu' callback legacy. Questa scelta rende il backend
+didatticamente piu' chiaro perche' mostra un confine netto: backend uguale fatti
+raw e manutenzione watch, core uguale semantica.
 
 ## Struttura dati di configurazione
 
@@ -545,7 +525,7 @@ Campi rilevanti:
 | `move_cache_size` | capacita' della cache move legacy | `config_defaults()`, `config_load()` | `app_init_legacy_shadow()` |
 | `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
 | `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
-| `event_engine_mode` | sceglie core o shadow | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `app_init_legacy_shadow()`, `inotify_backend_poll()`, `core_logger_on_event()` |
+| `event_engine_mode` | sceglie core o shadow residuo | `config_defaults()`, `config_load()`, `config_set_event_engine()` | `app_init()`, `app_init_legacy_shadow()`, `core_logger_on_event()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` prende il valore da `watch_manager_default_mask()`, poi

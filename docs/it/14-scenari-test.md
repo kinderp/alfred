@@ -251,11 +251,13 @@ Conclusione operativa:
 
 - la suite `make test` / `make test-core` e' oggi la sorgente piu' precisa per
   il comportamento end-to-end futuro del percorso core
-- la suite funzionale storica resta utile solo finche' serve come smoke test
-  end-to-end legacy/shadow durante la migrazione
+- la suite funzionale storica resta solo memoria della fase legacy/shadow; dopo
+  lo spegnimento del dispatch legacy nel poll path non e' piu' una verifica
+  ordinaria
 - `make test-legacy-shadow` resta esplicito per i controlli storici su
   `WATCH_ADDED`, `WATCH_REMOVED` e differenze legacy/core, ma non e' destinato
-  a sopravvivere allo switch totale
+  a sopravvivere allo switch totale; i controlli watch utili sono gia' in
+  `tests/backend/`
 - `tests/functional/test_move_rename_file.sh` resta utile come scenario
   legacy/shadow esplicito per mostrare la vecchia doppia emissione
   `FILE_MOVED + FILE_RENAMED`
@@ -343,7 +345,8 @@ Strategia consigliata per i prossimi refactor dei test:
 
 1. usare `make test` come contratto ufficiale core
 2. mantenere `make test-core` come nome esplicito della stessa suite
-3. mantenere `make test-legacy-shadow` come suite diagnostica separata
+3. non usare piu' `make test-legacy-shadow` come verifica ordinaria: il
+   dispatch legacy live e' stato spento
 4. non aggiungere per ora una terza suite `test-functional-core`, perche'
    `make test` e `make test-core` sono gia' end-to-end sul percorso core
 5. quando lo shadow sara' archiviato, spostare o rimuovere i funzionali

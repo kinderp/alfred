@@ -970,12 +970,17 @@ Esegue gli script in:
 tests/functional/
 ```
 
-Questi test funzionali storici usano ancora lo shadow legacy. Per questo il
-target costruisce prima il binario con:
+Questi test funzionali storici appartengono al vecchio confronto legacy/shadow.
+Il target costruisce prima il binario con:
 
 ```bash
 ENABLE_LEGACY_SHADOW=1
 ```
+
+Dopo lo spegnimento del dispatch legacy nel poll path, questo target non e' piu'
+una verifica ordinaria dello switch. Resta temporaneamente nel Makefile solo
+finche' `events.c`, `move_cache.c` e la configurazione `shadow` non saranno
+rimossi o archiviati.
 
 ### test
 

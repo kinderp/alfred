@@ -36,10 +36,6 @@ static void app_build_inotify_backend_context(
 );
 static int app_init_legacy_shadow(app_t *app);
 static void app_shutdown_legacy_shadow(app_t *app);
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-static void app_legacy_shadow_dispatch(void *userdata,
-                                       const struct inotify_event *ev);
-#endif
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -71,16 +67,16 @@ static void app_build_inotify_backend_context(
     ctx->runtime = &app->inotify;
     ctx->config = &app->config;
     ctx->logger = &app->logger;
-    ctx->legacy_shadow = NULL;
 }
 
 /*
  * app_init_legacy_shadow - initialize the optional legacy comparison path
  * @app: application context that owns configuration and logger
  *
- * The inotify backend is raw-oriented and must not initialize semantic legacy
- * state. Shadow mode is an application-level comparison feature, so app.c owns
- * the build/runtime checks and the lifetime of events.c.
+ * The inotify backend is raw-oriented and no longer calls the semantic legacy
+ * dispatcher from its poll path. Until shadow mode is removed completely, app.c
+ * still owns the build/runtime check that rejects shadow requests in core-only
+ * binaries and the temporary lifetime of events.c in legacy-shadow builds.
  *
  * Return: ERR_OK when shadow is disabled or initialized, otherwise ERR_CONFIG
  * for an unavailable shadow build or ERR_ALLOC on legacy allocation failure.
@@ -127,23 +123,6 @@ static void app_shutdown_legacy_shadow(app_t *app)
     (void)app;
 #endif
 }
-
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-/*
- * app_legacy_shadow_dispatch - adapt the opaque bridge back to legacy app_t
- * @userdata: application context supplied by app_run()
- * @ev: kernel inotify event read by the backend
- *
- * The backend intentionally knows only callback + userdata. This adapter keeps
- * the historical app_t requirement local to app.c and events.c, which makes the
- * temporary shadow path visible without leaking app_t into the backend API.
- */
-static void app_legacy_shadow_dispatch(void *userdata,
-                                       const struct inotify_event *ev)
-{
-    legacy_events_dispatch((app_t *)userdata, ev);
-}
-#endif
 
 /* ============================================================================
  * Signal Handling
@@ -380,19 +359,6 @@ int app_run(app_t *app)
 
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);
-
-    legacy_shadow_bridge_t legacy = {
-#ifdef ALFRED_ENABLE_LEGACY_SHADOW
-        .dispatch = app_legacy_shadow_dispatch,
-        .userdata = app
-#else
-        .dispatch = NULL,
-        .userdata = NULL
-#endif
-    };
-
-    if (app->config.event_engine_mode == EVENT_ENGINE_SHADOW)
-        backend_ctx.legacy_shadow = &legacy;
 
     while (app->running) {
 

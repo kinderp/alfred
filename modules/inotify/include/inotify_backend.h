@@ -3,13 +3,10 @@
  *
  * This interface is the first step toward moving backend-specific runtime
  * ownership out of app.c. Backend operations receive an explicit backend
- * context; legacy shadow is an optional diagnostic callback stored in that
- * context while the migration remains reversible.
+ * context and produce raw Alfred events for the core.
  *
  * The backend contract is intentionally raw-oriented: callers receive
  * alfred_raw_event_t records and leave semantic classification to the core.
- * Legacy semantic dispatch is an implementation detail used only by shadow
- * mode while the migration is still reversible.
  * ========================================================================== */
 
 #ifndef INOTIFY_BACKEND_H
@@ -19,8 +16,6 @@
 #include "config.h"
 #include "logger.h"
 #include "watcher.h"
-
-#include <sys/inotify.h>
 
 /*
  * inotify_backend_t - runtime state owned by the inotify backend
@@ -38,49 +33,19 @@ typedef struct inotify_backend {
 } inotify_backend_t;
 
 /*
- * legacy_shadow_dispatch_fn - call the historical shadow dispatcher
- * @userdata: opaque application-owned context
- * @ev: kernel inotify event to compare through the legacy path
- *
- * The backend does not interpret @userdata. app.c owns the cast from the opaque
- * pointer to its real type, keeping app_t out of the backend public boundary.
- */
-typedef void (*legacy_shadow_dispatch_fn)(
-    void *userdata,
-    const struct inotify_event *ev
-);
-
-/*
- * legacy_shadow_bridge_t - temporary bridge for the legacy shadow dispatcher
- * @dispatch: optional legacy dispatch callback
- * @userdata: opaque context passed to @dispatch
- *
- * This type quarantines the remaining legacy dependency without exposing app_t
- * to the backend. The normal backend raw/core path must use
- * inotify_backend_context_t; only the legacy shadow comparison path may call
- * through this callback bridge.
- */
-typedef struct legacy_shadow_bridge {
-    legacy_shadow_dispatch_fn dispatch;
-    void *userdata;
-} legacy_shadow_bridge_t;
-
-/*
  * inotify_backend_context_t - borrowed dependencies for backend operations
  * @runtime: backend-owned runtime state to mutate
  * @config: application-owned configuration read by backend helpers
  * @logger: application-owned logger used for backend diagnostics
- * @legacy_shadow: optional legacy comparison bridge used only in shadow mode
  *
  * The context does not own any pointed-to object. It exists to avoid passing
  * the whole app_t into backend helpers that only need fd/watchers, selected
- * configuration fields, logging, and the temporary shadow callback.
+ * configuration fields, and logging.
  */
 typedef struct inotify_backend_context {
     inotify_backend_t *runtime;
     const config_t *config;
     logger_t *logger;
-    const legacy_shadow_bridge_t *legacy_shadow;
 } inotify_backend_context_t;
 
 /*

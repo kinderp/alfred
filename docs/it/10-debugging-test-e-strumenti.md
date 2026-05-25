@@ -689,16 +689,19 @@ ENABLE_LEGACY_SHADOW=1
 ```
 
 Questa variante include ancora il dispatcher legacy `events.c` e la
-`move_cache`, perche' i funzionali storici usano lo shadow mode come confronto.
+`move_cache`, ma il poll path del backend non chiama piu'
+`legacy_events_dispatch()`. Il target e' quindi storico: non va piu' usato come
+verifica ordinaria dello switch al core.
 
-Questo passo risponde alla domanda:
+Questo passo rispondeva alla domanda:
 
 ```text
 la modifica ha rotto la compatibilita' diagnostica legacy/shadow?
 ```
 
-Anche se il core e' il percorso ufficiale, questi test restano utili finche'
-shadow mode viene mantenuto come ponte di confronto.
+Da questo punto della migrazione la risposta non e' piu' necessaria per
+procedere: i controlli diagnostici utili sono stati migrati in `tests/backend/`
+e il contratto semantico ufficiale vive in `tests/core/`.
 
 ### 6. `make` finale
 
@@ -735,8 +738,8 @@ Esempi:
 - se fallisce `make test`, analizza il comportamento semantico del core
 - se fallisce `make test-backend-diagnostics`, controlla log diagnostici,
   watch descriptor e manutenzione della tabella dei watch
-- se fallisce `make test-legacy-shadow`, controlla compatibilita'
-  legacy/shadow o test funzionali storici
+- `make test-legacy-shadow` e' storico dopo lo spegnimento del dispatch legacy:
+  non usarlo come blocco per i nuovi refactor del core
 - se fallisce il `make` finale, il workspace non e' tornato alla build normale
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:

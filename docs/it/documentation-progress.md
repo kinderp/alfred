@@ -35,6 +35,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/src/inotify_backend.c`, `app/src/app.c`,
+  `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: rimosso il
+  bridge shadow dal context backend e spento il dispatch live
+  `legacy_events_dispatch()` dal poll path. `test-legacy-shadow` diventa
+  storico, mentre core e backend diagnostics restano le verifiche ordinarie.
 - `tests/backend/test_recursive_slow_watch_tree.sh`,
   `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
   `15-todo-switch-core.md`: migrata anche la diagnostica dei watch ricorsivi

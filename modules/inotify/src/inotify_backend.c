@@ -70,10 +70,6 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
 static void backend_handle_ignored(inotify_backend_context_t *ctx,
                                    const struct inotify_event *ev);
 
-static int backend_dispatch_legacy_shadow(
-    const inotify_backend_context_t *ctx,
-    const struct inotify_event *ev);
-
 static int backend_poll(inotify_backend_context_t *ctx,
                         inotify_backend_event_fn on_event,
                         void *userdata);
@@ -241,40 +237,6 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  * ========================================================================== */
 
 /*
- * backend_dispatch_legacy_shadow - run the temporary legacy comparison bridge
- * @legacy: optional callback bridge for the legacy dispatcher
- * @ctx: narrowed backend context used for configuration and diagnostics
- * @ev: raw inotify event to pass to the historical dispatcher
- *
- * This helper deliberately isolates the remaining legacy dependency in the
- * poll path. The backend/core path above it works with raw Alfred events and
- * opaque callback userdata; in core mode ctx->legacy_shadow is expected to be
- * NULL. Only the legacy shadow comparison path receives this callback bridge
- * because events.c was written before the core/backend split.
- *
- * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
- * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
- */
-static int backend_dispatch_legacy_shadow(
-    const inotify_backend_context_t *ctx,
-    const struct inotify_event *ev)
-{
-    if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
-        return ERR_OK;
-
-    const legacy_shadow_bridge_t *legacy = ctx->legacy_shadow;
-
-    if (legacy == NULL || legacy->dispatch == NULL) {
-        logger_error(ctx->logger,
-                     "shadow event engine requires legacy bridge");
-        return ERR_INVALID_ARG;
-    }
-
-    legacy->dispatch(legacy->userdata, ev);
-    return ERR_OK;
-}
-
-/*
  * inotify_backend_poll - process one nonblocking inotify read
  * @ctx: backend context used by the raw/core path
  * @on_event: callback used to deliver raw events to the application/core layer
@@ -285,11 +247,12 @@ static int backend_dispatch_legacy_shadow(
  * 1. log the kernel raw event for diagnostics
  * 2. convert the inotify record into alfred_raw_event_t when possible
  * 3. deliver the raw event to the core through @on_event
- * 4. optionally run the compiled-in legacy dispatcher for shadow comparison
+ * 4. update backend watch state
  * 5. update recursive watches and emit synthetic raw directory creates
  *
- * This keeps the core as the official semantic path while preserving the
- * legacy stream only as a comparison tool.
+ * This keeps the core as the only semantic path. Historical legacy shadow code
+ * may still be compiled temporarily, but it is no longer driven by backend
+ * polling.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
@@ -310,8 +273,7 @@ int inotify_backend_poll(inotify_backend_context_t *ctx,
  * @userdata: opaque callback context passed through unchanged
  *
  * The main backend path uses @ctx for runtime, configuration, and diagnostics.
- * Optional shadow comparison state is available through ctx->legacy_shadow,
- * keeping the public poll signature focused on context plus raw callback.
+ * No semantic legacy dispatcher is called from this function.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
@@ -399,12 +361,6 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         if (callback_status != ERR_OK)
             return callback_status;
-
-        int legacy_status =
-            backend_dispatch_legacy_shadow(ctx, ev);
-
-        if (legacy_status != ERR_OK)
-            return legacy_status;
 
         backend_handle_ignored(ctx, ev);
 
