@@ -96,6 +96,7 @@ static int backend_emit_synthetic_dir_create(
  * Initializes the watcher table first, then opens a nonblocking inotify file
  * descriptor. The removed legacy shadow path deliberately does not appear
  * here: the backend owns only inotify runtime state and raw-event production.
+ * It does not initialize semantic state; the core owns that state separately.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
@@ -240,7 +241,9 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  * @on_event: callback used to deliver raw events to the application/core layer
  * @userdata: opaque callback context passed through unchanged
  *
- * The processing order is deliberate:
+ * The processing order is deliberate. The backend first records what Linux
+ * reported, then produces an Alfred raw fact, and only then repairs backend
+ * watch state. Semantic interpretation stays downstream in the core.
  *
  * 1. log the kernel raw event for diagnostics
  * 2. convert the inotify record into alfred_raw_event_t when possible
@@ -248,7 +251,9 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  * 4. update backend watch state
  * 5. update recursive watches and emit synthetic raw directory creates
  *
- * This keeps the core as the only semantic path.
+ * This keeps the core as the only semantic path. WATCH_ADDED, WATCH_REMOVED,
+ * and recursive discovery are backend diagnostics/state repair, not a second
+ * user-facing event stream.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
@@ -269,7 +274,9 @@ int inotify_backend_poll(inotify_backend_context_t *ctx,
  * @userdata: opaque callback context passed through unchanged
  *
  * The main backend path uses @ctx for runtime, configuration, and diagnostics.
- * No semantic legacy dispatcher is called from this function.
+ * It deliberately accepts a raw callback instead of a semantic logger. That
+ * callback boundary prevents this file from recreating the old semantic
+ * dispatcher that used to live in the inotify module.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
@@ -409,6 +416,11 @@ static void backend_handle_ignored(inotify_backend_context_t *ctx,
  * watches below the created directory. When it discovers directories whose
  * kernel create event could not have been observed, it emits synthetic raw
  * CREATE|ISDIR facts so the core can still produce DIR_CREATED.
+ *
+ * The backend is not deciding that a semantic DIR_CREATED happened. It is
+ * saying: "this directory exists and the kernel event was probably missed
+ * because the watch tree was not ready yet." The core remains responsible for
+ * deduplication and final event semantics.
  */
 static void backend_handle_dir_create(inotify_backend_context_t *ctx,
                                       const struct inotify_event *ev,
@@ -458,7 +470,8 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
  *
  * Discovery callbacks run while watch_manager.c walks the filesystem. This
  * helper adapts that backend-state notification into the same raw event
- * callback used for real inotify events.
+ * callback used for real inotify events. Keeping both paths behind the same
+ * callback means the core does not need a special "recursive recovery" API.
  */
 static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
@@ -505,7 +518,7 @@ static uint64_t backend_now_ns(void)
  *
  * This helper is intentionally local to the inotify backend because the names
  * are Linux inotify flags, not Alfred semantic events and not generic app
- * utilities.
+ * utilities. The resulting string belongs in raw logs only.
  */
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
@@ -555,6 +568,11 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
  * watch did not exist yet. The core receives a normal ALFRED_RAW_CREATE |
  * ALFRED_RAW_ISDIR fact and does not need to know whether it came from an
  * inotify record or recursive discovery.
+ *
+ * This design keeps recovery local to the backend while preserving a single
+ * raw-event contract for the core. If a real inotify CREATE later arrives for
+ * the same directory, core-side deduplication policy decides whether another
+ * semantic event should be emitted.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */

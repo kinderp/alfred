@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- reinforced the core-only inotify backend comments in
+  `modules/inotify/src/inotify_backend.c`, especially the boundary between raw
+  facts, recursive watch recovery, synthetic raw directory creates, and core
+  semantic/deduplication policy
 - strengthened app/core/backend boundary comments in `app/include/app.h` and
   `app/src/app.c`
 - clarified raw path lifetime, sequence-number purpose, and private core state

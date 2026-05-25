@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c` e `docs/commenting-progress.md`:
+  rafforzati i commenti in inglese sul confine backend/core. Il backend
+  produce fatti raw, ripara lo stato dei watch ricorsivi e puo' generare raw
+  sintetici; la semantica finale e l'eventuale dedup restano responsabilita'
+  del core.
 - `app/src/utils.c`, `app/include/utils.h`,
   `modules/inotify/src/inotify_backend.c` e documentazione didattica: spostata
   la formattazione testuale delle mask inotify fuori dalle utility generiche e
