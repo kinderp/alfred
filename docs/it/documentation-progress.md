@@ -35,6 +35,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_backend.h`, `modules/inotify/src/inotify_backend.c`
+  e `app/src/app.c`: spostato il bridge shadow opzionale dentro
+  `inotify_backend_context_t`. `inotify_backend_poll()` non riceve piu' il
+  bridge come parametro pubblico: usa solo context, callback raw/core e
+  `userdata`.
+- `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  diciassettesimo micro-refactor, chiarendo che shadow resta nel context come
+  dipendenza diagnostica opzionale.
 - `Makefile`: cambiato `make test` in alias del percorso core ufficiale.
   `make test-core` resta il nome esplicito della stessa suite, mentre
   `make test-legacy-shadow` resta disponibile per diagnostica legacy/shadow.
@@ -107,7 +115,9 @@ Stati usati:
   backend.
 - `modules/inotify/src/inotify_backend.c`: estratto `backend_poll()` come forma
   interna context-shaped del polling. Questo passo e' stato poi completato
-  dalla firma pubblica `inotify_backend_poll(ctx, legacy, on_event, userdata)`.
+  prima dalla firma pubblica `inotify_backend_poll(ctx, legacy, on_event,
+  userdata)` e poi dalla variante piu' pulita in cui il bridge diagnostico vive
+  in `ctx->legacy_shadow`.
 - `15-todo-switch-core.md` e `16-mappa-codice-e-strutture.md`: documentato
   l'undicesimo micro-refactor, chiarendo che il parametro `app_t` nel poll path
   ha ormai significato solo legacy/shadow.

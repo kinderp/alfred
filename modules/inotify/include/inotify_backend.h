@@ -3,8 +3,8 @@
  *
  * This interface is the first step toward moving backend-specific runtime
  * ownership out of app.c. Backend operations receive an explicit backend
- * context; legacy shadow receives a separate bridge while the migration remains
- * reversible.
+ * context; legacy shadow is an optional diagnostic callback stored in that
+ * context while the migration remains reversible.
  *
  * The backend contract is intentionally raw-oriented: callers receive
  * alfred_raw_event_t records and leave semantic classification to the core.
@@ -38,22 +38,6 @@ typedef struct inotify_backend {
 } inotify_backend_t;
 
 /*
- * inotify_backend_context_t - borrowed dependencies for backend operations
- * @runtime: backend-owned runtime state to mutate
- * @config: application-owned configuration read by backend helpers
- * @logger: application-owned logger used for backend diagnostics
- *
- * The context does not own any pointed-to object. It exists to avoid passing
- * the whole app_t into backend helpers that only need fd/watchers, selected
- * configuration fields, and logging.
- */
-typedef struct inotify_backend_context {
-    inotify_backend_t *runtime;
-    const config_t *config;
-    logger_t *logger;
-} inotify_backend_context_t;
-
-/*
  * legacy_shadow_dispatch_fn - call the historical shadow dispatcher
  * @userdata: opaque application-owned context
  * @ev: kernel inotify event to compare through the legacy path
@@ -80,6 +64,24 @@ typedef struct legacy_shadow_bridge {
     legacy_shadow_dispatch_fn dispatch;
     void *userdata;
 } legacy_shadow_bridge_t;
+
+/*
+ * inotify_backend_context_t - borrowed dependencies for backend operations
+ * @runtime: backend-owned runtime state to mutate
+ * @config: application-owned configuration read by backend helpers
+ * @logger: application-owned logger used for backend diagnostics
+ * @legacy_shadow: optional legacy comparison bridge used only in shadow mode
+ *
+ * The context does not own any pointed-to object. It exists to avoid passing
+ * the whole app_t into backend helpers that only need fd/watchers, selected
+ * configuration fields, logging, and the temporary shadow callback.
+ */
+typedef struct inotify_backend_context {
+    inotify_backend_t *runtime;
+    const config_t *config;
+    logger_t *logger;
+    const legacy_shadow_bridge_t *legacy_shadow;
+} inotify_backend_context_t;
 
 /*
  * inotify_backend_event_fn - deliver one raw backend event to the application
@@ -120,7 +122,6 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
 /*
  * inotify_backend_poll - read and dispatch available inotify records
  * @ctx: backend context containing runtime, configuration, and logger
- * @legacy: optional bridge used only by legacy shadow mode
  * @on_event: callback that forwards raw events to the app/core boundary
  * @userdata: opaque callback context
  *
@@ -132,7 +133,6 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
 int inotify_backend_poll(inotify_backend_context_t *ctx,
-                         legacy_shadow_bridge_t *legacy,
                          inotify_backend_event_fn on_event,
                          void *userdata);
 

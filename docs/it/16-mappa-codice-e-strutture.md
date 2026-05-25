@@ -463,14 +463,16 @@ attuale `app_run()` passa `app` come `userdata`, e `handle_backend_event()` lo
 ricostruisce:
 
 ```text
-inotify_backend_poll(&ctx, &legacy, handle_backend_event, app)
+inotify_backend_poll(&ctx, handle_backend_event, app)
 handle_backend_event(raw, userdata)
   app = userdata
   alfred_process(app->core, raw)
 ```
 
 Questo e' piu' pulito perche' il backend non deve conoscere il tipo del consumer
-del raw event. Sa solo invocare una callback.
+del raw event. Sa solo invocare una callback. L'eventuale confronto legacy
+shadow non e' piu' un parametro ordinario del poll: vive nel context come campo
+temporaneo e viene letto solo dal percorso diagnostico.
 
 Anche il corpo di `inotify_backend_poll()` e' stato ristretto verso il context:
 
@@ -479,39 +481,38 @@ legacy_shadow_bridge_t legacy:
   legacy.dispatch = app_legacy_shadow_dispatch
   legacy.userdata = app
 
-legacy_shadow_bridge_t *legacy_bridge:
+ctx.legacy_shadow:
   NULL in event_engine=core
   &legacy in event_engine=shadow
 
-inotify_backend_poll(&ctx, legacy_bridge, on_event, userdata)
-  backend_poll(ctx, legacy_bridge, on_event, userdata)
+inotify_backend_poll(&ctx, on_event, userdata)
+  backend_poll(ctx, on_event, userdata)
 
-backend_poll(ctx, legacy_bridge, on_event, userdata)
+backend_poll(ctx, on_event, userdata)
   read(ctx->runtime->fd, ...)
   watcher_get_path(&ctx->runtime->watchers, wd)
   logger_raw(ctx->logger, ...)
   on_event(raw, userdata)
   backend_handle_dir_create(ctx, ev, on_event, userdata)
-  backend_dispatch_legacy_shadow(legacy_bridge, ctx, ev)
+  backend_dispatch_legacy_shadow(ctx, ev)
 ```
 
 La scelta core/shadow viene letta dal context. La chiamata diretta al
 dispatcher storico non e' piu' nel corpo principale del poll: passa da
 `backend_dispatch_legacy_shadow()`. Questa funzione riceve
-`legacy_shadow_bridge_t`, ma il bridge non contiene piu' `app_t`: contiene una
-callback e un `userdata` opaco. Il cast verso `app_t` vive in `app.c`, dentro
-`app_legacy_shadow_dispatch()`, perche' e' li' che il programma conosce il
-contesto applicativo completo. Il backend sa solo che, in shadow mode, deve
-invocare una callback di confronto.
+il context e legge `ctx->legacy_shadow`. Il bridge non contiene piu' `app_t`:
+contiene una callback e un `userdata` opaco. Il cast verso `app_t` vive in
+`app.c`, dentro `app_legacy_shadow_dispatch()`, perche' e' li' che il programma
+conosce il contesto applicativo completo. Il backend sa solo che, in shadow
+mode, deve invocare una callback di confronto.
 
 La differenza tra lifecycle e poll e' intenzionale. Le funzioni lifecycle
-pubbliche (`init`, startup watch, shutdown) ricevono gia' il context costruito
-da `app.c`. `poll()` riceve lo stesso context, ma riceve anche un bridge
-separato per lo shadow legacy. Questo evita di mescolare nel context normale una
-dipendenza che appartiene solo al vecchio dispatcher e impedisce a `app_t` di
-entrare nella API pubblica del backend.
+pubbliche (`init`, startup watch, poll, shutdown) ricevono il context costruito
+da `app.c`. Il bridge shadow e' un campo opzionale del context, non un parametro
+ordinario del poll. Questo impedisce a `app_t` di entrare nella API pubblica del
+backend e rende la firma del percorso core piu' pulita.
 
-Nel percorso normale `event_engine=core`, `legacy_bridge` e' `NULL`. Questa
+Nel percorso normale `event_engine=core`, `ctx.legacy_shadow` e' `NULL`. Questa
 scelta e' didatticamente importante: il core path non ha bisogno del dispatcher
 legacy nemmeno come valore vuoto. Il bridge esiste solo quando si chiede
 esplicitamente shadow mode per confrontare il vecchio stream con quello core.

@@ -67,12 +67,11 @@ static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
                                            const char *path,
                                            void *userdata);
 
-static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
-                                          const inotify_backend_context_t *ctx,
-                                          const struct inotify_event *ev);
+static int backend_dispatch_legacy_shadow(
+    const inotify_backend_context_t *ctx,
+    const struct inotify_event *ev);
 
 static int backend_poll(inotify_backend_context_t *ctx,
-                        legacy_shadow_bridge_t *legacy,
                         inotify_backend_event_fn on_event,
                         void *userdata);
 
@@ -246,19 +245,21 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
  *
  * This helper deliberately isolates the remaining legacy dependency in the
  * poll path. The backend/core path above it works with raw Alfred events and
- * opaque callback userdata; in core mode @legacy is expected to be NULL. Only
- * the legacy shadow comparison path receives this callback bridge because
- * events.c was written before the core/backend split.
+ * opaque callback userdata; in core mode ctx->legacy_shadow is expected to be
+ * NULL. Only the legacy shadow comparison path receives this callback bridge
+ * because events.c was written before the core/backend split.
  *
  * Return: ERR_OK when no shadow dispatch is needed or after successful legacy
  * dispatch, ERR_CONFIG when shadow mode is requested without legacy support.
  */
-static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
-                                          const inotify_backend_context_t *ctx,
-                                          const struct inotify_event *ev)
+static int backend_dispatch_legacy_shadow(
+    const inotify_backend_context_t *ctx,
+    const struct inotify_event *ev)
 {
     if (ctx->config->event_engine_mode != EVENT_ENGINE_SHADOW)
         return ERR_OK;
+
+    const legacy_shadow_bridge_t *legacy = ctx->legacy_shadow;
 
     if (legacy == NULL || legacy->dispatch == NULL) {
         logger_error(ctx->logger,
@@ -273,7 +274,6 @@ static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
 /*
  * inotify_backend_poll - process one nonblocking inotify read
  * @ctx: backend context used by the raw/core path
- * @legacy: optional bridge used only by legacy shadow mode
  * @on_event: callback used to deliver raw events to the application/core layer
  * @userdata: opaque callback context passed through unchanged
  *
@@ -291,31 +291,28 @@ static int backend_dispatch_legacy_shadow(legacy_shadow_bridge_t *legacy,
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
 int inotify_backend_poll(inotify_backend_context_t *ctx,
-                         legacy_shadow_bridge_t *legacy,
                          inotify_backend_event_fn on_event,
                          void *userdata)
 {
     if (ctx == NULL || on_event == NULL)
         return ERR_INVALID_ARG;
 
-    return backend_poll(ctx, legacy, on_event, userdata);
+    return backend_poll(ctx, on_event, userdata);
 }
 
 /*
  * backend_poll - process one nonblocking inotify read through backend context
  * @ctx: narrowed backend context used by the raw/core path
- * @legacy: optional bridge needed only by the legacy shadow path
  * @on_event: callback used to deliver raw events to the application/core layer
  * @userdata: opaque callback context passed through unchanged
  *
  * The main backend path uses @ctx for runtime, configuration, and diagnostics.
- * The @legacy parameter deliberately keeps the temporary shadow dependency out
- * of the normal backend context and out of the backend's public app boundary.
+ * Optional shadow comparison state is available through ctx->legacy_shadow,
+ * keeping the public poll signature focused on context plus raw callback.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */
 static int backend_poll(inotify_backend_context_t *ctx,
-                        legacy_shadow_bridge_t *legacy,
                         inotify_backend_event_fn on_event,
                         void *userdata)
 {
@@ -401,7 +398,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
             return callback_status;
 
         int legacy_status =
-            backend_dispatch_legacy_shadow(legacy, ctx, ev);
+            backend_dispatch_legacy_shadow(ctx, ev);
 
         if (legacy_status != ERR_OK)
             return legacy_status;
