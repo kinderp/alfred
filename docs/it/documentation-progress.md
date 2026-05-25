@@ -35,6 +35,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `14-scenari-test.md` e `15-todo-switch-core.md`: pianificata la nuova
+  categoria `tests/backend/` per preservare diagnostica utile come
+  `WATCH_ADDED`, `WATCH_REMOVED` e watch ricorsivi lenti prima di rimuovere
+  `test-legacy-shadow`.
 - `14-scenari-test.md` e `15-todo-switch-core.md`: aggiunto l'audit
   pre-rimozione dello shadow legacy. La documentazione chiarisce che lo switch
   deve essere totale, che lo shadow non e' una feature futura, e che la suite

@@ -936,6 +936,8 @@ Prima di archiviare `test-legacy-shadow` devono essere vere queste condizioni:
   come diagnostica, non come contratto utente
 - gli studenti sanno che `WATCH_ADDED` e `WATCH_REMOVED` sono log backend
 - la documentazione degli scenari indica quali test legacy sono storici
+- gli scenari diagnostici utili sono migrati in una suite backend separata,
+  senza dipendere da `events.c` o dallo shadow legacy
 
 ### Audit di copertura prima della rimozione legacy
 
@@ -952,7 +954,8 @@ del prodotto finale:
 
 La suite legacy copre ancora due categorie che non devono bloccare lo switch:
 
-- diagnostica backend: `WATCH_ADDED` e `WATCH_REMOVED`
+- diagnostica backend: `WATCH_ADDED`, `WATCH_REMOVED` e aggiunta progressiva
+  dei watch nelle directory ricorsive lente
 - comportamento storico diverso dal target: doppia emissione
   `MOVED + RENAMED` invece di un solo `RELOCATED`
 
@@ -964,12 +967,13 @@ step corretto non e' ripristinare lo shadow, ma aggiungere un test core mirato.
 Ordine operativo consigliato per la rimozione:
 
 1. documentare che `ENABLE_LEGACY_SHADOW` e' temporaneo
-2. eliminare il bridge shadow da `inotify_backend_context_t`
-3. eliminare `backend_dispatch_legacy_shadow()` dal poll path
-4. rimuovere init/shutdown legacy da `app.c`
-5. togliere `event_engine=shadow` dalla configurazione ordinaria
-6. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`
-7. archiviare nei documenti la vecchia semantica solo come storia della
+2. creare una suite `tests/backend/` per la diagnostica utile dei watch
+3. eliminare il bridge shadow da `inotify_backend_context_t`
+4. eliminare `backend_dispatch_legacy_shadow()` dal poll path
+5. rimuovere init/shutdown legacy da `app.c`
+6. togliere `event_engine=shadow` dalla configurazione ordinaria
+7. rimuovere `events.c`, `move_cache.c` e target `test-legacy-shadow`
+8. archiviare nei documenti la vecchia semantica solo come storia della
    migrazione
 
 L'overflow resta fuori dal percorso immediato per una ragione precisa: non e'

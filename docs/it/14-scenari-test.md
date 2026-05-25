@@ -221,6 +221,7 @@ Scenari diagnostici da ricollocare o tenere solo se servono davvero:
 
 - controllo di `WATCH_ADDED`
 - controllo di `WATCH_REMOVED`
+- controllo dell'aggiunta progressiva dei watch in una creazione ricorsiva lenta
 - smoke test del vecchio comando `make test-legacy-shadow`
 
 Questa distinzione e' essenziale per gli studenti: un test puo' essere utile
@@ -258,6 +259,50 @@ Conclusione operativa:
 - `tests/functional/test_move_rename_file.sh` resta utile come scenario
   legacy/shadow esplicito per mostrare la vecchia doppia emissione
   `FILE_MOVED + FILE_RENAMED`
+
+## Test backend diagnostics
+
+Prima di rimuovere `test-legacy-shadow`, conviene salvare gli scenari che non
+sono semantica core ma descrivono la salute del backend inotify. Questi test non
+dovrebbero vivere nella suite core, perche' non controllano il contratto utente
+di Alfred. Dovrebbero vivere in una suite separata, per esempio:
+
+```text
+tests/backend/
+make test-backend-diagnostics
+```
+
+Questa suite avrebbe un obiettivo diverso:
+
+```text
+tests/core/     -> eventi semantici ufficiali
+tests/backend/  -> diagnostica e manutenzione interna del backend inotify
+tests/functional/ -> storico legacy/shadow da rimuovere
+```
+
+Gli scenari da migrare sono:
+
+| Scenario diagnostico | Origine attuale | Cosa controlla | Perche' e' utile |
+| --- | --- | --- | --- |
+| create directory watch | `tests/functional/test_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
+| delete directory watch | `tests/functional/test_delete_dir.sh` | `WATCH_REMOVED` o rimozione diagnostica equivalente | verifica che il backend non lasci una voce watch valida per una directory sparita |
+| recursive slow watch tree | `tests/functional/test_recursive.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
+| recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh`, da valutare | raw sintetici per directory scoperte dallo scan | utile solo se vogliamo testare esplicitamente il contratto raw/backend, non solo il risultato core |
+
+La quarta riga va discussa prima di implementarla: il test core esistente
+verifica gia' l'effetto semantico finale (`DIR_CREATED` per tutta la catena).
+Un test backend sui raw sintetici avrebbe senso solo se decidiamo che anche il
+formato raw diagnostico e' un contratto interno abbastanza stabile da
+proteggere.
+
+La regola pratica e':
+
+- se il test parla di `FILE_CREATED`, `DIR_RELOCATED`, `FILE_READY`, va in
+  `tests/core/`
+- se il test parla di `WATCH_ADDED`, `WATCH_REMOVED`, watch descriptor o raw
+  diagnostici, va in `tests/backend/`
+- se il test parla di differenze legacy/core, va archiviato con la storia dello
+  shadow e non deve sopravvivere come controllo automatico ordinario
 
 ### Scenario core: shadow richiesto senza build legacy
 
