@@ -7,9 +7,9 @@
  *
  * app_t is still a practical orchestration object: it wires configuration,
  * logging, the inotify backend, and the core together. The semantic state is
- * already owned by the core engine; what remains transitional is that the
- * inotify backend context is embedded here and backend functions still receive
- * app_t so they can reach configuration, logging, and the core callback.
+ * already owned by the core engine. The inotify backend runtime is embedded
+ * here, but backend functions receive an explicit inotify_backend_context_t
+ * built by app.c instead of receiving the whole app_t object.
  * ============================================================================
  */
 
@@ -31,9 +31,10 @@
  * each subsystem into this object, app_run() uses it while polling inotify,
  * and app_shutdown() releases resources in the reverse direction.
  *
- * The current design still embeds inotify_backend_t here. That is a temporary
- * integration boundary while the backend still needs app-level configuration
- * and logging.
+ * The current design still embeds inotify_backend_t here. app.c exposes it to
+ * backend functions through inotify_backend_context_t together with borrowed
+ * configuration and logger pointers. The backend never owns app_t; app_t is
+ * only passed back as opaque callback userdata at the app/core boundary.
  */
 typedef struct app {
 
@@ -48,9 +49,9 @@ typedef struct app {
     config_t config;
 
     /*
-     * inotify backend state. This now owns the nonblocking descriptor and the
-     * watch descriptor table, though the backend still receives app_t during
-     * the transition so it can use config and logger.
+     * inotify backend state. This owns the nonblocking descriptor and watch
+     * descriptor table. Backend functions access it through
+     * inotify_backend_context_t, not through app_t.
      */
     inotify_backend_t inotify;
 
