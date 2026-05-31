@@ -420,7 +420,8 @@ static void backend_handle_ignored(inotify_backend_context_t *ctx,
  * The backend is not deciding that a semantic DIR_CREATED happened. It is
  * saying: "this directory exists and the kernel event was probably missed
  * because the watch tree was not ready yet." The core remains responsible for
- * deduplication and final event semantics.
+ * final event semantics. No generic create deduplication policy is implemented
+ * yet; if a duplicate appears, that policy must be designed explicitly.
  */
 static void backend_handle_dir_create(inotify_backend_context_t *ctx,
                                       const struct inotify_event *ev,
@@ -570,9 +571,10 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
  * inotify record or recursive discovery.
  *
  * This design keeps recovery local to the backend while preserving a single
- * raw-event contract for the core. If a real inotify CREATE later arrives for
- * the same directory, core-side deduplication policy decides whether another
- * semantic event should be emitted.
+ * raw-event contract for the core. The current core emits every CREATE fact it
+ * receives. If a future scenario produces both synthetic and real CREATE facts
+ * for the same directory, an explicit deduplication policy must be added before
+ * suppressing either semantic event.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */

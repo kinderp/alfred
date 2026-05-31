@@ -312,7 +312,9 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
  *
  * The callback receives discovery facts, not final events. In the current
  * backend those facts become synthetic ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR
- * records, and the core still owns deduplication and semantic emission.
+ * records, while the core owns semantic emission. Generic create
+ * deduplication is not implemented yet and must be added as an explicit
+ * policy if a future scenario needs it.
  *
  * Return: 0 on success, -1 on failure.
  */
