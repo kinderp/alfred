@@ -51,8 +51,8 @@ Stati usati:
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`: aggiunto il parser
   testuale di `inotify_watch_mask`. La configurazione supporta `default`, liste
   esplicite di flag `IN_*` e modificatori `+FLAG` / `-FLAG`; i token
-  sconosciuti fanno fallire `config_load()` con `ERR_CONFIG`. L'avvio puo'
-  caricare un file tramite `ALFRED_CONFIG`.
+  sconosciuti o non ancora supportati da Alfred fanno fallire `config_load()`
+  con `ERR_CONFIG`. L'avvio puo' caricare un file tramite `ALFRED_CONFIG`.
 - `app/include/config.h`, `app/src/config.c`,
   `modules/inotify/include/inotify_config.h`,
   `modules/inotify/src/inotify_config.c`,

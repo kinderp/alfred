@@ -44,10 +44,12 @@ void inotify_config_defaults(inotify_config_t *cfg);
  *
  *   default
  *   default,-IN_ATTRIB
- *   default,+IN_OPEN,+IN_ACCESS
+ *   default,+IN_Q_OVERFLOW
  *   IN_CREATE,IN_DELETE,IN_MODIFY
  *
- * Unknown tokens are rejected so typos do not silently change the observed
+ * Only flags that Alfred can currently render in raw logs and convert into
+ * Alfred raw masks are accepted. Unknown or unsupported tokens are rejected so
+ * typos and premature configuration do not silently change the observed
  * filesystem contract.
  *
  * Return: 0 on success, -1 on invalid input.

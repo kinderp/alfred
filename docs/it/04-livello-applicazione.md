@@ -319,7 +319,7 @@ La chiave `inotify_watch_mask` configura la maschera passata a
 ```text
 default
 default,-IN_ATTRIB
-default,+IN_OPEN,+IN_ACCESS
+default,+IN_Q_OVERFLOW
 IN_CREATE,IN_DELETE,IN_MODIFY,IN_CLOSE_WRITE
 ```
 
@@ -333,6 +333,11 @@ Un token sconosciuto e' un errore di configurazione. Per esempio
 intenzionale: ignorare i typo sarebbe pericoloso, perche' l'utente penserebbe
 di aver modificato la maschera mentre Alfred starebbe continuando con un valore
 diverso.
+
+La configurazione accetta solo i flag che Alfred sa gia' rendere nei raw log e
+convertire in raw mask del core. Flag inotify reali ma non ancora supportati da
+Alfred, per esempio `IN_OPEN` o `IN_ACCESS`, vengono rifiutati finche' non
+decidiamo esplicitamente come osservarli e documentarli.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

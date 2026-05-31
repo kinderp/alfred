@@ -134,7 +134,7 @@ La maschera e' configurabile da file con:
 ```text
 inotify_watch_mask=default
 inotify_watch_mask=default,-IN_ATTRIB
-inotify_watch_mask=default,+IN_OPEN,+IN_ACCESS
+inotify_watch_mask=default,+IN_Q_OVERFLOW
 inotify_watch_mask=IN_CREATE,IN_DELETE,IN_MODIFY,IN_CLOSE_WRITE
 ```
 
@@ -143,6 +143,11 @@ importante perche' i nomi `IN_*` sono concetti Linux/inotify, mentre il core
 deve rimanere backend-neutral. Se un token non e' riconosciuto, `config_load()`
 ritorna `ERR_CONFIG` e Alfred non parte: un errore come `IN_ATRIB` non deve
 essere ignorato silenziosamente.
+
+Il parser non accetta tutti i flag esistenti di inotify. Accetta solo quelli che
+Alfred sa gia' mostrare nel raw log e convertire verso la raw mask del core.
+Questa scelta evita configurazioni apparentemente valide ma non osservabili in
+modo chiaro da Alfred.
 
 `IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
 produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti
