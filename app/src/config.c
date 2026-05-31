@@ -7,7 +7,7 @@
  * ========================================================================== */
 
 #include "config.h"
-#include "watch_manager.h"
+#include "inotify_config.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -24,8 +24,8 @@
  * @cfg: configuration object to initialize
  *
  * The defaults favor development visibility: recursive watching is enabled,
- * logs use predictable local filenames, and the watch mask comes from the
- * inotify watch manager.
+ * logs use predictable local filenames, and backend-specific defaults are
+ * delegated to the owning backend configuration helper.
  */
 void config_defaults(config_t *cfg)
 {
@@ -34,13 +34,10 @@ void config_defaults(config_t *cfg)
 
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->recursive          = 1;
     cfg->use_epoll          = 0;
     cfg->flush_immediately  = 1;
 
-    cfg->watcher_capacity   = 128;
-
-    cfg->watch_mask = watch_manager_default_mask();
+    inotify_config_defaults(&cfg->inotify);
 
     snprintf(cfg->raw_log,
              sizeof(cfg->raw_log),
@@ -170,6 +167,7 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
  * Example:
  *
  *   recursive=true
+ *   inotify_recursive=true
  *   use_epoll=false
  *   event_engine=core
  *   raw_log=myraw.log
@@ -211,9 +209,10 @@ error_t config_load(config_t *cfg, const char *path)
         char *key   = line;
         char *value = eq + 1;
 
-        if (strcmp(key, "recursive") == 0) {
+        if (strcmp(key, "recursive") == 0 ||
+            strcmp(key, "inotify_recursive") == 0) {
 
-            cfg->recursive =
+            cfg->inotify.recursive =
                 parse_bool(value);
         }
 
@@ -229,10 +228,11 @@ error_t config_load(config_t *cfg, const char *path)
                 parse_bool(value);
         }
 
-        else if (strcmp(key, "watcher_capacity") == 0) {
+        else if (strcmp(key, "watcher_capacity") == 0 ||
+                 strcmp(key, "inotify_watcher_capacity") == 0) {
 
-            cfg->watcher_capacity =
-                parse_size_or_default(value, cfg->watcher_capacity);
+            cfg->inotify.watcher_capacity =
+                parse_size_or_default(value, cfg->inotify.watcher_capacity);
         }
 
         else if (strcmp(key, "event_engine") == 0) {

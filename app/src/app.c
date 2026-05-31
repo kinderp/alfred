@@ -60,7 +60,7 @@ static void app_build_inotify_backend_context(
 )
 {
     ctx->runtime = &app->inotify;
-    ctx->config = &app->config;
+    ctx->config = &app->config.inotify;
     ctx->logger = &app->logger;
 }
 

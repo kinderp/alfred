@@ -276,6 +276,20 @@ Questo semplifica cleanup e ownership.
 - motore eventi in `core`
 - nomi standard dei log
 
+I valori specifici del backend inotify non sono piu' campi sparsi direttamente
+in `config_t`: sono raccolti in `config_t.inotify`, una sottostruttura di tipo
+`inotify_config_t`. Questo rende piu' chiaro il confine:
+
+```text
+config_t                 -> configurazione applicativa generale
+config_t.inotify         -> configurazione specifica del backend inotify
+alfred_config_t          -> configurazione del core semantico
+```
+
+Il backend inotify riceve solo `inotify_config_t` tramite
+`inotify_backend_context_t`. In questo modo non puo' leggere accidentalmente
+opzioni applicative o future opzioni di altri backend.
+
 `config_load()` legge righe semplici:
 
 ```text
@@ -286,10 +300,18 @@ Esempio:
 
 ```text
 recursive=true
+inotify_recursive=true
 watcher_capacity=256
+inotify_watcher_capacity=256
 event_engine=core
 raw_log=myraw.log
 ```
+
+Le chiavi storiche `recursive` e `watcher_capacity` restano accettate. Le nuove
+chiavi `inotify_recursive` e `inotify_watcher_capacity` descrivono meglio il
+proprietario reale di quelle opzioni e sono la forma preferita per i nuovi file
+di configurazione. La maschera inotify non e' ancora configurabile da file in
+questo micro-step.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

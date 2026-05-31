@@ -26,6 +26,9 @@ runtime architecture.
 
 Latest refresh:
 
+- added reviewed comments for the new inotify backend configuration files
+  `modules/inotify/include/inotify_config.h` and
+  `modules/inotify/src/inotify_config.c`
 - reinforced the core-only inotify backend comments in
   `modules/inotify/src/inotify_backend.c`, especially the boundary between raw
   facts, recursive watch recovery, synthetic raw directory creates, and core
@@ -101,12 +104,14 @@ Completed in the first heavy pass:
 | Done | `modules/inotify/include/events.h` |
 | Done | `modules/inotify/include/inotify_adapter.h` |
 | Done | `modules/inotify/include/inotify_backend.h` |
+| Done | `modules/inotify/include/inotify_config.h` |
 | Done | `modules/inotify/include/move_cache.h` |
 | Done | `modules/inotify/include/watch_manager.h` |
 | Done | `modules/inotify/include/watcher.h` |
 | Done | `modules/inotify/src/events.c` |
 | Done | `modules/inotify/src/inotify_adapter.c` |
 | Done | `modules/inotify/src/inotify_backend.c` |
+| Done | `modules/inotify/src/inotify_config.c` |
 | Done | `modules/inotify/src/move_cache.c` |
 | Done | `modules/inotify/src/watch_manager.c` |
 | Done | `modules/inotify/src/watcher.c` |

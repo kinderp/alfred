@@ -36,6 +36,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/include/config.h`, `app/src/config.c`,
+  `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_config.c`,
+  `modules/inotify/include/inotify_backend.h`, `app/src/app.c`, `Makefile`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md` e
+  `16-mappa-codice-e-strutture.md`: introdotta `inotify_config_t` come
+  sottostruttura specifica del backend inotify. `config_t` resta il contenitore
+  applicativo generale, mentre il backend riceve ora solo la configurazione
+  inotify tramite `inotify_backend_context_t`. Le chiavi storiche
+  `recursive` e `watcher_capacity` restano accettate; i nuovi alias
+  `inotify_recursive` e `inotify_watcher_capacity` preparano il futuro parser
+  di `inotify_watch_mask`.
 - `05-modulo-inotify.md`, `13-semantica-eventi.md` e `14-scenari-test.md`:
   dettagliati i casi che possono generare `IN_ATTRIB` secondo `inotify(7)`:
   permessi, timestamp, attributi estesi, numero di hard link, proprietario e

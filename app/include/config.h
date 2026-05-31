@@ -1,10 +1,9 @@
 /* ============================================================================
  * config.h - runtime configuration API
  *
- * The configuration layer owns user-tunable runtime values such as recursive
- * watching, table capacities, watch masks, and log file paths. Configuration is
- * loaded before subsystem initialization so later components can rely on this
- * structure being populated.
+ * The configuration layer owns user-tunable runtime values and log file paths.
+ * Backend-specific groups, such as the inotify configuration, are nested here
+ * so subsystem boundaries receive only the fields they need.
  * ============================================================================
  */
 
@@ -16,6 +15,7 @@
 #include <stdint.h>
 
 #include "errors.h"
+#include "inotify_config.h"
 
 /*
  * config_t - runtime configuration values
@@ -26,26 +26,14 @@
  */
 typedef struct {
 
-    /* Add watches recursively when startup paths contain directories. */
-    int recursive;
-
     /* Reserved for a future epoll-based event loop. */
     int use_epoll;
 
     /* Flush log streams after each write for better crash visibility. */
     int flush_immediately;
 
-    /*
-     * Initial capacity of the backend watcher table. The table can grow when
-     * inotify returns a watch descriptor beyond the current capacity.
-     */
-    size_t watcher_capacity;
-
-    /*
-     * Backend-specific inotify event mask used by watch_manager_add(). It is
-     * stored in config_t even though it is not yet configurable from the file.
-     */
-    uint32_t watch_mask;
+    /* Linux inotify backend configuration. */
+    inotify_config_t inotify;
 
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];

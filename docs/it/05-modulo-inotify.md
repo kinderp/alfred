@@ -114,18 +114,22 @@ IN_IGNORED
 IN_Q_OVERFLOW
 ```
 
-Questa maschera passa attraverso `config_t.watch_mask`:
+Questa maschera passa attraverso `config_t.inotify.watch_mask`:
 
 ```text
 config_defaults()
-    -> cfg->watch_mask = watch_manager_default_mask()
+    -> inotify_config_defaults(&cfg->inotify)
+    -> cfg->inotify.watch_mask = watch_manager_default_mask()
+app_build_inotify_backend_context()
+    -> ctx.config = &app->config.inotify
 watch_manager_add()
-    -> inotify_add_watch(..., app->config.watch_mask)
+    -> inotify_add_watch(..., ctx->config->watch_mask)
 ```
 
-Quindi `config_t` contiene davvero la maschera usata dal runtime. In questa fase
-la maschera non e' ancora configurabile da file: `config_load()` legge molte
-opzioni, ma non espone una chiave `watch_mask`.
+Quindi la configurazione applicativa contiene davvero la maschera usata dal
+runtime, ma dentro una sottostruttura dedicata al backend inotify. In questa
+fase la maschera non e' ancora configurabile da file: `config_load()` legge
+molte opzioni, ma non espone ancora una chiave `inotify_watch_mask`.
 
 `IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
 produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti
