@@ -30,6 +30,10 @@ Latest refresh:
   `app/src/fs_scanner.c`, and the scanner C test helper. The comments document
   scanner boundaries, callback lifetimes, traversal options, early-stop
   behavior, and the `openat()`/`fstatat()` traversal policy
+- refreshed `app/src/fs_scanner.c` after the scanner options tests. The file
+  now has explicit section headers, state-field comments, return contracts for
+  non-trivial helpers, and local policy comments for disappearing entries and
+  `max_depth` enforcement
 - added and refreshed reviewed comments for the inotify backend configuration
   files `modules/inotify/include/inotify_config.h` and
   `modules/inotify/src/inotify_config.c`, including the textual watch-mask

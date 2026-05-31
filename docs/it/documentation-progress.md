@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: estesa la copertura scanner alle opzioni pubbliche
+  `emit_root`, `max_depth`, `max_entries` e `include_files`. La roadmap ora
+  include anche una guida pratica all'uso dell'API `fs_scan_tree()` dal codice.
 - `21-roadmap-scanner-resync.md`: ampliata la spiegazione tecnica dello scanner
   filesystem. La nuova sezione chiarisce perche' sono state scelte primitive
   come `openat()`, `fdopendir()`, `readdir()` e `fstatat()`, quali vantaggi

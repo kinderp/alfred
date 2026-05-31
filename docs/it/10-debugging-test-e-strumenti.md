@@ -684,15 +684,20 @@ root/
     a/
         b/
         file.txt
+    c/
     link_to_a -> a/
 ```
 
 Poi verifica che lo scanner:
 
 - emetta la root
-- emetta le directory `a` e `a/b`
+- emetta le directory `a`, `a/b` e `c`
 - non emetta il file, perche' la configurazione iniziale e' directory-only
 - non segua il symlink, perche' `follow_symlinks` e' disabilitato di default
+- rispetti `emit_root=0`
+- rispetti `max_depth=1`
+- si fermi dopo `max_entries=2`
+- emetta il file quando `include_files=1`
 
 Questo target serve alla futura progettazione resync e indicizzazione. Non
 sostituisce `make test` o `make test-backend-diagnostics`.

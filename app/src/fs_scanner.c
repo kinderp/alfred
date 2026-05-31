@@ -19,6 +19,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+/* ============================================================================
+ * Scan State
+ * ============================================================================
+ */
+
 /*
  * fs_scan_state_t - private state for one scan operation
  *
@@ -29,12 +34,26 @@
  * command-line indexing mode.
  */
 typedef struct fs_scan_state {
+    /* Effective options for this scan, copied from the caller or defaults. */
     fs_scan_options_t opts;
+
+    /* Caller callback invoked for each selected entry. */
     fs_scan_fn on_entry;
+
+    /* Opaque callback context; borrowed and never interpreted by the scanner. */
     void *userdata;
+
+    /* Number of entries delivered to the callback. */
     size_t emitted;
+
+    /* Set when max_entries is reached or the callback asks to stop. */
     int stop;
 } fs_scan_state_t;
+
+/* ============================================================================
+ * Type and Emission Helpers
+ * ============================================================================
+ */
 
 /*
  * mode_to_type - translate POSIX mode bits to the scanner's coarse type
@@ -42,6 +61,8 @@ typedef struct fs_scan_state {
  *
  * The scanner intentionally collapses many filesystem kinds into
  * FS_SCAN_OTHER. Detailed semantic interpretation belongs above this layer.
+ *
+ * Return: scanner entry type matching @mode.
  */
 static fs_scan_type_t mode_to_type(mode_t mode)
 {
@@ -63,6 +84,8 @@ static fs_scan_type_t mode_to_type(mode_t mode)
  * Emission is not the same as traversal. A future scan may avoid emitting
  * files while still walking directories in order to add watches or rebuild
  * directory state.
+ *
+ * Return: nonzero when @type should be emitted.
  */
 static int should_emit(const fs_scan_options_t *opts, fs_scan_type_t type)
 {
@@ -91,6 +114,8 @@ static int should_emit(const fs_scan_options_t *opts, fs_scan_type_t type)
  * This helper centralizes include filters, max_entries handling, and callback
  * early-stop semantics. A nonzero callback result does not mean I/O failure; it
  * asks the traversal loop to stop cleanly.
+ *
+ * Return: ERR_OK. The current helper does not perform I/O.
  */
 static error_t emit_entry(fs_scan_state_t *state,
                           const char *path,
@@ -122,6 +147,11 @@ static error_t emit_entry(fs_scan_state_t *state,
     return ERR_OK;
 }
 
+/* ============================================================================
+ * Directory Traversal Helpers
+ * ============================================================================
+ */
+
 /*
  * directory_open_flags - build open/openat flags for directory traversal
  * @opts: scan policy
@@ -129,6 +159,8 @@ static error_t emit_entry(fs_scan_state_t *state,
  * O_NOFOLLOW keeps the default scanner from crossing a directory symlink. This
  * matches the first resync use case: rebuild knowledge of the watched tree
  * without silently scanning another subtree through a link.
+ *
+ * Return: OR-ed open(2) flags for directory descriptors.
  */
 static int directory_open_flags(const fs_scan_options_t *opts)
 {
@@ -153,6 +185,8 @@ static int directory_open_flags(const fs_scan_options_t *opts)
  * Children are opened relative to the current directory descriptor to reduce
  * repeated absolute path resolution and to keep traversal logic close to the
  * directory entry that was just read.
+ *
+ * Return: ERR_OK on success or requested early stop, ERR_IO on traversal error.
  */
 static error_t scan_dir_fd(fs_scan_state_t *state,
                            const char *path,
@@ -198,17 +232,33 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
                              ? 0
                              : AT_SYMLINK_NOFOLLOW;
 
+        /*
+         * A filesystem can change while it is being scanned. If an entry
+         * disappears between readdir() and fstatat(), skip it for now rather
+         * than failing the whole scan. The broader partial-error policy is still
+         * documented as a future resync decision.
+         */
         if (fstatat(dirfd(dir), ent->d_name, &st, stat_flags) != 0)
             continue;
 
         fs_scan_type_t type = mode_to_type(st.st_mode);
+        int child_depth = depth + 1;
 
-        if (emit_entry(state, child, type, depth + 1, &st) != ERR_OK)
+        /*
+         * max_depth limits both emission and recursion. This keeps
+         * max_depth = 0 meaningful: emit only the root when emit_root is set.
+         */
+        if (state->opts.max_depth >= 0 &&
+            child_depth > state->opts.max_depth) {
+            continue;
+        }
+
+        if (emit_entry(state, child, type, child_depth, &st) != ERR_OK)
             break;
 
         if (type == FS_SCAN_DIR &&
             (state->opts.max_depth < 0 ||
-             depth + 1 < state->opts.max_depth)) {
+             child_depth < state->opts.max_depth)) {
 
             int child_fd =
                 openat(dirfd(dir),
@@ -220,7 +270,7 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
                 return ERR_IO;
             }
 
-            error_t rc = scan_dir_fd(state, child, child_fd, depth + 1);
+            error_t rc = scan_dir_fd(state, child, child_fd, child_depth);
 
             if (rc != ERR_OK) {
                 closedir(dir);
@@ -234,6 +284,20 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
     return ERR_OK;
 }
 
+/* ============================================================================
+ * Public API
+ * ============================================================================
+ */
+
+/*
+ * fs_scan_options_defaults - initialize conservative scanner options
+ * @opts: options object to initialize
+ *
+ * The default profile matches the first resync need: discover directories,
+ * include the root path, avoid symbolic-link traversal, and leave depth/entry
+ * limits disabled. Callers opt into files, symlinks, or bounded scans
+ * explicitly.
+ */
 void fs_scan_options_defaults(fs_scan_options_t *opts)
 {
     if (opts == NULL)
@@ -256,6 +320,20 @@ void fs_scan_options_defaults(fs_scan_options_t *opts)
     opts->max_entries = 0;
 }
 
+/*
+ * fs_scan_tree - scan a filesystem tree
+ * @root: root path to scan
+ * @opts: optional scan policy; NULL selects fs_scan_options_defaults()
+ * @on_entry: callback invoked for selected entries
+ * @userdata: opaque pointer passed unchanged to @on_entry
+ *
+ * This is a fact-gathering API. It does not add watches, emit raw events, or
+ * decide semantic filesystem events. The callback receives borrowed entry data
+ * that remains valid only until the callback returns.
+ *
+ * Return: ERR_OK on success or callback-requested stop, ERR_INVALID_ARG for
+ * bad arguments, ERR_IO for root/traversal I/O failures.
+ */
 error_t fs_scan_tree(const char *root,
                      const fs_scan_options_t *opts,
                      fs_scan_fn on_entry,

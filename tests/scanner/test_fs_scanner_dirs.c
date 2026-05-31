@@ -1,9 +1,10 @@
 /*
  * test_fs_scanner_dirs.c - helper for the directory-only scanner scenario
  *
- * The shell wrapper builds a small tree, then this program verifies the first
- * scanner contract: default options emit root and directories only, without
- * following directory symlinks and without reporting regular files.
+ * The shell wrapper builds a small tree, then this program verifies the
+ * scanner contracts that are easiest to check without starting the full Alfred
+ * runtime: default directory-only output, root emission, depth limits, entry
+ * limits, file inclusion, and symlink exclusion.
  */
 
 #include "fs_scanner.h"
@@ -17,6 +18,7 @@ typedef struct {
     int saw_root;
     int saw_a;
     int saw_b;
+    int saw_c;
     int saw_symlink_dir;
     int saw_file;
 } scan_seen_t;
@@ -52,11 +54,161 @@ static int on_entry(const fs_scan_entry_t *entry, void *userdata)
         seen->saw_b = 1;
     }
 
+    if (has_suffix(entry->path, "/c") &&
+        entry->type == FS_SCAN_DIR) {
+        seen->saw_c = 1;
+    }
+
     if (strstr(entry->path, "link_to_a") != NULL)
         seen->saw_symlink_dir = 1;
 
     if (strstr(entry->path, "file.txt") != NULL)
         seen->saw_file = 1;
+
+    return 0;
+}
+
+static int run_scan(const char *root,
+                    const fs_scan_options_t *opts,
+                    scan_seen_t *seen)
+{
+    memset(seen, 0, sizeof(*seen));
+
+    error_t rc = fs_scan_tree(root, opts, on_entry, seen);
+
+    if (rc != ERR_OK) {
+        fprintf(stderr, "scan failed rc=%d\n", rc);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_default_dirs(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
+        seen.saw_symlink_dir || seen.saw_file || seen.count != 4) {
+
+        fprintf(stderr,
+                "default dirs mismatch count=%d root=%d a=%d b=%d c=%d "
+                "symlink=%d file=%d\n",
+                seen.count,
+                seen.saw_root,
+                seen.saw_a,
+                seen.saw_b,
+                seen.saw_c,
+                seen.saw_symlink_dir,
+                seen.saw_file);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_no_root(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    opts.emit_root = 0;
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
+        seen.count != 3) {
+        fprintf(stderr,
+                "emit_root=0 mismatch count=%d root=%d a=%d b=%d c=%d\n",
+                seen.count,
+                seen.saw_root,
+                seen.saw_a,
+                seen.saw_b,
+                seen.saw_c);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_max_depth_one(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    opts.max_depth = 1;
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (!seen.saw_root || !seen.saw_a || seen.saw_b || !seen.saw_c ||
+        seen.count != 3) {
+        fprintf(stderr,
+                "max_depth=1 mismatch count=%d root=%d a=%d b=%d c=%d\n",
+                seen.count,
+                seen.saw_root,
+                seen.saw_a,
+                seen.saw_b,
+                seen.saw_c);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_max_entries_two(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    opts.max_entries = 2;
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (seen.count != 2) {
+        fprintf(stderr, "max_entries=2 mismatch count=%d\n", seen.count);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_include_files(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_files = 1;
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
+        !seen.saw_file || seen.saw_symlink_dir || seen.count != 5) {
+        fprintf(stderr,
+                "include_files mismatch count=%d root=%d a=%d b=%d c=%d "
+                "file=%d symlink=%d\n",
+                seen.count,
+                seen.saw_root,
+                seen.saw_a,
+                seen.saw_b,
+                seen.saw_c,
+                seen.saw_file,
+                seen.saw_symlink_dir);
+        return 1;
+    }
 
     return 0;
 }
@@ -68,37 +220,11 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    fs_scan_options_t opts;
-
-    fs_scan_options_defaults(&opts);
-
-    scan_seen_t seen;
-
-    memset(&seen, 0, sizeof(seen));
-
-    error_t rc = fs_scan_tree(argv[1], &opts, on_entry, &seen);
-
-    if (rc != ERR_OK) {
-        fprintf(stderr, "scan failed rc=%d\n", rc);
-        return 1;
-    }
-
-    if (!seen.saw_root ||
-        !seen.saw_a ||
-        !seen.saw_b ||
-        seen.saw_symlink_dir ||
-        seen.saw_file ||
-        seen.count != 3) {
-
-        fprintf(stderr,
-                "unexpected scan result count=%d root=%d a=%d b=%d "
-                "symlink=%d file=%d\n",
-                seen.count,
-                seen.saw_root,
-                seen.saw_a,
-                seen.saw_b,
-                seen.saw_symlink_dir,
-                seen.saw_file);
+    if (expect_default_dirs(argv[1]) != 0 ||
+        expect_no_root(argv[1]) != 0 ||
+        expect_max_depth_one(argv[1]) != 0 ||
+        expect_max_entries_two(argv[1]) != 0 ||
+        expect_include_files(argv[1]) != 0) {
         return 1;
     }
 

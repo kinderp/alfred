@@ -303,7 +303,7 @@ filesystem che useremo per resync e, in futuro, indicizzazione.
 
 | Scenario | Script | Cosa controlla | Perche' serve |
 | --- | --- | --- | --- |
-| scanner directories only | `tests/scanner/test_fs_scanner_dirs.sh` | root, directory annidate, file esclusi, symlink non seguito | fissa il primo contratto dello scanner: directory-only, callback con `userdata`, no symlink following |
+| scanner directories and options | `tests/scanner/test_fs_scanner_dirs.sh` | default directory-only, `emit_root=0`, `max_depth=1`, `max_entries=2`, `include_files=1`, symlink non seguito | fissa il contratto iniziale dello scanner e delle opzioni pubbliche prima di usarlo per resync |
 
 Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
 `IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,

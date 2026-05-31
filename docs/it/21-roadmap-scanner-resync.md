@@ -458,14 +458,106 @@ Il test iniziale crea un albero con directory annidate, un file e un symlink.
 Verifica che lo scanner emetta solo root e directory reali e che non segua il
 symlink.
 
+## Come usare lo scanner dal codice
+
+Lo scanner non e' un programma separato e non e' ancora esposto dalla CLI. Per
+ora e' una piccola API C usata dai test e preparata per il futuro resync.
+
+Un chiamante deve:
+
+1. includere `fs_scanner.h`
+2. inizializzare una `fs_scan_options_t`
+3. scegliere quali entry ricevere
+4. passare una callback a `fs_scan_tree()`
+
+Esempio minimo:
+
+```c
+#include "fs_scanner.h"
+
+static int on_scan_entry(const fs_scan_entry_t *entry, void *userdata)
+{
+    (void)userdata;
+
+    /*
+     * entry->path and entry->st are borrowed. Copy them here if they must live
+     * after the callback returns.
+     */
+    printf("%d %s\n", entry->depth, entry->path);
+
+    return 0;
+}
+
+void scan_example(const char *root)
+{
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_files = 1;
+    opts.max_depth = 3;
+
+    (void)fs_scan_tree(root, &opts, on_scan_entry, NULL);
+}
+```
+
+Il valore di ritorno della callback ha una semantica precisa:
+
+- `0`: continua lo scan
+- diverso da `0`: ferma lo scan senza errore
+
+Questa scelta serve per casi come:
+
+- trovare la prima directory che soddisfa una condizione
+- limitare una futura indicizzazione
+- interrompere un resync quando il chiamante ha gia' raccolto abbastanza dati
+
+Le opzioni principali sono:
+
+| Opzione | Default | Significato |
+| --- | --- | --- |
+| `include_dirs` | `1` | emette directory |
+| `include_files` | `0` | emette file regolari |
+| `include_symlinks` | `0` | emette link simbolici come entry proprie |
+| `include_other` | `0` | emette fifo, socket, device e altri tipi |
+| `follow_symlinks` | `0` | segue i symlink invece di classificarli come symlink |
+| `emit_root` | `1` | emette anche il path root con profondita' `0` |
+| `max_depth` | `-1` | profondita' massima; `-1` significa nessun limite |
+| `max_entries` | `0` | numero massimo di callback; `0` significa nessun limite |
+
+Esempi:
+
+```c
+/* Solo root. */
+opts.max_depth = 0;
+
+/* Root e figli diretti, ma non nipoti. */
+opts.max_depth = 1;
+
+/* Prime 100 entry emesse, poi stop pulito. */
+opts.max_entries = 100;
+
+/* Directory e file regolari. */
+opts.include_files = 1;
+```
+
+La distinzione importante e':
+
+```text
+scan filesystem -> produce fatti osservati
+backend/core    -> decidono se quei fatti diventano watch, raw o eventi
+```
+
+Quindi una callback dello scanner non dovrebbe inventare direttamente una
+semantica core. Deve raccogliere fatti, aggiornare una struttura dati del
+chiamante o chiedere al backend di applicare una policy esplicita.
+
 ## Prossimi passi consigliati
 
-1. aggiungere test su `max_depth` e `max_entries`
-2. aggiungere modalita' `include_files`
-3. decidere la policy sugli errori parziali di permesso/accesso
-4. valutare se sostituire la discovery ricorsiva del watch manager
-5. progettare l'uso per `IN_MOVE_SELF`
-6. rimandare output CLI e JSON a un passo successivo
+1. decidere la policy sugli errori parziali di permesso/accesso
+2. aggiungere test dedicati su `include_symlinks` e `follow_symlinks`
+3. valutare se sostituire la discovery ricorsiva del watch manager
+4. progettare l'uso per `IN_MOVE_SELF`
+5. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 
