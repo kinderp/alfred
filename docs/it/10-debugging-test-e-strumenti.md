@@ -568,11 +568,14 @@ git diff --check
 make
 make test
 make test-backend-diagnostics
+make test-scanner
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
 problemi piu' semplici, poi il comportamento core e infine la diagnostica
-backend che non fa parte dello stream semantico.
+backend che non fa parte dello stream semantico. `make test-scanner` e' separato
+perche' verifica il componente di attraversamento filesystem, non il runtime
+inotify -> core.
 
 ### 1. `git diff --check`
 
@@ -664,7 +667,37 @@ Questo passo risponde alla domanda:
 il backend inotify mantiene correttamente il proprio stato interno?
 ```
 
-### 5. Nessun `test-legacy-shadow`
+### 5. `make test-scanner`
+
+Il comando:
+
+```bash
+make test-scanner
+```
+
+esegue i test del componente `fs_scanner`.
+
+Nel primo step dello scanner, il test costruisce un piccolo albero:
+
+```text
+root/
+    a/
+        b/
+        file.txt
+    link_to_a -> a/
+```
+
+Poi verifica che lo scanner:
+
+- emetta la root
+- emetta le directory `a` e `a/b`
+- non emetta il file, perche' la configurazione iniziale e' directory-only
+- non segua il symlink, perche' `follow_symlinks` e' disabilitato di default
+
+Questo target serve alla futura progettazione resync e indicizzazione. Non
+sostituisce `make test` o `make test-backend-diagnostics`.
+
+### 6. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
@@ -693,6 +726,8 @@ Esempi:
 - se fallisce `make test`, analizza il comportamento semantico del core
 - se fallisce `make test-backend-diagnostics`, controlla log diagnostici,
   watch descriptor e manutenzione della tabella dei watch
+- se fallisce `make test-scanner`, controlla attraversamento directory,
+  symlink, limiti e callback dello scanner
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
 in quel caso almeno `git diff --check` resta obbligatorio. Se pero' la

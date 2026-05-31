@@ -289,6 +289,22 @@ Scenari diagnostici riesaminati:
 
 I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
 
+## Test scanner
+
+La suite scanner si esegue con:
+
+```bash
+make test-scanner
+```
+
+Questi test non avviano Alfred come processo di monitoraggio e non controllano
+eventi semantici. Servono a verificare il componente di attraversamento
+filesystem che useremo per resync e, in futuro, indicizzazione.
+
+| Scenario | Script | Cosa controlla | Perche' serve |
+| --- | --- | --- | --- |
+| scanner directories only | `tests/scanner/test_fs_scanner_dirs.sh` | root, directory annidate, file esclusi, symlink non seguito | fissa il primo contratto dello scanner: directory-only, callback con `userdata`, no symlink following |
+
 Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
 `IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,
 numero di hard link, proprietario e gruppo. Non li testiamo tutti subito perche'

@@ -1213,6 +1213,7 @@ Nel progetto sono phony target come:
 - `test`
 - `test-core`
 - `test-backend-diagnostics`
+- `test-scanner`
 - `format`
 - `scan`
 - `tidy`
@@ -1253,6 +1254,20 @@ make scan
 
 Esegue `cppcheck`, uno strumento di analisi statica.
 
+### test-scanner
+
+```bash
+make test-scanner
+```
+
+Esegue i test del componente `fs_scanner`. Questa suite non controlla lo stream
+semantico del core e non controlla la diagnostica inotify: verifica solo che lo
+scanner filesystem attraversi l'albero secondo il contratto scelto.
+
+Nel primo passo lo scanner visita directory, non segue symlink e usa una
+callback con `userdata`. Il test compila un piccolo helper C in
+`tests/scanner/` e lo esegue su un albero temporaneo.
+
 ### tidy
 
 ```bash
@@ -1273,6 +1288,7 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
+| Eseguire test scanner filesystem | `make test-scanner` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
 | Formattare codice | `make format` |

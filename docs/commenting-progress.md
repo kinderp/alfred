@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- added the first scanner comment pass for `app/include/fs_scanner.h`,
+  `app/src/fs_scanner.c`, and the scanner C test helper. The comments document
+  scanner boundaries, callback lifetimes, traversal options, early-stop
+  behavior, and the `openat()`/`fstatat()` traversal policy
 - added and refreshed reviewed comments for the inotify backend configuration
   files `modules/inotify/include/inotify_config.h` and
   `modules/inotify/src/inotify_config.c`, including the textual watch-mask
@@ -77,11 +81,13 @@ Completed in the first heavy pass:
 | Done | `app/include/config.h` |
 | Done | `app/include/core_logger.h` |
 | Done | `app/include/errors.h` |
+| Done | `app/include/fs_scanner.h` |
 | Done | `app/include/logger.h` |
 | Done | `app/include/utils.h` |
 | Done | `app/src/app.c` |
 | Done | `app/src/config.c` |
 | Done | `app/src/core_logger.c` |
+| Done | `app/src/fs_scanner.c` |
 | Done | `app/src/logger.c` |
 | Done | `app/src/main.c` |
 | Done | `app/src/utils.c` |

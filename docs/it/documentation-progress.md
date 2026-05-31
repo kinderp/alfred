@@ -31,6 +31,7 @@ Stati usati:
 | Parziale | `18-modello-licenze.md` |
 | Parziale | `19-roadmap-cli-e-man-page.md` |
 | Completo | `20-matrice-eventi-inotify.md` |
+| Parziale | `21-roadmap-scanner-resync.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -38,6 +39,30 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: ampliata la spiegazione tecnica dello scanner
+  filesystem. La nuova sezione chiarisce perche' sono state scelte primitive
+  come `openat()`, `fdopendir()`, `readdir()` e `fstatat()`, quali vantaggi
+  danno su controllo, prestazioni, symlink e race, e perche' l'eventuale uso di
+  `d_type` resta una possibile ottimizzazione futura invece che il contratto
+  corrente.
+- `app/include/fs_scanner.h`, `app/src/fs_scanner.c` e
+  `tests/scanner/test_fs_scanner_dirs.c`: rafforzata la documentazione interna
+  del primo scanner filesystem. I commenti spiegano confini di responsabilita',
+  durata dei puntatori passati alla callback, opzioni di attraversamento,
+  stop anticipato, limiti di profondita'/numero entry e uso di
+  `openat()`/`fstatat()`. I test restano commentati in modo leggero, coerente
+  con il livello della suite esistente.
+- `21-roadmap-scanner-resync.md` e `README.md`: aperta la progettazione dello
+  scanner filesystem e della futura policy di resync. Il documento registra lo
+  stato corrente di `IN_DELETE_SELF` e `IN_MOVE_SELF`, chiarisce che non esiste
+  ancora mapping semantico runtime per questi eventi, valuta `nftw()` e propone
+  uno scanner custom riusabile anche per indicizzazione futura.
+- `app/include/fs_scanner.h`, `app/src/fs_scanner.c`, `tests/scanner/`,
+  `Makefile`, `README.md`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: implementato il primo step dello scanner
+  filesystem. Il target `make test-scanner` verifica lo scan directory-only,
+  callback con `userdata` e symlink non seguiti.
 - `20-matrice-eventi-inotify.md`, `README.md`, `05-modulo-inotify.md` e
   `13-semantica-eventi.md`: aggiunta una matrice completa degli eventi e flag
   `inotify(7)`. La tabella distingue eventi richiedibili, bit restituiti dal
