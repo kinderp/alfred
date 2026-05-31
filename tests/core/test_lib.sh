@@ -35,7 +35,10 @@ stop_alfred() {
 cleanup() {
     stop_alfred
     rm -rf "$TEST_ROOT"
-    rm -f "$LOG_FILE" ./raw.log ./errors.log
+
+    if [[ "${ALFRED_KEEP_TEST_LOGS:-0}" != "1" ]]; then
+        rm -f "$LOG_FILE" ./raw.log ./errors.log
+    fi
 }
 
 fail_with_log() {

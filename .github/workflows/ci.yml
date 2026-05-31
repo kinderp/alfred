@@ -15,6 +15,8 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    env:
+      ALFRED_KEEP_TEST_LOGS: "1"
 
     steps:
       - name: Check out repository
@@ -33,3 +35,13 @@ jobs:
 
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-test-logs
+          if-no-files-found: ignore
+          path: |
+            tests/core/*.log
+            tests/backend/*.log

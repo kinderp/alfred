@@ -320,6 +320,8 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    env:
+      ALFRED_KEEP_TEST_LOGS: "1"
 
     steps:
       - name: Check out repository
@@ -338,6 +340,16 @@ jobs:
 
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-test-logs
+          if-no-files-found: ignore
+          path: |
+            tests/core/*.log
+            tests/backend/*.log
 ```
 
 `name` e' il nome visibile del workflow nell'interfaccia GitHub Actions. Qui e'
@@ -399,6 +411,18 @@ runs-on: ubuntu-latest
 Significa che GitHub avvia una macchina Linux Ubuntu gestita da GitHub. Questo
 e' adatto al progetto perche' Alfred usa API Linux come inotify.
 
+`env` definisce variabili d'ambiente disponibili nei passi del job:
+
+```yaml
+env:
+  ALFRED_KEEP_TEST_LOGS: "1"
+```
+
+Nel progetto questa variabile dice agli script di test di non cancellare
+`raw.log`, `events.log` ed `errors.log` alla fine del test. In locale il valore
+predefinito e' diverso: i log vengono rimossi durante la cleanup normale. In CI
+li conserviamo per poterli caricare come artifact se qualcosa fallisce.
+
 `steps` e' la lista dei passi del job. Ogni elemento della lista comincia con
 `-`. I passi vengono eseguiti in ordine: se un passo fallisce, il job fallisce e
 i passi successivi normalmente non vengono eseguiti.
@@ -424,6 +448,16 @@ Un passo puo' anche eseguire comandi shell:
 `run` contiene il comando da eseguire. Se il comando termina con codice diverso
 da zero, GitHub considera fallito il passo.
 
+`if` permette di eseguire uno step solo in certe condizioni:
+
+```yaml
+if: failure()
+```
+
+`failure()` e' una funzione di GitHub Actions. Significa: esegui questo step
+solo se uno step precedente del job e' fallito. La usiamo per caricare i log
+solo quando servono davvero.
+
 Il blocco:
 
 ```yaml
@@ -435,6 +469,25 @@ run: |
 usa `|` per scrivere piu' righe di shell nello stesso campo YAML. In questo caso
 aggiorna l'indice dei pacchetti e installa gli strumenti base di compilazione C,
 come compilatore, linker e make.
+
+`with` passa parametri a un'action usata con `uses`. Nel nostro workflow:
+
+```yaml
+with:
+  name: alfred-test-logs
+  if-no-files-found: ignore
+  path: |
+    tests/core/*.log
+    tests/backend/*.log
+```
+
+Questi campi configurano `actions/upload-artifact@v4`:
+
+- `name`: nome dell'artifact scaricabile dalla pagina della run
+- `if-no-files-found`: non fallire se non trova log da caricare
+- `path`: lista dei file da includere nell'artifact
+
+`*.log` e' un pattern: significa "tutti i file che finiscono con `.log`".
 
 Gli ultimi tre passi rispecchiano il controllo che deve fare anche un
 contributore in locale:
@@ -448,6 +501,10 @@ contributore in locale:
 
 - name: Run backend diagnostics
   run: make test-backend-diagnostics
+
+- name: Upload test logs on failure
+  if: failure()
+  uses: actions/upload-artifact@v4
 ```
 
 Questa scelta e' intenzionale: la CI non deve avere una procedura misteriosa
@@ -459,6 +516,93 @@ formatter o una suite di test aggiuntiva, bisogna aggiornare due posti:
 
 - `.github/workflows/ci.yml`
 - questa guida contributori
+
+## Leggere output ed errori su GitHub Actions
+
+Quando una pull request viene aperta o aggiornata, GitHub mostra lo stato della
+CI nella pagina della PR. Se tutto passa, il controllo diventa verde. Se un
+comando fallisce, il controllo diventa rosso e bisogna leggere i log della run.
+
+Percorso dal browser:
+
+1. apri il repository su GitHub
+2. entra nel tab `Actions`
+3. seleziona il workflow `CI`
+4. apri la run piu' recente o quella collegata alla PR
+5. clicca il job `Build and test`
+6. apri lo step fallito
+
+Gli step principali sono:
+
+- `Build`
+- `Run official core suite`
+- `Run backend diagnostics`
+
+Ogni step mostra l'output standard e l'output di errore del comando eseguito.
+Questo significa che nello step `Run official core suite` vedrai l'output di:
+
+```bash
+make test
+```
+
+Nello step `Run backend diagnostics` vedrai l'output di:
+
+```bash
+make test-backend-diagnostics
+```
+
+Se uno script di test stampa un messaggio `FAIL`, quel messaggio appare nel log
+dello step. Per esempio:
+
+```text
+Running test_move_file.sh
+FAIL: missing FILE_MOVED event
+```
+
+In quel caso la cosa giusta da fare non e' correggere a caso. Bisogna capire
+quale contratto e' cambiato:
+
+- il codice ha introdotto una regressione?
+- il test si aspetta un comportamento vecchio?
+- la documentazione descrive un comportamento diverso dal codice?
+- manca un aggiornamento agli scenari di test?
+
+GitHub permette anche di scaricare tutti i log testuali della run:
+
+1. apri la run
+2. usa il menu con i tre puntini
+3. scegli `Download log archive`
+
+In piu', quando la CI fallisce, il workflow carica un artifact chiamato:
+
+```text
+alfred-test-logs
+```
+
+L'artifact contiene i log runtime prodotti dai test, se presenti:
+
+```text
+tests/core/raw.log
+tests/core/events.log
+tests/core/errors.log
+tests/backend/raw.log
+tests/backend/events.log
+tests/backend/errors.log
+```
+
+Questi file sono piu' dettagliati dell'output visibile nello step. L'output
+dello step dice quale test e' fallito; i log runtime aiutano a capire quali
+eventi raw, semantici o diagnostici sono stati realmente prodotti da Alfred.
+
+Per scaricare l'artifact:
+
+1. apri la run fallita
+2. cerca la sezione `Artifacts`
+3. clicca `alfred-test-logs`
+4. scarica ed estrai lo zip
+
+L'artifact viene caricato solo su fallimento, per non conservare log inutili
+quando tutto passa.
 
 ## Review e merge
 

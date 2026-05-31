@@ -700,6 +700,72 @@ documentazione descrive codice, test, Makefile o comportamento runtime, conviene
 comunque eseguire i comandi rilevanti per evitare di documentare qualcosa di non
 piu' vero.
 
+### Conservare i log dei test
+
+Di default le suite in `tests/core/` e `tests/backend/` puliscono i log alla fine
+di ogni test. Questo evita di sporcare la working tree durante lo sviluppo
+normale.
+
+Quando pero' devi analizzare un fallimento puo' essere utile conservare:
+
+```text
+raw.log
+events.log
+errors.log
+```
+
+Per farlo, esegui il test con:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make test
+```
+
+oppure:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make test-backend-diagnostics
+```
+
+La variabile `ALFRED_KEEP_TEST_LOGS=1` viene letta dagli script di supporto dei
+test. Quando e' impostata a `1`, la funzione di cleanup ferma Alfred e rimuove
+la directory temporanea del test, ma non cancella i file `.log` generati nella
+directory della suite.
+
+Dopo `make test`, i log possono trovarsi in:
+
+```text
+tests/core/raw.log
+tests/core/events.log
+tests/core/errors.log
+```
+
+Dopo `make test-backend-diagnostics`, i log possono trovarsi in:
+
+```text
+tests/backend/raw.log
+tests/backend/events.log
+tests/backend/errors.log
+```
+
+Significato dei file:
+
+- `raw.log`: eventi grezzi letti dal backend inotify
+- `events.log`: eventi semantici del core e diagnostica backend come
+  `WATCH_ADDED` o `WATCH_REMOVED`
+- `errors.log`: errori applicativi o diagnostica di fallimento
+
+Questa modalita' e' pensata per debugging manuale e per GitHub Actions. Nel
+workflow CI la variabile viene impostata automaticamente, cosi' se un test
+fallisce lo step finale puo' caricare i log come artifact.
+
+Dopo averli letti localmente, puoi cancellarli con:
+
+```bash
+rm -f tests/core/*.log tests/backend/*.log
+```
+
+I log sono ignorati da Git e non devono essere committati.
+
 ## Test funzionali
 
 Il progetto contiene test in:

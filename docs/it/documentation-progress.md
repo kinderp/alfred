@@ -39,7 +39,13 @@ Stati usati:
   prima GitHub Action del progetto. La CI esegue `make`, `make test` e
   `make test-backend-diagnostics` su pull request verso `main` e push su
   `main`. La guida contributori ora spiega il flusso fork/upstream/branch/PR,
-  la sincronizzazione del fork, i test locali e il ruolo della review.
+  la sincronizzazione del fork, i test locali, il ruolo della review, come
+  leggere output/errori delle run GitHub Actions e come scaricare l'artifact
+  `alfred-test-logs` prodotto quando la CI fallisce.
+- `docs/it/10-debugging-test-e-strumenti.md`: documentata la modalita'
+  `ALFRED_KEEP_TEST_LOGS=1` per conservare `raw.log`, `events.log` ed
+  `errors.log` durante il debugging locale o nelle run CI che caricano artifact
+  su fallimento.
 - `docs/it/15-todo-switch-core.md`: chiusa formalmente la fase post-switch core
   per lo stato corrente. Restano separati solo l'eliminazione futura degli
   archivi storici `tests/functional/` e `tests/shadow/`, la progettazione
