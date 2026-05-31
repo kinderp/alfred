@@ -21,7 +21,7 @@ Stati usati:
 | Completo | `08-guida-c-usato-nel-progetto.md` |
 | Completo | `09-makefile-e-build-system.md` |
 | Completo | `10-debugging-test-e-strumenti.md` |
-| Parziale | `11-come-contribuire.md` |
+| Completo | `11-come-contribuire.md` |
 | Completo | `12-confronto-shadow-mode.md` |
 | Completo | `13-semantica-eventi.md` |
 | Completo | `14-scenari-test.md` |
@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `.github/workflows/ci.yml` e `docs/it/11-come-contribuire.md`: aggiunta la
+  prima GitHub Action del progetto. La CI esegue `make`, `make test` e
+  `make test-backend-diagnostics` su pull request verso `main` e push su
+  `main`. La guida contributori ora spiega il flusso fork/upstream/branch/PR,
+  la sincronizzazione del fork, i test locali e il ruolo della review.
 - `docs/it/15-todo-switch-core.md`: chiusa formalmente la fase post-switch core
   per lo stato corrente. Restano separati solo l'eliminazione futura degli
   archivi storici `tests/functional/` e `tests/shadow/`, la progettazione
