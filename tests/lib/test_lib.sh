@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-FSMON_BIN="../../fsmon"
+ALFRED_BIN="../../alfred"
 
-TEST_ROOT="/tmp/fsmon_test"
+TEST_ROOT="/tmp/alfred_test"
 LOG_FILE="./events.log"
 
-FSMON_PID=""
+ALFRED_PID=""
 
 reset_env() {
     rm -rf "$TEST_ROOT"
@@ -15,19 +15,23 @@ reset_env() {
     : > "$LOG_FILE"
 }
 
-start_fsmon() {
+start_alfred() {
     reset_env
 
-    "$FSMON_BIN" "$TEST_ROOT" > "$LOG_FILE" 2>&1 &
-    FSMON_PID=$!
+    echo "tests/functional is a historical legacy/shadow suite." >&2
+    echo "It is not runnable after legacy shadow removal; use make test." >&2
+    exit 1
+
+    ALFRED_EVENT_ENGINE=shadow "$ALFRED_BIN" "$TEST_ROOT" > "$LOG_FILE" 2>&1 &
+    ALFRED_PID=$!
 
     sleep 1
 }
 
-stop_fsmon() {
-    if kill -0 "$FSMON_PID" 2>/dev/null; then
-        kill -INT "$FSMON_PID"
-        wait "$FSMON_PID" || true
+stop_alfred() {
+    if kill -0 "$ALFRED_PID" 2>/dev/null; then
+        kill -INT "$ALFRED_PID"
+        wait "$ALFRED_PID" || true
     fi
 }
 

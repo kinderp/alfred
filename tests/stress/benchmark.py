@@ -2,8 +2,8 @@ import os
 import time
 import subprocess
 
-ROOT="/tmp/fsmon_bench"
-BIN="../../fsmon"
+ROOT="/tmp/alfred_bench"
+BIN="../../alfred"
 
 os.system("rm -rf " + ROOT)
 os.makedirs(ROOT)

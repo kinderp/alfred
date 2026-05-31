@@ -2,10 +2,10 @@
 
 source ../lib/test_lib.sh
 
-start_fsmon
+start_alfred
 
 mkdir "$TEST_ROOT/src"
-sleep 0.2
+#sleep 0.2
 mkdir "$TEST_ROOT/src/before"
 
 mkdir "$TEST_ROOT/dst"
@@ -25,7 +25,7 @@ assert_contains "WATCH_ADDED.*dst"
 
 assert_contains "DIR_MOVED.*src/before.*dst/after"
 assert_contains "DIR_RENAMED.*src/before.*dst/after"
-stop_fsmon
+stop_alfred
 cleanup
 
 echo "✔ rename dir PASS"

@@ -1,22 +1,29 @@
 # =============================================================================
 # Makefile
-# Professional build system for fsmon
+# Build system for alfred
 # =============================================================================
 
 # -----------------------------------------------------------------------------
 # PROJECT
 # -----------------------------------------------------------------------------
 
-TARGET      := fsmon
+TARGET      := alfred
+MODULES     ?= inotify
 
 # -----------------------------------------------------------------------------
 # DIRECTORIES
 # -----------------------------------------------------------------------------
 
-SRC_DIR     := src
-INC_DIR     := include
+APP_DIR     := app
+CORE_DIR    := core
+MODULE_DIR  := modules
 BUILD_DIR   := build
-OBJ_DIR     := $(BUILD_DIR)/obj
+
+OBJ_DIR     := $(BUILD_DIR)/obj/core
+
+APP_INC_DIR := $(APP_DIR)/include
+CORE_INC_DIR := $(CORE_DIR)/include
+CORE_PRIVATE_INC_DIR := $(CORE_DIR)/src
 
 # -----------------------------------------------------------------------------
 # COMPILER
@@ -56,13 +63,21 @@ SANITIZERS  := \
 	-fsanitize=address \
 	-fsanitize=undefined
 
-INCLUDES    := -I$(INC_DIR)
+DEPFLAGS    := -MMD -MP
+DEFINES     :=
 
-CFLAGS      := \
+INCLUDES    := \
+	-I$(APP_INC_DIR) \
+	-I$(CORE_INC_DIR) \
+	-I$(CORE_PRIVATE_INC_DIR)
+
+CFLAGS      = \
 	$(C_STANDARD) \
 	$(WARNINGS) \
 	$(DEBUG_FLAGS) \
 	$(SANITIZERS) \
+	$(DEPFLAGS) \
+	$(DEFINES) \
 	$(INCLUDES)
 
 LDFLAGS     := \
@@ -73,23 +88,40 @@ LDFLAGS     := \
 # SOURCES
 # -----------------------------------------------------------------------------
 
-SRCS := \
-	$(SRC_DIR)/main.c \
-	$(SRC_DIR)/app.c \
-	$(SRC_DIR)/watcher.c \
-	$(SRC_DIR)/watch_manager.c \
-	$(SRC_DIR)/move_cache.c \
-	$(SRC_DIR)/logger.c \
-	$(SRC_DIR)/utils.c \
-	$(SRC_DIR)/events.c \
-	$(SRC_DIR)/config.c
-	
+APP_SRCS := \
+	$(APP_DIR)/src/main.c \
+	$(APP_DIR)/src/app.c \
+	$(APP_DIR)/src/core_logger.c \
+	$(APP_DIR)/src/config.c \
+	$(APP_DIR)/src/logger.c \
+	$(APP_DIR)/src/utils.c
+
+CORE_SRCS := \
+	$(CORE_DIR)/src/alfred_correlator.c \
+	$(CORE_DIR)/src/alfred_tables.c \
+	$(CORE_DIR)/src/alfred_utils.c
+
+MODULE_SRCS :=
+
+ifneq ($(filter inotify,$(MODULES)),)
+INCLUDES += -I$(MODULE_DIR)/inotify/include
+DEFINES += -DALFRED_ENABLE_INOTIFY
+MODULE_SRCS += \
+	$(MODULE_DIR)/inotify/src/inotify_adapter.c \
+	$(MODULE_DIR)/inotify/src/inotify_backend.c \
+	$(MODULE_DIR)/inotify/src/watch_manager.c \
+	$(MODULE_DIR)/inotify/src/watcher.c
+endif
+
+SRCS := $(APP_SRCS) $(CORE_SRCS) $(MODULE_SRCS)
 
 # -----------------------------------------------------------------------------
 # OBJECTS
 # -----------------------------------------------------------------------------
 
-OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
+DEPS := $(OBJS:.o=.d)
+OBJ_DIRS := $(sort $(dir $(OBJS)))
 
 # -----------------------------------------------------------------------------
 # COLORS
@@ -111,16 +143,18 @@ all: banner directories $(TARGET)
 # LINK
 # -----------------------------------------------------------------------------
 
-$(TARGET): $(OBJS)
+$(TARGET): FORCE $(OBJS)
 	@printf "$(BLUE)[LINK]$(RESET) %s\n" "$(TARGET)"
 	@$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
 	@printf "$(GREEN)[OK]$(RESET) build completed\n"
+
+FORCE:
 
 # -----------------------------------------------------------------------------
 # COMPILE
 # -----------------------------------------------------------------------------
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%.o: %.c
 	@printf "$(YELLOW)[CC]$(RESET) %s\n" "$<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
@@ -130,7 +164,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 
 directories:
 	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(OBJ_DIR)
+	@mkdir -p $(OBJ_DIRS)
 
 # -----------------------------------------------------------------------------
 # CLEAN
@@ -150,10 +184,12 @@ re: fclean all
 # RELEASE BUILD
 # -----------------------------------------------------------------------------
 
-release: CFLAGS := \
+release: CFLAGS = \
 	$(C_STANDARD) \
 	$(WARNINGS) \
 	$(RELEASE_FLAGS) \
+	$(DEPFLAGS) \
+	$(DEFINES) \
 	$(INCLUDES)
 
 release: LDFLAGS :=
@@ -169,13 +205,21 @@ run: all
 
 # -----------------------------------------------------------------------------
 # TEST
-# You can run all test in two ways:
-# 1. make && make test
-# 2. cd tests/functional && ./run_all.sh
+# test-core is the official core end-to-end suite.
+# test-backend-diagnostics checks backend health logs that are not semantics.
+# test is the official core alias.
 # -----------------------------------------------------------------------------
 
-test:
-	cd tests/functional && bash run_all.sh
+test: test-core
+
+test-core:
+	$(MAKE) all
+	cd tests/core && bash run_all.sh
+
+test-backend-diagnostics:
+	$(MAKE) all
+	cd tests/backend && bash run_all.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -200,8 +244,10 @@ gdb: all
 
 format:
 	clang-format -i \
-		$(SRC_DIR)/*.c \
-		$(INC_DIR)/*.h
+		$(APP_DIR)/src/*.c \
+		$(APP_DIR)/include/*.h \
+		$(MODULE_DIR)/inotify/src/*.c \
+		$(MODULE_DIR)/inotify/include/*.h
 
 # -----------------------------------------------------------------------------
 # STATIC ANALYSIS
@@ -212,8 +258,9 @@ scan:
 		--enable=all \
 		--inconclusive \
 		--std=gnu99 \
-		-I $(INC_DIR) \
-		$(SRC_DIR)
+		$(INCLUDES) \
+		$(APP_DIR)/src \
+		$(MODULE_DIR)/inotify/src
 
 # -----------------------------------------------------------------------------
 # CLANG TIDY
@@ -221,8 +268,9 @@ scan:
 
 tidy:
 	clang-tidy \
-		$(SRC_DIR)/*.c \
-		-- -I$(INC_DIR)
+		$(APP_DIR)/src/*.c \
+		$(MODULE_DIR)/inotify/src/*.c \
+		-- $(INCLUDES)
 
 # -----------------------------------------------------------------------------
 # BANNER
@@ -231,7 +279,7 @@ tidy:
 banner:
 	@printf "$(GREEN)"
 	@printf "=========================================\n"
-	@printf " FSMon - Filesystem Monitor\n"
+	@printf " Alfred - Filesystem Event Engine\n"
 	@printf " Professional Linux inotify Engine\n"
 	@printf "=========================================\n"
 	@printf "$(RESET)"
@@ -247,10 +295,16 @@ banner:
 	re \
 	release \
 	run \
+	test \
+	test-core \
+	test-backend-diagnostics \
 	valgrind \
 	gdb \
 	format \
 	scan \
 	tidy \
 	banner \
-	directories
+	directories \
+	FORCE
+
+-include $(DEPS)

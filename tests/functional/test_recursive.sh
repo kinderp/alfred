@@ -2,7 +2,7 @@
 
 source ../lib/test_lib.sh
 
-start_fsmon
+start_alfred
 
 mkdir "$TEST_ROOT/a"
 sleep 0.2
@@ -25,7 +25,7 @@ assert_contains "WATCH_ADDED.*a/b/c"
 
 assert_contains "FILE_CREATED.*file.txt"
 
-stop_fsmon
+stop_alfred
 cleanup
 
 echo "✔ recursive PASS"

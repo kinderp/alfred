@@ -2,7 +2,7 @@
 
 source ../lib/test_lib.sh
 
-start_fsmon
+start_alfred
 
 mkdir "$TEST_ROOT/src"
 mkdir "$TEST_ROOT/dst"
@@ -15,7 +15,7 @@ sleep 1
 
 assert_contains "FILE_MOVED.*src.*dst"
 
-stop_fsmon
+stop_alfred
 cleanup
 
 echo "✔ move file PASS"
