@@ -36,6 +36,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `README.md`: aggiunto nel quick start un esempio di avvio con
+  `ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch` e rimandi alla
+  documentazione italiana su livello applicazione e strumenti di debug.
+- `10-debugging-test-e-strumenti.md`: aggiunta una sezione pratica su
+  `ALFRED_CONFIG`, con esempio di file temporaneo, comando di avvio, ordine di
+  precedenza rispetto ai default e a `ALFRED_EVENT_ENGINE`, e richiamo a
+  `ALFRED_KEEP_TEST_LOGS=1` per ispezionare i log.
 - `modules/inotify/include/inotify_config.h`,
   `modules/inotify/src/inotify_config.c`, `app/src/config.c`, `app/src/app.c`,
   `tests/backend/test_watch_mask_disable_attrib.sh`,

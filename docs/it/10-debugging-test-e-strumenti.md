@@ -1011,6 +1011,44 @@ python3 tests/shadow/compare_shadow_output.py <scenario> --event-engine core
 
 La verifica ufficiale resta `make test` e `make test-backend-diagnostics`.
 
+## Provare un file di configurazione
+
+Alfred carica i default con `config_defaults()` e puo' poi applicare un file di
+configurazione tramite la variabile d'ambiente `ALFRED_CONFIG`.
+
+Esempio:
+
+```bash
+cat > /tmp/alfred.conf <<'EOF'
+inotify_watch_mask=default,-IN_ATTRIB
+EOF
+
+ALFRED_CONFIG=/tmp/alfred.conf ./alfred /tmp/cartella-da-osservare
+```
+
+Questa variabile e' il modo supportato oggi per provare opzioni runtime senza
+aggiungere ancora un parser CLI. La precedenza pratica e':
+
+```text
+config_defaults()
+    -> ALFRED_CONFIG, se presente
+    -> ALFRED_EVENT_ENGINE, se presente
+```
+
+Quindi il file caricato da `ALFRED_CONFIG` puo' cambiare opzioni come
+`inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity` e i path
+dei log. `ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo
+il file per rifiutare esplicitamente valori vecchi come `shadow`.
+
+Per debug conviene usare anche:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make test-backend-diagnostics
+```
+
+cosi' si possono ispezionare `raw.log`, `events.log` ed `errors.log` dopo uno
+scenario che usa una configurazione temporanea.
+
 ## Provare il core come stream ufficiale
 
 Il core e' lo stream ufficiale di default. Per forzare esplicitamente la stessa

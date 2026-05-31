@@ -64,6 +64,16 @@ Run Alfred on one or more paths:
 ./alfred /path/to/watch
 ```
 
+Run Alfred with a configuration file:
+
+```bash
+ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch
+```
+
+Configuration details are documented in Italian for now:
+[application layer](docs/it/04-livello-applicazione.md) and
+[debugging, tests, and tools](docs/it/10-debugging-test-e-strumenti.md).
+
 Stop it with `Ctrl+C`.
 
 ## Logs
