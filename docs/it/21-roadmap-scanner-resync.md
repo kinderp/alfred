@@ -551,6 +551,320 @@ Quindi una callback dello scanner non dovrebbe inventare direttamente una
 semantica core. Deve raccogliere fatti, aggiornare una struttura dati del
 chiamante o chiedere al backend di applicare una policy esplicita.
 
+## Funzioni e casi del prossimo passo
+
+Il prossimo punto da decidere riguarda la policy sugli errori parziali. Per
+capirlo bisogna distinguere le funzioni coinvolte e il tipo di errore che
+possono produrre.
+
+### `readdir()`
+
+`readdir()` legge il prossimo nome dentro una directory gia' aperta.
+
+Nel nostro scanner viene usata dentro `scan_dir_fd()`:
+
+```text
+DIR *dir = fdopendir(fd)
+while ((ent = readdir(dir)) != NULL)
+    ...
+```
+
+Se la directory contiene:
+
+```text
+a
+b
+c
+```
+
+`readdir()` restituisce un nome alla volta. Non garantisce che il filesystem
+resti fermo mentre stiamo leggendo. Un altro processo potrebbe cancellare `b`
+dopo che `readdir()` ha restituito il nome ma prima che Alfred legga i suoi
+metadati.
+
+Per questo il resync deve essere pensato come una fotografia imperfetta ma
+utile, non come una transazione atomica sul filesystem.
+
+### `fstatat()`
+
+`fstatat()` prende:
+
+- il file descriptor della directory padre
+- il nome letto da `readdir()`
+- una `struct stat *` da riempire
+- flag come `AT_SYMLINK_NOFOLLOW`
+
+Serve a rispondere a domande come:
+
+```text
+questa entry e' una directory?
+e' un file regolare?
+e' un symlink?
+quali metadati ha?
+```
+
+Caso importante:
+
+```text
+1. readdir() legge "tmp"
+2. un altro processo cancella "tmp"
+3. fstatat() prova a leggere i metadati di "tmp"
+4. fstatat() fallisce
+```
+
+Oggi lo scanner salta quell'entry e continua. Questa scelta e' ragionevole per
+entry figlie transitorie, perche' durante un resync e' normale che il mondo
+cambi sotto i nostri piedi.
+
+### `openat()`
+
+`openat()` apre una directory figlia partendo dal descriptor della directory
+padre. Lo scanner lo usa solo quando una entry e' stata classificata come
+directory e deve essere attraversata.
+
+Caso:
+
+```text
+root/
+    a/
+        b/
+```
+
+Lo scanner legge `a`, capisce con `fstatat()` che e' una directory, poi usa
+`openat()` per aprirla e scendere dentro.
+
+Possibili fallimenti:
+
+- la directory e' stata cancellata dopo `fstatat()`
+- i permessi sono cambiati
+- il filesystem ha restituito un errore I/O
+- il path e' ancora visibile ma non e' piu' apribile
+
+Qui dobbiamo scegliere la policy. Per un resync robusto, fallire tutto per una
+singola directory figlia non leggibile potrebbe essere troppo aggressivo.
+Tuttavia ignorare sempre l'errore senza registrarlo potrebbe nascondere problemi
+reali.
+
+Scelta da discutere:
+
+```text
+root non apribile      -> ERR_IO
+directory figlia sparita -> skip + continua
+directory figlia senza permessi -> skip + continua + futura statistica/log
+errore I/O serio       -> forse ERR_IO
+```
+
+### `fdopendir()`
+
+`fdopendir()` trasforma un file descriptor aperto in uno stream `DIR *` usabile
+con `readdir()`.
+
+Se `fdopendir()` fallisce, la directory non e' realmente attraversabile con il
+meccanismo scelto. Per la root e' quasi certamente un errore duro. Per una
+directory figlia dobbiamo decidere se trattarlo come:
+
+- errore duro dello scan
+- errore parziale da saltare
+
+La scelta dovrebbe essere coerente con `openat()`: se decidiamo che una
+directory figlia non accessibile non deve fermare tutto il resync, allora anche
+un fallimento di `fdopendir()` su una figlia dovrebbe diventare skip + continua.
+
+### `path_join()`
+
+`path_join()` costruisce il path testuale:
+
+```text
+parent = /tmp/root/a
+name   = b
+child  = /tmp/root/a/b
+```
+
+Questo path serve alla callback, ai test, ai log e alla futura indicizzazione.
+
+Se `path_join()` fallisce, di solito significa che il path non entra in
+`PATH_MAX`. Questo non e' un errore transitorio come una directory cancellata:
+il chiamante non riceverebbe un path affidabile. Per ora e' corretto trattarlo
+come `ERR_IO` o, in futuro, come errore specifico se aggiungeremo un codice piu'
+preciso.
+
+### `ERR_IO`
+
+`ERR_IO` e' il codice generico usato quando lo scanner incontra un problema di
+I/O o filesystem che non riesce a gestire localmente.
+
+Il punto aperto non e' se `ERR_IO` serva: serve. Il punto e' decidere quando un
+errore locale deve diventare errore dell'intero scan.
+
+Principio proposto:
+
+```text
+errore sulla root       -> fallisce lo scan
+errore su entry figlia  -> preferire skip + continua, se e' recuperabile
+errore di path interno  -> fallisce lo scan
+```
+
+## Roadmap completa dello scanner
+
+Questa roadmap divide lo scanner in passi piccoli. Alcuni sono necessari per il
+resync, altri preparano usi futuri come indicizzazione e CLI.
+
+### Fase 1 - Contratto base completato
+
+Stato: implementato.
+
+Risultato:
+
+- API pubblica `fs_scan_tree()`
+- opzioni `fs_scan_options_t`
+- callback con `userdata`
+- root emessa di default
+- directory-only di default
+- symlink non seguiti di default
+- limiti `max_depth` e `max_entries`
+- test `make test-scanner`
+- documentazione tecnica e didattica iniziale
+
+### Fase 2 - Errori parziali
+
+Stato: prossimo punto di discussione.
+
+Obiettivo: decidere cosa succede quando una parte dell'albero non e' leggibile
+o cambia durante lo scan.
+
+Decisioni da prendere:
+
+- root non leggibile: hard failure
+- entry sparita tra `readdir()` e `fstatat()`: skip
+- directory figlia non apribile: skip oppure hard failure
+- permission denied su directory figlia: skip, log o statistica
+- path troppo lungo: hard failure
+
+Possibile implementazione futura:
+
+```c
+typedef struct {
+    size_t emitted;
+    size_t skipped;
+    size_t io_errors;
+    size_t permission_errors;
+} fs_scan_stats_t;
+```
+
+Io non la introdurrei subito. Prima fissiamo la policy, poi aggiungiamo
+statistiche solo se servono davvero al backend o alla CLI.
+
+### Fase 3 - Symlink
+
+Stato: da fare.
+
+Obiettivo: distinguere due concetti diversi:
+
+- `include_symlinks`: emetti il symlink come entry osservata
+- `follow_symlinks`: attraversa il target del symlink
+
+Decisione probabile:
+
+- per resync: default conservativo, non seguire symlink
+- per indicizzazione: possibilita' futura di seguire symlink su richiesta
+
+Test da aggiungere:
+
+- symlink emesso quando `include_symlinks = 1`
+- symlink non seguito quando `follow_symlinks = 0`
+- eventuale follow controllato quando `follow_symlinks = 1`
+
+### Fase 4 - File e tipi speciali
+
+Stato: parziale.
+
+`include_files = 1` e' gia' coperto dal test base. Restano da decidere:
+
+- se testare `include_other`
+- come trattare socket, fifo e device
+- se questi tipi servono al resync o solo a una futura indicizzazione
+
+Per il resync dei watch inotify, le directory sono la parte critica. File e tipi
+speciali diventano importanti se Alfred espone una modalita' di scan/index.
+
+### Fase 5 - Integrazione con watch manager
+
+Stato: da progettare.
+
+Obiettivo: valutare se sostituire o affiancare
+`watch_manager_add_recursive_with_discovery()`.
+
+Domande:
+
+- lo scanner deve solo elencare directory e lasciare al watch manager
+  `inotify_add_watch()`?
+- il watch manager deve continuare a generare raw sintetici per directory
+  scoperte?
+- come evitiamo duplicazione tra discovery ricorsiva attuale e scanner?
+
+Direzione probabile:
+
+```text
+scanner      -> trova directory
+watch_manager -> aggiunge watch
+backend      -> decide se generare raw sintetici
+core         -> dedup/semantica
+```
+
+### Fase 6 - Resync dopo eventi critici
+
+Stato: da progettare dopo la policy errori.
+
+Trigger possibili:
+
+- `IN_MOVE_SELF`
+- `IN_DELETE_SELF`
+- `IN_UNMOUNT`
+- `IN_Q_OVERFLOW`
+
+Uso possibile:
+
+- marcare una subtree come stale
+- fare scan da una root ancora affidabile
+- ricostruire watch mancanti
+- produrre diagnostica quando il path osservato non e' piu' affidabile
+
+Per `IN_MOVE_SELF` resta il problema principale: senza un nuovo path non
+possiamo inventare una relocation semantica. Lo scanner puo' aiutare solo se
+abbiamo una root affidabile da cui ripartire.
+
+### Fase 7 - CLI di indicizzazione
+
+Stato: futura.
+
+Esempi possibili:
+
+```bash
+alfred --scan /path
+alfred --scan --dirs-only /path
+alfred --scan --json /path
+```
+
+Questa fase non serve subito allo switch/resync. La teniamo in mente per non
+disegnare un'API che la renda difficile.
+
+### Fase 8 - Performance
+
+Stato: futura, dopo test e policy.
+
+Ottimizzazioni possibili:
+
+- usare `dirent.d_type` come fast path quando affidabile
+- chiamare `fstatat()` solo se servono metadati completi
+- aggiungere statistiche di scan
+- valutare batching o callback piu' specializzate
+
+Non conviene ottimizzare prima di avere:
+
+- contratto stabile
+- test su errori/symlink
+- primo uso reale nel backend
+
 ## Prossimi passi consigliati
 
 1. decidere la policy sugli errori parziali di permesso/accesso

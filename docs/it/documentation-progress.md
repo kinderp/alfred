@@ -39,6 +39,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: aggiunta una roadmap completa delle fasi
+  scanner. Il documento ora separa contratto base, errori parziali, symlink,
+  file/tipi speciali, integrazione con watch manager, resync sugli eventi
+  critici, futura CLI di indicizzazione e performance. Aggiunta anche una
+  spiegazione didattica di `readdir()`, `fstatat()`, `openat()`,
+  `fdopendir()`, `path_join()` ed `ERR_IO` per preparare la discussione sulla
+  policy degli errori parziali.
 - `tests/scanner/test_fs_scanner_dirs.c`,
   `tests/scanner/test_fs_scanner_dirs.sh`,
   `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
