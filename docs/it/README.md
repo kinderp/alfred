@@ -25,7 +25,8 @@ piu' dettaglio.
 16. [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md)
 17. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
 18. [Modello licenze](18-modello-licenze.md)
-19. [Glossario](glossario.md)
+19. [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)
+20. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

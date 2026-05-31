@@ -29,6 +29,7 @@ Stati usati:
 | Parziale | `16-mappa-codice-e-strutture.md` |
 | Parziale | `17-roadmap-documentazione-avanzata.md` |
 | Parziale | `18-modello-licenze.md` |
+| Parziale | `19-roadmap-cli-e-man-page.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -36,6 +37,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `19-roadmap-cli-e-man-page.md` e `README.md`: aggiunta una roadmap per il
+  futuro parser CLI professionale e per la futura pagina man. Il documento
+  registra `-c` / `--config`, `--print-config`, `--check-config`, `--help`,
+  `--version`, la precedenza tra default, ambiente e CLI, e le fonti di
+  riferimento GNU/POSIX/man-pages.
 - `README.md`: aggiunto nel quick start un esempio di avvio con
   `ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch` e rimandi alla
   documentazione italiana su livello applicazione e strumenti di debug.
