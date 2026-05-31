@@ -9,6 +9,9 @@ start_alfred_core
 
 touch "$TEST_ROOT/metadata.txt"
 sleep 1
+
+events_before_chmod=$(wc -l < "$LOG_FILE")
+
 chmod 600 "$TEST_ROOT/metadata.txt"
 sleep 1
 
@@ -16,6 +19,17 @@ if ! grep -Eq "IN_ATTRIB .*path=.*/alfred_backend_test_attrib_raw name=metadata.
     ./raw.log; then
 
     echo "FAIL: missing IN_ATTRIB raw log"
+    echo "----- raw.log -----"
+    cat ./raw.log || true
+    exit 1
+fi
+
+events_after_chmod=$(wc -l < "$LOG_FILE")
+
+if [[ "$events_after_chmod" != "$events_before_chmod" ]]; then
+    echo "FAIL: chmod produced unexpected semantic or diagnostic events"
+    echo "----- events.log -----"
+    cat "$LOG_FILE" || true
     echo "----- raw.log -----"
     cat ./raw.log || true
     exit 1

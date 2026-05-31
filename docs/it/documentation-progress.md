@@ -42,7 +42,8 @@ Stati usati:
   `13-semantica-eventi.md` e `14-scenari-test.md`: aggiunto `IN_ATTRIB` alla
   maschera inotify predefinita e al raw log formatter. Il backend ora osserva i
   cambiamenti attributo come fatti raw (`ALFRED_RAW_ATTRIB`), ma il core non
-  emette ancora un evento semantico metadata/attrib.
+  emette ancora un evento semantico metadata/attrib. Il test backend controlla
+  anche che `events.log` non riceva nuove righe dopo `chmod`.
 - `.github/pull_request_template.md` e `docs/it/11-come-contribuire.md`:
   aggiunto un template GitHub per le pull request. La guida contributori spiega
   come compilare summary, scope, verification, documentazione, compatibilita',
