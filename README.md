@@ -172,3 +172,7 @@ No license has been selected yet.
 Until a license is added, this repository should not be treated as an
 open-source package with clearly granted reuse rights. The license choice will
 be discussed before the project is presented as reusable by third parties.
+
+The intended direction is an open-source core with the possibility of separate
+commercial or source-available licensing for future advanced modules. See the
+Italian licensing notes in [docs/it/18-modello-licenze.md](docs/it/18-modello-licenze.md).

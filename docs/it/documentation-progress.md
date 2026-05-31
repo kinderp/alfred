@@ -28,6 +28,7 @@ Stati usati:
 | Parziale | `15-todo-switch-core.md` |
 | Parziale | `16-mappa-codice-e-strutture.md` |
 | Parziale | `17-roadmap-documentazione-avanzata.md` |
+| Parziale | `18-modello-licenze.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -35,6 +36,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `docs/it/18-modello-licenze.md`, `docs/it/README.md` e `README.md`:
+  documentato il modello licenze provvisorio. Il core e il backend base sono
+  pensati come open source, mentre moduli avanzati futuri come `fanotify` o
+  `ebpf` potranno avere licenze commerciali o source-available separate. La
+  licenza definitiva non e' ancora scelta.
 - `README.md`: sostituito il testo iniziale da traccia didattica con un README
   pubblico in inglese. Il nuovo README presenta Alfred come progetto C/Linux,
   descrive stato, quick start, log, test, CI, contributi, roadmap e rimanda alla
