@@ -113,7 +113,7 @@ Passi principali del ciclo backend:
 2. `inotify_backend_add_startup_watch()` installa i watch sui path passati da
    riga di comando.
 3. `watch_manager_add()` chiama `inotify_add_watch()` usando
-   `config.watch_mask`.
+   `config.inotify.watch_mask`.
 4. `watcher_store()` salva la relazione `wd -> path`.
 5. `inotify_backend_poll()` legge uno o piu' record dal file descriptor.
 6. `watcher_get_path()` recupera la directory parent associata al `wd`.
@@ -234,9 +234,10 @@ flowchart TD
 
     B --> B1["fd"]
     B --> B2["watcher_table_t"]
-    C --> C1["recursive"]
-    C --> C2["watch_mask"]
-    C --> C3["watcher_capacity"]
+    C --> C0["inotify_config_t"]
+    C0 --> C1["recursive"]
+    C0 --> C2["watch_mask"]
+    C0 --> C3["watcher_capacity"]
 ```
 
 Tabella di lettura:
@@ -245,9 +246,9 @@ Tabella di lettura:
 | --- | --- | --- | --- |
 | `app->inotify.fd` | `inotify_backend_poll()` tramite `ctx.runtime`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
 | `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
-| `app->config.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
-| `app->config.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
-| `app->config.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
+| `app->config.inotify.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
+| `app->config.inotify.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
+| `app->config.inotify.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
 | `app->logger` | backend tramite `ctx.logger` e watch manager | raw log, errori, `WATCH_ADDED`, `WATCH_REMOVED` | si', ma come dipendenza esplicita |
 | callback `on_event` | `inotify_backend_poll()` e raw sintetici | consegnare `alfred_raw_event_t` all'app/core | si', ma con contesto opaco piu' stretto |
 
@@ -386,7 +387,7 @@ app_t app
 
 app_build_inotify_backend_context(app, &ctx):
   ctx.runtime = &app->inotify
-  ctx.config = &app->config
+  ctx.config = &app->config.inotify
   ctx.logger = &app->logger
 
 inotify_backend_init(&ctx):
@@ -493,44 +494,51 @@ raw e manutenzione watch, core uguale semantica.
 ## Struttura dati di configurazione
 
 `config_t` guida molte decisioni prese durante l'inizializzazione. Non e' una
-struttura dati del backend in senso stretto, ma il backend legge alcuni suoi
-campi per sapere come comportarsi.
+struttura dati del backend in senso stretto: contiene anche sottostrutture di
+configurazione specifiche dei backend. Il backend inotify non riceve piu' tutta
+`config_t`, ma solo `config_t.inotify`, cioe' un `inotify_config_t`.
 
 ```mermaid
 flowchart TD
-    A["config_t"] --> B["recursive"]
-    A --> C["watcher_capacity"]
-    A --> D["watch_mask"]
+    A["config_t"] --> B["inotify_config_t"]
     A --> E["raw_log / event_log / error_log"]
+    A --> H["use_epoll / flush_immediately"]
 
-    C --> F["watcher_init(capacity)"]
-    D --> G["inotify_add_watch(mask)"]
+    B --> C["recursive"]
+    B --> D["watcher_capacity"]
+    B --> M["watch_mask"]
+
+    D --> F["watcher_init(capacity)"]
+    M --> G["inotify_add_watch(mask)"]
 ```
 
 Campi rilevanti:
 
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
-| `recursive` | abilita watch ricorsivi | `config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
-| `watcher_capacity` | capacita' iniziale della tabella watch | `config_defaults()`, `config_load()` | `watcher_init()` |
-| `watch_mask` | maschera inotify usata per aggiungere watch | `config_defaults()` | `watch_manager_add()` |
+| `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
+| `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
+| `inotify.watch_mask` | maschera inotify usata per aggiungere watch | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
-`config_defaults()` prende il valore da `watch_manager_default_mask()`, poi
-`watch_manager_add()` usa quel valore quando chiama `inotify_add_watch()`.
+`config_defaults()` delega a `inotify_config_defaults()`, questa prende il
+valore da `watch_manager_default_mask()`, poi `watch_manager_add()` usa quel
+valore quando chiama `inotify_add_watch()`.
 
 ```mermaid
 sequenceDiagram
     participant Config as config_defaults()
+    participant InCfg as inotify_config_defaults()
     participant Mask as watch_manager_default_mask()
     participant App as inotify_backend_init()
     participant Watch as watch_manager_add()
     participant Kernel as inotify_add_watch()
 
-    Config->>Mask: richiede maschera predefinita
-    Mask-->>Config: IN_CREATE | IN_DELETE | IN_MODIFY | ...
+    Config->>InCfg: inizializza config_t.inotify
+    InCfg->>Mask: richiede maschera predefinita
+    Mask-->>InCfg: IN_CREATE | IN_DELETE | IN_MODIFY | ...
     App->>Watch: aggiungi path
-    Watch->>Kernel: fd, path, config.watch_mask
+    Watch->>Kernel: fd, path, inotify.watch_mask
 ```
 
 Il parsing delle capacita' usa una funzione dedicata invece di `atoi()`. Il
@@ -626,7 +634,7 @@ sequenceDiagram
     participant Logger as logger_event()
 
     Backend->>Manager: path=/tmp/progetto
-    Manager->>Kernel: add watch con config.watch_mask
+    Manager->>Kernel: add watch con inotify.watch_mask
     Kernel-->>Manager: wd=3
     Manager->>Table: store wd=3 path=/tmp/progetto
     Table-->>Manager: ok
@@ -1126,9 +1134,9 @@ Frame:
 
 ```text
 frame 1 - configurazione pronta:
-  config.recursive = 1
-  config.watch_mask = IN_CREATE | IN_DELETE | IN_MODIFY | ...
-  config.watcher_capacity = 128
+  config.inotify.recursive = 1
+  config.inotify.watch_mask = IN_CREATE | IN_DELETE | IN_MODIFY | ...
+  config.inotify.watcher_capacity = 128
 
 frame 2 - backend inizializzato:
   app_build_inotify_backend_context(app, &ctx)
@@ -1143,7 +1151,7 @@ frame 3 - richiesta watch:
 
 frame 4 - chiamata kernel:
   watch_manager_add()
-  inotify_add_watch(fd, "/tmp/progetto", config.watch_mask)
+  inotify_add_watch(fd, "/tmp/progetto", config.inotify.watch_mask)
   kernel restituisce wd=3
 
 frame 5 - aggiornamento watcher table:

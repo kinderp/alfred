@@ -29,6 +29,7 @@ Stati usati:
 | Parziale | `16-mappa-codice-e-strutture.md` |
 | Parziale | `17-roadmap-documentazione-avanzata.md` |
 | Parziale | `18-modello-licenze.md` |
+| Parziale | `19-roadmap-cli-e-man-page.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -36,6 +37,40 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `19-roadmap-cli-e-man-page.md` e `README.md`: aggiunta una roadmap per il
+  futuro parser CLI professionale e per la futura pagina man. Il documento
+  registra `-c` / `--config`, `--print-config`, `--check-config`, `--help`,
+  `--version`, la precedenza tra default, ambiente e CLI, e le fonti di
+  riferimento GNU/POSIX/man-pages.
+- `README.md`: aggiunto nel quick start un esempio di avvio con
+  `ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch` e rimandi alla
+  documentazione italiana su livello applicazione e strumenti di debug.
+- `10-debugging-test-e-strumenti.md`: aggiunta una sezione pratica su
+  `ALFRED_CONFIG`, con esempio di file temporaneo, comando di avvio, ordine di
+  precedenza rispetto ai default e a `ALFRED_EVENT_ENGINE`, e richiamo a
+  `ALFRED_KEEP_TEST_LOGS=1` per ispezionare i log.
+- `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_config.c`, `app/src/config.c`, `app/src/app.c`,
+  `tests/backend/test_watch_mask_disable_attrib.sh`,
+  `tests/backend/test_watch_mask_invalid_token.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`: aggiunto il parser
+  testuale di `inotify_watch_mask`. La configurazione supporta `default`, liste
+  esplicite di flag `IN_*` e modificatori `+FLAG` / `-FLAG`; i token
+  sconosciuti o non ancora supportati da Alfred fanno fallire `config_load()`
+  con `ERR_CONFIG`. L'avvio puo' caricare un file tramite `ALFRED_CONFIG`.
+- `app/include/config.h`, `app/src/config.c`,
+  `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_config.c`,
+  `modules/inotify/include/inotify_backend.h`, `app/src/app.c`, `Makefile`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md` e
+  `16-mappa-codice-e-strutture.md`: introdotta `inotify_config_t` come
+  sottostruttura specifica del backend inotify. `config_t` resta il contenitore
+  applicativo generale, mentre il backend riceve ora solo la configurazione
+  inotify tramite `inotify_backend_context_t`. Le chiavi storiche
+  `recursive` e `watcher_capacity` restano accettate; i nuovi alias
+  `inotify_recursive` e `inotify_watcher_capacity` preparano il futuro parser
+  di `inotify_watch_mask`.
 - `05-modulo-inotify.md`, `13-semantica-eventi.md` e `14-scenari-test.md`:
   dettagliati i casi che possono generare `IN_ATTRIB` secondo `inotify(7)`:
   permessi, timestamp, attributi estesi, numero di hard link, proprietario e

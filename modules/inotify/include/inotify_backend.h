@@ -13,7 +13,7 @@
 #define INOTIFY_BACKEND_H
 
 #include "alfred_correlator.h"
-#include "config.h"
+#include "inotify_config.h"
 #include "logger.h"
 #include "watcher.h"
 
@@ -35,16 +35,16 @@ typedef struct inotify_backend {
 /*
  * inotify_backend_context_t - borrowed dependencies for backend operations
  * @runtime: backend-owned runtime state to mutate
- * @config: application-owned configuration read by backend helpers
+ * @config: application-owned inotify configuration read by backend helpers
  * @logger: application-owned logger used for backend diagnostics
  *
  * The context does not own any pointed-to object. It exists to avoid passing
- * the whole app_t into backend helpers that only need fd/watchers, selected
- * configuration fields, and logging.
+ * the whole app_t or top-level config_t into backend helpers that only need
+ * fd/watchers, inotify-specific configuration fields, and logging.
  */
 typedef struct inotify_backend_context {
     inotify_backend_t *runtime;
-    const config_t *config;
+    const inotify_config_t *config;
     logger_t *logger;
 } inotify_backend_context_t;
 
