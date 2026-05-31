@@ -36,6 +36,10 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `.github/pull_request_template.md` e `docs/it/11-come-contribuire.md`:
+  aggiunto un template GitHub per le pull request. La guida contributori spiega
+  come compilare summary, scope, verification, documentazione, compatibilita',
+  semantica e note per reviewer.
 - `docs/it/18-modello-licenze.md`, `docs/it/README.md` e `README.md`:
   documentato il modello licenze provvisorio. Il core e il backend base sono
   pensati come open source, mentre moduli avanzati futuri come `fanotify` o

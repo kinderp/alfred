@@ -245,7 +245,17 @@ git push origin NOME-BRANCH
 Poi apri GitHub nel browser. GitHub proporra' di creare una pull request dal
 branch del tuo fork verso `kinderp/alfred:main`.
 
-La PR deve spiegare:
+GitHub precompila la descrizione usando questo template:
+
+```text
+.github/pull_request_template.md
+```
+
+Il template non e' burocrazia: serve a rendere ogni PR leggibile nello stesso
+modo. Un reviewer deve capire rapidamente scopo, area modificata, test eseguiti,
+documentazione aggiornata e possibili effetti sulla semantica degli eventi.
+
+La PR deve comunque spiegare:
 
 - che problema risolve
 - quali file o aree modifica
@@ -253,19 +263,34 @@ La PR deve spiegare:
 - se ci sono scelte tecniche da discutere
 - se la documentazione e' stata aggiornata
 
-Esempio di descrizione:
+Le sezioni principali del template sono:
+
+- `Summary`: descrizione breve del cambiamento
+- `Scope`: tipo di modifica, per esempio codice, test, documentazione o CI
+- `Details`: lista concreta dei cambiamenti principali
+- `Verification`: comandi eseguiti localmente
+- `Documentation`: documentazione aggiornata o motivazione se non serve
+- `Compatibility and Semantics`: impatto su comportamento utente, eventi
+  semantici o diagnostica backend
+- `Reviewer Notes`: punti su cui vuoi attenzione particolare
+
+Esempio compilato:
 
 ```text
-Summary
+## Summary
+
 - Clarifies the recursive watch documentation.
 - Keeps backend diagnostics separate from semantic core events.
 
-Verification
-- make
-- make test
-- make test-backend-diagnostics
+## Verification
 
-Documentation
+- [x] git diff --check
+- [x] make
+- [x] make test
+- [x] make test-backend-diagnostics
+
+## Documentation
+
 - Updated docs/it/05-modulo-inotify.md.
 ```
 
