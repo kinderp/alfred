@@ -36,6 +36,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `05-modulo-inotify.md`, `13-semantica-eventi.md` e `14-scenari-test.md`:
+  dettagliati i casi che possono generare `IN_ATTRIB` secondo `inotify(7)`:
+  permessi, timestamp, attributi estesi, numero di hard link, proprietario e
+  gruppo. La documentazione chiarisce anche perche' il test automatico usa solo
+  `chmod` come caso rappresentativo e rimanda la copertura completa alla futura
+  scelta semantica sugli eventi metadata/attrib.
 - `modules/inotify/src/watch_manager.c`,
   `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_attrib_raw_log.sh`, `05-modulo-inotify.md`,

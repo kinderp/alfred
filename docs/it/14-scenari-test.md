@@ -286,6 +286,13 @@ Scenari diagnostici riesaminati:
 
 I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
 
+Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
+`IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,
+numero di hard link, proprietario e gruppo. Non li testiamo tutti subito perche'
+alcuni casi dipendono da permessi, filesystem o strumenti esterni. Verranno
+aggiunti alla suite solo se decidiamo una semantica utente ufficiale per i
+cambiamenti di metadati.
+
 Decisione attuale sui raw sintetici: non aggiungiamo un test backend separato
 solo sul formato raw. Il test core esistente verifica gia' il contratto utente:
 `DIR_CREATED` per tutta la catena `one/two/three`. Un test raw dedicato avrebbe

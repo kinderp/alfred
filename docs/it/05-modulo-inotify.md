@@ -129,9 +129,14 @@ opzioni, ma non espone una chiave `watch_mask`.
 
 `IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
 produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti
-di metadati, per esempio permessi o timestamp. Aumenta pero' anche il volume
-degli eventi raw: una semplice scrittura su file puo' generare `IN_CREATE`,
-`IN_MODIFY` e `IN_CLOSE_WRITE`, mentre un `chmod` puo' generare `IN_ATTRIB`.
+di metadati. Secondo `inotify(7)`, questo include permessi, timestamp, attributi
+estesi, numero di hard link, proprietario e gruppo.
+
+Aumenta pero' anche il volume degli eventi raw: una semplice scrittura su file
+puo' generare `IN_CREATE`, `IN_MODIFY` e `IN_CLOSE_WRITE`, mentre un `chmod` puo'
+generare `IN_ATTRIB`. Un singolo nome raw, quindi, copre casi tecnicamente
+diversi. Questa e' una delle ragioni per cui Alfred lo espone per ora solo come
+fatto grezzo di backend.
 
 Stato semantico importante: `IN_ATTRIB` viene tradotto in `ALFRED_RAW_ATTRIB`,
 ma per ora il core non emette un evento semantico ufficiale come
