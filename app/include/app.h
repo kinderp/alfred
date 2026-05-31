@@ -22,6 +22,8 @@
 #include "inotify_backend.h"
 #include "logger.h"
 
+#include <signal.h>
+
 /*
  * app_t - process-wide runtime context
  *
@@ -37,9 +39,10 @@ typedef struct app {
 
     /*
      * Cooperative shutdown flag. Signal handlers clear this flag instead of
-     * doing work directly in signal context.
+     * doing work directly in signal context. sig_atomic_t is the portable C type
+     * for values that are written by a signal handler and read by normal code.
      */
-    int running;
+    volatile sig_atomic_t running;
 
     /* Application configuration loaded before subsystem initialization. */
     config_t config;
