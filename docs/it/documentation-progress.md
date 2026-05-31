@@ -36,6 +36,20 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `05-modulo-inotify.md`, `13-semantica-eventi.md` e `14-scenari-test.md`:
+  dettagliati i casi che possono generare `IN_ATTRIB` secondo `inotify(7)`:
+  permessi, timestamp, attributi estesi, numero di hard link, proprietario e
+  gruppo. La documentazione chiarisce anche perche' il test automatico usa solo
+  `chmod` come caso rappresentativo e rimanda la copertura completa alla futura
+  scelta semantica sugli eventi metadata/attrib.
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_attrib_raw_log.sh`, `05-modulo-inotify.md`,
+  `13-semantica-eventi.md` e `14-scenari-test.md`: aggiunto `IN_ATTRIB` alla
+  maschera inotify predefinita e al raw log formatter. Il backend ora osserva i
+  cambiamenti attributo come fatti raw (`ALFRED_RAW_ATTRIB`), ma il core non
+  emette ancora un evento semantico metadata/attrib. Il test backend controlla
+  anche che `events.log` non riceva nuove righe dopo `chmod`.
 - `.github/pull_request_template.md` e `docs/it/11-come-contribuire.md`:
   aggiunto un template GitHub per le pull request. La guida contributori spiega
   come compilare summary, scope, verification, documentazione, compatibilita',

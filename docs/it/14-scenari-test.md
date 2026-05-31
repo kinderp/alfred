@@ -281,9 +281,17 @@ Scenari diagnostici riesaminati:
 | create directory watch | `tests/backend/test_watch_added_create_dir.sh` | `WATCH_ADDED` dopo la creazione di una directory | verifica che il backend aggiunga un watch alla nuova directory osservabile |
 | delete directory watch | `tests/backend/test_watch_removed_delete_dir.sh` | `WATCH_REMOVED` dopo `IN_IGNORED` | verifica che il backend non lasci una voce watch valida per una directory sparita |
 | recursive slow watch tree | `tests/backend/test_recursive_slow_watch_tree.sh` | `WATCH_ADDED` per `a`, `a/b`, `a/b/c` | verifica la manutenzione progressiva dei watch quando le directory nascono una dopo l'altra |
+| attrib raw log | `tests/backend/test_attrib_raw_log.sh` | `IN_ATTRIB` nel raw log dopo `chmod` | verifica che la maschera osservi cambiamenti di attributi e che `events.log` non riceva nuove righe semantiche o diagnostiche dopo `chmod` |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
 I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
+
+Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
+`IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,
+numero di hard link, proprietario e gruppo. Non li testiamo tutti subito perche'
+alcuni casi dipendono da permessi, filesystem o strumenti esterni. Verranno
+aggiunti alla suite solo se decidiamo una semantica utente ufficiale per i
+cambiamenti di metadati.
 
 Decisione attuale sui raw sintetici: non aggiungiamo un test backend separato
 solo sul formato raw. Il test core esistente verifica gia' il contratto utente:

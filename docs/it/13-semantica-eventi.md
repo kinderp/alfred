@@ -156,6 +156,76 @@ comportamento completo del core: una prima scrittura puo' produrre
 `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`; una modifica successiva puo'
 produrre un'altra coppia `FILE_MODIFIED` / `FILE_READY`.
 
+## Attributi e metadati
+
+`IN_ATTRIB` e' l'evento inotify usato per cambiamenti di attributi del file o
+della directory. La fonte primaria per questa semantica e' la pagina manuale
+Linux `inotify(7)`: Alfred non inventa qui un significato nuovo, ma osserva il
+fatto grezzo che il kernel espone.
+
+Secondo `inotify(7)`, `IN_ATTRIB` puo' essere generato quando cambiano:
+
+- permessi, per esempio tramite `chmod()` o `fchmod()`
+- timestamp, per esempio tramite `utimensat()` o comandi come `touch -m`
+- attributi estesi, per esempio tramite `setxattr()`
+- numero di hard link, per esempio tramite `link()` o `unlink()`
+- proprietario o gruppo, per esempio tramite `chown()`
+
+Esempi pratici:
+
+```bash
+chmod 600 file.txt
+touch -m file.txt
+setfattr -n user.example -v value file.txt
+ln file.txt file-hardlink.txt
+rm file-hardlink.txt
+chown user:group file.txt
+```
+
+Questi esempi non hanno tutti lo stesso peso nei test automatici. `chmod` e'
+semplice, portabile e non richiede privilegi particolari. `chown` puo' richiedere
+permessi diversi in base all'utente che esegue la suite; gli attributi estesi
+possono dipendere dal filesystem e dagli strumenti installati; i cambiamenti di
+hard link sono semanticamente diversi da un cambio permessi, anche se il kernel
+li notifica con lo stesso evento `IN_ATTRIB`.
+
+Per questo motivo il test backend attuale usa `chmod` come caso rappresentativo:
+serve a verificare che Alfred abbia davvero incluso `IN_ATTRIB` nella maschera
+di watch e che il raw log mostri il fatto grezzo. Non stiamo ancora fissando un
+contratto utente per tutti i possibili cambiamenti di metadati.
+
+Nel backend Alfred corrente:
+
+```text
+IN_ATTRIB -> ALFRED_RAW_ATTRIB
+```
+
+Questa traduzione e' gia' supportata dall'adapter. La maschera predefinita del
+backend ora include `IN_ATTRIB`, quindi il raw log puo' mostrare questi eventi.
+
+La semantica core, pero', non e' ancora stata scelta. Oggi
+`ALFRED_RAW_ATTRIB` e' un fatto raw osservabile, ma non produce ancora un evento
+utente come:
+
+```text
+FILE_METADATA_CHANGED
+DIR_METADATA_CHANGED
+```
+
+Questa e' una scelta intenzionale. Prima di aggiungere un evento semantico
+bisogna decidere:
+
+- se distinguere file e directory
+- se il nome debba parlare di attributi o metadati
+- se includere permessi, owner, timestamp e altri cambiamenti nello stesso evento
+- se applicare debounce o deduplica anche ai cambiamenti di attributi
+- quali scenari utente hanno davvero bisogno di questo evento
+- se testare separatamente permessi, timestamp, xattr, hard link e owner
+- quali casi sono abbastanza portabili per entrare nella suite ufficiale
+
+Per ora `IN_ATTRIB` serve come osservabilita' raw/backend. La semantica ufficiale
+verra' aggiunta solo dopo una decisione esplicita.
+
 ## Eventi semantici
 
 Un evento semantico descrive il significato dell'operazione vista da Alfred.
