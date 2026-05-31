@@ -930,6 +930,7 @@ chi rilegge la migrazione.
 | Decisione finale sui file storici di test | Decisa, non eseguita | Per ora restano come archivio didattico, ma il target finale e' eliminarli completamente dopo aver salvato le parti utili nella documentazione. |
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
+| Separare subscription mask e bit riconosciuti | Medio | Il parser di `inotify_watch_mask` oggi vive vicino ai bit che Alfred sa nominare o gestire in output. Per chiarezza futura, gli eventi che l'utente puo' chiedere al kernel vanno separati dai bit tecnici che il kernel aggiunge agli eventi. |
 
 ### Stato di chiusura della fase post-switch
 
@@ -942,12 +943,72 @@ Restano aperti solo lavori futuri separati:
 1. eliminare completamente `tests/functional/` e `tests/shadow/` quando la loro
    utilita' didattica sara' stata migrata nella documentazione
 2. progettare overflow/resync come tema autonomo
-3. aggiungere nuove passate di documentazione o test solo quando un refactor,
+3. separare nel backend inotify la subscription mask configurabile dai bit
+   riconosciuti in output
+4. aggiungere nuove passate di documentazione o test solo quando un refactor,
    un bug reale o un nuovo scenario utente lo richiedono
 
 Questa chiusura non significa che il progetto sia finito. Significa che lo
 switch totale al core non ha piu' debiti tecnici immediati da chiudere prima di
 passare a temi nuovi.
+
+### Subscription mask e bit riconosciuti
+
+`inotify` usa sempre una `mask`, ma non tutte le `mask` hanno lo stesso ruolo.
+Quando Alfred chiama:
+
+```c
+inotify_add_watch(fd, path, mask);
+```
+
+quella `mask` e' la subscription mask: indica quali eventi Alfred chiede al
+kernel di monitorare. Esempi naturali sono:
+
+```text
+IN_CREATE
+IN_DELETE
+IN_MODIFY
+IN_CLOSE_WRITE
+IN_MOVED_FROM
+IN_MOVED_TO
+```
+
+Quando invece Alfred legge una `struct inotify_event`, nella `event->mask`
+possono comparire anche bit tecnici aggiunti dal kernel. Esempi:
+
+```text
+IN_ISDIR
+IN_IGNORED
+IN_Q_OVERFLOW
+```
+
+`IN_ISDIR` non e' un evento autonomo: modifica il significato dell'evento
+principale. Per esempio:
+
+```text
+IN_CREATE | IN_ISDIR
+```
+
+significa "e' stata creata una directory", non "sono successi due eventi".
+
+`IN_IGNORED` e' ancora diverso: indica che il watch e' stato rimosso dal kernel.
+Questo e' fondamentale per il backend, perche' deve aggiornare la tabella
+`wd -> path`, ma non e' automaticamente un evento semantico del core.
+
+Il refactor futuro deve quindi separare due liste:
+
+```text
+eventi configurabili nella watch mask
+bit riconosciuti nel raw log/adattatore
+```
+
+Questa separazione rende piu' chiaro il parser di `inotify_watch_mask`: una
+chiave di configurazione dovrebbe accettare solo cio' che ha senso chiedere al
+kernel come subscription. Il raw log e l'adapter, invece, devono continuare a
+riconoscere anche bit tecnici restituiti dal kernel.
+
+La matrice completa e' in
+[Matrice eventi inotify](20-matrice-eventi-inotify.md).
 
 ### Audit responsabilita' residue
 

@@ -26,7 +26,8 @@ piu' dettaglio.
 17. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
 18. [Modello licenze](18-modello-licenze.md)
 19. [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)
-20. [Glossario](glossario.md)
+20. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
+21. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

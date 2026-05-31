@@ -226,6 +226,12 @@ bisogna decidere:
 Per ora `IN_ATTRIB` serve come osservabilita' raw/backend. La semantica ufficiale
 verra' aggiunta solo dopo una decisione esplicita.
 
+La classificazione completa degli eventi `IN_*`, compresi gli eventi che Alfred
+non supporta ancora e i motivi della scelta, e' mantenuta in
+[Matrice eventi inotify](20-matrice-eventi-inotify.md). Questo evita di
+confondere la semantica stabile del core con tutti i dettagli tecnici esposti
+dal backend Linux.
+
 ## Eventi semantici
 
 Un evento semantico descrive il significato dell'operazione vista da Alfred.

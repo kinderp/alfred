@@ -30,6 +30,7 @@ Stati usati:
 | Parziale | `17-roadmap-documentazione-avanzata.md` |
 | Parziale | `18-modello-licenze.md` |
 | Parziale | `19-roadmap-cli-e-man-page.md` |
+| Completo | `20-matrice-eventi-inotify.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -37,6 +38,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md`, `README.md`, `05-modulo-inotify.md` e
+  `13-semantica-eventi.md`: aggiunta una matrice completa degli eventi e flag
+  `inotify(7)`. La tabella distingue eventi richiedibili, bit restituiti dal
+  kernel, macro di comodita', flag di configurazione del watch, stato del raw
+  log backend, mapping `ALFRED_RAW_*`, semantica core e decisioni rimandate.
+  La documentazione evidenzia anche il prossimo refactor: separare meglio nel
+  codice la subscription mask dai bit riconosciuti in output.
+- `20-matrice-eventi-inotify.md` e `15-todo-switch-core.md`: aggiunta una
+  spiegazione didattica della differenza tra subscription mask e bit
+  riconosciuti in output. Gli esempi `IN_CREATE | IN_ISDIR` e `IN_IGNORED`
+  chiariscono perche' alcuni bit servono al backend o al raw log ma non devono
+  diventare automaticamente eventi semantici del core.
 - `19-roadmap-cli-e-man-page.md` e `README.md`: aggiunta una roadmap per il
   futuro parser CLI professionale e per la futura pagina man. Il documento
   registra `-c` / `--config`, `--print-config`, `--check-config`, `--help`,

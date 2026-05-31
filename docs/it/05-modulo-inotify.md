@@ -165,6 +165,12 @@ ma per ora il core non emette un evento semantico ufficiale come
 `FILE_METADATA_CHANGED`. La scelta del nome e del significato semantico dei
 cambiamenti attributo resta da discutere.
 
+Per la mappa completa di tutti gli eventi e flag `IN_*`, inclusi quelli che
+Alfred non gestisce ancora, vedi
+[Matrice eventi inotify](20-matrice-eventi-inotify.md). Quel capitolo distingue
+eventi richiedibili, bit restituiti dal kernel, flag di configurazione del
+watch, raw event Alfred e semantica core.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:
