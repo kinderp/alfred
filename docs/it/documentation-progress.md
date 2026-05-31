@@ -35,6 +35,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `README.md`: sostituito il testo iniziale da traccia didattica con un README
+  pubblico in inglese. Il nuovo README presenta Alfred come progetto C/Linux,
+  descrive stato, quick start, log, test, CI, contributi, roadmap e rimanda alla
+  documentazione italiana finche' non esistera' una documentazione inglese
+  completa.
 - `.github/workflows/ci.yml` e `docs/it/11-come-contribuire.md`: aggiunta la
   prima GitHub Action del progetto. La CI esegue `make`, `make test` e
   `make test-backend-diagnostics` su pull request verso `main` e push su
