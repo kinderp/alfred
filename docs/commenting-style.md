@@ -195,13 +195,14 @@ Important structs should be documented near their definition:
 /*
  * app_t - process-wide application state
  *
- * This object is the ownership root for the runtime. Subsystems receive a
- * pointer to it when they need shared services such as logging, watcher
- * state, or configuration.
+ * This object is the ownership root for the runtime. Backend code should
+ * receive narrowed contexts instead of the whole app_t whenever possible.
  */
 typedef struct app {
-    int running;    /* cleared to request cooperative shutdown */
-    int inotify_fd; /* nonblocking inotify descriptor owned by app_t */
+    volatile sig_atomic_t running; /* cleared to request shutdown */
+    config_t config;
+    inotify_backend_t inotify;     /* owns fd and watcher table */
+    alfred_engine_t *core;
 } app_t;
 ```
 

@@ -148,11 +148,11 @@ Stato attuale dell'integrazione:
 ```text
 il core supporta FILE_MODIFIED e FILE_READY;
 il backend inotify ora abilita IN_MODIFY e IN_CLOSE_WRITE nella maschera
-predefinita usata da config_t.watch_mask.
+predefinita usata da config_t.inotify.watch_mask.
 ```
 
-Quindi, durante lo shadow mode, lo scenario `modify_close_write_file` mostra il
-comportamento completo del core: una prima scrittura puo' produrre
+Quindi, nella suite core corrente, lo scenario `modify_close_write_file` mostra
+il comportamento completo del core: una prima scrittura puo' produrre
 `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`; una modifica successiva puo'
 produrre un'altra coppia `FILE_MODIFIED` / `FILE_READY`.
 
@@ -520,11 +520,11 @@ DIR_CREATED /tmp/progetto/one/two
 DIR_CREATED /tmp/progetto/one/two
 ```
 
-Per il primo passo non aggiungiamo subito una cache di dedup: implementiamo il
-recupero sintetico in shadow mode e osserviamo se compaiono duplicati reali. Se
-servira', la deduplica andra' preferibilmente nel layer backend/app che genera
-gli eventi sintetici, perche' il duplicato nasce dal recupero specifico di
-inotify. Il core potra' restare concentrato sulla semantica comune.
+Nel runtime corrente non abbiamo aggiunto una cache di dedup dedicata per i
+raw create sintetici. Se in futuro compariranno duplicati reali, la deduplica
+andra' preferibilmente nel layer backend che genera gli eventi sintetici,
+perche' il duplicato nasce dal recupero specifico di inotify. Il core potra'
+restare concentrato sulla semantica comune.
 
 Una possibile dedup futura e':
 

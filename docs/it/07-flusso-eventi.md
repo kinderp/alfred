@@ -2,9 +2,9 @@
 
 Questo capitolo spiega il percorso completo di un evento nel progetto.
 
-## Flusso finale desiderato
+## Flusso runtime corrente
 
-Nel disegno finale vogliamo questo:
+Il runtime corrente usa questo percorso:
 
 ```mermaid
 flowchart TD

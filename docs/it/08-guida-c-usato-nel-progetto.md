@@ -591,21 +591,22 @@ risorsa aperta.
 Nel progetto:
 
 ```c
-int inotify_fd;
+app->inotify.fd
 ```
 
-e' il file descriptor restituito da `inotify_init1()`.
+e' il file descriptor restituito da `inotify_init1()`. Il campo vive dentro
+`inotify_backend_t`, non direttamente dentro `app_t`.
 
 Si legge con:
 
 ```c
-read(app->inotify_fd, buffer, sizeof(buffer));
+read(ctx->runtime->fd, buffer, sizeof(buffer));
 ```
 
 e si chiude con:
 
 ```c
-close(app->inotify_fd);
+close(ctx->runtime->fd);
 ```
 
 ## Ownership
@@ -615,7 +616,8 @@ Ownership significa: chi e' responsabile di una risorsa?
 Esempi nel progetto:
 
 - `logger_t` possiede i suoi `FILE *`
-- `app_t` possiede il file descriptor `inotify_fd`
+- `app_t` possiede `inotify_backend_t`, che a sua volta possiede il file
+  descriptor inotify
 - `watcher_table_t` possiede le copie dei path associati ai watch
 
 Capire ownership e' fondamentale in C per evitare:

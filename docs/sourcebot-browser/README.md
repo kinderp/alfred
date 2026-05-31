@@ -289,7 +289,7 @@ Per l'uso didattico il percorso consigliato e':
 
 Sourcebot e' utile soprattutto per passare rapidamente da una parola chiave a
 tutti i punti del codice che la usano. Per esempio, cercare
-`ALFRED_EVENT_RELOCATED` permette di vedere dove compare l'evento semantico,
+`FILE_RELOCATED` permette di vedere dove compare l'evento semantico,
 mentre cercare `watch_descriptor` aiuta a seguire la gestione dei watch inotify.
 
 ## Query utili
@@ -303,7 +303,7 @@ repo:alfred app_run
 sym:app_run
 path:app/src app_run
 recursive_create_nested_dir
-ALFRED_EVENT_RELOCATED
+FILE_RELOCATED
 ```
 
 Significato pratico:
@@ -315,18 +315,18 @@ Significato pratico:
 - `path:app/src app_run`: cerca solo nei path che contengono `app/src`.
 - `recursive_create_nested_dir`: trova il caso del bug `mkdir -p` e la
   documentazione/test collegati.
-- `ALFRED_EVENT_RELOCATED`: segue la semantica core di move+rename unificato.
+- `FILE_RELOCATED`: segue la semantica core di move+rename unificato.
 
 Altre ricerche utili durante lo studio del progetto:
 
 ```text
 inotify_backend_poll
 watch_manager_add_recursive
-alfred_engine_process_raw
+alfred_process
 alfred_move_insert
 FILE_READY
-ENABLE_LEGACY_SHADOW
-event_engine_mode
+inotify_watch_mask
+ALFRED_RAW_ATTRIB
 ```
 
 Se una query produce troppi risultati, restringila con `path:` o `lang:c`.

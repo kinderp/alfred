@@ -73,7 +73,7 @@ Nel progetto Alfred questo vantaggio diventera' piu' utile se in futuro
 costruiremo uno script o una piccola UI che interroga Kythe e produce viste
 mirate, per esempio:
 
-- "mostrami la definizione e gli usi di `alfred_engine_process_raw`"
+- "mostrami la definizione e gli usi di `alfred_process`"
 - "mostrami tutte le funzioni che toccano la tabella dei watch"
 - "genera una mappa dei file coinvolti nel percorso `inotify -> raw -> core`"
 - "controlla se la lettura guidata cita funzioni che non esistono piu'"

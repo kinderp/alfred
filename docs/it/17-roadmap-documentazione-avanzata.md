@@ -83,7 +83,7 @@ app_run()
 inotify_backend_poll()
 inotify_backend_init()
 watch_manager_add_recursive()
-alfred_engine_process_raw()
+alfred_process()
 ```
 
 ### 4. Documentazione API navigabile
@@ -332,7 +332,7 @@ Esempi:
 app_run() call graph
 inotify_backend_poll() flow
 watch_manager_add_recursive() discovery graph
-alfred_engine_process_raw() semantic graph
+alfred_process() semantic graph
 ```
 
 Questi grafi dovrebbero essere piccoli e collegati a capitoli precisi della

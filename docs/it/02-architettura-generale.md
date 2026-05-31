@@ -129,7 +129,7 @@ logger         sa scrivere output
 
 Ogni parte diventa piu' facile da testare e modificare.
 
-## Flusso futuro desiderato
+## Flusso runtime corrente
 
 ```mermaid
 sequenceDiagram
@@ -145,6 +145,11 @@ sequenceDiagram
     Core->>App: alfred_event_t
     App->>Log: write event
 ```
+
+Questo non e' piu' solo un flusso desiderato: e' il percorso runtime corrente.
+Il vecchio confronto shadow/legacy e' stato rimosso dal percorso attivo. La
+documentazione storica resta disponibile per capire la migrazione, ma il core
+e' ora l'unica sorgente ufficiale degli eventi semantici.
 
 ## Tre livelli di evento
 
@@ -229,20 +234,27 @@ la semantica finale resta responsabilita' del core:
 directory scoperta dallo scan -> synthetic ALFRED_RAW_CREATE -> DIR_CREATED
 ```
 
-## Flusso attuale
+## Stato attuale
 
-Attualmente il progetto non e' ancora arrivato al disegno finale.
+Il progetto ha completato lo switch runtime al core. Il livello applicazione non
+legge piu' direttamente dal file descriptor inotify e non chiama piu'
+`legacy_events_dispatch()`.
 
-Oggi `app/src/app.c` legge direttamente dal file descriptor `inotify` e chiama:
+Il percorso corrente e':
 
-```c
-legacy_events_dispatch(app, ev);
+```text
+app_run()
+    -> inotify_backend_poll()
+    -> inotify_adapter_build_raw()
+    -> handle_backend_event()
+    -> alfred_process()
+    -> core_logger_on_event()
+    -> logger_event()
 ```
 
-Questa funzione e' implementata nel modulo inotify, ma produce gia' eventi
-semantici. Questo e' temporaneo.
-
-La prossima grande integrazione sara' spostare la semantica nel core.
+La semantica finale e' quindi nel core. Il modulo inotify resta responsabile
+dei fatti raw, della tabella dei watch, del raw log diagnostico e della
+manutenzione dei watch ricorsivi.
 
 ## Regola pratica per decidere dove mettere il codice
 

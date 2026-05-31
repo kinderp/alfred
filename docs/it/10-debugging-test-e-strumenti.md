@@ -316,7 +316,7 @@ lang:c app_run
 sym:app_run
 path:app/src app_run
 recursive_create_nested_dir
-ALFRED_EVENT_RELOCATED
+FILE_RELOCATED
 ```
 
 Sourcebot e' probabilmente lo strumento piu' comodo se l'obiettivo e' cercare
@@ -946,22 +946,19 @@ legacy dispatcher inotify -> events.log
 core in shadow mode       -> events.log con prefisso core
 ```
 
-Esempio storico:
+Non usare questo comando come verifica corrente: oggi la forma storica senza
+`--event-engine core` tenta di usare shadow mode e quindi fallisce.
 
-```bash
-python3 tests/shadow/compare_shadow_output.py move_rename_dir
-```
-
-Il tool stampa quattro sezioni:
+Durante la fase storica di confronto, il tool stampava quattro sezioni:
 
 - `Legacy`: eventi prodotti dal vecchio dispatcher
 - `Core`: eventi prodotti dal core
 - `Only in legacy`: eventi presenti solo nel vecchio percorso
 - `Only in core`: eventi presenti solo nel nuovo percorso
 
-Una differenza non e' automaticamente un bug. Durante shadow mode puo' essere
-una differenza attesa, per esempio quando il legacy emette `DIR_MOVED` piu'
-`DIR_RENAMED` ma il core emette un solo `DIR_RELOCATED`.
+Una differenza non era automaticamente un bug. Durante shadow mode poteva essere
+una differenza attesa, per esempio quando il legacy emetteva `DIR_MOVED` piu'
+`DIR_RENAMED` ma il core emetteva un solo `DIR_RELOCATED`.
 
 `--strict` appartiene alla fase storica di confronto legacy/core:
 
@@ -1009,7 +1006,9 @@ La sola modalita' ancora utile per ispezione manuale e':
 python3 tests/shadow/compare_shadow_output.py <scenario> --event-engine core
 ```
 
-La verifica ufficiale resta `make test` e `make test-backend-diagnostics`.
+In questa forma il tool non confronta piu' legacy e core: avvia solo il runtime
+ufficiale core e aiuta a ispezionare lo scenario. La verifica ufficiale resta
+`make test` e `make test-backend-diagnostics`.
 
 ## Provare un file di configurazione
 

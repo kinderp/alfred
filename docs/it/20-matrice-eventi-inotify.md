@@ -148,6 +148,29 @@ pensare che ogni bit `IN_*` sia una richiesta configurabile e un possibile
 evento semantico. Non e' cosi': alcuni bit sono solo metadati tecnici o segnali
 di manutenzione del backend.
 
+```mermaid
+flowchart TD
+    C["inotify_watch_mask"]
+    S["subscription mask"]
+    K["kernel inotify"]
+    E["struct inotify_event.mask"]
+    O["recognized output bits"]
+    R["ALFRED_RAW_*"]
+    B["backend state"]
+
+    C --> S
+    S --> K
+    K --> E
+    E --> O
+    O --> R
+    O --> B
+```
+
+Nel diagramma, `subscription mask` e `recognized output bits` sono due passaggi
+diversi anche se nel codice C sono entrambi rappresentati da bitmask numeriche.
+La prima decide cosa chiediamo al kernel; la seconda decide cosa Alfred sa
+leggere quando il kernel restituisce un evento.
+
 ## Macro di comodita'
 
 `inotify(7)` definisce anche macro che non sono eventi indipendenti.

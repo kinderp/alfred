@@ -130,18 +130,36 @@ ALFRED_KEEP_TEST_LOGS=1 make test-backend-diagnostics
 Detailed documentation is currently maintained in Italian:
 
 - [Italian documentation index](docs/it/README.md)
+- [Operational rules](docs/it/00-regole-operative.md)
 - [Project overview](docs/it/01-panoramica-progetto.md)
 - [Architecture](docs/it/02-architettura-generale.md)
+- [Repository layout](docs/it/03-struttura-cartelle.md)
 - [Application layer](docs/it/04-livello-applicazione.md)
 - [Inotify backend](docs/it/05-modulo-inotify.md)
 - [Core engine](docs/it/06-core-engine.md)
 - [Event flow](docs/it/07-flusso-eventi.md)
+- [C guide for this project](docs/it/08-guida-c-usato-nel-progetto.md)
 - [Makefile and build system](docs/it/09-makefile-e-build-system.md)
 - [Debugging, tests, and tools](docs/it/10-debugging-test-e-strumenti.md)
 - [Contributing guide](docs/it/11-come-contribuire.md)
+- [Historical shadow-mode comparison](docs/it/12-confronto-shadow-mode.md)
 - [Event semantics](docs/it/13-semantica-eventi.md)
 - [Test scenarios](docs/it/14-scenari-test.md)
+- [Core switch TODO and historical notes](docs/it/15-todo-switch-core.md)
 - [Code and data structure map](docs/it/16-mappa-codice-e-strutture.md)
+- [Advanced documentation roadmap](docs/it/17-roadmap-documentazione-avanzata.md)
+- [Licensing model notes](docs/it/18-modello-licenze.md)
+- [CLI and man page roadmap](docs/it/19-roadmap-cli-e-man-page.md)
+- [Inotify event matrix](docs/it/20-matrice-eventi-inotify.md)
+- [Glossary](docs/it/glossario.md)
+- [Documentation progress](docs/it/documentation-progress.md)
+
+Code browsing tools are documented separately:
+
+- [Code browsing tools](docs/code-browser/README.md)
+- [Sourcebot browser](docs/sourcebot-browser/README.md)
+- [Kythe browser](docs/kythe-browser/README.md)
+- [Aggregated code browsing scripts](tools/code-browsing/README.md)
 
 Code comments are written in English. Teaching documentation is currently in
 Italian.

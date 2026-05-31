@@ -229,9 +229,9 @@ ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
 e lo consegna alla stessa callback usata per gli eventi reali. La callback in
 `app.c` lo inoltra al core. Questo e' un miglioramento rispetto alla fase
 precedente: lo scan ricorsivo non nasce piu' in `app.c`, ma nel backend
-inotify. Anche fd e watcher table sono campi del backend; rimane ancora
-temporaneo il fatto che il backend usi `app_t` per raggiungere configurazione e
-logger.
+inotify. Anche fd e watcher table sono campi del backend. Il backend non riceve
+piu' l'intero `app_t`: lavora tramite `inotify_backend_context_t`, che contiene
+solo i riferimenti necessari a runtime inotify, configurazione e logger.
 
 ### app_shutdown()
 
@@ -366,10 +366,9 @@ watcher_capacity=12abc -> resta il default
 watcher_capacity=-1    -> resta il default
 ```
 
-La chiave `event_engine` accetta:
+La chiave `event_engine` accetta oggi un solo valore:
 
 ```text
-shadow
 core
 ```
 
@@ -377,23 +376,18 @@ core
 plain dal core e non chiama il dispatcher legacy. Il confronto shadow non e'
 piu' riattivabile nella build corrente.
 
-In shadow mode:
-
-```text
-legacy dispatcher -> evento ufficiale storico
-core              -> evento shadow con prefisso core
-```
-
-In core mode:
+Il flusso corrente e':
 
 ```text
 core -> evento ufficiale plain
 ```
 
-In `core` mode il vecchio dispatcher `events.c` non viene chiamato dal loop
-principale ed e' stato rimosso dal codice corrente. Il modulo inotify continua
-comunque a produrre diagnostica backend come `WATCH_ADDED`, perche' quella
-diagnostica nasce dal watch manager, non da un dispatcher semantico legacy.
+Se il file di configurazione contiene `event_engine=shadow`, oppure se
+l'ambiente contiene `ALFRED_EVENT_ENGINE=shadow`, Alfred fallisce con
+`ERR_CONFIG`. Questo e' voluto: il vecchio dispatcher `events.c` e' stato
+rimosso dal codice corrente. Il modulo inotify continua comunque a produrre
+diagnostica backend come `WATCH_ADDED`, perche' quella diagnostica nasce dal
+watch manager, non da un dispatcher semantico legacy.
 
 Nota temporanea dell'integrazione: `config_load()` sa gia' leggere
 `event_engine` e le opzioni inotify. L'avvio del programma non espone ancora

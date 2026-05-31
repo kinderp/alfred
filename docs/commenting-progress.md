@@ -64,10 +64,10 @@ Completed in the first heavy pass:
 - `modules/inotify/src/inotify_adapter.c` comment refresh only
 - `app/src/config.c` comment refresh only
 - `app/include/config.h` comment refresh only
-- `modules/inotify/src/events.c`
-- `modules/inotify/include/events.h`
-- `modules/inotify/src/move_cache.c`
-- `modules/inotify/include/move_cache.h`
+- `modules/inotify/src/events.c` (removed legacy file)
+- `modules/inotify/include/events.h` (removed legacy file)
+- `modules/inotify/src/move_cache.c` (removed legacy file)
+- `modules/inotify/include/move_cache.h` (removed legacy file)
 
 ## App
 
@@ -102,17 +102,20 @@ Completed in the first heavy pass:
 
 | Status | File |
 | --- | --- |
-| Done | `modules/inotify/include/events.h` |
 | Done | `modules/inotify/include/inotify_adapter.h` |
 | Done | `modules/inotify/include/inotify_backend.h` |
 | Done | `modules/inotify/include/inotify_config.h` |
-| Done | `modules/inotify/include/move_cache.h` |
 | Done | `modules/inotify/include/watch_manager.h` |
 | Done | `modules/inotify/include/watcher.h` |
-| Done | `modules/inotify/src/events.c` |
 | Done | `modules/inotify/src/inotify_adapter.c` |
 | Done | `modules/inotify/src/inotify_backend.c` |
 | Done | `modules/inotify/src/inotify_config.c` |
-| Done | `modules/inotify/src/move_cache.c` |
 | Done | `modules/inotify/src/watch_manager.c` |
 | Done | `modules/inotify/src/watcher.c` |
+
+Removed legacy files that were documented during the migration:
+
+- `modules/inotify/include/events.h`
+- `modules/inotify/include/move_cache.h`
+- `modules/inotify/src/events.c`
+- `modules/inotify/src/move_cache.c`

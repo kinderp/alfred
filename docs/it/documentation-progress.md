@@ -50,6 +50,19 @@ Stati usati:
   riconosciuti in output. Gli esempi `IN_CREATE | IN_ISDIR` e `IN_IGNORED`
   chiariscono perche' alcuni bit servono al backend o al raw log ma non devono
   diventare automaticamente eventi semantici del core.
+- `README.md`, `02-architettura-generale.md`, `04-livello-applicazione.md`,
+  `07-flusso-eventi.md` e `20-matrice-eventi-inotify.md`: riallineati i link
+  principali della sezione Documentation e aggiornate le parti Mermaid/testuali
+  che descrivono il runtime corrente core-only. La matrice inotify ora include
+  anche un diagramma dedicato alla separazione tra subscription mask e bit
+  riconosciuti in output.
+- `04-livello-applicazione.md`, `08-guida-c-usato-nel-progetto.md`,
+  `10-debugging-test-e-strumenti.md`, `13-semantica-eventi.md`,
+  `15-todo-switch-core.md`, `docs/sourcebot-browser/README.md`,
+  `docs/commenting-style.md` e `docs/commenting-progress.md`: audit di
+  riallineamento al codice corrente. Rimossi o chiariti esempi che trattavano
+  `shadow`, `event_engine_mode`, `app->inotify_fd`, `events.c` e `move_cache`
+  come elementi attivi invece che storici.
 - `19-roadmap-cli-e-man-page.md` e `README.md`: aggiunta una roadmap per il
   futuro parser CLI professionale e per la futura pagina man. Il documento
   registra `-c` / `--config`, `--print-config`, `--check-config`, `--help`,
@@ -690,7 +703,8 @@ Stati usati:
   eventi post-switch: formato ufficiale `plain`, formato `verbose`
   configurabile con `seq`, e formato shadow temporaneo con prefisso `core`.
 - `modules/inotify/src/watch_manager.c`: abilitati `IN_MODIFY` e
-  `IN_CLOSE_WRITE` nella maschera predefinita usata da `config_t.watch_mask`.
+  `IN_CLOSE_WRITE` nella maschera predefinita. Nello stato corrente quella
+  maschera passa da `config_t.inotify.watch_mask`.
 - `app/src/utils.c`: aggiornata la stampa dei raw log per mostrare `IN_MODIFY`
   e `IN_CLOSE_WRITE`.
 - `05-modulo-inotify.md`, `12-confronto-shadow-mode.md`,

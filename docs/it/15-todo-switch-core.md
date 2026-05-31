@@ -1276,14 +1276,9 @@ ricostruisce il binario core-only ed esegue la suite `tests/core/`. Il target:
 make test
 ```
 
-punta alla stessa suite core. Il target:
-
-```bash
-make test-legacy-shadow
-```
-
-non esiste piu' nel Makefile. I test funzionali storici restano nel repository
-solo come materiale di audit finche' non vengono archiviati o rimossi.
+punta alla stessa suite core. Il vecchio target `make test-legacy-shadow` non
+esiste piu' nel Makefile. I test funzionali storici restano nel repository solo
+come materiale di audit finche' non vengono archiviati o rimossi.
 
 ## Regola di avanzamento
 
