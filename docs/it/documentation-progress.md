@@ -63,6 +63,13 @@ Stati usati:
   riallineamento al codice corrente. Rimossi o chiariti esempi che trattavano
   `shadow`, `event_engine_mode`, `app->inotify_fd`, `events.c` e `move_cache`
   come elementi attivi invece che storici.
+- `20-matrice-eventi-inotify.md`, `14-scenari-test.md` e
+  `tests/backend/test_self_events_root_watch.sh`: aggiunto il primo test
+  osservativo sugli eventi `IN_DELETE_SELF` / `IN_MOVE_SELF` del path osservato
+  direttamente. La documentazione chiarisce che questi eventi riguardano il
+  watch stesso. Il caso delete puo' comunque produrre delete reali dei figli se
+  il kernel li emette; il caso move evidenzia invece il rischio di path stale
+  nella tabella `wd -> path`.
 - `19-roadmap-cli-e-man-page.md` e `README.md`: aggiunta una roadmap per il
   futuro parser CLI professionale e per la futura pagina man. Il documento
   registra `-c` / `--config`, `--print-config`, `--check-config`, `--help`,

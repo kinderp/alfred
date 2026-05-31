@@ -66,9 +66,9 @@ nella `mask` di `struct inotify_event`.
 | `IN_CLOSE_NOWRITE` | File o directory chiusi senza scrittura | No | Nessuno | Nessuna | Non supportato per ora. Utile forse per audit/debug, ma non per la semantica filesystem principale. |
 | `IN_CREATE` | File, directory, link, symlink o socket creato dentro una directory osservata | Si | `ALFRED_RAW_CREATE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_CREATED` o `DIR_CREATED` | Supportato end-to-end. In modalita' ricorsiva Alfred puo' emettere anche create sintetici per directory scoperte dopo l'aggiunta del watch. |
 | `IN_DELETE` | File o directory cancellato da una directory osservata | Si | `ALFRED_RAW_DELETE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_DELETED` o `DIR_DELETED` | Supportato end-to-end quando l'evento riguarda un figlio della directory osservata. |
-| `IN_DELETE_SELF` | Il file o la directory osservata direttamente e' stata cancellata | Parziale | Nessuno | Nessuna | Alfred lo logga nel raw backend e lo usa insieme a `IN_IGNORED` per riparare lo stato dei watch. Non diventa ancora evento core. |
+| `IN_DELETE_SELF` | Il file o la directory osservata direttamente e' stata cancellata | Parziale | Nessuno | Nessuna | Alfred lo logga nel raw backend e lo usa insieme a `IN_IGNORED` per riparare lo stato dei watch. Decisione proposta: mapparlo in futuro a `ALFRED_RAW_DELETE` per il path osservato direttamente, non per i figli. |
 | `IN_MODIFY` | Contenuto modificato, per esempio `write()` o `truncate()` | Si | `ALFRED_RAW_MODIFY` | `FILE_MODIFIED` | Supportato end-to-end con debounce nel core. |
-| `IN_MOVE_SELF` | Il file o la directory osservata direttamente e' stata spostata | No | Nessuno | Nessuna | Rimandato. E' diverso da `IN_MOVED_FROM` / `IN_MOVED_TO`: riguarda l'oggetto osservato, quindi puo' richiedere resync dei watch e aggiornamento dei path cache. |
+| `IN_MOVE_SELF` | Il file o la directory osservata direttamente e' stata spostata | No | Nessuno | Nessuna | Rimandato. E' diverso da `IN_MOVED_FROM` / `IN_MOVED_TO`: riguarda l'oggetto osservato, ma non fornisce una destinazione affidabile. Per ora va trattato come diagnostica/resync, non come rename/move semantico. |
 | `IN_MOVED_FROM` | Vecchio nome di un rename/move dentro directory osservata | Si | `ALFRED_RAW_MOVED_FROM` | Nessuna immediata | Supportato come prima meta' di una correlazione. Il core lo conserva in tabella in attesa di `IN_MOVED_TO` con lo stesso cookie. |
 | `IN_MOVED_TO` | Nuovo nome di un rename/move dentro directory osservata | Si | `ALFRED_RAW_MOVED_TO` | `FILE_RENAMED`, `FILE_MOVED`, `FILE_RELOCATED`, `DIR_RENAMED`, `DIR_MOVED`, `DIR_RELOCATED` oppure create fallback | Supportato. Se manca il `MOVED_FROM`, il core emette un create fallback perche' l'oggetto e' entrato nell'albero osservato. |
 | `IN_OPEN` | File o directory aperto | No | Nessuno | Nessuna | Non supportato per ora. Puo' essere utile per audit, ma e' molto rumoroso e non descrive una modifica del filesystem. |
@@ -220,6 +220,73 @@ Questa regola evita l'errore di copiare automaticamente tutta la superficie di
 inotify dentro l'API semantica. `IN_OPEN`, per esempio, e' reale e utile per
 alcuni strumenti di audit, ma non significa che un file sia stato creato,
 modificato, cancellato o pronto.
+
+## Eventi sul watch stesso
+
+`IN_DELETE_SELF` e `IN_MOVE_SELF` sono diversi da `IN_DELETE`,
+`IN_MOVED_FROM` e `IN_MOVED_TO`.
+
+Gli eventi senza suffisso `_SELF` descrivono figli dentro una directory
+osservata:
+
+```text
+watch su /tmp/root
+rm /tmp/root/file.txt
+    -> IN_DELETE name=file.txt
+```
+
+Gli eventi con suffisso `_SELF` descrivono invece il path osservato
+direttamente:
+
+```text
+watch su /tmp/root
+rm -rf /tmp/root
+    -> IN_DELETE_SELF name=
+    -> IN_IGNORED name=
+```
+
+Questa distinzione risponde anche al dubbio sui file contenuti nella directory
+monitorata. Se si cancella la directory osservata direttamente, il kernel non e'
+obbligato a produrre un `IN_DELETE` separato per ogni figlio in ogni possibile
+caso, ma nella pratica osservata con `rm -rf` sulla root Alfred riceve anche
+`IN_DELETE` per i figli mentre vengono rimossi. Quegli eventi sono reali e il
+core puo' emettere `FILE_DELETED` / `DIR_DELETED` per essi.
+
+La regola e': non inventare delete dei figli a partire da `IN_DELETE_SELF`;
+inoltrare solo i delete dei figli che il kernel produce davvero. Il segnale
+affidabile aggiuntivo di `IN_DELETE_SELF` e' che il path osservato direttamente
+non e' piu' valido. Quindi la futura semantica di `IN_DELETE_SELF` deve
+riguardare il path osservato.
+
+Per `IN_MOVE_SELF` il discorso e' ancora piu' delicato:
+
+```text
+watch su /tmp/root
+mv /tmp/root /tmp/root2
+    -> IN_MOVE_SELF name=
+    -> spesso IN_IGNORED name=
+```
+
+`IN_MOVE_SELF` dice che l'oggetto osservato e' stato spostato, ma non contiene
+il nuovo path. Senza destinazione Alfred non puo' produrre correttamente
+`DIR_RENAMED`, `DIR_MOVED` o `DIR_RELOCATED`. La scelta conservativa e' quindi:
+
+- `IN_DELETE_SELF`: futuro candidato per `ALFRED_RAW_DELETE` sul path osservato
+- `IN_MOVE_SELF`: diagnostica backend e futuro tema di resync, senza semantica
+  core immediata
+- `IN_IGNORED`: manutenzione backend della tabella watch, non evento core
+
+Il caso move ha anche un problema di correttezza dei path. Un watch inotify puo'
+restare associato allo stesso inode anche dopo lo spostamento della directory
+osservata. Se Alfred non gestisce `IN_MOVE_SELF`, la tabella `wd -> path` puo'
+continuare a contenere il vecchio path. Gli eventi successivi dentro la
+directory spostata rischiano quindi di essere ricostruiti con un path non piu'
+vero. Questo rende `IN_MOVE_SELF` un tema di backend state/resync prima ancora
+che un tema di semantica utente.
+
+Il test backend `test_self_events_root_watch.sh` fissa per ora il comportamento
+osservativo: controlla il raw log per gli eventi `_SELF`/`IN_IGNORED` e verifica
+che Alfred distingue gli eventi sul path osservato dagli eventi sui figli.
 
 ## Prossimi punti da discutere
 

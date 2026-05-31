@@ -931,6 +931,7 @@ chi rilegge la migrazione.
 | Rimuovere `EVENT_ENGINE_SHADOW` | Fatto | `shadow` e' ora un valore di configurazione invalido generico; resta valido solo `core`. |
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 | Separare subscription mask e bit riconosciuti | Medio | Il parser di `inotify_watch_mask` oggi vive vicino ai bit che Alfred sa nominare o gestire in output. Per chiarezza futura, gli eventi che l'utente puo' chiedere al kernel vanno separati dai bit tecnici che il kernel aggiunge agli eventi. |
+| Gestire `IN_MOVE_SELF` per evitare path stale | Medio/alto | Se la root osservata viene spostata, il watch puo' restare valido sull'inode mentre la tabella `wd -> path` contiene ancora il vecchio path. Prima di decidere una semantica utente bisogna progettare una policy backend: marcare il watch come stale, rimuoverlo, o fare resync. |
 
 ### Stato di chiusura della fase post-switch
 
@@ -945,7 +946,9 @@ Restano aperti solo lavori futuri separati:
 2. progettare overflow/resync come tema autonomo
 3. separare nel backend inotify la subscription mask configurabile dai bit
    riconosciuti in output
-4. aggiungere nuove passate di documentazione o test solo quando un refactor,
+4. progettare la gestione `IN_MOVE_SELF` per evitare path stale dopo lo
+   spostamento della root osservata
+5. aggiungere nuove passate di documentazione o test solo quando un refactor,
    un bug reale o un nuovo scenario utente lo richiedono
 
 Questa chiusura non significa che il progetto sia finito. Significa che lo

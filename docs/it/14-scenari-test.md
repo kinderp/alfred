@@ -284,6 +284,7 @@ Scenari diagnostici riesaminati:
 | attrib raw log | `tests/backend/test_attrib_raw_log.sh` | `IN_ATTRIB` nel raw log dopo `chmod` | verifica che la maschera osservi cambiamenti di attributi e che `events.log` non riceva nuove righe semantiche o diagnostiche dopo `chmod` |
 | watch mask disable attrib | `tests/backend/test_watch_mask_disable_attrib.sh` | assenza di `IN_ATTRIB` dopo `inotify_watch_mask=default,-IN_ATTRIB` | verifica che la maschera configurata cambi davvero gli eventi osservati dal backend |
 | watch mask invalid token | `tests/backend/test_watch_mask_invalid_token.sh` | avvio fallito con `IN_ATRIB` | verifica che i typo nella maschera siano errori di configurazione, non token ignorati |
+| self events root watch | `tests/backend/test_self_events_root_watch.sh` | `IN_DELETE_SELF`, `IN_IGNORED` e comportamento della root spostata | verifica osservativa per distinguere eventi sul path osservato da eventi sui figli; il caso move resta diagnostico per la futura gestione dei path stale |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
 I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
