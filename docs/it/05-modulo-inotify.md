@@ -13,6 +13,7 @@ Esempi di eventi Linux:
 - `IN_CREATE`
 - `IN_DELETE`
 - `IN_MODIFY`
+- `IN_ATTRIB`
 - `IN_CLOSE_WRITE`
 - `IN_MOVED_FROM`
 - `IN_MOVED_TO`
@@ -104,6 +105,7 @@ e include:
 IN_CREATE
 IN_DELETE
 IN_MODIFY
+IN_ATTRIB
 IN_CLOSE_WRITE
 IN_MOVED_FROM
 IN_MOVED_TO
@@ -125,10 +127,16 @@ Quindi `config_t` contiene davvero la maschera usata dal runtime. In questa fase
 la maschera non e' ancora configurabile da file: `config_load()` legge molte
 opzioni, ma non espone una chiave `watch_mask`.
 
-L'aggiunta di `IN_MODIFY` e `IN_CLOSE_WRITE` rende visibili al core gli eventi
-necessari per produrre `FILE_MODIFIED` e `FILE_READY`. Aumenta pero' anche il
-volume degli eventi raw: una semplice scrittura su file puo' generare
-`IN_CREATE`, `IN_MODIFY` e `IN_CLOSE_WRITE`.
+`IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
+produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti
+di metadati, per esempio permessi o timestamp. Aumenta pero' anche il volume
+degli eventi raw: una semplice scrittura su file puo' generare `IN_CREATE`,
+`IN_MODIFY` e `IN_CLOSE_WRITE`, mentre un `chmod` puo' generare `IN_ATTRIB`.
+
+Stato semantico importante: `IN_ATTRIB` viene tradotto in `ALFRED_RAW_ATTRIB`,
+ma per ora il core non emette un evento semantico ufficiale come
+`FILE_METADATA_CHANGED`. La scelta del nome e del significato semantico dei
+cambiamenti attributo resta da discutere.
 
 ## Watch descriptor
 

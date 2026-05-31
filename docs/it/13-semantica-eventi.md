@@ -156,6 +156,46 @@ comportamento completo del core: una prima scrittura puo' produrre
 `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`; una modifica successiva puo'
 produrre un'altra coppia `FILE_MODIFIED` / `FILE_READY`.
 
+## Attributi e metadati
+
+`IN_ATTRIB` e' l'evento inotify usato per cambiamenti di attributi del file o
+della directory. Per esempio puo' comparire dopo:
+
+```bash
+chmod 600 file.txt
+touch -m file.txt
+```
+
+Nel backend Alfred corrente:
+
+```text
+IN_ATTRIB -> ALFRED_RAW_ATTRIB
+```
+
+Questa traduzione e' gia' supportata dall'adapter. La maschera predefinita del
+backend ora include `IN_ATTRIB`, quindi il raw log puo' mostrare questi eventi.
+
+La semantica core, pero', non e' ancora stata scelta. Oggi
+`ALFRED_RAW_ATTRIB` e' un fatto raw osservabile, ma non produce ancora un evento
+utente come:
+
+```text
+FILE_METADATA_CHANGED
+DIR_METADATA_CHANGED
+```
+
+Questa e' una scelta intenzionale. Prima di aggiungere un evento semantico
+bisogna decidere:
+
+- se distinguere file e directory
+- se il nome debba parlare di attributi o metadati
+- se includere permessi, owner, timestamp e altri cambiamenti nello stesso evento
+- se applicare debounce o deduplica anche ai cambiamenti di attributi
+- quali scenari utente hanno davvero bisogno di questo evento
+
+Per ora `IN_ATTRIB` serve come osservabilita' raw/backend. La semantica ufficiale
+verra' aggiunta solo dopo una decisione esplicita.
+
 ## Eventi semantici
 
 Un evento semantico descrive il significato dell'operazione vista da Alfred.

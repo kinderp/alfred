@@ -53,9 +53,9 @@ static int watch_manager_context_is_valid(
 /*
  * watch_manager_default_mask - return the default inotify subscription mask
  *
- * The mask includes creation/deletion, modify/close-write, move pairs, watch
- * removal diagnostics, and queue overflow. It is stored in config_t so future
- * configuration can override it without changing watch_manager_add().
+ * The mask includes creation/deletion, modify/attrib/close-write, move pairs,
+ * watch removal diagnostics, and queue overflow. It is stored in config_t so
+ * future configuration can override it without changing watch_manager_add().
  *
  * Return: OR-ed IN_* mask flags.
  */
@@ -65,6 +65,7 @@ uint32_t watch_manager_default_mask(void)
         IN_CREATE      |
         IN_DELETE      |
         IN_MODIFY      |
+        IN_ATTRIB      |
         IN_CLOSE_WRITE |
         IN_MOVED_FROM  |
         IN_MOVED_TO    |

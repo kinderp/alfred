@@ -36,6 +36,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_attrib_raw_log.sh`, `05-modulo-inotify.md`,
+  `13-semantica-eventi.md` e `14-scenari-test.md`: aggiunto `IN_ATTRIB` alla
+  maschera inotify predefinita e al raw log formatter. Il backend ora osserva i
+  cambiamenti attributo come fatti raw (`ALFRED_RAW_ATTRIB`), ma il core non
+  emette ancora un evento semantico metadata/attrib.
 - `docs/it/18-modello-licenze.md`, `docs/it/README.md` e `README.md`:
   documentato il modello licenze provvisorio. Il core e il backend base sono
   pensati come open source, mentre moduli avanzati futuri come `fanotify` o
