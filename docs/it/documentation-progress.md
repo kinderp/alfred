@@ -36,6 +36,16 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_config.c`, `app/src/config.c`, `app/src/app.c`,
+  `tests/backend/test_watch_mask_disable_attrib.sh`,
+  `tests/backend/test_watch_mask_invalid_token.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`: aggiunto il parser
+  testuale di `inotify_watch_mask`. La configurazione supporta `default`, liste
+  esplicite di flag `IN_*` e modificatori `+FLAG` / `-FLAG`; i token
+  sconosciuti fanno fallire `config_load()` con `ERR_CONFIG`. L'avvio puo'
+  caricare un file tramite `ALFRED_CONFIG`.
 - `app/include/config.h`, `app/src/config.c`,
   `modules/inotify/include/inotify_config.h`,
   `modules/inotify/src/inotify_config.c`,

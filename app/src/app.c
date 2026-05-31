@@ -171,10 +171,20 @@ int app_init(app_t *app, int argc, char **argv)
      */
     config_defaults(&app->config);
 
+    const char *config_path = getenv("ALFRED_CONFIG");
+    if (config_path != NULL &&
+        config_load(&app->config, config_path) != ERR_OK) {
+
+        fprintf(stderr,
+                "invalid ALFRED_CONFIG=%s\n",
+                config_path);
+        error = ERR_CONFIG;
+        goto fail;
+    }
+
     /*
-     * Temporary integration override. config_load() can parse event_engine, but
-     * startup does not yet accept a config file path, so the environment keeps
-     * core-mode testing possible without changing the CLI contract.
+     * The environment override is applied after the optional config file so it
+     * can reject stale or accidental event engine values with highest priority.
      */
     const char *event_engine_env = getenv("ALFRED_EVENT_ENGINE");
     if (event_engine_env != NULL &&

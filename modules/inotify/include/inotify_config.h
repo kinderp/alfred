@@ -35,4 +35,23 @@ typedef struct inotify_config {
  */
 void inotify_config_defaults(inotify_config_t *cfg);
 
+/*
+ * inotify_config_set_watch_mask - parse and assign a textual IN_* mask
+ * @cfg: inotify configuration object to update
+ * @value: comma-separated mask expression
+ *
+ * Supported forms:
+ *
+ *   default
+ *   default,-IN_ATTRIB
+ *   default,+IN_OPEN,+IN_ACCESS
+ *   IN_CREATE,IN_DELETE,IN_MODIFY
+ *
+ * Unknown tokens are rejected so typos do not silently change the observed
+ * filesystem contract.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+int inotify_config_set_watch_mask(inotify_config_t *cfg, const char *value);
+
 #endif /* INOTIFY_CONFIG_H */

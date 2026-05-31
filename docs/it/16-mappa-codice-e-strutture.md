@@ -387,7 +387,7 @@ app_t app
 
 app_build_inotify_backend_context(app, &ctx):
   ctx.runtime = &app->inotify
-  ctx.config = &app->config
+  ctx.config = &app->config.inotify
   ctx.logger = &app->logger
 
 inotify_backend_init(&ctx):
@@ -518,7 +518,7 @@ Campi rilevanti:
 | --- | --- | --- | --- |
 | `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
-| `inotify.watch_mask` | maschera inotify usata per aggiungere watch | `inotify_config_defaults()` | `watch_manager_add()` |
+| `inotify.watch_mask` | maschera inotify usata per aggiungere watch | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` delega a `inotify_config_defaults()`, questa prende il

@@ -26,9 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
-- added reviewed comments for the new inotify backend configuration files
-  `modules/inotify/include/inotify_config.h` and
-  `modules/inotify/src/inotify_config.c`
+- added and refreshed reviewed comments for the inotify backend configuration
+  files `modules/inotify/include/inotify_config.h` and
+  `modules/inotify/src/inotify_config.c`, including the textual watch-mask
+  parser
 - reinforced the core-only inotify backend comments in
   `modules/inotify/src/inotify_backend.c`, especially the boundary between raw
   facts, recursive watch recovery, synthetic raw directory creates, and core

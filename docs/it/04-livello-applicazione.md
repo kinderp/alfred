@@ -303,6 +303,7 @@ recursive=true
 inotify_recursive=true
 watcher_capacity=256
 inotify_watcher_capacity=256
+inotify_watch_mask=default,-IN_ATTRIB
 event_engine=core
 raw_log=myraw.log
 ```
@@ -310,8 +311,28 @@ raw_log=myraw.log
 Le chiavi storiche `recursive` e `watcher_capacity` restano accettate. Le nuove
 chiavi `inotify_recursive` e `inotify_watcher_capacity` descrivono meglio il
 proprietario reale di quelle opzioni e sono la forma preferita per i nuovi file
-di configurazione. La maschera inotify non e' ancora configurabile da file in
-questo micro-step.
+di configurazione.
+
+La chiave `inotify_watch_mask` configura la maschera passata a
+`inotify_add_watch()`. Il valore puo' essere:
+
+```text
+default
+default,-IN_ATTRIB
+default,+IN_OPEN,+IN_ACCESS
+IN_CREATE,IN_DELETE,IN_MODIFY,IN_CLOSE_WRITE
+```
+
+`default` significa "parti dalla maschera standard scelta da Alfred". I token
+con `+` aggiungono flag a quella maschera; i token con `-` li rimuovono. Una
+lista senza `default` parte invece da maschera vuota e contiene solo i flag
+indicati.
+
+Un token sconosciuto e' un errore di configurazione. Per esempio
+`IN_ATRIB`, scritto con una sola `T`, fa fallire l'avvio. Questa scelta e'
+intenzionale: ignorare i typo sarebbe pericoloso, perche' l'utente penserebbe
+di aver modificato la maschera mentre Alfred starebbe continuando con un valore
+diverso.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile
@@ -370,9 +391,15 @@ comunque a produrre diagnostica backend come `WATCH_ADDED`, perche' quella
 diagnostica nasce dal watch manager, non da un dispatcher semantico legacy.
 
 Nota temporanea dell'integrazione: `config_load()` sa gia' leggere
-`event_engine`, ma l'avvio del programma non espone ancora un'opzione CLI per
-indicare un file di configurazione. Per forzare esplicitamente la modalita'
-core si usa l'override d'ambiente:
+`event_engine` e le opzioni inotify. L'avvio del programma non espone ancora
+un'opzione CLI per indicare un file di configurazione, ma accetta il percorso
+tramite variabile d'ambiente:
+
+```bash
+ALFRED_CONFIG=./alfred.conf ./alfred /path/da/osservare
+```
+
+Per forzare esplicitamente la modalita' core si usa l'override d'ambiente:
 
 ```bash
 ALFRED_EVENT_ENGINE=core ./alfred /path/da/osservare

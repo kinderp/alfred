@@ -127,9 +127,22 @@ watch_manager_add()
 ```
 
 Quindi la configurazione applicativa contiene davvero la maschera usata dal
-runtime, ma dentro una sottostruttura dedicata al backend inotify. In questa
-fase la maschera non e' ancora configurabile da file: `config_load()` legge
-molte opzioni, ma non espone ancora una chiave `inotify_watch_mask`.
+runtime, ma dentro una sottostruttura dedicata al backend inotify.
+
+La maschera e' configurabile da file con:
+
+```text
+inotify_watch_mask=default
+inotify_watch_mask=default,-IN_ATTRIB
+inotify_watch_mask=default,+IN_OPEN,+IN_ACCESS
+inotify_watch_mask=IN_CREATE,IN_DELETE,IN_MODIFY,IN_CLOSE_WRITE
+```
+
+Il parser vive nella configurazione del modulo inotify, non nel core. Questo e'
+importante perche' i nomi `IN_*` sono concetti Linux/inotify, mentre il core
+deve rimanere backend-neutral. Se un token non e' riconosciuto, `config_load()`
+ritorna `ERR_CONFIG` e Alfred non parte: un errore come `IN_ATRIB` non deve
+essere ignorato silenziosamente.
 
 `IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
 produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti

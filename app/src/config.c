@@ -168,6 +168,7 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
  *
  *   recursive=true
  *   inotify_recursive=true
+ *   inotify_watch_mask=default,-IN_ATTRIB
  *   use_epoll=false
  *   event_engine=core
  *   raw_log=myraw.log
@@ -233,6 +234,14 @@ error_t config_load(config_t *cfg, const char *path)
 
             cfg->inotify.watcher_capacity =
                 parse_size_or_default(value, cfg->inotify.watcher_capacity);
+        }
+
+        else if (strcmp(key, "inotify_watch_mask") == 0) {
+
+            if (inotify_config_set_watch_mask(&cfg->inotify, value) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
         }
 
         else if (strcmp(key, "event_engine") == 0) {
