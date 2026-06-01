@@ -730,6 +730,7 @@ affidabile. Non usa inotify reale e non produce log semantici.
 Il primo test controlla che:
 
 - `watcher_store()` renda lo slot `WATCHER_STATE_VALID`
+- `watcher_store_identity()` salvi anche identita' `st_dev/st_ino`
 - `watcher_set_state()` possa passare a `WATCHER_STATE_STALE`
 - `watcher_set_state()` possa passare a `WATCHER_STATE_RESYNCING`
 - `watcher_remove()` riporti lo slot a `WATCHER_STATE_REMOVED`

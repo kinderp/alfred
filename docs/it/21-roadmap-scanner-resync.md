@@ -1334,7 +1334,7 @@ useranno lo stesso modello dati.
 ```mermaid
 stateDiagram-v2
     [*] --> REMOVED: watcher_init() / slot vuoto
-    REMOVED --> VALID: watcher_store(wd, path)
+    REMOVED --> VALID: watcher_store_identity(wd, path, id)
 
     VALID --> STALE: IN_MOVE_SELF / path non affidabile
     VALID --> STALE: IN_DELETE_SELF / path osservato cancellato
@@ -1353,7 +1353,7 @@ stateDiagram-v2
 La lettura importante e' questa:
 
 - `REMOVED -> VALID` nasce solo da un watch reale memorizzato con
-  `watcher_store()`
+  `watcher_store_identity()`
 - `VALID -> STALE` non cancella il path: lo conserva per diagnostica e recovery
 - `STALE -> RESYNCING` indica che Alfred sta provando a ricostruire fiducia
 - `RESYNCING -> VALID` e' possibile solo se il resync conferma un path
@@ -1427,7 +1427,10 @@ Il primo cambio di codice e' stato implementato senza emettere nuovi eventi
 semantici:
 
 - `watcher_state_t` definisce `REMOVED`, `VALID`, `STALE` e `RESYNCING`
-- `watcher_store()` inizializza un watch attivo come `VALID`
+- `watcher_store()` inizializza un watch attivo come `VALID` senza identita',
+  utile per test e usi interni che non hanno un path reale
+- `watcher_store_identity()` inizializza un watch attivo come `VALID` e salva
+  la coppia `(st_dev, st_ino)` usata dal runtime inotify
 - `watcher_remove()` riporta lo slot a `REMOVED`
 - `watcher_set_state()` permette solo stati attivi, quindi non usa
   `REMOVED` per uno slot ancora presente
@@ -1532,13 +1535,20 @@ backend marca il watch `STALE` e chiama `backend_resync_watch()` come probe
 conservativo sul singolo `wd`.
 
 Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
-produce raw Alfred. Controlla solo se il vecchio path associato al watch esiste
-ancora ed e' una directory ispezionabile. Questa verifica pero' non e' una
-prova di identita': dopo `IN_MOVE_SELF` un altro processo potrebbe ricreare una
-directory con lo stesso vecchio path mentre il watch kernel continua a riferirsi
-all'oggetto spostato. Per questo il probe non riporta ancora il watch a
-`VALID`; se non puo' provare l'identita' del path, lascia il watch `STALE` e
-scrive `WATCH_RESYNC_FAILED`.
+produce raw Alfred. Controlla se il vecchio path associato al watch esiste
+ancora, e' una directory ispezionabile e ha la stessa identita' filesystem
+salvata nella watcher table. Questa terza condizione e' essenziale: dopo
+`IN_MOVE_SELF` un altro processo potrebbe ricreare una directory con lo stesso
+vecchio path mentre il watch kernel continua a riferirsi all'oggetto spostato.
+Per questo la raggiungibilita' del path non basta. Il probe riporta il watch a
+`VALID` solo se la coppia `(st_dev, st_ino)` coincide; altrimenti lascia il
+watch `STALE` e scrive `WATCH_RESYNC_FAILED`.
+
+La watcher table salva questa identita' quando il watch viene installato:
+`watch_manager_add()` chiama `inotify_add_watch()`, poi `stat()` sul path e
+infine `watcher_store_identity()`. La sequenza non crea semantica utente: serve
+solo a dare al backend una prova piu' forte del semplice path durante il futuro
+resync.
 
 Internamente il probe classifica l'esito con
 `backend_resync_probe_result_t`. Questa scelta evita di spargere stringhe di
@@ -1553,7 +1563,9 @@ distinguere casi molto diversi:
 | `PATH_UNREACHABLE` | il vecchio path non e' piu' raggiungibile con `stat()` |
 | `NOT_DIRECTORY` | il vecchio path esiste ma non e' una directory |
 | `SET_STALE_FAILED` | il ritorno conservativo a `STALE` e' fallito |
-| `IDENTITY_UNKNOWN` | il path e' raggiungibile, ma non sappiamo se e' lo stesso oggetto |
+| `SET_VALID_FAILED` | la transizione a `VALID` dopo identita' confermata e' fallita |
+| `MISSING_IDENTITY` | la watcher table non ha una coppia `st_dev/st_ino` salvata |
+| `IDENTITY_MISMATCH` | il path e' raggiungibile, ma non e' lo stesso oggetto |
 
 Tutti questi esiti producono ancora lo stesso tipo di diagnostica:
 `WATCH_RESYNC_FAILED`. La differenza sta nel token `error=...`, che rende i log
@@ -1576,8 +1588,8 @@ WATCH_RESYNC_FAILED path=...
 WATCH_RESYNC_END path=...
 ```
 
-`WATCH_RESYNC_BEGIN` e `WATCH_RESYNC_FAILED` sono ora usati dal probe minimo.
-`WATCH_RESYNC_END`, `WATCH_RESYNC_REPAIRED` e `WATCH_RESYNC_STALE` restano nomi
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e `WATCH_RESYNC_END` sono ora usati
+dal probe minimo. `WATCH_RESYNC_REPAIRED` e `WATCH_RESYNC_STALE` restano nomi
 proposti per la fase scanner-based. La regola importante rimane: nessun raw
 Alfred sintetico e nessun evento core fino a quando non decidiamo un contratto
 esplicito per gli eventi ricostruiti.
@@ -1606,7 +1618,8 @@ resync attraversi direttamente `watcher_table_t.items`.
 
 | Condizione | Stato prima | Azione v0 | Stato dopo |
 | --- | --- | --- | --- |
-| path del watch esiste ed e' directory accessibile | `STALE` | probe minimo: verifica path ma non puo' provare l'identita' dopo `IN_MOVE_SELF` | resta `STALE` |
+| path del watch esiste, e' directory e ha stessa identita' | `STALE` | probe minimo: confrontare `(st_dev, st_ino)` salvati con `stat()` corrente | `VALID` |
+| path del watch esiste ma ha identita' diversa o mancante | `STALE` | probe minimo: log diagnostico `WATCH_RESYNC_FAILED` | resta `STALE` |
 | path del watch non esiste piu' | `STALE` | probe minimo: `WATCH_RESYNC_BEGIN`, verifica path, `WATCH_RESYNC_FAILED` | resta `STALE` |
 | path esiste ma scan fallisce sulla root | `STALE` | log errore/recovery fallita | `STALE` |
 | directory figlia sparisce durante scan | `RESYNCING` | saltare la figlia e continuare | resta `RESYNCING`, poi `VALID` se non ci sono errori duri |
@@ -1630,10 +1643,11 @@ flowchart TD
 ```
 
 Nel codice corrente e' implementata solo la parte iniziale del flusso:
+`STALE -> RESYNCING -> VALID` quando il vecchio path e' ancora una directory e
+la sua identita' `(st_dev, st_ino)` coincide con quella salvata, oppure
 `STALE -> RESYNCING -> STALE` con `WATCH_RESYNC_FAILED` se il vecchio path non
-e' piu' raggiungibile oppure se e' raggiungibile ma l'identita' non e'
-dimostrabile. Il blocco `fs_scan_tree()`, l'aggiunta dei watch mancanti e la
-transizione sicura a `VALID` restano nella roadmap.
+e' piu' raggiungibile, non e' una directory o ha identita' diversa/mancante. Il
+blocco `fs_scan_tree()` e l'aggiunta dei watch mancanti restano nella roadmap.
 
 #### Regola per tornare VALID
 

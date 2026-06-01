@@ -3,7 +3,7 @@
  *
  * This file owns the operations that mutate the backend watcher table:
  *
- *   inotify_add_watch() -> watcher_store()
+ *   inotify_add_watch() -> stat() -> watcher_store_identity()
  *   inotify_rm_watch()  -> watcher_remove()
  *
  * It deliberately does not classify filesystem events. WATCH_ADDED and
@@ -24,6 +24,7 @@
 
 #include <limits.h>
 #include <sys/inotify.h>
+#include <sys/stat.h>
 
 /* ============================================================================
  * INTERNAL HELPERS
@@ -120,8 +121,9 @@ uint32_t watch_manager_default_mask(void)
  * @path: filesystem path to watch
  *
  * On success the kernel returns a watch descriptor. The descriptor is then used
- * as an index into watcher_table_t, where watcher_store() saves the path needed
- * later to reconstruct full event paths from inotify records.
+ * as an index into watcher_table_t, where watcher_store_identity() saves the
+ * path and stat(2) identity needed later to reconstruct full event paths and
+ * validate stale mappings during resync.
  *
  * The WATCH_ADDED log documents that Alfred can now observe @path. It is not a
  * substitute for DIR_CREATED and must not be consumed as a semantic core event.
@@ -150,12 +152,29 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    if (watcher_store(&ctx->runtime->watchers,
-                      wd,
-                      path) != 0) {
+    struct stat st;
+
+    if (stat(path, &st) != 0) {
+        logger_error(ctx->logger,
+                     "stat failed for watched path=%s errno=%d (%s)",
+                     path,
+                     errno,
+                     strerror(errno));
+
+        inotify_rm_watch(ctx->runtime->fd,
+                         wd);
+
+        return -1;
+    }
+
+    if (watcher_store_identity(&ctx->runtime->watchers,
+                               wd,
+                               path,
+                               st.st_dev,
+                               st.st_ino) != 0) {
 
         logger_error(ctx->logger,
-                     "watcher_store failed wd=%d path=%s",
+                     "watcher_store_identity failed wd=%d path=%s",
                      wd,
                      path);
 

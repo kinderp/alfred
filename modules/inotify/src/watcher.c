@@ -4,8 +4,8 @@
  * The inotify backend needs to reconstruct full paths from kernel events.
  * Kernel records contain a watch descriptor and an optional name; they do not
  * repeat the watched directory path. This table stores that missing directory
- * path, tracks whether the mapping is still reliable, and lets the backend
- * perform direct lookup by wd.
+ * path, tracks whether the mapping is still reliable, stores optional
+ * stat(2)-based identity, and lets the backend perform direct lookup by wd.
  *
  * The table may be sparse because inotify watch descriptors are kernel-assigned
  * integers. watcher_expand() grows the array until the descriptor can be used
@@ -186,9 +186,66 @@ int watcher_store(watcher_table_t *wt,
     if (!slot->active)
         wt->count++;
 
-    slot->wd     = wd;
-    slot->active = 1;
-    slot->state  = WATCHER_STATE_VALID;
+    slot->wd           = wd;
+    slot->active       = 1;
+    slot->state        = WATCHER_STATE_VALID;
+    slot->has_identity = 0;
+    slot->device_id    = 0;
+    slot->inode_id     = 0;
+
+    snprintf(slot->path,
+             sizeof(slot->path),
+             "%s",
+             path);
+
+    return 0;
+}
+
+/*
+ * watcher_store_identity - store a wd -> path mapping with filesystem identity
+ * @wt: table to update
+ * @wd: inotify watch descriptor
+ * @path: watched path to copy into the table
+ * @device_id: st_dev captured for @path when the watch was installed
+ * @inode_id: st_ino captured for @path when the watch was installed
+ *
+ * The identity pair is not a semantic event. It is backend evidence used by
+ * future resync policy: if a stale path is later reachable again, Alfred can
+ * compare the current stat(2) identity with the identity captured at watch
+ * installation time before trusting that path.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+int watcher_store_identity(watcher_table_t *wt,
+                           int wd,
+                           const char *path,
+                           dev_t device_id,
+                           ino_t inode_id)
+{
+    if (wt == NULL || path == NULL)
+        return -1;
+
+    if (wd < 0)
+        return -1;
+
+    if (watcher_expand(wt, wd) != 0)
+        return -1;
+
+    watcher_entry_t *slot = &wt->items[wd];
+
+    /*
+     * Replacing an active slot updates its path but does not create another
+     * active watcher.
+     */
+    if (!slot->active)
+        wt->count++;
+
+    slot->wd           = wd;
+    slot->active       = 1;
+    slot->state        = WATCHER_STATE_VALID;
+    slot->has_identity = 1;
+    slot->device_id    = device_id;
+    slot->inode_id     = inode_id;
 
     snprintf(slot->path,
              sizeof(slot->path),
@@ -225,6 +282,9 @@ void watcher_remove(watcher_table_t *wt, int wd)
     slot->active = 0;
     slot->wd     = -1;
     slot->state  = WATCHER_STATE_REMOVED;
+    slot->has_identity = 0;
+    slot->device_id    = 0;
+    slot->inode_id     = 0;
     slot->path[0] = '\0';
 
     if (wt->count > 0)
@@ -257,6 +317,38 @@ const char* watcher_get_path(const watcher_table_t *wt,
         return NULL;
 
     return slot->path;
+}
+
+/*
+ * watcher_get_identity - read the filesystem identity captured for a watch
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ * @device_id: output pointer for st_dev
+ * @inode_id: output pointer for st_ino
+ *
+ * Return: 0 when an active watch has captured identity, -1 otherwise.
+ */
+int watcher_get_identity(const watcher_table_t *wt,
+                         int wd,
+                         dev_t *device_id,
+                         ino_t *inode_id)
+{
+    if (device_id == NULL || inode_id == NULL)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    const watcher_entry_t *slot =
+        &wt->items[wd];
+
+    if (!slot->has_identity)
+        return -1;
+
+    *device_id = slot->device_id;
+    *inode_id  = slot->inode_id;
+
+    return 0;
 }
 
 /*
@@ -476,9 +568,12 @@ void watcher_dump(const watcher_table_t *wt)
         if (!e->active)
             continue;
 
-        printf("wd=%d state=%s path=%s\n",
+        printf("wd=%d state=%s identity=%s dev=%llu ino=%llu path=%s\n",
                e->wd,
                watcher_state_name(e->state),
+               e->has_identity ? "yes" : "no",
+               (unsigned long long)e->device_id,
+               (unsigned long long)e->inode_id,
                e->path);
     }
 

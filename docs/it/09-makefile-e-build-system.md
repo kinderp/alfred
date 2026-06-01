@@ -1288,6 +1288,7 @@ della struttura dati `watcher_table_t`.
 Il primo scenario controlla lo stato di affidabilita' dei watch:
 
 - `watcher_store()` crea uno slot `VALID`
+- `watcher_store_identity()` crea uno slot `VALID` con identita' `st_dev/st_ino`
 - `watcher_set_state()` puo' marcare uno slot `STALE` o `RESYNCING`
 - `watcher_remove()` riporta lo slot a `REMOVED`
 - uno slot rimosso non viene considerato stale

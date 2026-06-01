@@ -26,6 +26,14 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/watcher/test_watcher_state.c` after adding watch filesystem identity.
+  Comments document why `(st_dev, st_ino)` is captured, why path reachability is
+  not enough after IN_MOVE_SELF, and how identity enables a guarded return to
+  WATCHER_STATE_VALID
 - refreshed `modules/inotify/src/inotify_backend.c` after splitting the resync
   probe result from the WATCH_RESYNC_FAILED formatter. Comments document the
   internal result enum, the normalized failure logger, and why these diagnostic

@@ -55,7 +55,9 @@ typedef enum backend_resync_probe_result {
     BACKEND_RESYNC_PROBE_PATH_UNREACHABLE,
     BACKEND_RESYNC_PROBE_NOT_DIRECTORY,
     BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-    BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN
+    BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
+    BACKEND_RESYNC_PROBE_MISSING_IDENTITY,
+    BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH
 } backend_resync_probe_result_t;
 
 /* ============================================================================
@@ -536,12 +538,13 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
  * @reason: kernel/backend reason that triggered the probe
  *
  * This is intentionally not the full scanner-based recovery. It only checks
- * whether the old wd -> path mapping is still a reachable directory. For
- * IN_MOVE_SELF, even a reachable old path is not enough to prove identity: the
+ * whether the old wd -> path mapping is still a reachable directory and then
+ * compares its current stat(2) identity with the identity captured when the
+ * watch was installed. For IN_MOVE_SELF, reachability alone is not enough: the
  * watched object may have moved while another directory was created at the old
- * location. Until the backend stores stronger identity data, the watch remains
- * STALE and Alfred logs an explicit failure instead of inventing raw Alfred
- * events or semantic core events.
+ * location. Only a matching identity can move the watch back to VALID.
+ * Otherwise Alfred keeps the watch STALE and logs an explicit failure instead
+ * of inventing raw Alfred events or semantic core events.
  */
 static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
@@ -550,8 +553,7 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
     if (ctx == NULL || reason == NULL)
         return;
 
-    backend_resync_probe_result_t result =
-        BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN;
+    backend_resync_probe_result_t result;
     int saved_errno = 0;
 
     const char *path =
@@ -651,25 +653,81 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
         return;
     }
 
-    if (watcher_set_state(&ctx->runtime->watchers,
-                          wd,
-                          WATCHER_STATE_STALE) != 0) {
+    dev_t stored_device_id;
+    ino_t stored_inode_id;
+
+    if (watcher_get_identity(&ctx->runtime->watchers,
+                             wd,
+                             &stored_device_id,
+                             &stored_inode_id) != 0) {
+        result = BACKEND_RESYNC_PROBE_MISSING_IDENTITY;
+
+        if (watcher_set_state(&ctx->runtime->watchers,
+                              wd,
+                              WATCHER_STATE_STALE) != 0) {
+
+            backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                       0);
+            return;
+        }
 
         backend_log_resync_failure(ctx,
                                    wd,
                                    path,
                                    reason,
-                                   BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                   result,
                                    0);
         return;
     }
 
-    backend_log_resync_failure(ctx,
-                               wd,
-                               path,
-                               reason,
-                               result,
-                               0);
+    if (stored_device_id != st.st_dev ||
+        stored_inode_id != st.st_ino) {
+        result = BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH;
+
+        if (watcher_set_state(&ctx->runtime->watchers,
+                              wd,
+                              WATCHER_STATE_STALE) != 0) {
+
+            backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                       0);
+            return;
+        }
+
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   result,
+                                   0);
+        return;
+    }
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          wd,
+                          WATCHER_STATE_VALID) != 0) {
+
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
+                                   0);
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_RESYNC_END wd=%d path=%s reason=%s result=valid",
+                 wd,
+                 path,
+                 reason);
 }
 
 /*
@@ -699,8 +757,12 @@ static const char *backend_resync_probe_result_name(
         return "not-directory";
     case BACKEND_RESYNC_PROBE_SET_STALE_FAILED:
         return "set-stale";
-    case BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN:
-        return "identity-unknown";
+    case BACKEND_RESYNC_PROBE_SET_VALID_FAILED:
+        return "set-valid";
+    case BACKEND_RESYNC_PROBE_MISSING_IDENTITY:
+        return "missing-identity";
+    case BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH:
+        return "identity-mismatch";
     }
 
     return "unknown";

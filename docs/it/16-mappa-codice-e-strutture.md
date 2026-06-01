@@ -56,7 +56,7 @@ flowchart TD
     B --> F["inotify_backend_init()"]
     B --> G["inotify_backend_add_startup_watch()"]
     G --> H["watch_manager_add()<br/>o recursive add"]
-    H --> I["watcher_store()"]
+    H --> I["watcher_store_identity()"]
     A --> L["app_run()"]
     L --> M["inotify_backend_poll()"]
     M --> N["watcher_get_path()"]
@@ -114,7 +114,7 @@ Passi principali del ciclo backend:
    riga di comando.
 3. `watch_manager_add()` chiama `inotify_add_watch()` usando
    `config.inotify.watch_mask`.
-4. `watcher_store()` salva la relazione `wd -> path`.
+4. `watcher_store_identity()` salva `wd -> path` e l'identita' `st_dev/st_ino`.
 5. `inotify_backend_poll()` legge uno o piu' record dal file descriptor.
 6. `watcher_get_path()` recupera la directory parent associata al `wd`.
 7. `inotify_adapter_build_raw()` costruisce `alfred_raw_event_t`.
@@ -607,6 +607,9 @@ typedef struct {
     int wd;
     int active;
     watcher_state_t state;
+    int has_identity;
+    dev_t device_id;
+    ino_t inode_id;
     char path[PATH_MAX];
 } watcher_entry_t;
 ```
@@ -616,9 +619,18 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `wd` | watch descriptor restituito dal kernel | `watcher_store()`, `watcher_remove()` | `watcher_dump()` |
-| `active` | indica se lo slot contiene una mappatura valida | `watcher_store()`, `watcher_remove()`, `watcher_expand()` | `watcher_get_path()`, `watcher_exists()`, `watcher_dump()` |
-| `state` | indica se il mapping e' affidabile, stale o in resync | `watcher_store()`, `watcher_remove()`, `watcher_set_state()` | `watcher_get_state()`, `watcher_is_stale()`, `watcher_dump()` |
-| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
+| `active` | indica se lo slot contiene una mappatura valida | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_expand()` | `watcher_get_path()`, `watcher_exists()`, `watcher_dump()` |
+| `state` | indica se il mapping e' affidabile, stale o in resync | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_set_state()` | `watcher_get_state()`, `watcher_is_stale()`, `watcher_dump()` |
+| `has_identity` | dice se `device_id` e `inode_id` sono stati catturati | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, `watcher_dump()`, probe resync |
+| `device_id` | valore `st_dev` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
+| `inode_id` | valore `st_ino` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
+| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
+
+`device_id` e `inode_id` formano la prova di identita' Unix/Linux classica:
+`st_dev` identifica il filesystem/device e `st_ino` identifica l'inode dentro
+quel filesystem. Il path da solo non basta, perche' puo' essere cancellato e
+ricreato. Durante il resync, Alfred puo' confrontare l'identita' salvata con
+una nuova `stat()` sul path per capire se sta guardando lo stesso oggetto.
 
 ### `watcher_state_t`
 
@@ -673,10 +685,10 @@ memorizza lo stato, mentre il backend decide quando cambiare stato. La
 transizione `IN_MOVE_SELF -> STALE` e la transizione
 `IN_DELETE_SELF -> STALE -> REMOVED` sono gia' collegate al runtime. Dopo
 `IN_MOVE_SELF`, il backend usa anche il primo probe `backend_resync_watch()`:
-porta temporaneamente il watch a `RESYNCING`, verifica il vecchio path e poi
-torna a `STALE` quando non puo' provare l'identita' dell'oggetto osservato.
-Questa e' ancora diagnostica backend, non semantica core. Le policy per
-`IN_UNMOUNT`, `IN_Q_OVERFLOW`, prova di identita' e resync completo restano da
+porta temporaneamente il watch a `RESYNCING`, verifica il vecchio path,
+confronta `st_dev/st_ino` con l'identita' salvata e torna a `VALID` solo se
+l'identita' coincide. Questa e' ancora diagnostica backend, non semantica core.
+Le policy per `IN_UNMOUNT`, `IN_Q_OVERFLOW` e resync completo restano da
 progettare.
 
 ## Inserimento di un watch
@@ -1064,9 +1076,12 @@ frame 2:
   inotify_add_watch() restituisce wd=3
 
 frame 3:
-  watcher_store() scrive:
+  watcher_store_identity() scrive:
     items[3].wd = 3
     items[3].active = 1
+    items[3].has_identity = 1
+    items[3].device_id = st.st_dev
+    items[3].inode_id = st.st_ino
     items[3].path = "/tmp/progetto"
     count = 1
 
@@ -1231,9 +1246,12 @@ frame 4 - chiamata kernel:
   kernel restituisce wd=3
 
 frame 5 - aggiornamento watcher table:
-  watcher_store(wd=3, path="/tmp/progetto")
+  watcher_store_identity(wd=3, path="/tmp/progetto", st_dev, st_ino)
   watchers.items[3].wd = 3
   watchers.items[3].active = 1
+  watchers.items[3].has_identity = 1
+  watchers.items[3].device_id = st.st_dev
+  watchers.items[3].inode_id = st.st_ino
   watchers.items[3].path = "/tmp/progetto"
   watchers.count = 1
 
@@ -1439,13 +1457,13 @@ frame 3 - discovery ricorsiva:
   fs_scan_tree("/tmp/progetto/one", emit_root=0)
 
 frame 4 - watch su one:
-  watcher_store(wd=4, path="/tmp/progetto/one")
+  watcher_store_identity(wd=4, path="/tmp/progetto/one", st_dev, st_ino)
   WATCH_ADDED wd=4 path=/tmp/progetto/one
 
 frame 5 - scoperta two:
   fs_scan_tree() vede "/tmp/progetto/one/two"
   watch_manager_add()
-  watcher_store(wd=5, path="/tmp/progetto/one/two")
+  watcher_store_identity(wd=5, path="/tmp/progetto/one/two", st_dev, st_ino)
   backend_process_scanned_dir_create(path="/tmp/progetto/one/two")
 
 frame 6 - raw sintetico two:
@@ -1456,7 +1474,7 @@ frame 6 - raw sintetico two:
 
 frame 7 - scoperta three:
   stesso schema:
-    watcher_store(wd=6, path="/tmp/progetto/one/two/three")
+    watcher_store_identity(wd=6, path="/tmp/progetto/one/two/three", st_dev, st_ino)
     raw sintetico CREATE|ISDIR
     core emette DIR_CREATED one/two/three
 ```

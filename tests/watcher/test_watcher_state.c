@@ -42,6 +42,8 @@ static int capture_entry(const watcher_entry_t *entry, void *userdata)
 static void test_store_starts_valid(void)
 {
     watcher_table_t table;
+    dev_t device_id = 0;
+    ino_t inode_id = 0;
 
     /*
      * A newly initialized table contains only removed/unused slots. The test
@@ -59,12 +61,63 @@ static void test_store_starts_valid(void)
     assert(watcher_exists(&table, 4) == 1);
     assert(strcmp(watcher_get_path(&table, 4), "/tmp/root") == 0);
     assert(watcher_get_state(&table, 4) == WATCHER_STATE_VALID);
+    assert(watcher_get_identity(&table, 4, &device_id, &inode_id) == -1);
 
     /*
      * VALID is not STALE. This matters because future code can cheaply ask
      * whether an event path needs recovery policy before being trusted.
      */
     assert(watcher_is_stale(&table, 4) == 0);
+
+    watcher_destroy(&table);
+}
+
+/*
+ * test_store_identity_records_device_and_inode - keep identity next to path
+ *
+ * The backend captures st_dev/st_ino when a real inotify watch is installed.
+ * Those two values let future resync code distinguish "the old path still
+ * exists" from "the old path is still the same filesystem object".
+ */
+static void test_store_identity_records_device_and_inode(void)
+{
+    watcher_table_t table;
+    dev_t device_id = 0;
+    ino_t inode_id = 0;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store_identity(&table,
+                                  6,
+                                  "/tmp/with-id",
+                                  (dev_t)1234,
+                                  (ino_t)5678) == 0);
+
+    assert(watcher_exists(&table, 6) == 1);
+    assert(watcher_get_state(&table, 6) == WATCHER_STATE_VALID);
+    assert(watcher_get_identity(&table, 6, &device_id, &inode_id) == 0);
+    assert(device_id == (dev_t)1234);
+    assert(inode_id == (ino_t)5678);
+
+    /*
+     * Replacing the slot through watcher_store() deliberately clears identity.
+     * This keeps the contract explicit: identity exists only when the caller
+     * captured it and chose watcher_store_identity().
+     */
+    assert(watcher_store(&table, 6, "/tmp/no-id") == 0);
+    assert(watcher_get_identity(&table, 6, &device_id, &inode_id) == -1);
+
+    assert(watcher_store_identity(&table,
+                                  6,
+                                  "/tmp/with-id-again",
+                                  (dev_t)4321,
+                                  (ino_t)8765) == 0);
+    assert(watcher_get_identity(&table, 6, &device_id, &inode_id) == 0);
+    assert(device_id == (dev_t)4321);
+    assert(inode_id == (ino_t)8765);
+
+    watcher_remove(&table, 6);
+    assert(watcher_get_identity(&table, 6, &device_id, &inode_id) == -1);
 
     watcher_destroy(&table);
 }
@@ -330,6 +383,7 @@ static void test_foreach_state_rejects_invalid_inputs(void)
 int main(void)
 {
     test_store_starts_valid();
+    test_store_identity_records_device_and_inode();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();

@@ -39,6 +39,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/watch_manager.c`, `modules/inotify/src/inotify_backend.c`,
+  `tests/watcher/test_watcher_state.c`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunta la prova di identita' dei watch
+  basata su `(st_dev, st_ino)`. Il watch manager cattura l'identita' con
+  `stat()` dopo `inotify_add_watch()`, la watcher table la conserva e il probe
+  resync puo' tornare a `VALID` solo quando l'identita' corrente coincide.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: il probe `backend_resync_watch()` ora usa
   `backend_resync_probe_result_t` per classificare gli esiti interni prima di

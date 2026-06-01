@@ -2,9 +2,10 @@
  * watcher.h - in-memory table for inotify watch descriptors
  *
  * inotify events carry a watch descriptor (wd), not the full watched path. This
- * table stores the mapping needed by the backend to rebuild complete paths and
- * the reliability state of that mapping. The table is backend state only; the
- * core never sees wd values.
+ * table stores the mapping needed by the backend to rebuild complete paths,
+ * the reliability state of that mapping, and optional filesystem identity
+ * captured from stat(2). The table is backend state only; the core never sees
+ * wd values.
  * ========================================================================== */
 
 #ifndef WATCHER_H
@@ -12,6 +13,7 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <sys/types.h>
 
 /*
  * watcher_state_t - reliability state of one watch-table slot
@@ -36,12 +38,18 @@ typedef enum {
  * @wd: inotify watch descriptor used as table index
  * @active: nonzero when this slot contains a valid mapping
  * @state: reliability state for the wd -> path mapping
+ * @has_identity: nonzero when @device_id and @inode_id were captured
+ * @device_id: filesystem device id captured from stat(2)
+ * @inode_id: inode id captured from stat(2)
  * @path: watched path copied into fixed storage
  */
 typedef struct {
     int wd;
     int active;
     watcher_state_t state;
+    int has_identity;
+    dev_t device_id;
+    ino_t inode_id;
     char path[PATH_MAX];
 } watcher_entry_t;
 
@@ -67,9 +75,18 @@ int watcher_init(watcher_table_t *wt, size_t capacity);
 void watcher_destroy(watcher_table_t *wt);
 
 int watcher_store(watcher_table_t *wt, int wd, const char *path);
+int watcher_store_identity(watcher_table_t *wt,
+                           int wd,
+                           const char *path,
+                           dev_t device_id,
+                           ino_t inode_id);
 void watcher_remove(watcher_table_t *wt, int wd);
 
 const char* watcher_get_path(const watcher_table_t *wt, int wd);
+int watcher_get_identity(const watcher_table_t *wt,
+                         int wd,
+                         dev_t *device_id,
+                         ino_t *inode_id);
 int watcher_exists(const watcher_table_t *wt, int wd);
 int watcher_set_state(watcher_table_t *wt, int wd, watcher_state_t state);
 watcher_state_t watcher_get_state(const watcher_table_t *wt, int wd);
