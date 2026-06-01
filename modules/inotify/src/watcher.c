@@ -358,6 +358,47 @@ size_t watcher_count(const watcher_table_t *wt)
 }
 
 /*
+ * watcher_count_state - count active watcher mappings in one reliability state
+ * @wt: table to inspect
+ * @state: reliability state to count
+ *
+ * This is a small diagnostic helper for future resync policy. Counting stale
+ * or resyncing watches lets the backend report how much state is no longer
+ * trusted without exposing the table internals. REMOVED is treated specially:
+ * removed slots are inactive, so the count is always zero even if unused array
+ * slots contain the zero-valued REMOVED state.
+ *
+ * Return: number of active entries with @state, or 0 for NULL/invalid state.
+ */
+size_t watcher_count_state(const watcher_table_t *wt,
+                           watcher_state_t state)
+{
+    if (wt == NULL)
+        return 0;
+
+    if (!watcher_state_is_valid(state))
+        return 0;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return 0;
+
+    size_t count = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (slot->state == state)
+            count++;
+    }
+
+    return count;
+}
+
+/*
  * watcher_dump - print the table to stdout for manual debugging
  * @wt: table to inspect
  */

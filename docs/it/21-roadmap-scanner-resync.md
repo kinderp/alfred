@@ -1541,6 +1541,18 @@ Questi nomi sono proposte, non ancora API stabile. La regola importante e':
 nessun raw Alfred sintetico e nessun evento core fino a quando non decidiamo un
 contratto esplicito per gli eventi ricostruiti.
 
+Prima della diagnostica completa, la watcher table espone un piccolo building
+block: `watcher_count_state()`. Questa funzione permette al backend di contare
+quanti watch attivi sono `STALE` o `RESYNCING` senza scorrere direttamente
+l'array interno. Sara' utile per messaggi come:
+
+```text
+WATCH_RESYNC_BEGIN stale=3 resyncing=0
+```
+
+Il conteggio riguarda solo watch attivi. `REMOVED` non viene contato perche' uno
+slot rimosso non rappresenta piu' un watch vivo da riparare.
+
 #### Tabella decisionale v0
 
 | Condizione | Stato prima | Azione v0 | Stato dopo |

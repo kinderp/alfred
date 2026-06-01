@@ -734,6 +734,7 @@ Il primo test controlla che:
 - `watcher_set_state()` possa passare a `WATCHER_STATE_RESYNCING`
 - `watcher_remove()` riporti lo slot a `WATCHER_STATE_REMOVED`
 - `WATCHER_STATE_REMOVED` non venga impostato su uno slot ancora attivo
+- `watcher_count_state()` conti solo watch attivi nello stato richiesto
 
 Questo serve alla futura gestione `IN_MOVE_SELF`: prima fissiamo il contratto
 della struttura dati, poi colleghiamo gli eventi critici alla policy di resync.

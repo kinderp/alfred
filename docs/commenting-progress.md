@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding
+  `watcher_count_state()`. Comments now document that state counts are active
+  watch diagnostics for future resync policy and that REMOVED slots are not
+  counted as live watches
 - refreshed `modules/inotify/src/inotify_backend.c` after wiring
   IN_DELETE_SELF to WATCHER_STATE_STALE. Comments document why delete-self is
   diagnostic state first, why child delete events are not invented, and why

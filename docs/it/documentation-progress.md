@@ -39,6 +39,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunto
+  `watcher_count_state()` come building block diagnostico per resync v0. La
+  funzione conta solo watch attivi nello stato richiesto, preparando futuri log
+  sul numero di watch `STALE` o `RESYNCING`.
 - `21-roadmap-scanner-resync.md`: aggiunta la proposta di policy `resync v0`.
   La documentazione chiarisce che il primo resync deve essere diagnostico e
   watch-state only, senza raw Alfred o eventi core sintetici, definendo scope,

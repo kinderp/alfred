@@ -152,12 +152,54 @@ static void test_invalid_state_changes_fail(void)
     watcher_destroy(&table);
 }
 
+/*
+ * test_count_state_counts_only_active_entries - count watches by reliability
+ *
+ * Resync diagnostics will need answers such as "how many watches are stale?".
+ * The count must ignore sparse, removed, or never-used slots even though those
+ * slots also have the zero-valued REMOVED state in memory.
+ */
+static void test_count_state_counts_only_active_entries(void)
+{
+    watcher_table_t table;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store(&table, 1, "/tmp/a") == 0);
+    assert(watcher_store(&table, 3, "/tmp/b") == 0);
+    assert(watcher_store(&table, 7, "/tmp/c") == 0);
+    assert(watcher_count(&table) == 3);
+    assert(watcher_count_state(&table, WATCHER_STATE_VALID) == 3);
+    assert(watcher_count_state(&table, WATCHER_STATE_STALE) == 0);
+    assert(watcher_count_state(&table, WATCHER_STATE_RESYNCING) == 0);
+    assert(watcher_count_state(&table, WATCHER_STATE_REMOVED) == 0);
+
+    assert(watcher_set_state(&table, 3, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 7, WATCHER_STATE_RESYNCING) == 0);
+
+    assert(watcher_count(&table) == 3);
+    assert(watcher_count_state(&table, WATCHER_STATE_VALID) == 1);
+    assert(watcher_count_state(&table, WATCHER_STATE_STALE) == 1);
+    assert(watcher_count_state(&table, WATCHER_STATE_RESYNCING) == 1);
+
+    watcher_remove(&table, 3);
+
+    assert(watcher_count(&table) == 2);
+    assert(watcher_count_state(&table, WATCHER_STATE_VALID) == 1);
+    assert(watcher_count_state(&table, WATCHER_STATE_STALE) == 0);
+    assert(watcher_count_state(&table, WATCHER_STATE_RESYNCING) == 1);
+    assert(watcher_count_state(NULL, WATCHER_STATE_STALE) == 0);
+
+    watcher_destroy(&table);
+}
+
 int main(void)
 {
     test_store_starts_valid();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();
+    test_count_state_counts_only_active_entries();
 
     return 0;
 }
