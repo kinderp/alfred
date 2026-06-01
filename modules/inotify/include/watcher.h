@@ -35,13 +35,27 @@ typedef enum {
 
 /*
  * watcher_entry_t - one wd -> path slot
- * @wd: inotify watch descriptor used as table index
- * @active: nonzero when this slot contains a valid mapping
- * @state: reliability state for the wd -> path mapping
- * @has_identity: nonzero when @device_id and @inode_id were captured
- * @device_id: filesystem device id captured from stat(2)
- * @inode_id: inode id captured from stat(2)
- * @path: watched path copied into fixed storage
+ * @wd: inotify watch descriptor used as table index.
+ * @active: nonzero when this slot contains a live watcher-table mapping.
+ * @state: reliability state for the wd -> path mapping.
+ * @has_identity: nonzero when @device_id and @inode_id were captured.
+ * @device_id: filesystem device id, copied from stat(2) st_dev.
+ * @inode_id: inode id inside @device_id, copied from stat(2) st_ino.
+ * @path: watched path copied into fixed storage.
+ *
+ * The fields have separate jobs:
+ *
+ * - @wd is the kernel handle received in every inotify event.
+ * - @active tells whether this table slot currently contains a usable watch.
+ * - @state tells whether the saved path is trusted, stale, or being resynced.
+ * - @path is the last path Alfred associated with @wd.
+ * - @has_identity says whether filesystem identity evidence is available.
+ * - @device_id and @inode_id identify the watched filesystem object over time.
+ *
+ * A path alone is not stable identity. A directory can be moved away and a new
+ * directory can be created at the same path. During resync, Alfred compares the
+ * current stat(2) identity with @device_id/@inode_id before trusting that the
+ * old path still names the same watched object.
  */
 typedef struct {
     int wd;

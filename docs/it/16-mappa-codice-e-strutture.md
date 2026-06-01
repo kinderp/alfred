@@ -632,6 +632,54 @@ quel filesystem. Il path da solo non basta, perche' puo' essere cancellato e
 ricreato. Durante il resync, Alfred puo' confrontare l'identita' salvata con
 una nuova `stat()` sul path per capire se sta guardando lo stesso oggetto.
 
+Il motivo pratico e' che `watcher_entry_t` contiene tutto cio' che Alfred sa di
+un watch inotify. Il kernel non rimanda il path completo in ogni evento: manda
+un `wd`. Alfred quindi usa la watcher table per rispondere a domande come:
+
+```text
+wd=4 a quale path corrisponde?
+questo mapping e' ancora affidabile?
+posso fidarmi del path salvato?
+```
+
+I campi sono separati perche' rappresentano concetti diversi:
+
+- `wd` e' il numero restituito da `inotify_add_watch()` e ricevuto negli eventi
+  kernel.
+- `active` dice se lo slot contiene davvero un watch vivo.
+- `state` dice quanto e' affidabile il mapping: `VALID`, `STALE`,
+  `RESYNCING` o `REMOVED`.
+- `path` e' il path che Alfred associa al `wd` per ricostruire gli eventi.
+- `has_identity` dice se Alfred ha anche una prova di identita' filesystem.
+- `device_id` e' `st_dev`, cioe' il device/filesystem su cui vive il path.
+- `inode_id` e' `st_ino`, cioe' l'inode dell'oggetto osservato dentro quel
+  filesystem.
+
+Esempio del problema:
+
+```text
+1. Alfred osserva /tmp/root
+2. /tmp/root ha identita' (st_dev=X, st_ino=100)
+3. qualcuno sposta /tmp/root in /tmp/root_moved
+4. qualcuno crea una nuova /tmp/root
+5. la nuova /tmp/root ha identita' (st_dev=X, st_ino=200)
+```
+
+Se Alfred guardasse solo il path, vedrebbe che `/tmp/root` esiste ancora e
+potrebbe concludere erroneamente che il watch e' tornato affidabile. Con
+`device_id` e `inode_id`, invece, puo' confrontare:
+
+```text
+identita' salvata:  st_dev=X, st_ino=100
+identita' attuale:  st_dev=X, st_ino=200
+```
+
+La conclusione corretta e': il path e' raggiungibile, ma non e' lo stesso
+oggetto osservato prima. Per questo l'identita' sta dentro `watcher_entry_t`,
+vicino al mapping `wd -> path` e allo stato `VALID/STALE/RESYNCING`: durante
+il resync il backend puo' tornare a `VALID` solo se path e identita'
+coincidono.
+
 ### `watcher_state_t`
 
 Definizione:
