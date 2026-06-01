@@ -685,6 +685,7 @@ root/
         b/
         file.txt
     c/
+    volatile/
     link_to_a -> a/
 ```
 
@@ -698,6 +699,7 @@ Poi verifica che lo scanner:
 - rispetti `max_depth=1`
 - si fermi dopo `max_entries=2`
 - emetta il file quando `include_files=1`
+- continui se una directory figlia sparisce tra emissione e discesa ricorsiva
 
 Questo target serve alla futura progettazione resync e indicizzazione. Non
 sostituisce `make test` o `make test-backend-diagnostics`.

@@ -173,6 +173,27 @@ static int directory_open_flags(const fs_scan_options_t *opts)
 }
 
 /*
+ * child_open_error_is_recoverable - classify child directory open failures
+ * @err: errno value captured immediately after openat() failed
+ *
+ * The root path is validated by fs_scan_tree() and remains a hard failure when
+ * it cannot be opened. Child directories are different: a concurrent process
+ * may remove, replace, or chmod a subtree between fstatat() and openat().
+ * Those cases are normal during resync and should not invalidate the whole
+ * scan. Unknown I/O failures still abort because continuing could hide a real
+ * storage or kernel problem.
+ *
+ * Return: nonzero when the caller should skip the child and continue.
+ */
+static int child_open_error_is_recoverable(int err)
+{
+    return err == EACCES ||
+           err == ENOENT ||
+           err == ENOTDIR ||
+           err == EPERM;
+}
+
+/*
  * scan_dir_fd - recursively scan an already-open directory
  * @state: active scan state
  * @path: printable path corresponding to @fd
@@ -266,6 +287,9 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
                        directory_open_flags(&state->opts));
 
             if (child_fd < 0) {
+                if (child_open_error_is_recoverable(errno))
+                    continue;
+
                 closedir(dir);
                 return ERR_IO;
             }

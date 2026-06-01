@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Compact set of observations collected from the scanner callback. */
 typedef struct {
@@ -19,8 +20,11 @@ typedef struct {
     int saw_a;
     int saw_b;
     int saw_c;
+    int saw_volatile;
     int saw_symlink_dir;
     int saw_file;
+    int remove_volatile;
+    int callback_failed;
 } scan_seen_t;
 
 static int has_suffix(const char *s, const char *suffix)
@@ -59,6 +63,14 @@ static int on_entry(const fs_scan_entry_t *entry, void *userdata)
         seen->saw_c = 1;
     }
 
+    if (has_suffix(entry->path, "/volatile") &&
+        entry->type == FS_SCAN_DIR) {
+        seen->saw_volatile = 1;
+
+        if (seen->remove_volatile && rmdir(entry->path) != 0)
+            seen->callback_failed = 1;
+    }
+
     if (strstr(entry->path, "link_to_a") != NULL)
         seen->saw_symlink_dir = 1;
 
@@ -72,12 +84,15 @@ static int run_scan(const char *root,
                     const fs_scan_options_t *opts,
                     scan_seen_t *seen)
 {
-    memset(seen, 0, sizeof(*seen));
-
     error_t rc = fs_scan_tree(root, opts, on_entry, seen);
 
     if (rc != ERR_OK) {
         fprintf(stderr, "scan failed rc=%d\n", rc);
+        return 1;
+    }
+
+    if (seen->callback_failed) {
+        fprintf(stderr, "callback failed\n");
         return 1;
     }
 
@@ -90,21 +105,24 @@ static int expect_default_dirs(const char *root)
     scan_seen_t seen;
 
     fs_scan_options_defaults(&opts);
+    memset(&seen, 0, sizeof(seen));
 
     if (run_scan(root, &opts, &seen) != 0)
         return 1;
 
     if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
-        seen.saw_symlink_dir || seen.saw_file || seen.count != 4) {
+        !seen.saw_volatile || seen.saw_symlink_dir || seen.saw_file ||
+        seen.count != 5) {
 
         fprintf(stderr,
                 "default dirs mismatch count=%d root=%d a=%d b=%d c=%d "
-                "symlink=%d file=%d\n",
+                "volatile=%d symlink=%d file=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
                 seen.saw_b,
                 seen.saw_c,
+                seen.saw_volatile,
                 seen.saw_symlink_dir,
                 seen.saw_file);
         return 1;
@@ -120,19 +138,22 @@ static int expect_no_root(const char *root)
 
     fs_scan_options_defaults(&opts);
     opts.emit_root = 0;
+    memset(&seen, 0, sizeof(seen));
 
     if (run_scan(root, &opts, &seen) != 0)
         return 1;
 
     if (seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
-        seen.count != 3) {
+        !seen.saw_volatile || seen.count != 4) {
         fprintf(stderr,
-                "emit_root=0 mismatch count=%d root=%d a=%d b=%d c=%d\n",
+                "emit_root=0 mismatch count=%d root=%d a=%d b=%d c=%d "
+                "volatile=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
                 seen.saw_b,
-                seen.saw_c);
+                seen.saw_c,
+                seen.saw_volatile);
         return 1;
     }
 
@@ -146,19 +167,22 @@ static int expect_max_depth_one(const char *root)
 
     fs_scan_options_defaults(&opts);
     opts.max_depth = 1;
+    memset(&seen, 0, sizeof(seen));
 
     if (run_scan(root, &opts, &seen) != 0)
         return 1;
 
     if (!seen.saw_root || !seen.saw_a || seen.saw_b || !seen.saw_c ||
-        seen.count != 3) {
+        !seen.saw_volatile || seen.count != 4) {
         fprintf(stderr,
-                "max_depth=1 mismatch count=%d root=%d a=%d b=%d c=%d\n",
+                "max_depth=1 mismatch count=%d root=%d a=%d b=%d c=%d "
+                "volatile=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
                 seen.saw_b,
-                seen.saw_c);
+                seen.saw_c,
+                seen.saw_volatile);
         return 1;
     }
 
@@ -172,6 +196,7 @@ static int expect_max_entries_two(const char *root)
 
     fs_scan_options_defaults(&opts);
     opts.max_entries = 2;
+    memset(&seen, 0, sizeof(seen));
 
     if (run_scan(root, &opts, &seen) != 0)
         return 1;
@@ -191,22 +216,45 @@ static int expect_include_files(const char *root)
 
     fs_scan_options_defaults(&opts);
     opts.include_files = 1;
+    memset(&seen, 0, sizeof(seen));
 
     if (run_scan(root, &opts, &seen) != 0)
         return 1;
 
     if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
-        !seen.saw_file || seen.saw_symlink_dir || seen.count != 5) {
+        !seen.saw_volatile || !seen.saw_file || seen.saw_symlink_dir ||
+        seen.count != 6) {
         fprintf(stderr,
                 "include_files mismatch count=%d root=%d a=%d b=%d c=%d "
-                "file=%d symlink=%d\n",
+                "volatile=%d file=%d symlink=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
                 seen.saw_b,
                 seen.saw_c,
+                seen.saw_volatile,
                 seen.saw_file,
                 seen.saw_symlink_dir);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_removed_child_directory_is_skipped(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    memset(&seen, 0, sizeof(seen));
+    seen.remove_volatile = 1;
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (!seen.saw_volatile) {
+        fprintf(stderr, "volatile directory was not observed\n");
         return 1;
     }
 
@@ -224,7 +272,8 @@ int main(int argc, char **argv)
         expect_no_root(argv[1]) != 0 ||
         expect_max_depth_one(argv[1]) != 0 ||
         expect_max_entries_two(argv[1]) != 0 ||
-        expect_include_files(argv[1]) != 0) {
+        expect_include_files(argv[1]) != 0 ||
+        expect_removed_child_directory_is_skipped(argv[1]) != 0) {
         return 1;
     }
 

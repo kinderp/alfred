@@ -39,6 +39,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `app/src/fs_scanner.c`, `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`, `21-roadmap-scanner-resync.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `docs/commenting-progress.md`: implementato il primo passo della policy sugli
+  errori parziali dello scanner. La root resta un errore duro, mentre una
+  directory figlia rimossa, trasformata o non accessibile durante la discesa
+  viene saltata e lo scan continua. Il test simula una race rimuovendo una
+  directory `volatile` dalla callback prima della ricorsione.
 - `21-roadmap-scanner-resync.md`: aggiunta una roadmap completa delle fasi
   scanner. Il documento ora separa contratto base, errori parziali, symlink,
   file/tipi speciali, integrazione con watch manager, resync sugli eventi

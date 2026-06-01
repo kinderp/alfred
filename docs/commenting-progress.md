@@ -34,6 +34,9 @@ Latest refresh:
   now has explicit section headers, state-field comments, return contracts for
   non-trivial helpers, and local policy comments for disappearing entries and
   `max_depth` enforcement
+- refreshed `app/src/fs_scanner.c` after the first partial-error policy step.
+  The new child-open classifier documents which child directory failures are
+  recoverable during resync and why root failures remain hard errors
 - added and refreshed reviewed comments for the inotify backend configuration
   files `modules/inotify/include/inotify_config.h` and
   `modules/inotify/src/inotify_config.c`, including the textual watch-mask

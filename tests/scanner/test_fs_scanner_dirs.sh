@@ -16,6 +16,7 @@ cleanup
 
 mkdir -p "$TEST_ROOT/a/b"
 mkdir -p "$TEST_ROOT/c"
+mkdir -p "$TEST_ROOT/volatile"
 touch "$TEST_ROOT/a/file.txt"
 ln -s "$TEST_ROOT/a" "$TEST_ROOT/link_to_a"
 

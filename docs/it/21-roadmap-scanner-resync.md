@@ -645,14 +645,21 @@ singola directory figlia non leggibile potrebbe essere troppo aggressivo.
 Tuttavia ignorare sempre l'errore senza registrarlo potrebbe nascondere problemi
 reali.
 
-Scelta da discutere:
+Scelta implementata per il primo passo:
 
 ```text
-root non apribile      -> ERR_IO
-directory figlia sparita -> skip + continua
-directory figlia senza permessi -> skip + continua + futura statistica/log
-errore I/O serio       -> forse ERR_IO
+root non apribile             -> ERR_IO
+directory figlia sparita      -> skip + continua
+directory figlia senza permessi -> skip + continua
+entry trasformata in non-dir  -> skip + continua
+errore I/O non classificato   -> ERR_IO
 ```
+
+Nel codice questa decisione e' concentrata in
+`child_open_error_is_recoverable()`. La funzione considera recuperabili
+`ENOENT`, `ENOTDIR`, `EACCES` ed `EPERM` quando l'errore riguarda una directory
+figlia aperta con `openat()`. La root resta gestita da `fs_scan_tree()` e quindi
+continua a fallire con `ERR_IO` se non e' leggibile o non e' apribile.
 
 ### `fdopendir()`
 
@@ -727,18 +734,31 @@ Risultato:
 
 ### Fase 2 - Errori parziali
 
-Stato: prossimo punto di discussione.
+Stato: primo passo implementato.
 
 Obiettivo: decidere cosa succede quando una parte dell'albero non e' leggibile
 o cambia durante lo scan.
 
-Decisioni da prendere:
+Decisioni fissate:
 
 - root non leggibile: hard failure
 - entry sparita tra `readdir()` e `fstatat()`: skip
-- directory figlia non apribile: skip oppure hard failure
-- permission denied su directory figlia: skip, log o statistica
+- directory figlia non apribile per `ENOENT`, `ENOTDIR`, `EACCES` o `EPERM`:
+  skip
 - path troppo lungo: hard failure
+
+Il test scanner crea una directory `volatile`. La callback la rimuove dopo che
+lo scanner l'ha osservata ma prima della discesa ricorsiva. Questo simula una
+race reale: `fstatat()` vede una directory, poi `openat()` fallisce perche' la
+directory non esiste piu'. Il contratto atteso e' che lo scan continui e ritorni
+`ERR_OK`.
+
+Decisioni ancora aperte:
+
+- se aggiungere log diagnostici per directory figlie saltate
+- se esporre statistiche di skip/errori al chiamante
+- se distinguere errori I/O gravi da permessi o race transitorie con codici
+  piu' specifici
 
 Possibile implementazione futura:
 
