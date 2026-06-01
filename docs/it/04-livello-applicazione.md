@@ -201,9 +201,10 @@ esegue sempre:
 
 ```text
 IN_CREATE | IN_ISDIR
-    -> watch_manager_add_recursive_with_discovery()
-    -> WATCH_ADDED
-    -> eventuali raw event sintetici verso il core
+    -> watch_manager_add() sulla directory creata
+    -> fs_scan_tree(..., emit_root = 0)
+    -> watch_manager_add() sulle directory annidate
+    -> eventuali raw create sintetici verso il core
 ```
 
 In questo modo core mode continua a monitorare le nuove directory e puo'

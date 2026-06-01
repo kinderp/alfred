@@ -141,7 +141,7 @@ Il backend modifica stato solo quando quello stato appartiene al backend:
 | `inotify_backend_t.fd` | `inotify_backend_init()`, `inotify_backend_shutdown()` | e' il descrittore Linux letto dal backend |
 | `watcher_table_t` | `watcher_store()`, `watcher_remove()` | serve a tradurre `wd` in path |
 | watch ricorsivi startup | `watch_manager_add_recursive()` + `fs_scan_tree()` | installano watch sull'albero gia' esistente senza raw sintetici |
-| watch ricorsivi runtime | `watch_manager_add_recursive_with_discovery()` | riparano nuove directory annidate e notificano discovery al backend |
+| watch ricorsivi runtime | `backend_handle_dir_create()` + `fs_scan_tree()` | riparano nuove directory annidate e mantengono la policy raw sintetica nel backend |
 | raw sintetici per discovery | `backend_emit_synthetic_dir_create()` | riparano un limite di osservazione del backend |
 
 `WATCH_ADDED` e `WATCH_REMOVED` restano log diagnostici del backend. Non sono
@@ -433,13 +433,15 @@ Anche la discovery ricorsiva usa ora lo stesso context:
 backend_handle_dir_create(ctx, ev, on_event, userdata)
   legge ctx.config->recursive
   cerca il path padre in ctx.runtime->watchers
+  aggiunge il watch sulla root creata
   backend_emit_context_t:
     ctx = ctx
     on_event = on_event
     userdata = userdata
-  watch_manager_add_recursive_with_discovery(ctx, ...)
-  backend_process_discovered_dir(ctx, path, userdata)
-  backend_emit_synthetic_dir_create(ctx, path, on_event, userdata)
+  fs_scan_tree(full, emit_root=0)
+  backend_process_scanned_dir_create(entry, userdata)
+  watch_manager_add(ctx, entry.path)
+  backend_emit_synthetic_dir_create(ctx, entry.path, on_event, userdata)
 ```
 
 La callback pubblica ora e':
@@ -782,19 +784,23 @@ Sequenza semplificata:
 sequenceDiagram
     participant Kernel as inotify
     participant Backend as inotify_backend_poll()
-    participant Manager as watch_manager_add_recursive_with_discovery()
+    participant Scanner as fs_scan_tree()
+    participant Manager as watch_manager_add()
     participant Table as watcher_store()
     participant Synthetic as backend_emit_synthetic_dir_create()
     participant Core as alfred_process()
 
     Kernel-->>Backend: IN_CREATE|IN_ISDIR one
-    Backend->>Manager: scan ricorsivo di one
+    Backend->>Manager: add watch per one
     Manager->>Table: store watch per one
+    Backend->>Scanner: scan one con emit_root=0
+    Scanner->>Backend: discovered one/two
+    Backend->>Manager: add watch per one/two
     Manager->>Table: store watch per one/two
-    Manager->>Synthetic: discovered one/two
     Synthetic->>Core: ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR one/two
+    Scanner->>Backend: discovered one/two/three
+    Backend->>Manager: add watch per one/two/three
     Manager->>Table: store watch per one/two/three
-    Manager->>Synthetic: discovered one/two/three
     Synthetic->>Core: ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR one/two/three
 ```
 
@@ -1365,18 +1371,18 @@ frame 2 - backend gestisce one:
 
 frame 3 - discovery ricorsiva:
   backend_handle_dir_create()
-  watch_manager_add_recursive_with_discovery("/tmp/progetto/one")
+  watch_manager_add("/tmp/progetto/one")
+  fs_scan_tree("/tmp/progetto/one", emit_root=0)
 
 frame 4 - watch su one:
-  watch_manager_add("/tmp/progetto/one")
   watcher_store(wd=4, path="/tmp/progetto/one")
   WATCH_ADDED wd=4 path=/tmp/progetto/one
 
 frame 5 - scoperta two:
-  recursive_walk() vede "/tmp/progetto/one/two"
+  fs_scan_tree() vede "/tmp/progetto/one/two"
   watch_manager_add()
   watcher_store(wd=5, path="/tmp/progetto/one/two")
-  backend_process_discovered_dir(path="/tmp/progetto/one/two")
+  backend_process_scanned_dir_create(path="/tmp/progetto/one/two")
 
 frame 6 - raw sintetico two:
   backend_emit_synthetic_dir_create()

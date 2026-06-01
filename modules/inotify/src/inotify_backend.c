@@ -14,6 +14,7 @@
 #include "inotify_backend.h"
 
 #include "errors.h"
+#include "fs_scanner.h"
 #include "inotify_adapter.h"
 #include "logger.h"
 #include "utils.h"
@@ -43,6 +44,7 @@ typedef struct backend_emit_context {
     inotify_backend_context_t *ctx;
     inotify_backend_event_fn on_event;
     void *userdata;
+    int failed;
 } backend_emit_context_t;
 
 /* ============================================================================
@@ -61,9 +63,8 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 
 static void backend_shutdown(inotify_backend_context_t *ctx);
 
-static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
-                                           const char *path,
-                                           void *userdata);
+static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
+                                              void *userdata);
 
 static void backend_handle_ignored(inotify_backend_context_t *ctx,
                                    const struct inotify_event *ev);
@@ -455,42 +456,68 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
     context.ctx = ctx;
     context.on_event = on_event;
     context.userdata = userdata;
+    context.failed = 0;
 
-    watch_manager_add_recursive_with_discovery(
-        ctx,
-        full,
-        backend_process_discovered_dir,
-        &context);
+    if (watch_manager_add(ctx, full) < 0)
+        return;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.emit_root = 0;
+
+    error_t rc =
+        fs_scan_tree(full,
+                     &opts,
+                     backend_process_scanned_dir_create,
+                     &context);
+
+    if (rc != ERR_OK || context.failed) {
+        logger_error(ctx->logger,
+                     "recursive directory discovery failed path=%s",
+                     full);
+    }
 }
 
 /*
- * backend_process_discovered_dir - convert recursive discovery into raw input
- * @ctx: backend context used for discovery
- * @path: discovered directory path
+ * backend_process_scanned_dir_create - add watch and emit synthetic raw create
+ * @entry: scanner entry discovered below a newly created directory
  * @userdata: backend_emit_context_t supplied by backend_handle_dir_create()
  *
- * Discovery callbacks run while watch_manager.c walks the filesystem. This
- * helper adapts that backend-state notification into the same raw event
- * callback used for real inotify events. Keeping both paths behind the same
- * callback means the core does not need a special "recursive recovery" API.
+ * Runtime recursive discovery uses emit_root=0 because the root directory has
+ * already produced a real inotify CREATE|ISDIR raw event. Every directory
+ * reported here is nested below that root and may have been created before a
+ * watch existed on its parent, so the backend installs a watch and emits the
+ * same synthetic raw create fact that the old recursive discovery callback
+ * produced.
+ *
+ * Return: 0 to continue scanning, nonzero to stop after a watch/raw failure.
  */
-static void backend_process_discovered_dir(inotify_backend_context_t *ctx,
-                                           const char *path,
-                                           void *userdata)
+static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
+                                              void *userdata)
 {
     backend_emit_context_t *context =
         (backend_emit_context_t *)userdata;
 
-    if (context == NULL)
-        return;
+    if (context == NULL || context->ctx == NULL || entry == NULL ||
+        entry->type != FS_SCAN_DIR) {
+        return 0;
+    }
 
-    if (context->ctx == NULL)
-        context->ctx = ctx;
+    if (watch_manager_add(context->ctx, entry->path) < 0) {
+        context->failed = 1;
+        return 1;
+    }
 
-    (void)backend_emit_synthetic_dir_create(context->ctx,
-                                            path,
-                                            context->on_event,
-                                            context->userdata);
+    if (backend_emit_synthetic_dir_create(context->ctx,
+                                          entry->path,
+                                          context->on_event,
+                                          context->userdata) != ERR_OK) {
+        context->failed = 1;
+        return 1;
+    }
+
+    return 0;
 }
 
 /*

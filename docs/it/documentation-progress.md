@@ -39,6 +39,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/include/watch_manager.h`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md`, `15-todo-switch-core.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: migrato allo scanner anche il percorso runtime
+  `IN_CREATE | IN_ISDIR`. Il backend aggiunge il watch sulla root reale, esegue
+  `fs_scan_tree()` con `emit_root = 0`, aggiunge watch alle directory annidate
+  e mantiene nel backend l'emissione dei raw create sintetici. La vecchia API
+  callback `watch_manager_add_recursive_with_discovery()` resta solo come
+  transitoria da rimuovere.
 - `modules/inotify/src/watch_manager.c`, `05-modulo-inotify.md`,
   `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: implementato il primo refactor di integrazione

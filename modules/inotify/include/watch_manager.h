@@ -6,9 +6,10 @@
  * can recursively discover directories that need watches.
  *
  * WATCH_ADDED and WATCH_REMOVED are diagnostics about the watch table, not core
- * events. Recursive discovery may report already-existing child directories
- * through a callback. The callback consumer decides what to do with that fact;
- * the watch manager itself must not emit raw or semantic FILE_* or DIR_* events.
+ * events. Runtime scanner discovery now lives in the inotify backend. The
+ * callback-based recursive discovery API remains temporarily available while
+ * the migration is cleaned up, but the watch manager itself must not emit raw
+ * or semantic FILE_* or DIR_* events.
  * ========================================================================== */
 
 #ifndef WATCH_MANAGER_H
@@ -24,9 +25,8 @@
  * @path: discovered directory path
  * @userdata: opaque pointer supplied by the caller
  *
- * The callback reports observation facts, not semantic decisions. The inotify
- * backend currently turns those facts into synthetic raw directory-create
- * events for the core.
+ * The callback reports observation facts, not semantic decisions. This
+ * transitional callback API is kept until the old recursive walk is removed.
  */
 typedef void (*watch_manager_discovered_dir_fn)(
     inotify_backend_context_t *ctx,
@@ -73,11 +73,10 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
  * @on_discovered: optional callback for discovered child directories
  * @userdata: opaque pointer passed to @on_discovered
  *
- * The root is watched but not reported as discovered. Child directories found
- * during the recursive walk are reported after their watch is added. This lets
- * the backend repair missed create notifications from fast recursive mkdir
- * scenarios without moving raw-event emission or semantic decisions into the
- * watch manager.
+ * Transitional API kept while the scanner migration is completed. The root is
+ * watched but not reported as discovered. Child directories found during the
+ * recursive walk are reported after their watch is added. Callers decide what
+ * to do with those facts.
  *
  * Return: 0 on success, -1 on failure.
  */

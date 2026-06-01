@@ -45,6 +45,10 @@ Latest refresh:
   `modules/inotify/src/inotify_backend.c`, especially the boundary between raw
   facts, recursive watch recovery, synthetic raw directory creates, and core
   semantic/deduplication policy
+- refreshed `modules/inotify/src/inotify_backend.c` after moving runtime
+  recursive discovery to `fs_scan_tree()`. The new comments document why
+  `emit_root = 0` preserves the real inotify create for the root and why only
+  nested scanner directories receive synthetic raw create facts
 - reinforced `modules/inotify/src/watch_manager.c` and
   `modules/inotify/include/watch_manager.h` comments so WATCH_ADDED,
   WATCH_REMOVED, recursive discovery facts, synthetic raw events, and core

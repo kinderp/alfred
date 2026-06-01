@@ -356,13 +356,22 @@ watch_manager_add_recursive()
 Questo percorso non genera raw sintetici perche' le directory esistono gia'
 prima dell'avvio del polling.
 
-Il percorso runtime `watch_manager_add_recursive_with_discovery()` usa ancora la
-vecchia ricorsione interna con callback, perche' deve preservare la logica dei
-raw create sintetici per directory annidate create troppo velocemente.
+Il percorso runtime `IN_CREATE | IN_ISDIR` ora usa lo scanner direttamente nel
+backend:
 
-Questa funzione continua ad aggiungere i watch, ma quando scopre una
-sottodirectory gia' esistente chiama una callback. Oggi la callback e' gestita
-dal backend inotify in:
+```text
+backend_handle_dir_create()
+    -> watch_manager_add() sulla root creata
+    -> fs_scan_tree(..., emit_root = 0)
+    -> watch_manager_add() sulle directory annidate
+    -> backend_emit_synthetic_dir_create() sulle directory annidate
+```
+
+La vecchia API `watch_manager_add_recursive_with_discovery()` resta nel codice
+solo come percorso transitorio da rimuovere. La logica dei raw create sintetici
+vive nel backend, non nel watch manager.
+
+Il backend inotify gestisce questa discovery in:
 
 ```text
 modules/inotify/src/inotify_backend.c

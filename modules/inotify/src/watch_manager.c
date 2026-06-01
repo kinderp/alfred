@@ -9,9 +9,9 @@
  * It deliberately does not classify filesystem events. WATCH_ADDED and
  * WATCH_REMOVED are backend diagnostics about Alfred's observation state, not
  * semantic filesystem events. Startup recursive watching consumes fs_scanner
- * directory facts to install watches, while runtime recursive discovery still
- * reports directory facts to the backend through a callback; the core later
- * decides whether those facts become DIR_CREATED events.
+ * directory facts to install watches. Runtime recursive discovery has moved to
+ * the backend scanner adapter; the callback-based recursive walk remains only
+ * as a transitional path until it is removed in the next cleanup step.
  * ========================================================================== */
 
 #include "watch_manager.h"
@@ -364,16 +364,13 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
  * @on_discovered: callback for nested directories found during scanning
  * @userdata: opaque callback data
  *
- * Used after an inotify IN_CREATE|IN_ISDIR event while recursive mode is active.
- * The backend already has the real create event for @root. The discovery
- * callback reports nested directories that may have been missed in fast
- * recursive creation scenarios such as `mkdir -p one/two/three`.
+ * Transitional helper kept while the scanner migration is completed. The
+ * active runtime backend path now uses fs_scan_tree() directly so it can keep
+ * raw synthetic emission in the backend, where the recovery policy belongs.
  *
- * The callback receives discovery facts, not final events. In the current
- * backend those facts become synthetic ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR
- * records, while the core owns semantic emission. Generic create
- * deduplication is not implemented yet and must be added as an explicit
- * policy if a future scenario needs it.
+ * The callback receives discovery facts, not final events. If this function is
+ * still used by temporary callers, they remain responsible for deciding whether
+ * those facts become synthetic raw input for the core.
  *
  * Return: 0 on success, -1 on failure.
  */

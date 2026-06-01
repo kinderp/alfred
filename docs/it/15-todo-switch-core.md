@@ -96,9 +96,10 @@ Al momento:
   loop applicativo al backend inotify
 - `events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi
   dal codice corrente
-- `watch_manager_add_recursive_with_discovery()` puo' notificare directory
-  scoperte dallo scan ricorsivo
-- il backend trasforma directory scoperte in raw event sintetici per il core
+- `backend_handle_dir_create()` usa `fs_scan_tree(..., emit_root = 0)` per
+  scoprire directory annidate dopo `IN_CREATE | IN_ISDIR`
+- il backend trasforma le directory annidate scoperte in raw event sintetici
+  per il core
 - il core recupera `DIR_CREATED` mancanti in scenari tipo
   `recursive_create_nested_dir`
 - `inotify_fd` e `watchers` non sono piu' campi diretti di `app_t`: vivono in
@@ -185,7 +186,8 @@ La catena ricorsiva non parte piu' da `app.c`. Ora e':
 
 ```text
 inotify_backend.c -> backend_handle_dir_create()
-                  -> watch_manager_add_recursive_with_discovery()
+                  -> fs_scan_tree(..., emit_root = 0)
+                  -> watch_manager_add()
                   -> backend_emit_synthetic_dir_create()
                   -> callback app
                   -> core
@@ -194,8 +196,8 @@ inotify_backend.c -> backend_handle_dir_create()
 Questa catena serve a non perdere le directory create rapidamente prima che il
 watch del padre sia installato. E' un miglioramento perche' la manutenzione dei
 watch sta nel backend, non nell'app. Il backend non riceve piu' l'intera
-`app_t`: riceve un context con runtime/config/logger, una callback raw/core e,
-solo per shadow mode, un bridge legacy opaco.
+`app_t`: riceve un context con runtime/config/logger, una callback raw/core e
+userdata opaco.
 
 ### `modules/inotify/src/inotify_backend.c`
 
@@ -239,8 +241,8 @@ Dipendenze reali osservate oggi:
 | `inotify_backend_add_startup_watch()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_add_startup_watch(ctx, path)` | sceglie watch singolo o ricorsivo tramite context | gia' fuori da `app_t`; resta da valutare se mantenere anche helper interno |
 | `inotify_backend_shutdown()` | riceve `inotify_backend_context_t *` pubblico; delega a `backend_shutdown(ctx)` | chiude fd e distrugge watch table | gia' fuori da `app_t`; non spegne piu' legacy shadow |
 | `inotify_backend_poll()` | riceve `inotify_backend_context_t *`, callback raw/core e `userdata` | legge eventi, logga raw, costruisce raw Alfred, chiama callback, aggiorna diagnostica watch e discovery ricorsiva | gia' fuori da `app_t` e fuori dal dispatch legacy |
-| `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers` e watch manager | aggiorna watch ricorsivi e prepara discovery sintetica | gia' interna al backend context |
-| `backend_process_discovered_dir()` | usa il context backend e propaga `userdata` | adatta la callback di discovery del watch manager al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
+| `backend_handle_dir_create()` | riceve `inotify_backend_context_t`; usa `ctx.config->recursive`, `ctx.runtime->watchers`, `fs_scan_tree()` e watch manager | aggiunge watch alla root creata, scansiona le directory annidate con `emit_root = 0` e prepara discovery sintetica | gia' interna al backend context |
+| `backend_process_scanned_dir_create()` | usa il context backend e propaga `userdata` | adatta le directory annidate viste dallo scanner al percorso raw/core | mantenere la discovery agganciata al backend context, senza dipendere dall'app completa |
 | `backend_emit_synthetic_dir_create()` | chiama `on_event(raw, userdata)` | genera `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` sintetico | gia' allineata alla callback raw con contesto opaco |
 | `watch_manager_add()` | `app->inotify.fd`, `app->config.watch_mask`, `app->inotify.watchers`, `app->logger` | installa watch kernel, salva mapping, logga `WATCH_ADDED` | ricevere fd/watchers/mask/logger espliciti o un contesto backend |
 | `watch_manager_remove()` | `app->inotify.fd`, `app->inotify.watchers`, `app->logger` | rimuove watch kernel, pulisce mapping, logga `WATCH_REMOVED` | ricevere fd/watchers/logger espliciti o un contesto backend |
@@ -342,7 +344,8 @@ Stato implementato del primo micro-refactor:
   `watch_manager_add_recursive()` e
   `watch_manager_add_recursive_with_discovery()` ricevono ora il context, non
   `app_t`
-- la callback di discovery del watch manager riceve il context
+- la callback di discovery del watch manager e' ormai transitoria; il percorso
+  runtime corrente usa `fs_scan_tree()` nel backend
 - `inotify_backend.c` costruisce un context locale partendo da `app_t` nei
   punti in cui deve chiamare il watch manager
 - `inotify_backend_poll()` riceve ancora `app_t` per guidare il backend, ma la
@@ -684,8 +687,11 @@ Questo file contiene stato backend reale:
 - `watch_manager_add_recursive_with_discovery()`
 
 `WATCH_ADDED` e `WATCH_REMOVED` qui sono log diagnostici del backend, non eventi
-semantici core. Lo scan ricorsivo e' backend state; la parte delicata e' la
-notifica delle directory scoperte, perche' oggi chiama indietro `app.c` per
+semantici core. Lo startup ricorsivo usa `fs_scan_tree()` tramite
+`watch_manager_add_recursive()`. La vecchia callback
+`watch_manager_add_recursive_with_discovery()` resta transitoria finche' non
+viene rimossa; il percorso runtime corrente fa discovery nel backend con
+`fs_scan_tree(..., emit_root = 0)` per
 generare raw event sintetici verso il core.
 
 ### `app_t`
