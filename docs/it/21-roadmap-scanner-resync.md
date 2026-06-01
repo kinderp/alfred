@@ -12,11 +12,11 @@ essere riusato in due contesti:
 - indicizzazione esplicita di un albero, eventualmente esposta in futuro dalla
   riga di comando
 
-## Stato codice prima dello scanner
+## Stato corrente sugli eventi critici
 
-Prima di iniziare questo lavoro abbiamo verificato che non esiste ancora codice
-runtime che implementi una semantica specifica per `IN_DELETE_SELF` o
-`IN_MOVE_SELF`.
+Questa sezione fotografa lo stato corrente degli eventi critici che hanno
+motivato lo scanner e il modello `stale`. Nessuno di questi eventi produce oggi
+una semantica core completa di delete/move del path osservato direttamente.
 
 Stato attuale:
 
@@ -25,9 +25,10 @@ Stato attuale:
 - `IN_DELETE_SELF` viene scritto nel raw log backend
 - `IN_DELETE_SELF` non viene convertito in `ALFRED_RAW_DELETE`
 - `IN_DELETE_SELF` non produce direttamente eventi core
-- `IN_MOVE_SELF` non e' nella maschera predefinita
-- `IN_MOVE_SELF` non e' accettato dal parser `inotify_watch_mask`
-- `IN_MOVE_SELF` non viene nominato dal raw log formatter
+- `IN_MOVE_SELF` e' nella maschera predefinita del backend inotify
+- `IN_MOVE_SELF` e' accettato dal parser `inotify_watch_mask`
+- `IN_MOVE_SELF` viene scritto nel raw log backend
+- `IN_MOVE_SELF` marca il watch come `STALE` e produce `WATCH_STALE`
 - `IN_MOVE_SELF` non produce raw Alfred e non produce semantica core
 
 Il percorso storico:
@@ -1324,9 +1325,10 @@ capire se Alfred puo' fidarsi del path ricostruito.
 #### Diagramma di stato dei watch
 
 Il diagramma seguente mostra il ciclo di vita previsto per un watch. Le
-transizioni `store` e `remove` sono gia' implementate; le transizioni legate a
-`IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT`, `IN_Q_OVERFLOW` e al resync sono
-policy future che useranno il modello dati appena introdotto.
+transizioni `store`, `remove` e `IN_MOVE_SELF -> STALE` sono gia'
+implementate; le transizioni legate a `IN_DELETE_SELF`, `IN_UNMOUNT`,
+`IN_Q_OVERFLOW` e al resync completo sono policy future che useranno lo stesso
+modello dati.
 
 ```mermaid
 stateDiagram-v2
@@ -1392,7 +1394,7 @@ stato. La seconda preserva informazione diagnostica per decidere una recovery.
 | Trigger | Problema principale | Azione conservativa candidata |
 | --- | --- | --- |
 | `IN_DELETE_SELF` | Il path osservato direttamente e' stato cancellato | Marcare il watch come non piu' affidabile, attendere `IN_IGNORED` per cleanup, valutare in futuro `ALFRED_RAW_DELETE` sul path osservato |
-| `IN_MOVE_SELF` | Il path osservato e' stato spostato senza destinazione | Marcare stale, non emettere move/rename/relocated, valutare resync da una root superiore affidabile |
+| `IN_MOVE_SELF` | Il path osservato e' stato spostato senza destinazione | Implementato: marcare stale e loggare `WATCH_STALE`; non emettere move/rename/relocated |
 | `IN_UNMOUNT` | Il filesystem osservato non e' piu' disponibile | Marcare la subtree non affidabile e produrre diagnostica backend |
 | `IN_Q_OVERFLOW` | La coda ha perso eventi, quindi lo stream e' incompleto | Marcare lo stato globale o la subtree come stale e progettare una procedura di resync |
 
@@ -1434,13 +1436,23 @@ semantici:
 Il test `make test-watcher` fissa questo contratto senza coinvolgere il kernel:
 e' un test della struttura dati, non un test end-to-end inotify.
 
+Il secondo cambio di codice e' stato implementato:
+
+- `watch_manager_default_mask()` include `IN_MOVE_SELF`
+- il parser `inotify_watch_mask` accetta `IN_MOVE_SELF`
+- il raw log backend nomina `IN_MOVE_SELF`
+- `backend_handle_move_self()` marca il watch come `WATCHER_STATE_STALE`
+- il backend logga `WATCH_STALE wd=... path=... reason=IN_MOVE_SELF`
+- il core non riceve un nuovo raw dedicato e non emette relocation semantica
+
 Il prossimo passo prudente e':
 
-1. marcare `IN_MOVE_SELF` come causa di stato non affidabile
-2. verificare con un test backend che gli eventi successivi non vengano
-   presentati come se il path fosse certamente corretto
-3. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica o una
-   futura API di resync
+1. decidere se `IN_DELETE_SELF` deve usare lo stesso percorso stale prima di
+   `IN_IGNORED`
+2. iniziare a progettare la policy di resync vera e propria per gli stati
+   `STALE` e `RESYNCING`
+3. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica piu'
+   strutturata o una futura API di resync
 
 ### Fase 7 - CLI di indicizzazione
 

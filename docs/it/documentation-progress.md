@@ -39,6 +39,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/src/inotify_config.c`,
+  `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato
+  `IN_MOVE_SELF` al modello watch `STALE`. Alfred ora richiede e nomina
+  `IN_MOVE_SELF`, lo accetta in `inotify_watch_mask`, marca il watch come
+  `WATCHER_STATE_STALE` e logga `WATCH_STALE`, senza produrre raw Alfred o
+  eventi core di move/rename/relocation.
 - `21-roadmap-scanner-resync.md`, `16-mappa-codice-e-strutture.md`: aggiunto il
   diagramma di stato Mermaid dei watch, con transizioni da `REMOVED` a `VALID`,
   passaggi futuri verso `STALE` causati da eventi critici inotify, fase

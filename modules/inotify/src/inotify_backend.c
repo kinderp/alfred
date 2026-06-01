@@ -69,6 +69,9 @@ static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
 static void backend_handle_ignored(inotify_backend_context_t *ctx,
                                    const struct inotify_event *ev);
 
+static void backend_handle_move_self(inotify_backend_context_t *ctx,
+                                     const struct inotify_event *ev);
+
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
                                              size_t dest_size);
@@ -368,6 +371,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
         if (callback_status != ERR_OK)
             return callback_status;
 
+        backend_handle_move_self(ctx, ev);
+
         backend_handle_ignored(ctx, ev);
 
         backend_handle_dir_create(ctx, ev, on_event, userdata);
@@ -399,6 +404,52 @@ static void backend_handle_ignored(inotify_backend_context_t *ctx,
         return;
 
     watch_manager_remove(ctx, ev->wd);
+}
+
+/*
+ * backend_handle_move_self - mark a watched path as no longer reliable
+ * @ctx: narrowed backend context used by the poll path
+ * @ev: raw inotify event currently being processed
+ *
+ * IN_MOVE_SELF says that the watched object itself moved, but the event does
+ * not contain the new destination path. The backend therefore must not invent
+ * a rename, move, or relocation event for the core. Instead it marks the
+ * existing wd -> path mapping as STALE so later resync policy can decide
+ * whether the watch can be repaired, invalidated, or only reported as
+ * diagnostic state.
+ *
+ * This handler intentionally runs before IN_IGNORED cleanup. Some kernels or
+ * scenarios may deliver both facts close together; marking stale first records
+ * the loss of path reliability while the wd -> path mapping is still available
+ * for diagnostics.
+ */
+static void backend_handle_move_self(inotify_backend_context_t *ctx,
+                                     const struct inotify_event *ev)
+{
+    if (ctx == NULL || ev == NULL)
+        return;
+
+    if ((ev->mask & IN_MOVE_SELF) == 0)
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, ev->wd);
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          ev->wd,
+                          WATCHER_STATE_STALE) != 0) {
+
+        logger_error(ctx->logger,
+                     "failed to mark watch stale wd=%d reason=IN_MOVE_SELF",
+                     ev->wd);
+
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE wd=%d path=%s reason=IN_MOVE_SELF",
+                 ev->wd,
+                 path ? path : "");
 }
 
 /* ============================================================================
@@ -575,6 +626,8 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
         strncat(dest, "IN_ISDIR ", dest_size - strlen(dest) - 1);
     if (mask & IN_DELETE_SELF)
         strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_MOVE_SELF)
+        strncat(dest, "IN_MOVE_SELF ", dest_size - strlen(dest) - 1);
     if (mask & IN_IGNORED)
         strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
     if (mask & IN_Q_OVERFLOW)

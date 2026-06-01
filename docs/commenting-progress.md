@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `modules/inotify/src/inotify_config.c`,
+  `modules/inotify/include/inotify_config.h`, and
+  `modules/inotify/src/watch_manager.c` after wiring IN_MOVE_SELF to
+  WATCHER_STATE_STALE. Comments now document why the backend records stale
+  state as diagnostics instead of inventing move/rename/relocation semantics
 - expanded comments in `tests/watcher/test_watcher_state.c` so each watcher
   state transition is documented as part of the future IN_MOVE_SELF/resync
   contract, including the distinction between stale active mappings and removed

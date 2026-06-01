@@ -336,9 +336,12 @@ di aver modificato la maschera mentre Alfred starebbe continuando con un valore
 diverso.
 
 La configurazione accetta solo i flag che Alfred sa gia' rendere nei raw log e
-convertire in raw mask del core. Flag inotify reali ma non ancora supportati da
-Alfred, per esempio `IN_OPEN` o `IN_ACCESS`, vengono rifiutati finche' non
-decidiamo esplicitamente come osservarli e documentarli.
+gestire in modo esplicito: conversione in raw mask del core oppure diagnostica
+di stato backend. `IN_MOVE_SELF`, per esempio, e' supportato come diagnostica:
+marca il watch `STALE` e produce `WATCH_STALE`, ma non diventa un evento core.
+Flag inotify reali ma non ancora supportati da Alfred, per esempio `IN_OPEN` o
+`IN_ACCESS`, vengono rifiutati finche' non decidiamo esplicitamente come
+osservarli e documentarli.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

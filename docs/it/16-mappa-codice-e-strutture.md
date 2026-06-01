@@ -655,8 +655,10 @@ doppia su add, remove ed espansione della capacita'.
 Il diagramma completo delle transizioni tra `REMOVED`, `VALID`, `STALE` e
 `RESYNCING` e' nella roadmap scanner/resync, nella sezione "Diagramma di stato
 dei watch". Qui basta ricordare il confine di responsabilita': `watcher.c`
-memorizza lo stato, mentre il backend decidera' quando cambiare stato in
-risposta a `IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT` o `IN_Q_OVERFLOW`.
+memorizza lo stato, mentre il backend decide quando cambiare stato. La
+transizione `IN_MOVE_SELF -> STALE` e' gia' collegata al runtime; le policy per
+`IN_DELETE_SELF`, `IN_UNMOUNT`, `IN_Q_OVERFLOW` e resync completo restano da
+progettare.
 
 ## Inserimento di un watch
 

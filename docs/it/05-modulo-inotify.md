@@ -110,6 +110,7 @@ IN_CLOSE_WRITE
 IN_MOVED_FROM
 IN_MOVED_TO
 IN_DELETE_SELF
+IN_MOVE_SELF
 IN_IGNORED
 IN_Q_OVERFLOW
 ```
@@ -145,7 +146,10 @@ ritorna `ERR_CONFIG` e Alfred non parte: un errore come `IN_ATRIB` non deve
 essere ignorato silenziosamente.
 
 Il parser non accetta tutti i flag esistenti di inotify. Accetta solo quelli che
-Alfred sa gia' mostrare nel raw log e convertire verso la raw mask del core.
+Alfred sa gia' mostrare nel raw log e che sa gestire in uno dei due livelli
+interni: conversione verso la raw mask del core oppure diagnostica/stato
+backend. `IN_MOVE_SELF`, per esempio, non diventa un raw Alfred semantico, ma
+marca il watch come `STALE` e produce il log diagnostico `WATCH_STALE`.
 Questa scelta evita configurazioni apparentemente valide ma non osservabili in
 modo chiaro da Alfred.
 

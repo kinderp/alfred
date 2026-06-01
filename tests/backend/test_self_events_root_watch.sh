@@ -53,9 +53,19 @@ sleep 1
 mv "$TEST_ROOT" "$MOVE_TARGET"
 sleep 1
 
-if grep -Eq "IN_MOVE_SELF" ./raw.log; then
-    echo "observed IN_MOVE_SELF for watched root"
+if ! grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_self_events name=" \
+    ./raw.log; then
+
+    echo "FAIL: missing IN_MOVE_SELF for moved watched root"
+    echo "----- raw.log -----"
+    cat ./raw.log || true
+    exit 1
 fi
+
+assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_not_contains "DIR_RELOCATED path="
+assert_not_contains "DIR_MOVED path="
+assert_not_contains "DIR_RENAMED path="
 
 if grep -Eq "FILE_DELETED path=.*/file-before-move.txt" "$LOG_FILE"; then
     echo "FAIL: root move unexpectedly produced child file delete"
