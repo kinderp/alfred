@@ -39,6 +39,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/include/watch_manager.h`, `05-modulo-inotify.md`,
+  `15-todo-switch-core.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: completato il cleanup della Fase 5 dello
+  scanner. Rimossi `recursive_walk()`,
+  `watch_manager_add_recursive_with_discovery()` e il typedef callback di
+  discovery. Lo startup e la discovery runtime usano ora `fs_scan_tree()` come
+  unico attraversatore, mentre il watch manager resta responsabile solo dello
+  stato dei watch.
 - `modules/inotify/src/inotify_backend.c`,
   `modules/inotify/src/watch_manager.c`,
   `modules/inotify/include/watch_manager.h`, `04-livello-applicazione.md`,
@@ -47,20 +56,17 @@ Stati usati:
   `docs/commenting-progress.md`: migrato allo scanner anche il percorso runtime
   `IN_CREATE | IN_ISDIR`. Il backend aggiunge il watch sulla root reale, esegue
   `fs_scan_tree()` con `emit_root = 0`, aggiunge watch alle directory annidate
-  e mantiene nel backend l'emissione dei raw create sintetici. La vecchia API
-  callback `watch_manager_add_recursive_with_discovery()` resta solo come
-  transitoria da rimuovere.
+  e mantiene nel backend l'emissione dei raw create sintetici.
 - `modules/inotify/src/watch_manager.c`, `05-modulo-inotify.md`,
   `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: implementato il primo refactor di integrazione
   scanner/watch manager. Il percorso startup `watch_manager_add_recursive()`
   ora usa `fs_scan_tree()` in modalita' directory-only e chiama
   `watch_manager_add()` per ogni directory trovata. Il percorso runtime
-  `watch_manager_add_recursive_with_discovery()` resta invariato per preservare
-  i raw create sintetici usati nei casi `mkdir -p`.
+  storico e' documentato solo come passaggio della migrazione.
 - `21-roadmap-scanner-resync.md`: completato l'audit iniziale della Fase 5,
   integrazione scanner/watch manager. La roadmap documenta il flusso corrente
-  `recursive_walk()`, i percorsi startup e runtime `IN_CREATE | IN_ISDIR`, i
+  storico, i percorsi startup e runtime `IN_CREATE | IN_ISDIR`, i
   limiti della ricorsione attuale, la divisione target tra scanner, watch
   manager, backend e core, la regola `emit_root = 0` per evitare doppi raw
   create sintetici e una strategia di migrazione a passi piccoli.

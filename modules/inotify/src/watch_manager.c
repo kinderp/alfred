@@ -1,5 +1,5 @@
 /* ============================================================================
- * watch_manager.c - inotify watch installation and recursive discovery
+ * watch_manager.c - inotify watch installation
  *
  * This file owns the operations that mutate the backend watcher table:
  *
@@ -9,23 +9,19 @@
  * It deliberately does not classify filesystem events. WATCH_ADDED and
  * WATCH_REMOVED are backend diagnostics about Alfred's observation state, not
  * semantic filesystem events. Startup recursive watching consumes fs_scanner
- * directory facts to install watches. Runtime recursive discovery has moved to
- * the backend scanner adapter; the callback-based recursive walk remains only
- * as a transitional path until it is removed in the next cleanup step.
+ * directory facts to install watches. Runtime recursive discovery also uses
+ * fs_scanner, but its synthetic raw-event policy stays in the backend.
  * ========================================================================== */
 
 #include "watch_manager.h"
 #include "fs_scanner.h"
 #include "watcher.h"
 #include "logger.h"
-#include "utils.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-#include <unistd.h>
-#include <dirent.h>
 #include <limits.h>
 #include <sys/inotify.h>
 
@@ -228,93 +224,6 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
 }
 
 /* ============================================================================
- * INTERNAL RECURSIVE WALK
- * ========================================================================== */
-
-/*
- * recursive_walk - add watches for a directory tree
- * @ctx: borrowed backend context containing runtime, config, and logger
- * @root: directory currently being scanned
- * @on_discovered: optional callback for discovered directories
- * @userdata: opaque callback data
- * @notify_root: nonzero to report @root through @on_discovered
- *
- * The root passed by the public entry point is not reported because its real
- * inotify create event is already being processed by the backend. Nested
- * directories are reported because they may have been created before a watch
- * existed on their parent, which means the kernel could not deliver their
- * create event to Alfred.
- *
- * This function mutates backend observation state only. It never emits raw or
- * semantic events directly; the optional callback lets the backend decide how
- * to represent discovered directories to the core.
- *
- * Return: 0 on success, -1 on opendir failure.
- */
-static int recursive_walk(inotify_backend_context_t *ctx,
-                          const char *root,
-                          watch_manager_discovered_dir_fn on_discovered,
-                          void *userdata,
-                          int notify_root)
-{
-    DIR *dir = opendir(root);
-
-    if (dir == NULL) {
-
-        logger_error(ctx->logger,
-                     "opendir failed path=%s",
-                     root);
-
-        return -1;
-    }
-
-    /*
-     * Add the watch before reporting discovery. This ordering means any
-     * synthetic raw create emitted by the backend describes a directory that is
-     * already watched for subsequent changes.
-     */
-    watch_manager_add(ctx, root);
-
-    if (notify_root && on_discovered != NULL) {
-        on_discovered(ctx, root, userdata);
-    }
-
-    struct dirent *ent;
-
-    while ((ent = readdir(dir)) != NULL) {
-
-        if (strcmp(ent->d_name, ".") == 0)
-            continue;
-
-        if (strcmp(ent->d_name, "..") == 0)
-            continue;
-
-        if (ent->d_type != DT_DIR)
-            continue;
-
-        char child[PATH_MAX];
-
-        if (path_join(child,
-                      sizeof(child),
-                      root,
-                      ent->d_name) != 0) {
-
-            continue;
-        }
-
-        recursive_walk(ctx,
-                       child,
-                       on_discovered,
-                       userdata,
-                       1);
-    }
-
-    closedir(dir);
-
-    return 0;
-}
-
-/* ============================================================================
  * ADD RECURSIVE
  * ========================================================================== */
 
@@ -355,33 +264,4 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
         return -1;
 
     return 0;
-}
-
-/*
- * watch_manager_add_recursive_with_discovery - add watches and report children
- * @ctx: borrowed backend context containing runtime, config, and logger
- * @root: newly created directory to scan
- * @on_discovered: callback for nested directories found during scanning
- * @userdata: opaque callback data
- *
- * Transitional helper kept while the scanner migration is completed. The
- * active runtime backend path now uses fs_scan_tree() directly so it can keep
- * raw synthetic emission in the backend, where the recovery policy belongs.
- *
- * The callback receives discovery facts, not final events. If this function is
- * still used by temporary callers, they remain responsible for deciding whether
- * those facts become synthetic raw input for the core.
- *
- * Return: 0 on success, -1 on failure.
- */
-int watch_manager_add_recursive_with_discovery(
-    inotify_backend_context_t *ctx,
-    const char *root,
-    watch_manager_discovered_dir_fn on_discovered,
-    void *userdata)
-{
-    if (!watch_manager_context_is_valid(ctx) || root == NULL)
-        return -1;
-
-    return recursive_walk(ctx, root, on_discovered, userdata, 0);
 }

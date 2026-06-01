@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- removed the transitional watch-manager recursive discovery API from
+  `modules/inotify/src/watch_manager.c` and
+  `modules/inotify/include/watch_manager.h`. Comments now describe
+  `fs_scan_tree()` as the single filesystem traversal primitive, with startup
+  watch installation in the watch manager and runtime synthetic raw-event
+  policy in the backend
 - added the first scanner comment pass for `app/include/fs_scanner.h`,
   `app/src/fs_scanner.c`, and the scanner C test helper. The comments document
   scanner boundaries, callback lifetimes, traversal options, early-stop

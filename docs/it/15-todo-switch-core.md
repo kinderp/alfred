@@ -341,10 +341,8 @@ Stato implementato del primo micro-refactor:
 - `inotify_backend_context_t` e' definito in
   `modules/inotify/include/inotify_backend.h`
 - `watch_manager_add()`, `watch_manager_remove()`,
-  `watch_manager_add_recursive()` e
-  `watch_manager_add_recursive_with_discovery()` ricevono ora il context, non
-  `app_t`
-- la callback di discovery del watch manager e' ormai transitoria; il percorso
+  `watch_manager_add_recursive()` ricevono il context, non `app_t`
+- la callback di discovery del watch manager e' stata rimossa; il percorso
   runtime corrente usa `fs_scan_tree()` nel backend
 - `inotify_backend.c` costruisce un context locale partendo da `app_t` nei
   punti in cui deve chiamare il watch manager
@@ -684,15 +682,14 @@ Questo file contiene stato backend reale:
 - `watch_manager_add()`
 - `watch_manager_remove()`
 - `watch_manager_add_recursive()`
-- `watch_manager_add_recursive_with_discovery()`
 
 `WATCH_ADDED` e `WATCH_REMOVED` qui sono log diagnostici del backend, non eventi
 semantici core. Lo startup ricorsivo usa `fs_scan_tree()` tramite
-`watch_manager_add_recursive()`. La vecchia callback
-`watch_manager_add_recursive_with_discovery()` resta transitoria finche' non
-viene rimossa; il percorso runtime corrente fa discovery nel backend con
-`fs_scan_tree(..., emit_root = 0)` per
-generare raw event sintetici verso il core.
+`watch_manager_add_recursive()`. Il percorso runtime corrente fa discovery nel
+backend con `fs_scan_tree(..., emit_root = 0)` per generare raw event sintetici
+verso il core. La vecchia API callback del watch manager e' stata rimossa:
+questa separazione rende esplicito che il watch manager gestisce osservazione,
+mentre il backend decide la recovery runtime.
 
 ### `app_t`
 

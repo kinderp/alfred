@@ -333,16 +333,9 @@ mkdir -p one/two/three
 prima che Alfred riesca ad aggiungere il watch su `one`.
 
 Per mitigare il problema, il watch manager attraversa ricorsivamente la nuova
-directory e aggiunge watch alle sottodirectory gia' presenti. Ora esiste anche
-una variante con callback di discovery:
-
-```c
-watch_manager_add_recursive_with_discovery(...)
-```
-
-Nota sullo stato corrente: `watch_manager_add_recursive()` e
-`watch_manager_add_recursive_with_discovery()` non usano piu' la stessa
-implementazione interna.
+directory e aggiunge watch alle sottodirectory gia' presenti. In passato questa
+discovery runtime era una variante callback del watch manager; ora il codice
+usa lo scanner filesystem generico anche per questo caso.
 
 Per lo startup, `watch_manager_add_recursive()` usa lo scanner filesystem
 generico:
@@ -367,9 +360,8 @@ backend_handle_dir_create()
     -> backend_emit_synthetic_dir_create() sulle directory annidate
 ```
 
-La vecchia API `watch_manager_add_recursive_with_discovery()` resta nel codice
-solo come percorso transitorio da rimuovere. La logica dei raw create sintetici
-vive nel backend, non nel watch manager.
+La vecchia API callback del watch manager e' stata rimossa. La logica dei raw
+create sintetici vive nel backend, non nel watch manager.
 
 Il backend inotify gestisce questa discovery in:
 
@@ -381,10 +373,11 @@ Il backend genera un raw event sintetico verso lo stesso percorso usato dagli
 eventi reali, cosi' il core puo' emettere il `DIR_CREATED` che inotify non ha
 potuto consegnare.
 
-Il watch manager non decide direttamente la semantica. Si limita a segnalare:
+Il watch manager non decide direttamente la semantica. Nel percorso runtime si
+limita ad aggiungere il watch richiesto dal backend:
 
 ```text
-ho scoperto questa directory durante lo scan
+aggiungi un watch su questa directory
 ```
 
 La trasformazione in `DIR_CREATED` resta responsabilita' del core.
