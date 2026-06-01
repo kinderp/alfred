@@ -66,7 +66,7 @@ nella `mask` di `struct inotify_event`.
 | `IN_CLOSE_NOWRITE` | File o directory chiusi senza scrittura | No | Nessuno | Nessuna | Non supportato per ora. Utile forse per audit/debug, ma non per la semantica filesystem principale. |
 | `IN_CREATE` | File, directory, link, symlink o socket creato dentro una directory osservata | Si | `ALFRED_RAW_CREATE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_CREATED` o `DIR_CREATED` | Supportato end-to-end. In modalita' ricorsiva Alfred puo' emettere anche create sintetici per directory scoperte dopo l'aggiunta del watch. |
 | `IN_DELETE` | File o directory cancellato da una directory osservata | Si | `ALFRED_RAW_DELETE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_DELETED` o `DIR_DELETED` | Supportato end-to-end quando l'evento riguarda un figlio della directory osservata. |
-| `IN_DELETE_SELF` | Il file o la directory osservata direttamente e' stata cancellata | Parziale | Nessuno | Nessuna | Alfred lo logga nel raw backend e lo usa insieme a `IN_IGNORED` per riparare lo stato dei watch. Decisione proposta: mapparlo in futuro a `ALFRED_RAW_DELETE` per il path osservato direttamente, non per i figli. |
+| `IN_DELETE_SELF` | Il file o la directory osservata direttamente e' stata cancellata | Backend | Nessuno | Nessuna | Alfred lo logga nel raw backend, marca il watch `STALE`, scrive `WATCH_STALE` e lascia poi a `IN_IGNORED` il cleanup `WATCH_REMOVED`. Decisione proposta: valutare in futuro `ALFRED_RAW_DELETE` per il path osservato direttamente, non per i figli. |
 | `IN_MODIFY` | Contenuto modificato, per esempio `write()` o `truncate()` | Si | `ALFRED_RAW_MODIFY` | `FILE_MODIFIED` | Supportato end-to-end con debounce nel core. |
 | `IN_MOVE_SELF` | Il file o la directory osservata direttamente e' stata spostata | Backend | Nessuno | Nessuna | Gestito come perdita di affidabilita' del mapping `wd -> path`: Alfred lo logga nel raw backend, marca il watch `STALE` e scrive `WATCH_STALE`. Non produce rename/move/relocated perche' manca il nuovo path. |
 | `IN_MOVED_FROM` | Vecchio nome di un rename/move dentro directory osservata | Si | `ALFRED_RAW_MOVED_FROM` | Nessuna immediata | Supportato come prima meta' di una correlazione. Il core lo conserva in tabella in attesa di `IN_MOVED_TO` con lo stesso cookie. |
@@ -204,7 +204,7 @@ Questa vista compatta risponde alla domanda pratica: cosa gestiamo davvero oggi?
 | Inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_Q_OVERFLOW` | `IN_ACCESS`, `IN_CLOSE_NOWRITE`, `IN_OPEN`, `IN_UNMOUNT` |
 | Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_ATTRIB`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`, `ALFRED_RAW_MOVED_TO`, `ALFRED_RAW_OVERFLOW`, `ALFRED_RAW_ISDIR` | Access/open/close-nowrite/move-self/unmount raw dedicati |
 | Core semantico | create, delete, modify, ready, move/rename/relocated, overflow | metadata changed, access/open audit, close-nowrite, watched-object moved/deleted-self policy, unmount/resync |
-| Backend state | recursive watch add, synthetic directory create, ignored-watch cleanup, `IN_MOVE_SELF -> WATCH_STALE` | policy completa per root watched object deleted, resync dopo unmount/overflow |
+| Backend state | recursive watch add, synthetic directory create, ignored-watch cleanup, `IN_MOVE_SELF -> WATCH_STALE`, `IN_DELETE_SELF -> WATCH_STALE -> WATCH_REMOVED` | resync dopo unmount/overflow |
 
 ## Decisioni operative
 
@@ -271,7 +271,8 @@ mv /tmp/root /tmp/root2
 il nuovo path. Senza destinazione Alfred non puo' produrre correttamente
 `DIR_RENAMED`, `DIR_MOVED` o `DIR_RELOCATED`. La scelta conservativa e' quindi:
 
-- `IN_DELETE_SELF`: futuro candidato per `ALFRED_RAW_DELETE` sul path osservato
+- `IN_DELETE_SELF`: diagnostica backend implementata con `WATCH_STALE`; futuro
+  candidato per `ALFRED_RAW_DELETE` sul path osservato
 - `IN_MOVE_SELF`: diagnostica backend implementata con `WATCH_STALE`, senza
   semantica core immediata
 - `IN_IGNORED`: manutenzione backend della tabella watch, non evento core
@@ -293,8 +294,9 @@ sicurezza.
 
 Il test backend `test_self_events_root_watch.sh` fissa per ora il comportamento
 osservativo: controlla il raw log per gli eventi `_SELF`/`IN_IGNORED`, verifica
-che `IN_MOVE_SELF` produca `WATCH_STALE` e conferma che Alfred non inventi una
-relocation semantica quando manca il nuovo path.
+che `IN_DELETE_SELF` e `IN_MOVE_SELF` producano `WATCH_STALE`, controlla il
+cleanup `WATCH_REMOVED` dopo `IN_DELETE_SELF` e conferma che Alfred non inventi
+delete dei figli o relocation semantiche.
 
 ## Prossimi punti da discutere
 
@@ -302,8 +304,9 @@ relocation semantica quando manca il nuovo path.
    bit riconosciuti in output.
 2. Decidere la semantica di `ALFRED_RAW_ATTRIB`: nessun evento, evento unico
    `METADATA_CHANGED`, oppure distinzione file/directory.
-3. Decidere se `IN_DELETE_SELF` deve produrre un evento semantico quando il path
-   osservato direttamente viene cancellato.
+3. Decidere se `IN_DELETE_SELF`, oggi solo diagnostica `WATCH_STALE`, deve
+   produrre in futuro un evento semantico quando il path osservato direttamente
+   viene cancellato.
 4. Progettare il resync successivo a `IN_MOVE_SELF`: oggi il watch diventa
    `STALE`, ma non esiste ancora una procedura che lo riporti a `VALID`.
 5. Rimandare `IN_UNMOUNT` e overflow completo alla progettazione della recovery

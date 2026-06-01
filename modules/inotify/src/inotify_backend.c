@@ -72,6 +72,9 @@ static void backend_handle_ignored(inotify_backend_context_t *ctx,
 static void backend_handle_move_self(inotify_backend_context_t *ctx,
                                      const struct inotify_event *ev);
 
+static void backend_handle_delete_self(inotify_backend_context_t *ctx,
+                                       const struct inotify_event *ev);
+
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
                                              size_t dest_size);
@@ -373,6 +376,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         backend_handle_move_self(ctx, ev);
 
+        backend_handle_delete_self(ctx, ev);
+
         backend_handle_ignored(ctx, ev);
 
         backend_handle_dir_create(ctx, ev, on_event, userdata);
@@ -448,6 +453,50 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
 
     logger_event(ctx->logger,
                  "WATCH_STALE wd=%d path=%s reason=IN_MOVE_SELF",
+                 ev->wd,
+                 path ? path : "");
+}
+
+/*
+ * backend_handle_delete_self - mark a watched path as deleted/stale
+ * @ctx: narrowed backend context used by the poll path
+ * @ev: raw inotify event currently being processed
+ *
+ * IN_DELETE_SELF says that the watched object itself was deleted. That makes
+ * the wd -> path mapping unreliable immediately, but it still does not justify
+ * inventing delete events for children or emitting a core delete for the
+ * watched path before the project defines that semantic contract.
+ *
+ * The handler marks the watch STALE first and lets IN_IGNORED perform the
+ * final table cleanup afterwards. This preserves a diagnostic transition:
+ * VALID -> STALE because the watched path disappeared, then STALE -> REMOVED
+ * when the kernel confirms that the watch is gone.
+ */
+static void backend_handle_delete_self(inotify_backend_context_t *ctx,
+                                       const struct inotify_event *ev)
+{
+    if (ctx == NULL || ev == NULL)
+        return;
+
+    if ((ev->mask & IN_DELETE_SELF) == 0)
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, ev->wd);
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          ev->wd,
+                          WATCHER_STATE_STALE) != 0) {
+
+        logger_error(ctx->logger,
+                     "failed to mark watch stale wd=%d reason=IN_DELETE_SELF",
+                     ev->wd);
+
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
                  ev->wd,
                  path ? path : "");
 }

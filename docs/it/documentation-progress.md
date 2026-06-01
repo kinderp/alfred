@@ -39,6 +39,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato
+  anche `IN_DELETE_SELF` al modello watch `STALE`. Il backend ora logga
+  `WATCH_STALE ... reason=IN_DELETE_SELF` prima del cleanup `WATCH_REMOVED`
+  generato da `IN_IGNORED`, senza produrre raw Alfred delete per il path
+  osservato direttamente e senza inventare delete per i figli.
 - `modules/inotify/src/watch_manager.c`,
   `modules/inotify/src/inotify_config.c`,
   `modules/inotify/include/inotify_config.h`,

@@ -34,6 +34,11 @@ if ! grep -Eq "IN_IGNORED .*path=.*/alfred_backend_test_self_events name=" \
     exit 1
 fi
 
+assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_DELETE_SELF"
+assert_contains "WATCH_REMOVED wd=[0-9]+ path=.*/alfred_backend_test_self_events$"
+assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_DELETE_SELF" \
+             "WATCH_REMOVED wd=[0-9]+ path=.*/alfred_backend_test_self_events$"
+
 assert_contains "FILE_DELETED path=.*/file-before-delete.txt"
 assert_contains "DIR_DELETED path=.*/dir-before-delete"
 

@@ -23,6 +23,7 @@ Stato attuale:
 - `IN_DELETE_SELF` e' nella maschera predefinita del backend inotify
 - `IN_DELETE_SELF` e' accettato dal parser `inotify_watch_mask`
 - `IN_DELETE_SELF` viene scritto nel raw log backend
+- `IN_DELETE_SELF` marca il watch come `STALE` e produce `WATCH_STALE`
 - `IN_DELETE_SELF` non viene convertito in `ALFRED_RAW_DELETE`
 - `IN_DELETE_SELF` non produce direttamente eventi core
 - `IN_MOVE_SELF` e' nella maschera predefinita del backend inotify
@@ -1325,10 +1326,10 @@ capire se Alfred puo' fidarsi del path ricostruito.
 #### Diagramma di stato dei watch
 
 Il diagramma seguente mostra il ciclo di vita previsto per un watch. Le
-transizioni `store`, `remove` e `IN_MOVE_SELF -> STALE` sono gia'
-implementate; le transizioni legate a `IN_DELETE_SELF`, `IN_UNMOUNT`,
-`IN_Q_OVERFLOW` e al resync completo sono policy future che useranno lo stesso
-modello dati.
+transizioni `store`, `remove`, `IN_MOVE_SELF -> STALE` e
+`IN_DELETE_SELF -> STALE` sono gia' implementate; le transizioni legate a
+`IN_UNMOUNT`, `IN_Q_OVERFLOW` e al resync completo sono policy future che
+useranno lo stesso modello dati.
 
 ```mermaid
 stateDiagram-v2
@@ -1393,7 +1394,7 @@ stato. La seconda preserva informazione diagnostica per decidere una recovery.
 
 | Trigger | Problema principale | Azione conservativa candidata |
 | --- | --- | --- |
-| `IN_DELETE_SELF` | Il path osservato direttamente e' stato cancellato | Marcare il watch come non piu' affidabile, attendere `IN_IGNORED` per cleanup, valutare in futuro `ALFRED_RAW_DELETE` sul path osservato |
+| `IN_DELETE_SELF` | Il path osservato direttamente e' stato cancellato | Implementato: marcare stale e loggare `WATCH_STALE`; attendere `IN_IGNORED` per cleanup; valutare in futuro `ALFRED_RAW_DELETE` sul path osservato |
 | `IN_MOVE_SELF` | Il path osservato e' stato spostato senza destinazione | Implementato: marcare stale e loggare `WATCH_STALE`; non emettere move/rename/relocated |
 | `IN_UNMOUNT` | Il filesystem osservato non e' piu' disponibile | Marcare la subtree non affidabile e produrre diagnostica backend |
 | `IN_Q_OVERFLOW` | La coda ha perso eventi, quindi lo stream e' incompleto | Marcare lo stato globale o la subtree come stale e progettare una procedura di resync |
@@ -1436,7 +1437,7 @@ semantici:
 Il test `make test-watcher` fissa questo contratto senza coinvolgere il kernel:
 e' un test della struttura dati, non un test end-to-end inotify.
 
-Il secondo cambio di codice e' stato implementato:
+Il secondo cambio di codice ha collegato `IN_MOVE_SELF` allo stato `STALE`:
 
 - `watch_manager_default_mask()` include `IN_MOVE_SELF`
 - il parser `inotify_watch_mask` accetta `IN_MOVE_SELF`
@@ -1445,12 +1446,22 @@ Il secondo cambio di codice e' stato implementato:
 - il backend logga `WATCH_STALE wd=... path=... reason=IN_MOVE_SELF`
 - il core non riceve un nuovo raw dedicato e non emette relocation semantica
 
+Il terzo cambio di codice ha collegato anche `IN_DELETE_SELF` allo stesso
+modello diagnostico:
+
+- `backend_handle_delete_self()` marca il watch come `WATCHER_STATE_STALE`
+- il backend logga `WATCH_STALE wd=... path=... reason=IN_DELETE_SELF`
+- `IN_IGNORED` continua poi a rimuovere il watch con `WATCH_REMOVED`
+- il core non riceve un nuovo raw delete per il path osservato direttamente
+- Alfred non inventa delete per i figli: restano validi solo i delete realmente
+  consegnati dal kernel
+
 Il prossimo passo prudente e':
 
-1. decidere se `IN_DELETE_SELF` deve usare lo stesso percorso stale prima di
-   `IN_IGNORED`
-2. iniziare a progettare la policy di resync vera e propria per gli stati
+1. iniziare a progettare la policy di resync vera e propria per gli stati
    `STALE` e `RESYNCING`
+2. decidere come trattare `IN_UNMOUNT` e `IN_Q_OVERFLOW`, che possono rendere
+   stale piu' di un singolo watch
 3. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica piu'
    strutturata o una futura API di resync
 

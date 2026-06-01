@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after wiring
+  IN_DELETE_SELF to WATCHER_STATE_STALE. Comments document why delete-self is
+  diagnostic state first, why child delete events are not invented, and why
+  IN_IGNORED still owns final watch cleanup
 - refreshed `modules/inotify/src/inotify_backend.c`,
   `modules/inotify/src/inotify_config.c`,
   `modules/inotify/include/inotify_config.h`, and
