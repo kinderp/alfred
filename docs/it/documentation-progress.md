@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: completato l'audit iniziale della Fase 5,
+  integrazione scanner/watch manager. La roadmap documenta il flusso corrente
+  `recursive_walk()`, i percorsi startup e runtime `IN_CREATE | IN_ISDIR`, i
+  limiti della ricorsione attuale, la divisione target tra scanner, watch
+  manager, backend e core, la regola `emit_root = 0` per evitare doppi raw
+  create sintetici e una strategia di migrazione a passi piccoli.
 - `tests/scanner/test_fs_scanner_dirs.c`,
   `tests/scanner/test_fs_scanner_dirs.sh`,
   `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e

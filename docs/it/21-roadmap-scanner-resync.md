@@ -951,27 +951,199 @@ di scan/index.
 
 ### Fase 5 - Integrazione con watch manager
 
-Stato: da progettare.
+Stato: audit e design iniziale completati.
 
 Obiettivo: valutare se sostituire o affiancare
 `watch_manager_add_recursive_with_discovery()`.
 
-Domande:
+#### Stato attuale del codice
 
-- lo scanner deve solo elencare directory e lasciare al watch manager
-  `inotify_add_watch()`?
-- il watch manager deve continuare a generare raw sintetici per directory
-  scoperte?
-- come evitiamo duplicazione tra discovery ricorsiva attuale e scanner?
-
-Direzione probabile:
+Oggi la discovery ricorsiva vive in:
 
 ```text
-scanner      -> trova directory
-watch_manager -> aggiunge watch
-backend      -> decide se generare raw sintetici
-core         -> dedup/semantica
+modules/inotify/src/watch_manager.c
 ```
+
+La funzione interna e':
+
+```c
+static int recursive_walk(inotify_backend_context_t *ctx,
+                          const char *root,
+                          watch_manager_discovered_dir_fn on_discovered,
+                          void *userdata,
+                          int notify_root);
+```
+
+Le funzioni pubbliche che la usano sono:
+
+```c
+int watch_manager_add_recursive(inotify_backend_context_t *ctx,
+                                const char *root);
+
+int watch_manager_add_recursive_with_discovery(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    watch_manager_discovered_dir_fn on_discovered,
+    void *userdata);
+```
+
+Il flusso corrente e':
+
+```text
+inotify_backend_add_startup_watch()
+    -> watch_manager_add_recursive()
+        -> recursive_walk()
+            -> opendir()
+            -> watch_manager_add()
+            -> readdir()
+            -> path_join()
+            -> recursive_walk(child)
+```
+
+Per directory create mentre Alfred e' gia' in esecuzione:
+
+```text
+inotify_backend_poll()
+    -> backend_handle_dir_create()
+        -> watch_manager_add_recursive_with_discovery()
+            -> recursive_walk()
+                -> watch_manager_add()
+                -> on_discovered()
+                    -> backend_process_discovered_dir()
+                        -> backend_emit_synthetic_dir_create()
+                            -> core callback
+```
+
+Questo secondo percorso serve a mitigare il caso:
+
+```bash
+mkdir -p one/two/three
+```
+
+Il kernel puo' notificare la creazione di `one`, ma `two` e `three` possono
+essere creati prima che Alfred abbia installato watch sui loro genitori. La
+discovery ricorsiva aggiunge i watch mancanti e segnala al backend le directory
+annidate scoperte, che il backend trasforma in raw create sintetici.
+
+#### Responsabilita' attuali
+
+`recursive_walk()` oggi mescola tre responsabilita':
+
+1. attraversare il filesystem
+2. aggiungere watch inotify
+3. notificare directory scoperte al backend
+
+Questa miscela ha funzionato per risolvere il problema `mkdir -p`, ma non e'
+ideale per il resync piu' generale.
+
+Limiti attuali:
+
+- usa `opendir()` su path assoluti invece dello scan basato su descriptor
+- dipende da `dirent.d_type == DT_DIR`, che non e' affidabile su tutti i
+  filesystem
+- non ha un contratto generale per symlink, file, FIFO o tipi speciali
+- non espone limiti come `max_depth` o `max_entries`
+- non separa chiaramente "trovare directory" da "aggiungere watch"
+- non e' riusabile per una futura CLI di indicizzazione
+
+#### Responsabilita' target
+
+La divisione target dovrebbe essere:
+
+```text
+fs_scanner      -> attraversa il filesystem e produce fatti osservati
+watch_manager   -> aggiunge/rimuove watch e mantiene wd -> path
+inotify_backend -> decide quando fare discovery e se emettere raw sintetici
+core            -> dedup, correlazione e semantica utente
+```
+
+In altre parole:
+
+- lo scanner non deve chiamare `inotify_add_watch()`
+- lo scanner non deve emettere raw Alfred
+- lo scanner non deve decidere `DIR_CREATED`, `DIR_DELETED` o `DIR_RELOCATED`
+- il watch manager non dovrebbe piu' possedere una propria ricorsione
+  filesystem completa
+- il backend resta il punto che trasforma discovery in raw sintetici, quando la
+  policy lo richiede
+
+#### Direzione proposta
+
+```text
+startup:
+    backend
+        -> scanner dirs-only
+        -> watch_manager_add() per ogni directory
+        -> nessun raw sintetico
+
+directory create runtime:
+    backend riceve IN_CREATE | IN_ISDIR
+        -> emette il raw reale per la directory root creata
+        -> scanner dirs-only sulla nuova directory
+        -> watch_manager_add() per ogni directory
+        -> raw sintetico solo per directory annidate scoperte
+
+resync futuro:
+    backend marca stato stale o overflow
+        -> scanner da una root affidabile
+        -> watch_manager_add()/remove secondo policy
+        -> diagnostica o raw sintetici solo se decisi esplicitamente
+```
+
+#### Attenzione sulla root
+
+`watch_manager_add_recursive_with_discovery()` oggi non notifica la root della
+scansione. Questo e' importante.
+
+Quando arriva:
+
+```text
+IN_CREATE | IN_ISDIR name=one
+```
+
+il backend ha gia' un raw reale per `one`. Se la discovery notificasse anche
+`one`, produrremmo un possibile doppio create:
+
+```text
+real raw create:      one
+synthetic raw create: one
+```
+
+Il comportamento target deve conservare questa regola:
+
+```text
+emit_root = 0 per la discovery runtime post-create
+emit_root = 1 oppure equivalente per startup, ma senza raw sintetici
+```
+
+#### Strategia di migrazione consigliata
+
+Non conviene cancellare subito `recursive_walk()`. I passi piccoli sono:
+
+1. aggiungere un adapter nel watch manager o nel backend che usa
+   `fs_scan_tree()` in modalita' directory-only
+2. usare l'adapter solo per lo startup recursive watch
+3. verificare che `make test`, `make test-backend-diagnostics` e
+   `make test-scanner` restino verdi
+4. passare la discovery runtime `IN_CREATE | IN_ISDIR` allo scanner con
+   `emit_root = 0`
+5. verificare gli scenari `recursive_create_nested_dir` e backend watch tree
+6. rimuovere `recursive_walk()` solo dopo avere sostituito entrambi i percorsi
+
+#### Domande ancora aperte
+
+- L'adapter deve vivere in `watch_manager.c` o in `inotify_backend.c`?
+- Il callback dello scanner deve chiamare direttamente `watch_manager_add()` o
+  deve accumulare risultati prima?
+- In caso di fallimento di `watch_manager_add()` su una directory figlia,
+  continuiamo o falliamo tutta la discovery?
+- I raw sintetici devono restare identici a oggi oppure vogliamo aggiungere un
+  marker diagnostico futuro per distinguere real/synthetic nel raw log?
+
+Proposta iniziale: mettere l'adapter nel backend per il percorso runtime, perche'
+solo il backend conosce il motivo della scansione e decide se emettere raw
+sintetici. Per lo startup potremmo invece avere un helper nel watch manager,
+purche' non reintroduca logica semantica.
 
 ### Fase 6 - Resync dopo eventi critici
 
@@ -1029,10 +1201,12 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. decidere la policy sugli errori parziali di permesso/accesso
-2. aggiungere test dedicati su `include_symlinks` e `follow_symlinks`
-3. valutare se sostituire la discovery ricorsiva del watch manager
-4. progettare l'uso per `IN_MOVE_SELF`
+1. decidere dove mettere l'adapter scanner/watch manager
+2. sostituire prima il percorso startup recursive watch oppure quello runtime
+   `IN_CREATE | IN_ISDIR`
+3. mantenere `emit_root = 0` nel percorso runtime per evitare doppi raw create
+4. progettare l'uso dello scanner per `IN_MOVE_SELF` e overflow solo dopo la
+   migrazione della discovery attuale
 5. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
