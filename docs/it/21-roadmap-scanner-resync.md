@@ -1465,6 +1465,132 @@ Il prossimo passo prudente e':
 3. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica piu'
    strutturata o una futura API di resync
 
+#### Policy resync v0
+
+La prima policy di resync deve essere volutamente conservativa. Lo scanner e la
+watcher table servono prima a ripristinare fiducia nello stato backend; non
+devono ancora generare eventi utente sintetici.
+
+Obiettivi della v0:
+
+- non inventare create/delete/move semantici a partire da una fotografia
+  successiva del filesystem
+- usare lo scanner per capire se un path e' ancora raggiungibile
+- reinstallare o confermare watch solo quando il path e' affidabile
+- lasciare il watch `STALE` quando non abbiamo abbastanza informazioni
+- usare `REMOVED` quando il watch non e' piu' utilizzabile o il kernel lo ha
+  gia' rimosso
+
+Non obiettivi della v0:
+
+- generare `DIR_CREATED` o `FILE_DELETED` sintetici da una differenza di scan
+- ricostruire automaticamente la destinazione di un `IN_MOVE_SELF`
+- trasformare overflow in una lista completa di eventi mancanti
+- seguire symlink durante la recovery
+
+La ragione e' didattica e tecnica: uno scan e' una fotografia presa dopo il
+problema. Se lo stato e' gia' stale, lo scanner puo' dire "cosa vedo ora", ma
+non puo' sempre dire "quale sequenza di eventi e' successa prima". Generare
+eventi core da questa fotografia sarebbe rischioso senza un contratto piu'
+forte.
+
+#### Scope del resync
+
+La v0 dovrebbe distinguere tre livelli:
+
+| Scope | Quando usarlo | Cosa puo' fare |
+| --- | --- | --- |
+| singolo watch | `IN_MOVE_SELF` o `IN_DELETE_SELF` su un `wd` preciso | verificare il path associato e decidere `VALID`, `STALE` o `REMOVED` |
+| subtree | una directory osservata resta raggiungibile ma i watch figli possono essere incompleti | rieseguire scan directory-only e reinstallare watch mancanti |
+| globale/backend | `IN_Q_OVERFLOW` o perdita di affidabilita' non localizzata | marcare piu' watch `STALE`, produrre diagnostica e chiedere una recovery piu' ampia |
+
+Per ora il candidato piu' semplice e' il resync di subtree directory-only: se
+una root affidabile e' ancora raggiungibile, lo scanner puo' attraversarla e
+assicurare che le directory visibili abbiano un watch. Questo e' simile allo
+startup recursive watch, ma avviene quando il backend e' gia' in esecuzione.
+
+#### Cosa confrontare nella v0
+
+La v0 dovrebbe confrontare solo quello che serve alla salute del backend
+inotify:
+
+- directory visibili
+- watch presenti o mancanti
+- raggiungibilita' del path root
+- eventuali errori di scan
+
+File, symlink e tipi speciali restano fuori dalla recovery v0. Sono importanti
+per una futura CLI di indicizzazione, ma non servono subito per riparare la
+struttura dei watch. Questo riduce il rischio di trasformare il resync in un
+secondo motore semantico parallelo al core.
+
+#### Output della v0
+
+La v0 dovrebbe produrre solo diagnostica backend e mutazioni della watcher
+table:
+
+```text
+WATCH_RESYNC_BEGIN path=...
+WATCH_RESYNC_REPAIRED path=...
+WATCH_RESYNC_STALE path=...
+WATCH_RESYNC_FAILED path=...
+WATCH_RESYNC_END path=...
+```
+
+Questi nomi sono proposte, non ancora API stabile. La regola importante e':
+nessun raw Alfred sintetico e nessun evento core fino a quando non decidiamo un
+contratto esplicito per gli eventi ricostruiti.
+
+#### Tabella decisionale v0
+
+| Condizione | Stato prima | Azione v0 | Stato dopo |
+| --- | --- | --- | --- |
+| path del watch esiste ed e' directory accessibile | `STALE` | scan directory-only, reinstallare watch mancanti, log diagnostico | `VALID` se lo scan termina senza errori duri |
+| path del watch non esiste piu' | `STALE` | log diagnostico, attendere o forzare cleanup secondo policy | `REMOVED` se il watch non e' piu' utile, altrimenti `STALE` |
+| path esiste ma scan fallisce sulla root | `STALE` | log errore/recovery fallita | `STALE` |
+| directory figlia sparisce durante scan | `RESYNCING` | saltare la figlia e continuare | resta `RESYNCING`, poi `VALID` se non ci sono errori duri |
+| overflow globale | qualsiasi | marcare stato non affidabile e rimandare recovery ampia | `STALE` su scope scelto |
+| unmount | qualsiasi | diagnostica di perdita subtree | `STALE` o `REMOVED`, da decidere |
+
+#### Flusso v0
+
+```mermaid
+flowchart TD
+    A["watch in stato STALE"] --> B{"esiste una root affidabile?"}
+    B -- "no" --> C["resta STALE<br/>log diagnostico"]
+    B -- "si" --> D["set RESYNCING"]
+    D --> E["fs_scan_tree()<br/>directory-only"]
+    E --> F{"errore duro sulla root?"}
+    F -- "si" --> G["set STALE<br/>WATCH_RESYNC_FAILED"]
+    F -- "no" --> H["aggiungi watch mancanti"]
+    H --> I{"watch installati?"}
+    I -- "no" --> G
+    I -- "si" --> J["set VALID<br/>WATCH_RESYNC_END"]
+```
+
+#### Regola per tornare VALID
+
+Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
+
+- il path associato al watch e' ancora raggiungibile
+- lo scan della root non fallisce con errore duro
+- i watch necessari per la subtree scelta sono installati o confermati
+
+Non basta "non ho visto altri errori". La transizione `RESYNCING -> VALID`
+deve essere il risultato di una verifica esplicita.
+
+#### Regola per restare STALE
+
+Il watch resta `STALE` quando Alfred non ha abbastanza informazioni:
+
+- `IN_MOVE_SELF` ha spostato il path e non conosciamo la nuova destinazione
+- lo scan non puo' partire da una root affidabile
+- la root esiste ma non e' accessibile
+- la recovery e' stata interrotta
+
+In questi casi Alfred deve preferire diagnostica esplicita a eventi utente
+potenzialmente falsi.
+
 ### Fase 7 - CLI di indicizzazione
 
 Stato: futura.

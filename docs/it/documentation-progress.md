@@ -39,6 +39,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: aggiunta la proposta di policy `resync v0`.
+  La documentazione chiarisce che il primo resync deve essere diagnostico e
+  watch-state only, senza raw Alfred o eventi core sintetici, definendo scope,
+  dati da confrontare, output diagnostici candidati, tabella decisionale,
+  flowchart Mermaid e regole per tornare `VALID` o restare `STALE`.
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
   `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md`,
