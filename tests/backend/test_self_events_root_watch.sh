@@ -68,6 +68,12 @@ if ! grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_self_events name=" \
 fi
 
 assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
+             "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
+             "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_not_contains "DIR_RELOCATED path="
 assert_not_contains "DIR_MOVED path="
 assert_not_contains "DIR_RENAMED path="

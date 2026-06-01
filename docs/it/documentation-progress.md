@@ -39,6 +39,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunto il primo probe runtime
+  `backend_resync_watch()` dopo `IN_MOVE_SELF`. Il probe usa solo il vecchio
+  path del watch per distinguere path ancora raggiungibile da path non piu'
+  affidabile e logga `WATCH_RESYNC_BEGIN` / `WATCH_RESYNC_FAILED` quando non
+  puo' provare l'identita' dell'oggetto osservato, senza produrre raw Alfred o
+  eventi core.
 - `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
   `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,

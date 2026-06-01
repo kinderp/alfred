@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -74,6 +75,10 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
 
 static void backend_handle_delete_self(inotify_backend_context_t *ctx,
                                        const struct inotify_event *ev);
+
+static void backend_resync_watch(inotify_backend_context_t *ctx,
+                                 int wd,
+                                 const char *reason);
 
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
@@ -455,6 +460,8 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
                  "WATCH_STALE wd=%d path=%s reason=IN_MOVE_SELF",
                  ev->wd,
                  path ? path : "");
+
+    backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF");
 }
 
 /*
@@ -499,6 +506,118 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
                  "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
                  ev->wd,
                  path ? path : "");
+}
+
+/*
+ * backend_resync_watch - run the first conservative resync probe for one watch
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: inotify watch descriptor whose mapping was marked stale
+ * @reason: kernel/backend reason that triggered the probe
+ *
+ * This is intentionally not the full scanner-based recovery. It only checks
+ * whether the old wd -> path mapping is still a reachable directory. For
+ * IN_MOVE_SELF, even a reachable old path is not enough to prove identity: the
+ * watched object may have moved while another directory was created at the old
+ * location. Until the backend stores stronger identity data, the watch remains
+ * STALE and Alfred logs an explicit failure instead of inventing raw Alfred
+ * events or semantic core events.
+ */
+static void backend_resync_watch(inotify_backend_context_t *ctx,
+                                 int wd,
+                                 const char *reason)
+{
+    if (ctx == NULL || reason == NULL)
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, wd);
+
+    if (path == NULL) {
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path= reason=%s error=missing-watch",
+                     wd,
+                     reason);
+        return;
+    }
+
+    if (watcher_get_state(&ctx->runtime->watchers, wd) !=
+        WATCHER_STATE_STALE) {
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=not-stale",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
+                 wd,
+                 path,
+                 reason);
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          wd,
+                          WATCHER_STATE_RESYNCING) != 0) {
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=set-resyncing",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    struct stat st;
+
+    if (stat(path, &st) != 0) {
+        int saved_errno = errno;
+
+        watcher_set_state(&ctx->runtime->watchers,
+                          wd,
+                          WATCHER_STATE_STALE);
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s errno=%d (%s)",
+                     wd,
+                     path,
+                     reason,
+                     saved_errno,
+                     strerror(saved_errno));
+        return;
+    }
+
+    if (!S_ISDIR(st.st_mode)) {
+        watcher_set_state(&ctx->runtime->watchers,
+                          wd,
+                          WATCHER_STATE_STALE);
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=not-directory",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          wd,
+                          WATCHER_STATE_STALE) != 0) {
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=set-stale",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=identity-unknown",
+                 wd,
+                 path,
+                 reason);
 }
 
 /* ============================================================================

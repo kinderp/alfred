@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after adding the first
+  conservative `backend_resync_watch()` probe. Comments document why the helper
+  only verifies the old watched path, why failure keeps the watch STALE, and
+  why the backend still avoids raw Alfred or semantic core events during resync
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`, and
   `tests/watcher/test_watcher_state.c` after adding

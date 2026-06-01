@@ -1526,8 +1526,28 @@ secondo motore semantico parallelo al core.
 
 #### Output della v0
 
-La v0 dovrebbe produrre solo diagnostica backend e mutazioni della watcher
-table:
+La v0 deve produrre solo diagnostica backend e mutazioni della watcher table.
+Il primo pezzo implementato e' volutamente piccolo: dopo `IN_MOVE_SELF`, il
+backend marca il watch `STALE` e chiama `backend_resync_watch()` come probe
+conservativo sul singolo `wd`.
+
+Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
+produce raw Alfred. Controlla solo se il vecchio path associato al watch esiste
+ancora ed e' una directory ispezionabile. Questa verifica pero' non e' una
+prova di identita': dopo `IN_MOVE_SELF` un altro processo potrebbe ricreare una
+directory con lo stesso vecchio path mentre il watch kernel continua a riferirsi
+all'oggetto spostato. Per questo il probe non riporta ancora il watch a
+`VALID`; se non puo' provare l'identita' del path, lascia il watch `STALE` e
+scrive `WATCH_RESYNC_FAILED`.
+
+Questo comportamento e' importante per il caso normale di root spostata:
+`IN_MOVE_SELF` dice che l'oggetto osservato e' stato mosso, ma non fornisce il
+nuovo path. Se Alfred cercasse di "indovinare" la destinazione, rischierebbe di
+produrre una relocation falsa. La v0 preferisce quindi una diagnostica chiara:
+il vecchio mapping non e' piu' affidabile e la recovery completa resta un passo
+successivo.
+
+Log diagnostici previsti dalla v0:
 
 ```text
 WATCH_RESYNC_BEGIN path=...
@@ -1537,9 +1557,11 @@ WATCH_RESYNC_FAILED path=...
 WATCH_RESYNC_END path=...
 ```
 
-Questi nomi sono proposte, non ancora API stabile. La regola importante e':
-nessun raw Alfred sintetico e nessun evento core fino a quando non decidiamo un
-contratto esplicito per gli eventi ricostruiti.
+`WATCH_RESYNC_BEGIN` e `WATCH_RESYNC_FAILED` sono ora usati dal probe minimo.
+`WATCH_RESYNC_END`, `WATCH_RESYNC_REPAIRED` e `WATCH_RESYNC_STALE` restano nomi
+proposti per la fase scanner-based. La regola importante rimane: nessun raw
+Alfred sintetico e nessun evento core fino a quando non decidiamo un contratto
+esplicito per gli eventi ricostruiti.
 
 Prima della diagnostica completa, la watcher table espone un piccolo building
 block: `watcher_count_state()`. Questa funzione permette al backend di contare
@@ -1565,8 +1587,8 @@ resync attraversi direttamente `watcher_table_t.items`.
 
 | Condizione | Stato prima | Azione v0 | Stato dopo |
 | --- | --- | --- | --- |
-| path del watch esiste ed e' directory accessibile | `STALE` | scan directory-only, reinstallare watch mancanti, log diagnostico | `VALID` se lo scan termina senza errori duri |
-| path del watch non esiste piu' | `STALE` | log diagnostico, attendere o forzare cleanup secondo policy | `REMOVED` se il watch non e' piu' utile, altrimenti `STALE` |
+| path del watch esiste ed e' directory accessibile | `STALE` | probe minimo: verifica path ma non puo' provare l'identita' dopo `IN_MOVE_SELF` | resta `STALE` |
+| path del watch non esiste piu' | `STALE` | probe minimo: `WATCH_RESYNC_BEGIN`, verifica path, `WATCH_RESYNC_FAILED` | resta `STALE` |
 | path esiste ma scan fallisce sulla root | `STALE` | log errore/recovery fallita | `STALE` |
 | directory figlia sparisce durante scan | `RESYNCING` | saltare la figlia e continuare | resta `RESYNCING`, poi `VALID` se non ci sono errori duri |
 | overflow globale | qualsiasi | marcare stato non affidabile e rimandare recovery ampia | `STALE` su scope scelto |
@@ -1577,7 +1599,7 @@ resync attraversi direttamente `watcher_table_t.items`.
 ```mermaid
 flowchart TD
     A["watch in stato STALE"] --> B{"esiste una root affidabile?"}
-    B -- "no" --> C["resta STALE<br/>log diagnostico"]
+    B -- "no" --> C["resta STALE<br/>WATCH_RESYNC_FAILED"]
     B -- "si" --> D["set RESYNCING"]
     D --> E["fs_scan_tree()<br/>directory-only"]
     E --> F{"errore duro sulla root?"}
@@ -1587,6 +1609,12 @@ flowchart TD
     I -- "no" --> G
     I -- "si" --> J["set VALID<br/>WATCH_RESYNC_END"]
 ```
+
+Nel codice corrente e' implementata solo la parte iniziale del flusso:
+`STALE -> RESYNCING -> STALE` con `WATCH_RESYNC_FAILED` se il vecchio path non
+e' piu' raggiungibile oppure se e' raggiungibile ma l'identita' non e'
+dimostrabile. Il blocco `fs_scan_tree()`, l'aggiunta dei watch mancanti e la
+transizione sicura a `VALID` restano nella roadmap.
 
 #### Regola per tornare VALID
 

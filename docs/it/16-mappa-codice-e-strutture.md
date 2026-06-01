@@ -671,8 +671,13 @@ Il diagramma completo delle transizioni tra `REMOVED`, `VALID`, `STALE` e
 dei watch". Qui basta ricordare il confine di responsabilita': `watcher.c`
 memorizza lo stato, mentre il backend decide quando cambiare stato. La
 transizione `IN_MOVE_SELF -> STALE` e la transizione
-`IN_DELETE_SELF -> STALE -> REMOVED` sono gia' collegate al runtime; le policy
-per `IN_UNMOUNT`, `IN_Q_OVERFLOW` e resync completo restano da progettare.
+`IN_DELETE_SELF -> STALE -> REMOVED` sono gia' collegate al runtime. Dopo
+`IN_MOVE_SELF`, il backend usa anche il primo probe `backend_resync_watch()`:
+porta temporaneamente il watch a `RESYNCING`, verifica il vecchio path e poi
+torna a `STALE` quando non puo' provare l'identita' dell'oggetto osservato.
+Questa e' ancora diagnostica backend, non semantica core. Le policy per
+`IN_UNMOUNT`, `IN_Q_OVERFLOW`, prova di identita' e resync completo restano da
+progettare.
 
 ## Inserimento di un watch
 
