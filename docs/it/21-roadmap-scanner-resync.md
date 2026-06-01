@@ -894,16 +894,60 @@ resta rimandato.
 
 ### Fase 4 - File e tipi speciali
 
-Stato: parziale.
+Stato: implementato per il contratto iniziale.
 
-`include_files = 1` e' gia' coperto dal test base. Restano da decidere:
+`include_files = 1` e' gia' coperto dal test base. Ora e' coperto anche
+`include_other = 1` usando una FIFO creata con `mkfifo`.
 
-- se testare `include_other`
+`include_other` serve a emettere entry che non sono:
+
+- directory
+- file regolari
+- symlink
+
+Esempi:
+
+- FIFO / named pipe
+- socket Unix
+- device file
+- altri tipi speciali del filesystem
+
+Il test automatico usa una FIFO:
+
+```bash
+mkfifo "$TEST_ROOT/pipe.fifo"
+```
+
+Motivi:
+
+- non richiede privilegi root
+- e' stabile in un test locale
+- viene classificata come `FS_SCAN_OTHER`
+- non richiede di aprire o scrivere nella FIFO
+
+Decisioni fissate:
+
+- `include_other = 0` resta il default
+- `include_other = 1` emette la FIFO come `FS_SCAN_OTHER`
+- per il resync inotify, i tipi speciali non sono la parte piu' importante
+- per una futura modalita' scan/index, sapere che esistono puo' essere utile
+
+Restano da decidere:
+
 - come trattare socket, fifo e device
 - se questi tipi servono al resync o solo a una futura indicizzazione
 
-Per il resync dei watch inotify, le directory sono la parte critica. File e tipi
-speciali diventano importanti se Alfred espone una modalita' di scan/index.
+Per ora non testiamo socket e device file. I socket richiedono piu' setup nel
+test, mentre i device file possono richiedere privilegi o dipendere dalla
+piattaforma. La FIFO basta per fissare il contratto pubblico:
+
+```text
+tipo non directory/file/symlink -> FS_SCAN_OTHER
+```
+
+Per il resync dei watch inotify, le directory restano la parte critica. File e
+tipi speciali diventano importanti soprattutto se Alfred espone una modalita'
+di scan/index.
 
 ### Fase 5 - Integrazione con watch manager
 

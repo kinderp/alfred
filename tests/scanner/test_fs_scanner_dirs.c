@@ -4,7 +4,8 @@
  * The shell wrapper builds a small tree, then this program verifies the
  * scanner contracts that are easiest to check without starting the full Alfred
  * runtime: default directory-only output, root emission, depth limits, entry
- * limits, file inclusion, symlink exclusion, and explicit symlink emission.
+ * limits, file inclusion, symlink exclusion, explicit symlink emission, and
+ * special entry classification.
  */
 
 #include "fs_scanner.h"
@@ -24,6 +25,7 @@ typedef struct {
     int saw_symlink;
     int saw_symlink_as_dir;
     int saw_file;
+    int saw_fifo;
     int remove_volatile;
     int callback_failed;
 } scan_seen_t;
@@ -81,6 +83,11 @@ static int on_entry(const fs_scan_entry_t *entry, void *userdata)
 
     if (strstr(entry->path, "file.txt") != NULL)
         seen->saw_file = 1;
+
+    if (strstr(entry->path, "pipe.fifo") != NULL &&
+        entry->type == FS_SCAN_OTHER) {
+        seen->saw_fifo = 1;
+    }
 
     return 0;
 }
@@ -231,10 +238,10 @@ static int expect_include_files(const char *root)
     if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
         !seen.saw_volatile || !seen.saw_file || seen.saw_symlink ||
         seen.saw_symlink_as_dir ||
-        seen.count != 6) {
+        seen.saw_fifo || seen.count != 6) {
         fprintf(stderr,
                 "include_files mismatch count=%d root=%d a=%d b=%d c=%d "
-                "volatile=%d file=%d symlink=%d symlink_dir=%d\n",
+                "volatile=%d file=%d symlink=%d symlink_dir=%d fifo=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
@@ -243,7 +250,8 @@ static int expect_include_files(const char *root)
                 seen.saw_volatile,
                 seen.saw_file,
                 seen.saw_symlink,
-                seen.saw_symlink_as_dir);
+                seen.saw_symlink_as_dir,
+                seen.saw_fifo);
         return 1;
     }
 
@@ -264,10 +272,11 @@ static int expect_include_symlinks(const char *root)
 
     if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
         !seen.saw_volatile || !seen.saw_symlink ||
-        seen.saw_symlink_as_dir || seen.saw_file || seen.count != 6) {
+        seen.saw_symlink_as_dir || seen.saw_file || seen.saw_fifo ||
+        seen.count != 6) {
         fprintf(stderr,
                 "include_symlinks mismatch count=%d root=%d a=%d b=%d c=%d "
-                "volatile=%d symlink=%d symlink_dir=%d file=%d\n",
+                "volatile=%d symlink=%d symlink_dir=%d file=%d fifo=%d\n",
                 seen.count,
                 seen.saw_root,
                 seen.saw_a,
@@ -276,7 +285,42 @@ static int expect_include_symlinks(const char *root)
                 seen.saw_volatile,
                 seen.saw_symlink,
                 seen.saw_symlink_as_dir,
-                seen.saw_file);
+                seen.saw_file,
+                seen.saw_fifo);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_include_other(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_other = 1;
+    memset(&seen, 0, sizeof(seen));
+
+    if (run_scan(root, &opts, &seen) != 0)
+        return 1;
+
+    if (!seen.saw_root || !seen.saw_a || !seen.saw_b || !seen.saw_c ||
+        !seen.saw_volatile || !seen.saw_fifo || seen.saw_file ||
+        seen.saw_symlink || seen.saw_symlink_as_dir || seen.count != 6) {
+        fprintf(stderr,
+                "include_other mismatch count=%d root=%d a=%d b=%d c=%d "
+                "volatile=%d fifo=%d file=%d symlink=%d symlink_dir=%d\n",
+                seen.count,
+                seen.saw_root,
+                seen.saw_a,
+                seen.saw_b,
+                seen.saw_c,
+                seen.saw_volatile,
+                seen.saw_fifo,
+                seen.saw_file,
+                seen.saw_symlink,
+                seen.saw_symlink_as_dir);
         return 1;
     }
 
@@ -316,6 +360,7 @@ int main(int argc, char **argv)
         expect_max_entries_two(argv[1]) != 0 ||
         expect_include_files(argv[1]) != 0 ||
         expect_include_symlinks(argv[1]) != 0 ||
+        expect_include_other(argv[1]) != 0 ||
         expect_removed_child_directory_is_skipped(argv[1]) != 0) {
         return 1;
     }

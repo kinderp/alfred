@@ -40,6 +40,13 @@ Stati usati:
 ## Aggiornamenti recenti
 
 - `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: completato il contratto iniziale dei tipi pubblici
+  dello scanner con `include_other = 1`. Il test usa una FIFO creata con
+  `mkfifo`, verificata come `FS_SCAN_OTHER`, per evitare dipendenze da privilegi
+  o setup piu' fragile richiesti da device file e socket.
+- `tests/scanner/test_fs_scanner_dirs.c`,
   `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
   `14-scenari-test.md`: avviata la fase symlink dello scanner. Il test ora
   copre `include_symlinks = 1`, che emette il link simbolico come
