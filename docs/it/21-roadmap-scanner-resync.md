@@ -1239,7 +1239,8 @@ conosce semantica.
 
 ### Fase 6 - Resync dopo eventi critici
 
-Stato: da progettare dopo la policy errori.
+Stato: progettazione del modello `stale` avviata; nessun cambio runtime ancora
+implementato.
 
 Trigger possibili:
 
@@ -1258,6 +1259,129 @@ Uso possibile:
 Per `IN_MOVE_SELF` resta il problema principale: senza un nuovo path non
 possiamo inventare una relocation semantica. Lo scanner puo' aiutare solo se
 abbiamo una root affidabile da cui ripartire.
+
+#### Perche' serve uno stato stale
+
+La tabella dei watch non contiene solo dati tecnici. In pratica e' la memoria
+con cui Alfred ricostruisce il path completo degli eventi:
+
+```text
+wd -> path osservato
+evento inotify: wd + name
+path ricostruito: path osservato + name
+```
+
+Se il path associato a un watch non e' piu' affidabile, Alfred rischia di
+produrre eventi formalmente validi ma riferiti a un percorso sbagliato. Questo
+puo' accadere soprattutto con `IN_MOVE_SELF`: il watch puo' restare associato
+allo stesso oggetto del filesystem, ma il path memorizzato nella tabella puo'
+essere quello vecchio.
+
+Per questo la recovery non deve partire dalla domanda:
+
+```text
+quale evento semantico emetto?
+```
+
+ma dalla domanda:
+
+```text
+posso ancora fidarmi dello stato backend?
+```
+
+Lo stato `stale` rappresenta proprio questa situazione: Alfred sa che un watch
+o una subtree potrebbero non descrivere piu' correttamente il filesystem, ma non
+ha ancora abbastanza informazioni per trasformare il fatto in un evento utente
+preciso.
+
+#### Stati concettuali di un watch
+
+Per progettare il resync conviene distinguere almeno questi stati logici:
+
+| Stato | Significato | Uso previsto |
+| --- | --- | --- |
+| `valid` | Il mapping `wd -> path` e' considerato affidabile | Gli eventi figli possono essere ricostruiti normalmente |
+| `removed` | Il watch non e' piu' attivo ed e' stato tolto dalla tabella | Nessun evento futuro deve usare quel `wd` |
+| `stale` | Il watch o la subtree sono sospetti: il mapping potrebbe essere falso | Bloccare o marcare gli eventi successivi finche' una policy non decide cosa fare |
+| `resyncing` | Alfred sta confrontando filesystem e stato interno | Stato temporaneo durante una futura procedura di recovery |
+
+Questi stati non sono ancora strutture C nel codice. Sono il modello che guida
+la prossima implementazione. La scelta conservativa e' non aggiungere subito un
+campo alla tabella dei watch finche' non abbiamo deciso quali eventi devono
+leggerlo e quali test devono fissarne il comportamento.
+
+#### Differenza tra removed e stale
+
+`removed` significa: il watch non esiste piu' per Alfred.
+
+Esempio:
+
+```text
+IN_IGNORED
+    -> watcher_remove(wd)
+    -> quel wd non deve piu' essere usato
+```
+
+`stale` significa: il watch potrebbe esistere ancora, ma il path che Alfred
+associa a quel watch potrebbe essere sbagliato o incompleto.
+
+Esempio:
+
+```text
+IN_MOVE_SELF sul path /tmp/root
+    -> l'oggetto osservato e' stato spostato
+    -> il kernel non dice dove
+    -> wd puo' ancora rappresentare lo stesso inode
+    -> /tmp/root non e' piu' un path affidabile
+```
+
+Questa distinzione e' importante per gli studenti: togliere un watch e marcare
+un watch come non affidabile non sono la stessa operazione. La prima pulisce
+stato. La seconda preserva informazione diagnostica per decidere una recovery.
+
+#### Tabella iniziale dei trigger
+
+| Trigger | Problema principale | Azione conservativa candidata |
+| --- | --- | --- |
+| `IN_DELETE_SELF` | Il path osservato direttamente e' stato cancellato | Marcare il watch come non piu' affidabile, attendere `IN_IGNORED` per cleanup, valutare in futuro `ALFRED_RAW_DELETE` sul path osservato |
+| `IN_MOVE_SELF` | Il path osservato e' stato spostato senza destinazione | Marcare stale, non emettere move/rename/relocated, valutare resync da una root superiore affidabile |
+| `IN_UNMOUNT` | Il filesystem osservato non e' piu' disponibile | Marcare la subtree non affidabile e produrre diagnostica backend |
+| `IN_Q_OVERFLOW` | La coda ha perso eventi, quindi lo stream e' incompleto | Marcare lo stato globale o la subtree come stale e progettare una procedura di resync |
+
+Questa tabella non decide ancora la semantica finale. Decide il primo livello:
+quando il backend puo' continuare a fidarsi della propria tabella e quando deve
+fermarsi, diagnosticare o ricostruire.
+
+#### Ruolo dello scanner nel resync
+
+Lo scanner puo' aiutare solo se esiste una root ancora affidabile da cui
+ripartire. Per esempio:
+
+```text
+root affidabile: /tmp
+watch stale:     /tmp/project
+scanner da /tmp:
+    ritrova directory e file visibili
+    permette di confrontare stato reale e stato interno
+```
+
+Se invece la root stessa non e' piu' raggiungibile o e' stata spostata senza
+nuovo path, lo scanner non puo' inventare l'informazione mancante. In quel caso
+la risposta corretta puo' essere solo diagnostica, invalidazione dello stato o
+richiesta di riconfigurazione da parte dell'utente/applicazione.
+
+#### Prossimo micro-step di codice
+
+Il primo cambio di codice non dovrebbe ancora emettere nuovi eventi semantici.
+Il passo piu' prudente e':
+
+1. aggiungere un modo interno per rappresentare `stale` nella tabella watch o
+   in una struttura collegata
+2. marcare `IN_MOVE_SELF` come causa di stato non affidabile
+3. verificare con un test backend che gli eventi successivi non vengano
+   presentati come se il path fosse certamente corretto
+4. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica o una
+   futura API di resync
 
 ### Fase 7 - CLI di indicizzazione
 

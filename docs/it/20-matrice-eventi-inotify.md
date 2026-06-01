@@ -284,6 +284,13 @@ directory spostata rischiano quindi di essere ricostruiti con un path non piu'
 vero. Questo rende `IN_MOVE_SELF` un tema di backend state/resync prima ancora
 che un tema di semantica utente.
 
+La roadmap dello scanner introduce per questo il modello concettuale di watch
+`stale`: un watch ancora presente ma non piu' pienamente affidabile. Il punto
+importante e' che `stale` non significa `removed`. Un watch rimosso non deve
+piu' essere usato; un watch stale, invece, conserva informazione diagnostica ma
+richiede una policy di recovery prima di ricostruire path e semantica con
+sicurezza.
+
 Il test backend `test_self_events_root_watch.sh` fissa per ora il comportamento
 osservativo: controlla il raw log per gli eventi `_SELF`/`IN_IGNORED` e verifica
 che Alfred distingue gli eventi sul path osservato dagli eventi sui figli.

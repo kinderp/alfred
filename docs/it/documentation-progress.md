@@ -39,6 +39,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md` e `20-matrice-eventi-inotify.md`: avviata la
+  progettazione della Fase 6 sul resync dopo eventi critici. La documentazione
+  introduce il modello concettuale di watch `stale`, distingue `valid`,
+  `removed`, `stale` e `resyncing`, e spiega perche' `IN_MOVE_SELF`,
+  `IN_DELETE_SELF`, `IN_UNMOUNT` e `IN_Q_OVERFLOW` devono essere trattati prima
+  come problemi di affidabilita' dello stato backend e solo dopo come possibili
+  eventi semantici.
 - `modules/inotify/src/watch_manager.c`,
   `modules/inotify/include/watch_manager.h`, `05-modulo-inotify.md`,
   `15-todo-switch-core.md`, `21-roadmap-scanner-resync.md` e
