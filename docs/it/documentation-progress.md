@@ -43,6 +43,14 @@ Stati usati:
   `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunto
+  `watcher_foreach_state()` come iteratore read-only sui watch attivi in uno
+  stato richiesto. Il test copre filtro per stato, ordine sui wd sparsi,
+  esclusione degli slot rimossi, stop anticipato della callback e input
+  invalidi.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunto
   `watcher_count_state()` come building block diagnostico per resync v0. La
   funzione conta solo watch attivi nello stato richiesto, preparando futuri log
   sul numero di watch `STALE` o `RESYNCING`.

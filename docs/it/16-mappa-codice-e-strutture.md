@@ -643,14 +643,22 @@ Campi:
 | --- | --- | --- | --- |
 | `WATCHER_STATE_REMOVED` | nessun watch attivo nello slot | `watcher_init()`, `watcher_expand()`, `watcher_remove()` | `watcher_get_state()` per slot assenti o rimossi |
 | `WATCHER_STATE_VALID` | mapping `wd -> path` affidabile | `watcher_store()`, `watcher_set_state()` | futuro percorso normale di ricostruzione path |
-| `WATCHER_STATE_STALE` | mapping presente ma non pienamente affidabile | `watcher_set_state()` | `watcher_is_stale()`, `watcher_count_state()`, futura gestione resync |
-| `WATCHER_STATE_RESYNCING` | recovery in corso sulla watch/subtree | `watcher_set_state()` | `watcher_count_state()`, futura procedura di resync |
+| `WATCHER_STATE_STALE` | mapping presente ma non pienamente affidabile | `watcher_set_state()` | `watcher_is_stale()`, `watcher_count_state()`, `watcher_foreach_state()`, futura gestione resync |
+| `WATCHER_STATE_RESYNCING` | recovery in corso sulla watch/subtree | `watcher_set_state()` | `watcher_count_state()`, `watcher_foreach_state()`, futura procedura di resync |
 
 `watcher_count_state()` conta solo gli slot attivi in uno stato specifico. Per
 questo `WATCHER_STATE_REMOVED` ritorna sempre 0: gli slot rimossi non sono watch
 vivi, anche se internamente lo stato rimosso e' rappresentato dal valore zero.
 Questa funzione prepara diagnostiche future del tipo "quanti watch sono stale?"
 senza esporre l'array interno della watcher table.
+
+`watcher_foreach_state()` e' il passo successivo: permette di visitare gli slot
+attivi in uno stato specifico passando una `watcher_entry_t const *` a una
+callback. La callback puo' leggere `wd`, `path` e `state`, ma non puo' mutare la
+tabella attraverso quell'entry. Se la callback ritorna un valore non zero,
+l'iterazione si ferma e quel valore viene propagato al chiamante. Questo prepara
+il futuro resync: il backend potra' visitare tutti i watch `STALE` senza
+conoscere `items`, `capacity` o il layout interno della watcher table.
 
 La scelta architetturale e' mettere questo stato nella watcher table invece che
 in una tabella separata. Il motivo e' pratico: quando arriva un evento inotify,

@@ -29,6 +29,11 @@ Latest refresh:
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`, and
   `tests/watcher/test_watcher_state.c` after adding
+  `watcher_foreach_state()`. Comments document the read-only iterator contract,
+  state filtering, early callback stop, and why REMOVED is not iterable
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding
   `watcher_count_state()`. Comments now document that state counts are active
   watch diagnostics for future resync policy and that REMOVED slots are not
   counted as live watches

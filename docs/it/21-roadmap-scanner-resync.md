@@ -1553,6 +1553,14 @@ WATCH_RESYNC_BEGIN stale=3 resyncing=0
 Il conteggio riguarda solo watch attivi. `REMOVED` non viene contato perche' uno
 slot rimosso non rappresenta piu' un watch vivo da riparare.
 
+Il secondo building block e' `watcher_foreach_state()`. Dove
+`watcher_count_state()` risponde alla domanda "quanti watch sono in questo
+stato?", `watcher_foreach_state()` risponde alla domanda "quali watch sono in
+questo stato?". La funzione visita solo slot attivi nello stato richiesto,
+passa una entry read-only alla callback e permette alla callback di fermare
+l'iterazione con un ritorno non-zero. Questo evita che il futuro codice di
+resync attraversi direttamente `watcher_table_t.items`.
+
 #### Tabella decisionale v0
 
 | Condizione | Stato prima | Azione v0 | Stato dopo |

@@ -399,6 +399,62 @@ size_t watcher_count_state(const watcher_table_t *wt,
 }
 
 /*
+ * watcher_foreach_state - visit active watcher entries in one state
+ * @wt: table to inspect
+ * @state: reliability state to visit
+ * @callback: function invoked for each matching entry
+ * @userdata: opaque pointer passed to @callback
+ *
+ * Future resync code needs to inspect stale or resyncing watches without
+ * reaching into watcher_table_t internals. The callback receives a const entry
+ * so it can read wd, path, and state, but cannot mutate the table while it is
+ * being iterated through this API.
+ *
+ * REMOVED is not iterable because removed slots are inactive and do not
+ * represent live watches. If @callback returns nonzero, iteration stops early
+ * and that nonzero value is returned to the caller.
+ *
+ * Return: number of visited entries on success, -1 on invalid input, or the
+ * callback's nonzero return value when iteration is stopped early.
+ */
+int watcher_foreach_state(const watcher_table_t *wt,
+                          watcher_state_t state,
+                          watcher_iter_fn callback,
+                          void *userdata)
+{
+    if (wt == NULL || callback == NULL)
+        return -1;
+
+    if (!watcher_state_is_valid(state))
+        return -1;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    int visited = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (slot->state != state)
+            continue;
+
+        int rc = callback(slot, userdata);
+
+        if (rc != 0)
+            return rc;
+
+        visited++;
+    }
+
+    return visited;
+}
+
+/*
  * watcher_dump - print the table to stdout for manual debugging
  * @wt: table to inspect
  */

@@ -61,6 +61,8 @@ typedef struct {
     size_t capacity;
 } watcher_table_t;
 
+typedef int (*watcher_iter_fn)(const watcher_entry_t *entry, void *userdata);
+
 int watcher_init(watcher_table_t *wt, size_t capacity);
 void watcher_destroy(watcher_table_t *wt);
 
@@ -74,5 +76,9 @@ watcher_state_t watcher_get_state(const watcher_table_t *wt, int wd);
 int watcher_is_stale(const watcher_table_t *wt, int wd);
 size_t watcher_count(const watcher_table_t *wt);
 size_t watcher_count_state(const watcher_table_t *wt, watcher_state_t state);
+int watcher_foreach_state(const watcher_table_t *wt,
+                          watcher_state_t state,
+                          watcher_iter_fn callback,
+                          void *userdata);
 
 #endif

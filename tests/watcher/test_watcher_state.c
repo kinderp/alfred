@@ -12,6 +12,33 @@
 #include <assert.h>
 #include <string.h>
 
+typedef struct iter_capture {
+    int visited;
+    int stop_after;
+    int wds[8];
+    const char *paths[8];
+} iter_capture_t;
+
+static int capture_entry(const watcher_entry_t *entry, void *userdata)
+{
+    iter_capture_t *capture = (iter_capture_t *)userdata;
+
+    assert(entry != NULL);
+    assert(capture != NULL);
+    assert(capture->visited < 8);
+
+    capture->wds[capture->visited] = entry->wd;
+    capture->paths[capture->visited] = entry->path;
+    capture->visited++;
+
+    if (capture->stop_after > 0 &&
+        capture->visited >= capture->stop_after) {
+        return 77;
+    }
+
+    return 0;
+}
+
 static void test_store_starts_valid(void)
 {
     watcher_table_t table;
@@ -193,6 +220,113 @@ static void test_count_state_counts_only_active_entries(void)
     watcher_destroy(&table);
 }
 
+/*
+ * test_foreach_state_visits_matching_active_entries - iterate by state
+ *
+ * Future resync code will need to visit stale watches one by one. The iterator
+ * must filter by state, skip removed slots, preserve sparse wd indexing order,
+ * and pass read-only entries to the callback.
+ */
+static void test_foreach_state_visits_matching_active_entries(void)
+{
+    watcher_table_t table;
+    iter_capture_t capture;
+
+    memset(&capture, 0, sizeof(capture));
+
+    assert(watcher_init(&table, 1) == 0);
+    assert(watcher_store(&table, 2, "/tmp/a") == 0);
+    assert(watcher_store(&table, 5, "/tmp/b") == 0);
+    assert(watcher_store(&table, 9, "/tmp/c") == 0);
+    assert(watcher_set_state(&table, 2, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 9, WATCHER_STATE_STALE) == 0);
+
+    assert(watcher_foreach_state(&table,
+                                 WATCHER_STATE_STALE,
+                                 capture_entry,
+                                 &capture) == 2);
+
+    assert(capture.visited == 2);
+    assert(capture.wds[0] == 2);
+    assert(capture.wds[1] == 9);
+    assert(strcmp(capture.paths[0], "/tmp/a") == 0);
+    assert(strcmp(capture.paths[1], "/tmp/c") == 0);
+
+    watcher_remove(&table, 2);
+    memset(&capture, 0, sizeof(capture));
+
+    assert(watcher_foreach_state(&table,
+                                 WATCHER_STATE_STALE,
+                                 capture_entry,
+                                 &capture) == 1);
+    assert(capture.visited == 1);
+    assert(capture.wds[0] == 9);
+
+    watcher_destroy(&table);
+}
+
+/*
+ * test_foreach_state_can_stop_early - propagate callback stop condition
+ *
+ * Returning a nonzero value from the callback is how future resync code can
+ * stop after the first failure without scanning the rest of the watcher table.
+ */
+static void test_foreach_state_can_stop_early(void)
+{
+    watcher_table_t table;
+    iter_capture_t capture;
+
+    memset(&capture, 0, sizeof(capture));
+    capture.stop_after = 1;
+
+    assert(watcher_init(&table, 1) == 0);
+    assert(watcher_store(&table, 1, "/tmp/a") == 0);
+    assert(watcher_store(&table, 2, "/tmp/b") == 0);
+    assert(watcher_set_state(&table, 1, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 2, WATCHER_STATE_STALE) == 0);
+
+    assert(watcher_foreach_state(&table,
+                                 WATCHER_STATE_STALE,
+                                 capture_entry,
+                                 &capture) == 77);
+    assert(capture.visited == 1);
+    assert(capture.wds[0] == 1);
+
+    watcher_destroy(&table);
+}
+
+/*
+ * test_foreach_state_rejects_invalid_inputs - protect iterator contract
+ *
+ * REMOVED is not iterable because removed slots are not active watches. NULL
+ * table or callback arguments are also programmer errors.
+ */
+static void test_foreach_state_rejects_invalid_inputs(void)
+{
+    watcher_table_t table;
+    iter_capture_t capture;
+
+    memset(&capture, 0, sizeof(capture));
+
+    assert(watcher_init(&table, 1) == 0);
+    assert(watcher_store(&table, 1, "/tmp/a") == 0);
+
+    assert(watcher_foreach_state(NULL,
+                                 WATCHER_STATE_VALID,
+                                 capture_entry,
+                                 &capture) == -1);
+    assert(watcher_foreach_state(&table,
+                                 WATCHER_STATE_VALID,
+                                 NULL,
+                                 &capture) == -1);
+    assert(watcher_foreach_state(&table,
+                                 WATCHER_STATE_REMOVED,
+                                 capture_entry,
+                                 &capture) == -1);
+
+    watcher_destroy(&table);
+}
+
 int main(void)
 {
     test_store_starts_valid();
@@ -200,6 +334,9 @@ int main(void)
     test_remove_clears_state();
     test_invalid_state_changes_fail();
     test_count_state_counts_only_active_entries();
+    test_foreach_state_visits_matching_active_entries();
+    test_foreach_state_can_stop_early();
+    test_foreach_state_rejects_invalid_inputs();
 
     return 0;
 }
