@@ -572,7 +572,7 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
-| `watchers` | tabella `wd -> path` | `watcher_init()`, `watcher_store()`, `watcher_remove()`, `watcher_destroy()` | `watcher_get_path()`, `watcher_exists()` |
+| `watchers` | tabella `wd -> path` e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
 
 ### `watcher_table_t`
 
@@ -606,6 +606,7 @@ Definizione:
 typedef struct {
     int wd;
     int active;
+    watcher_state_t state;
     char path[PATH_MAX];
 } watcher_entry_t;
 ```
@@ -616,7 +617,46 @@ Campi:
 | --- | --- | --- | --- |
 | `wd` | watch descriptor restituito dal kernel | `watcher_store()`, `watcher_remove()` | `watcher_dump()` |
 | `active` | indica se lo slot contiene una mappatura valida | `watcher_store()`, `watcher_remove()`, `watcher_expand()` | `watcher_get_path()`, `watcher_exists()`, `watcher_dump()` |
+| `state` | indica se il mapping e' affidabile, stale o in resync | `watcher_store()`, `watcher_remove()`, `watcher_set_state()` | `watcher_get_state()`, `watcher_is_stale()`, `watcher_dump()` |
 | `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
+
+### `watcher_state_t`
+
+Definizione:
+
+```c
+typedef enum {
+    WATCHER_STATE_REMOVED = 0,
+    WATCHER_STATE_VALID,
+    WATCHER_STATE_STALE,
+    WATCHER_STATE_RESYNCING
+} watcher_state_t;
+```
+
+Questo enum descrive l'affidabilita' del mapping `wd -> path`. Non sostituisce
+`active`: `active` dice se lo slot contiene un watch usabile, mentre `state`
+dice se il path associato a quel watch puo' essere considerato affidabile.
+
+Campi:
+
+| Stato | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `WATCHER_STATE_REMOVED` | nessun watch attivo nello slot | `watcher_init()`, `watcher_expand()`, `watcher_remove()` | `watcher_get_state()` per slot assenti o rimossi |
+| `WATCHER_STATE_VALID` | mapping `wd -> path` affidabile | `watcher_store()`, `watcher_set_state()` | futuro percorso normale di ricostruzione path |
+| `WATCHER_STATE_STALE` | mapping presente ma non pienamente affidabile | `watcher_set_state()` | futura gestione `IN_MOVE_SELF` e resync |
+| `WATCHER_STATE_RESYNCING` | recovery in corso sulla watch/subtree | `watcher_set_state()` | futura procedura di resync |
+
+La scelta architetturale e' mettere questo stato nella watcher table invece che
+in una tabella separata. Il motivo e' pratico: quando arriva un evento inotify,
+il backend ha gia' il `wd` e deve fare una sola lookup per ottenere sia il path
+sia la sua affidabilita'. Una tabella separata richiederebbe sincronizzazione
+doppia su add, remove ed espansione della capacita'.
+
+Il diagramma completo delle transizioni tra `REMOVED`, `VALID`, `STALE` e
+`RESYNCING` e' nella roadmap scanner/resync, nella sezione "Diagramma di stato
+dei watch". Qui basta ricordare il confine di responsabilita': `watcher.c`
+memorizza lo stato, mentre il backend decidera' quando cambiare stato in
+risposta a `IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT` o `IN_Q_OVERFLOW`.
 
 ## Inserimento di un watch
 
@@ -653,6 +693,7 @@ items[3].active = 0
 dopo watcher_store():
 items[3].wd     = 3
 items[3].active = 1
+items[3].state  = WATCHER_STATE_VALID
 items[3].path   = "/tmp/progetto"
 count           = count + 1
 ```
@@ -755,11 +796,13 @@ Effetto sulla struttura dati:
 ```text
 prima:
 items[wd].active = 1
+items[wd].state  = WATCHER_STATE_STALE
 items[wd].path   = "/tmp/progetto"
 
 dopo watcher_remove():
 items[wd].active = 0
 items[wd].wd     = -1
+items[wd].state  = WATCHER_STATE_REMOVED
 items[wd].path   = ""
 count            = count - 1
 ```

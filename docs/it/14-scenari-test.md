@@ -305,6 +305,22 @@ filesystem che useremo per resync e, in futuro, indicizzazione.
 | --- | --- | --- | --- |
 | scanner directories and options | `tests/scanner/test_fs_scanner_dirs.sh` | default directory-only, `emit_root=0`, `max_depth=1`, `max_entries=2`, `include_files=1`, `include_symlinks=1`, `include_other=1`, symlink non seguito, directory figlia rimossa durante lo scan | fissa il contratto iniziale dello scanner, delle opzioni pubbliche e della prima policy sugli errori parziali prima di usarlo per resync |
 
+## Test watcher table
+
+La suite watcher si esegue con:
+
+```bash
+make test-watcher
+```
+
+Questi test non avviano Alfred e non usano eventi reali del kernel. Servono a
+verificare direttamente la struttura dati che conserva il mapping `wd -> path`
+e lo stato di affidabilita' del watch.
+
+| Scenario | Script | Cosa controlla | Perche' serve |
+| --- | --- | --- | --- |
+| watcher reliability states | `tests/watcher/test_watcher_state.c` | store iniziale `VALID`, transizioni a `STALE` e `RESYNCING`, remove a `REMOVED`, rifiuto di `REMOVED` su slot attivo | prepara la futura gestione `IN_MOVE_SELF` e resync senza dipendere da timing o dettagli del kernel |
+
 Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
 `IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,
 numero di hard link, proprietario e gruppo. Non li testiamo tutti subito perche'

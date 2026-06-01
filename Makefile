@@ -225,6 +225,9 @@ test-backend-diagnostics:
 test-scanner:
 	cd tests/scanner && bash run_all.sh
 
+test-watcher:
+	cd tests/watcher && bash run_all.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -303,6 +306,7 @@ banner:
 	test \
 	test-core \
 	test-scanner \
+	test-watcher \
 	test-backend-diagnostics \
 	valgrind \
 	gdb \

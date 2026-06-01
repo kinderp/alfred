@@ -26,6 +26,15 @@ runtime architecture.
 
 Latest refresh:
 
+- expanded comments in `tests/watcher/test_watcher_state.c` so each watcher
+  state transition is documented as part of the future IN_MOVE_SELF/resync
+  contract, including the distinction between stale active mappings and removed
+  slots
+- refreshed `modules/inotify/include/watcher.h` and
+  `modules/inotify/src/watcher.c` for the first stale-watch data model step.
+  Comments now explain why reliability state lives next to the wd -> path
+  mapping, how removed differs from stale, and why runtime semantics are still
+  deferred to future backend policy
 - removed the transitional watch-manager recursive discovery API from
   `modules/inotify/src/watch_manager.c` and
   `modules/inotify/include/watch_manager.h`. Comments now describe

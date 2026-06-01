@@ -1214,6 +1214,7 @@ Nel progetto sono phony target come:
 - `test-core`
 - `test-backend-diagnostics`
 - `test-scanner`
+- `test-watcher`
 - `format`
 - `scan`
 - `tidy`
@@ -1268,6 +1269,33 @@ Nel primo passo lo scanner visita directory, non segue symlink e usa una
 callback con `userdata`. Il test compila un piccolo helper C in
 `tests/scanner/` e lo esegue su un albero temporaneo.
 
+### test-watcher
+
+```bash
+make test-watcher
+```
+
+Esegue i test diretti della watcher table:
+
+```text
+tests/watcher/
+```
+
+Questa suite non avvia Alfred e non legge eventi reali dal kernel. Compila un
+piccolo test C contro `modules/inotify/src/watcher.c` e verifica il contratto
+della struttura dati `watcher_table_t`.
+
+Il primo scenario controlla lo stato di affidabilita' dei watch:
+
+- `watcher_store()` crea uno slot `VALID`
+- `watcher_set_state()` puo' marcare uno slot `STALE` o `RESYNCING`
+- `watcher_remove()` riporta lo slot a `REMOVED`
+- uno slot rimosso non viene considerato stale
+
+Questo target serve alla futura gestione `IN_MOVE_SELF` e resync. Lo teniamo
+separato dai test backend perche' qui non vogliamo testare timing o dettagli
+del kernel: vogliamo fissare il contratto interno della tabella.
+
 ### tidy
 
 ```bash
@@ -1289,6 +1317,7 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
 | Eseguire test scanner filesystem | `make test-scanner` |
+| Eseguire test watcher table | `make test-watcher` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
 | Formattare codice | `make format` |

@@ -1305,10 +1305,58 @@ Per progettare il resync conviene distinguere almeno questi stati logici:
 | `stale` | Il watch o la subtree sono sospetti: il mapping potrebbe essere falso | Bloccare o marcare gli eventi successivi finche' una policy non decide cosa fare |
 | `resyncing` | Alfred sta confrontando filesystem e stato interno | Stato temporaneo durante una futura procedura di recovery |
 
-Questi stati non sono ancora strutture C nel codice. Sono il modello che guida
-la prossima implementazione. La scelta conservativa e' non aggiungere subito un
-campo alla tabella dei watch finche' non abbiamo deciso quali eventi devono
-leggerlo e quali test devono fissarne il comportamento.
+Questi stati ora hanno un primo supporto nella watcher table tramite
+`watcher_state_t`. La scelta fatta e' l'opzione 1 discussa nella progettazione:
+lo stato di affidabilita' vive accanto al mapping `wd -> path`, dentro
+`watcher_entry_t`.
+
+Motivo tecnico: ogni evento inotify arriva con un `wd`. Nel momento in cui il
+backend legge la tabella per ricostruire il path, deve poter sapere anche se
+quel path e' affidabile. Una tabella separata `wd -> state` avrebbe separato le
+responsabilita' in modo piu' formale, ma avrebbe introdotto sincronizzazione
+doppia su add, remove, expand e cleanup. Un flag globale nel backend sarebbe
+stato troppo debole per piu' watch stale contemporanei.
+
+La watcher table quindi non e' piu' solo una cache di stringhe. Resta una
+struttura backend, ma ora rappresenta anche lo stato minimo necessario per
+capire se Alfred puo' fidarsi del path ricostruito.
+
+#### Diagramma di stato dei watch
+
+Il diagramma seguente mostra il ciclo di vita previsto per un watch. Le
+transizioni `store` e `remove` sono gia' implementate; le transizioni legate a
+`IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT`, `IN_Q_OVERFLOW` e al resync sono
+policy future che useranno il modello dati appena introdotto.
+
+```mermaid
+stateDiagram-v2
+    [*] --> REMOVED: watcher_init() / slot vuoto
+    REMOVED --> VALID: watcher_store(wd, path)
+
+    VALID --> STALE: IN_MOVE_SELF / path non affidabile
+    VALID --> STALE: IN_DELETE_SELF / path osservato cancellato
+    VALID --> STALE: IN_UNMOUNT / filesystem non disponibile
+    VALID --> STALE: IN_Q_OVERFLOW / stream incompleto
+
+    STALE --> RESYNCING: avvio policy di resync
+    RESYNCING --> VALID: resync riuscito / path confermato
+    RESYNCING --> REMOVED: resync fallito / watch invalidato
+
+    VALID --> REMOVED: watcher_remove() o IN_IGNORED
+    STALE --> REMOVED: watcher_remove() o IN_IGNORED
+    RESYNCING --> REMOVED: watcher_remove() o IN_IGNORED
+```
+
+La lettura importante e' questa:
+
+- `REMOVED -> VALID` nasce solo da un watch reale memorizzato con
+  `watcher_store()`
+- `VALID -> STALE` non cancella il path: lo conserva per diagnostica e recovery
+- `STALE -> RESYNCING` indica che Alfred sta provando a ricostruire fiducia
+- `RESYNCING -> VALID` e' possibile solo se il resync conferma un path
+  affidabile
+- qualunque stato attivo puo' finire in `REMOVED` quando il watch viene
+  rimosso o il kernel invia `IN_IGNORED`
 
 #### Differenza tra removed e stale
 
@@ -1372,15 +1420,26 @@ richiesta di riconfigurazione da parte dell'utente/applicazione.
 
 #### Prossimo micro-step di codice
 
-Il primo cambio di codice non dovrebbe ancora emettere nuovi eventi semantici.
-Il passo piu' prudente e':
+Il primo cambio di codice e' stato implementato senza emettere nuovi eventi
+semantici:
 
-1. aggiungere un modo interno per rappresentare `stale` nella tabella watch o
-   in una struttura collegata
-2. marcare `IN_MOVE_SELF` come causa di stato non affidabile
-3. verificare con un test backend che gli eventi successivi non vengano
+- `watcher_state_t` definisce `REMOVED`, `VALID`, `STALE` e `RESYNCING`
+- `watcher_store()` inizializza un watch attivo come `VALID`
+- `watcher_remove()` riporta lo slot a `REMOVED`
+- `watcher_set_state()` permette solo stati attivi, quindi non usa
+  `REMOVED` per uno slot ancora presente
+- `watcher_get_state()` ritorna `REMOVED` per watch non esistenti
+- `watcher_is_stale()` offre una query diretta per la futura policy
+
+Il test `make test-watcher` fissa questo contratto senza coinvolgere il kernel:
+e' un test della struttura dati, non un test end-to-end inotify.
+
+Il prossimo passo prudente e':
+
+1. marcare `IN_MOVE_SELF` come causa di stato non affidabile
+2. verificare con un test backend che gli eventi successivi non vengano
    presentati come se il path fosse certamente corretto
-4. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica o una
+3. decidere solo dopo se serve un raw Alfred dedicato, una diagnostica o una
    futura API di resync
 
 ### Fase 7 - CLI di indicizzazione

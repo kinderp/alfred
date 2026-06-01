@@ -569,13 +569,15 @@ make
 make test
 make test-backend-diagnostics
 make test-scanner
+make test-watcher
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
 problemi piu' semplici, poi il comportamento core e infine la diagnostica
-backend che non fa parte dello stream semantico. `make test-scanner` e' separato
-perche' verifica il componente di attraversamento filesystem, non il runtime
-inotify -> core.
+backend che non fa parte dello stream semantico. `make test-scanner` e'
+separato perche' verifica il componente di attraversamento filesystem, non il
+runtime inotify -> core. `make test-watcher` e' ancora piu' mirato: controlla la
+tabella `wd -> path` e lo stato di affidabilita' dei watch senza avviare Alfred.
 
 ### 1. `git diff --check`
 
@@ -707,7 +709,36 @@ Poi verifica che lo scanner:
 Questo target serve alla futura progettazione resync e indicizzazione. Non
 sostituisce `make test` o `make test-backend-diagnostics`.
 
-### 6. Nessun `test-legacy-shadow`
+### 6. `make test-watcher`
+
+Il comando:
+
+```bash
+make test-watcher
+```
+
+compila ed esegue un test C diretto in:
+
+```text
+tests/watcher/
+```
+
+Questa suite verifica la watcher table, cioe' la struttura che il backend usa
+per tradurre un `wd` in path e, da ora, per ricordare se quel mapping e'
+affidabile. Non usa inotify reale e non produce log semantici.
+
+Il primo test controlla che:
+
+- `watcher_store()` renda lo slot `WATCHER_STATE_VALID`
+- `watcher_set_state()` possa passare a `WATCHER_STATE_STALE`
+- `watcher_set_state()` possa passare a `WATCHER_STATE_RESYNCING`
+- `watcher_remove()` riporti lo slot a `WATCHER_STATE_REMOVED`
+- `WATCHER_STATE_REMOVED` non venga impostato su uno slot ancora attivo
+
+Questo serve alla futura gestione `IN_MOVE_SELF`: prima fissiamo il contratto
+della struttura dati, poi colleghiamo gli eventi critici alla policy di resync.
+
+### 7. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali

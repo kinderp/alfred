@@ -39,6 +39,19 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`, `16-mappa-codice-e-strutture.md`: aggiunto il
+  diagramma di stato Mermaid dei watch, con transizioni da `REMOVED` a `VALID`,
+  passaggi futuri verso `STALE` causati da eventi critici inotify, fase
+  `RESYNCING` e cleanup tramite `watcher_remove()`/`IN_IGNORED`.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `tests/watcher/run_all.sh`,
+  `Makefile`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: implementato il primo supporto dati per il
+  modello watch `stale`. La watcher table ora contiene `watcher_state_t`, con
+  stati `REMOVED`, `VALID`, `STALE` e `RESYNCING`; aggiunta la suite
+  `make test-watcher` per fissare il contratto senza coinvolgere il kernel.
 - `21-roadmap-scanner-resync.md` e `20-matrice-eventi-inotify.md`: avviata la
   progettazione della Fase 6 sul resync dopo eventi critici. La documentazione
   introduce il modello concettuale di watch `stale`, distingue `valid`,

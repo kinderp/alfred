@@ -4,7 +4,8 @@
  * The inotify backend needs to reconstruct full paths from kernel events.
  * Kernel records contain a watch descriptor and an optional name; they do not
  * repeat the watched directory path. This table stores that missing directory
- * path and lets the backend perform direct lookup by wd.
+ * path, tracks whether the mapping is still reliable, and lets the backend
+ * perform direct lookup by wd.
  *
  * The table may be sparse because inotify watch descriptors are kernel-assigned
  * integers. watcher_expand() grows the array until the descriptor can be used
@@ -68,6 +69,42 @@ static int watcher_expand(watcher_table_t *wt, int required_wd)
     wt->capacity = new_capacity;
 
     return 0;
+}
+
+/*
+ * watcher_state_is_valid - validate a public watcher state value
+ * @state: state value supplied by a caller
+ *
+ * Return: nonzero when @state is part of watcher_state_t.
+ */
+static int watcher_state_is_valid(watcher_state_t state)
+{
+    return state == WATCHER_STATE_REMOVED ||
+           state == WATCHER_STATE_VALID ||
+           state == WATCHER_STATE_STALE ||
+           state == WATCHER_STATE_RESYNCING;
+}
+
+/*
+ * watcher_state_name - convert a watcher state to a debug string
+ * @state: state value to render
+ *
+ * Return: static string used by watcher_dump().
+ */
+static const char *watcher_state_name(watcher_state_t state)
+{
+    switch (state) {
+    case WATCHER_STATE_REMOVED:
+        return "removed";
+    case WATCHER_STATE_VALID:
+        return "valid";
+    case WATCHER_STATE_STALE:
+        return "stale";
+    case WATCHER_STATE_RESYNCING:
+        return "resyncing";
+    default:
+        return "unknown";
+    }
 }
 
 /* ============================================================================
@@ -151,6 +188,7 @@ int watcher_store(watcher_table_t *wt,
 
     slot->wd     = wd;
     slot->active = 1;
+    slot->state  = WATCHER_STATE_VALID;
 
     snprintf(slot->path,
              sizeof(slot->path),
@@ -186,6 +224,7 @@ void watcher_remove(watcher_table_t *wt, int wd)
 
     slot->active = 0;
     slot->wd     = -1;
+    slot->state  = WATCHER_STATE_REMOVED;
     slot->path[0] = '\0';
 
     if (wt->count > 0)
@@ -243,6 +282,68 @@ int watcher_exists(const watcher_table_t *wt,
 }
 
 /*
+ * watcher_set_state - update the reliability state of an active watch
+ * @wt: table to update
+ * @wd: inotify watch descriptor to update
+ * @state: new reliability state
+ *
+ * Removed is represented by watcher_remove(), not by changing the state of an
+ * active slot. This keeps "slot is active" and "slot reliability" separate and
+ * prevents callers from leaving an active wd that says it is removed.
+ *
+ * Return: 0 on success, -1 on invalid input or inactive watch descriptor.
+ */
+int watcher_set_state(watcher_table_t *wt,
+                      int wd,
+                      watcher_state_t state)
+{
+    if (wt == NULL)
+        return -1;
+
+    if (!watcher_state_is_valid(state))
+        return -1;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    wt->items[wd].state = state;
+
+    return 0;
+}
+
+/*
+ * watcher_get_state - read the reliability state of a watch descriptor
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ *
+ * Return: stored state for active slots, WATCHER_STATE_REMOVED otherwise.
+ */
+watcher_state_t watcher_get_state(const watcher_table_t *wt,
+                                  int wd)
+{
+    if (!watcher_exists(wt, wd))
+        return WATCHER_STATE_REMOVED;
+
+    return wt->items[wd].state;
+}
+
+/*
+ * watcher_is_stale - test whether a watch mapping is no longer reliable
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ *
+ * Return: 1 for active stale watches, 0 otherwise.
+ */
+int watcher_is_stale(const watcher_table_t *wt,
+                     int wd)
+{
+    return watcher_get_state(wt, wd) == WATCHER_STATE_STALE ? 1 : 0;
+}
+
+/*
  * watcher_count - return the number of active watcher mappings
  * @wt: table to inspect
  *
@@ -278,8 +379,9 @@ void watcher_dump(const watcher_table_t *wt)
         if (!e->active)
             continue;
 
-        printf("wd=%d path=%s\n",
+        printf("wd=%d state=%s path=%s\n",
                e->wd,
+               watcher_state_name(e->state),
                e->path);
     }
 
