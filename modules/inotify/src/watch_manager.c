@@ -8,12 +8,14 @@
  *
  * It deliberately does not classify filesystem events. WATCH_ADDED and
  * WATCH_REMOVED are backend diagnostics about Alfred's observation state, not
- * semantic filesystem events. Recursive discovery reports directory facts to
- * the backend through a callback; the core later decides whether those facts
- * become DIR_CREATED events.
+ * semantic filesystem events. Startup recursive watching consumes fs_scanner
+ * directory facts to install watches, while runtime recursive discovery still
+ * reports directory facts to the backend through a callback; the core later
+ * decides whether those facts become DIR_CREATED events.
  * ========================================================================== */
 
 #include "watch_manager.h"
+#include "fs_scanner.h"
 #include "watcher.h"
 #include "logger.h"
 #include "utils.h"
@@ -31,6 +33,11 @@
  * INTERNAL HELPERS
  * ========================================================================== */
 
+typedef struct watch_manager_scan_context {
+    inotify_backend_context_t *ctx;
+    int failed;
+} watch_manager_scan_context_t;
+
 /*
  * watch_manager_context_is_valid - validate borrowed backend dependencies
  * @ctx: context to inspect
@@ -44,6 +51,37 @@ static int watch_manager_context_is_valid(
            ctx->runtime != NULL &&
            ctx->config != NULL &&
            ctx->logger != NULL;
+}
+
+/*
+ * watch_manager_add_scanned_dir - add a watch for one scanner directory fact
+ * @entry: filesystem entry reported by fs_scan_tree()
+ * @userdata: watch_manager_scan_context_t used for watch installation
+ *
+ * Startup recursive watching needs no raw synthetic events: all directories
+ * already exist before the event loop starts. The scanner only reports facts;
+ * this adapter turns directory facts into inotify watches and records whether
+ * watch installation failed.
+ *
+ * Return: 0 to keep scanning, nonzero to stop after a watch failure.
+ */
+static int watch_manager_add_scanned_dir(const fs_scan_entry_t *entry,
+                                         void *userdata)
+{
+    watch_manager_scan_context_t *scan_ctx =
+        (watch_manager_scan_context_t *)userdata;
+
+    if (scan_ctx == NULL || scan_ctx->ctx == NULL ||
+        entry == NULL || entry->type != FS_SCAN_DIR) {
+        return 0;
+    }
+
+    if (watch_manager_add(scan_ctx->ctx, entry->path) < 0) {
+        scan_ctx->failed = 1;
+        return 1;
+    }
+
+    return 0;
 }
 
 /* ============================================================================
@@ -285,8 +323,10 @@ static int recursive_walk(inotify_backend_context_t *ctx,
  * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: root directory to scan
  *
- * Used for startup recursive watching, where discovered children already exist
- * before Alfred starts and should not be emitted as create events.
+ * Used for startup recursive watching, where directories already exist before
+ * Alfred starts and must not be emitted as create events. The filesystem walk
+ * is delegated to fs_scan_tree(); this function only adapts scanner directory
+ * facts into watch_manager_add() calls.
  *
  * Return: 0 on success, -1 on failure.
  */
@@ -296,7 +336,25 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
     if (!watch_manager_context_is_valid(ctx) || root == NULL)
         return -1;
 
-    return recursive_walk(ctx, root, NULL, NULL, 0);
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+
+    watch_manager_scan_context_t scan_ctx;
+
+    scan_ctx.ctx = ctx;
+    scan_ctx.failed = 0;
+
+    error_t rc =
+        fs_scan_tree(root,
+                     &opts,
+                     watch_manager_add_scanned_dir,
+                     &scan_ctx);
+
+    if (rc != ERR_OK || scan_ctx.failed)
+        return -1;
+
+    return 0;
 }
 
 /*

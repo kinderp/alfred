@@ -39,6 +39,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`, `05-modulo-inotify.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: implementato il primo refactor di integrazione
+  scanner/watch manager. Il percorso startup `watch_manager_add_recursive()`
+  ora usa `fs_scan_tree()` in modalita' directory-only e chiama
+  `watch_manager_add()` per ogni directory trovata. Il percorso runtime
+  `watch_manager_add_recursive_with_discovery()` resta invariato per preservare
+  i raw create sintetici usati nei casi `mkdir -p`.
 - `21-roadmap-scanner-resync.md`: completato l'audit iniziale della Fase 5,
   integrazione scanner/watch manager. La roadmap documenta il flusso corrente
   `recursive_walk()`, i percorsi startup e runtime `IN_CREATE | IN_ISDIR`, i

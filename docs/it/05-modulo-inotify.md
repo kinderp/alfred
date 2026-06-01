@@ -340,6 +340,26 @@ una variante con callback di discovery:
 watch_manager_add_recursive_with_discovery(...)
 ```
 
+Nota sullo stato corrente: `watch_manager_add_recursive()` e
+`watch_manager_add_recursive_with_discovery()` non usano piu' la stessa
+implementazione interna.
+
+Per lo startup, `watch_manager_add_recursive()` usa lo scanner filesystem
+generico:
+
+```text
+watch_manager_add_recursive()
+    -> fs_scan_tree()
+    -> watch_manager_add() per ogni FS_SCAN_DIR
+```
+
+Questo percorso non genera raw sintetici perche' le directory esistono gia'
+prima dell'avvio del polling.
+
+Il percorso runtime `watch_manager_add_recursive_with_discovery()` usa ancora la
+vecchia ricorsione interna con callback, perche' deve preservare la logica dei
+raw create sintetici per directory annidate create troppo velocemente.
+
 Questa funzione continua ad aggiungere i watch, ma quando scopre una
 sottodirectory gia' esistente chiama una callback. Oggi la callback e' gestita
 dal backend inotify in:

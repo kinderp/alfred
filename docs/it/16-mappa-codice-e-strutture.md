@@ -140,7 +140,8 @@ Il backend modifica stato solo quando quello stato appartiene al backend:
 | --- | --- | --- |
 | `inotify_backend_t.fd` | `inotify_backend_init()`, `inotify_backend_shutdown()` | e' il descrittore Linux letto dal backend |
 | `watcher_table_t` | `watcher_store()`, `watcher_remove()` | serve a tradurre `wd` in path |
-| watch ricorsivi | `watch_manager_add_recursive*()` | mantengono osservabile l'albero filesystem |
+| watch ricorsivi startup | `watch_manager_add_recursive()` + `fs_scan_tree()` | installano watch sull'albero gia' esistente senza raw sintetici |
+| watch ricorsivi runtime | `watch_manager_add_recursive_with_discovery()` | riparano nuove directory annidate e notificano discovery al backend |
 | raw sintetici per discovery | `backend_emit_synthetic_dir_create()` | riparano un limite di osservazione del backend |
 
 `WATCH_ADDED` e `WATCH_REMOVED` restano log diagnostici del backend. Non sono
@@ -1148,6 +1149,11 @@ frame 2 - backend inizializzato:
 frame 3 - richiesta watch:
   inotify_backend_add_startup_watch(&ctx, "/tmp/progetto")
   watch_manager_add_recursive() oppure watch_manager_add()
+
+frame 3b - startup ricorsivo:
+  watch_manager_add_recursive(&ctx, "/tmp/progetto")
+  fs_scan_tree("/tmp/progetto", directory-only)
+  callback watch_manager_add_scanned_dir()
 
 frame 4 - chiamata kernel:
   watch_manager_add()
