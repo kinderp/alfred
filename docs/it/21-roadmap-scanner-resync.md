@@ -776,23 +776,121 @@ statistiche solo se servono davvero al backend o alla CLI.
 
 ### Fase 3 - Symlink
 
-Stato: da fare.
+Stato: in corso.
 
 Obiettivo: distinguere due concetti diversi:
 
 - `include_symlinks`: emetti il symlink come entry osservata
 - `follow_symlinks`: attraversa il target del symlink
 
-Decisione probabile:
+`include_symlinks` serve quando il chiamante vuole sapere che dentro l'albero
+esiste un link simbolico, senza entrare nel suo target. Esempio:
+
+```text
+root/
+    link_to_a -> a/
+```
+
+Con `include_symlinks = 1` e `follow_symlinks = 0`, lo scanner emette
+`link_to_a` come `FS_SCAN_SYMLINK`. Non emette il contenuto del target come se
+fosse una directory figlia.
+
+Questa distinzione e' importante per due motivi:
+
+- per il resync, sapere che un symlink esiste puo' essere utile come fatto
+  osservato, ma seguirlo potrebbe far uscire Alfred dalla root osservata
+- per una futura indicizzazione, un utente potrebbe voler vedere anche i
+  symlink senza duplicare il contenuto raggiungibile tramite quei link
+
+Decisione corrente:
 
 - per resync: default conservativo, non seguire symlink
-- per indicizzazione: possibilita' futura di seguire symlink su richiesta
+- `include_symlinks = 1` e' supportato e testato
+- `follow_symlinks = 1` e' rimandato
+- per indicizzazione: possibilita' futura di seguire symlink su richiesta, ma
+  solo dopo avere una policy anti-cicli esplicita
 
-Test da aggiungere:
+Test aggiunto:
 
-- symlink emesso quando `include_symlinks = 1`
+- symlink emesso come `FS_SCAN_SYMLINK` quando `include_symlinks = 1`
 - symlink non seguito quando `follow_symlinks = 0`
+
+Test rimandato:
+
 - eventuale follow controllato quando `follow_symlinks = 1`
+
+#### Policy anti-cicli per `follow_symlinks`
+
+Seguire symlink e' delicato perche' un link puo' creare cicli o portare lo scan
+fuori dall'albero scelto dall'utente.
+
+Esempio di ciclo:
+
+```text
+root/
+    a/
+        back -> ../
+```
+
+Se lo scanner segue `back`, puo' tornare a `root`, poi rientrare in `a`, poi
+seguire di nuovo `back`, e cosi' via.
+
+Le policy comuni sono:
+
+1. Non seguire symlink.
+
+   E' la policy attuale e la piu' sicura per resync/watch. Il symlink puo'
+   essere emesso come entry, ma il target non viene attraversato.
+
+2. Tenere un set di directory gia' visitate usando `(st_dev, st_ino)`.
+
+   `st_dev` identifica il device/filesystem, `st_ino` identifica l'inode. Se
+   una directory target e' gia' stata visitata, lo scanner non rientra.
+
+   ```text
+   root visto
+   a visto
+   back punta a root, root gia' visto -> skip
+   ```
+
+3. Limitare la profondita' massima.
+
+   `max_depth` e' una protezione utile, ma da sola non e' una vera policy
+   anti-ciclo. Evita loop infiniti solo tagliando lo scan dopo una profondita'
+   arbitraria.
+
+4. Restare sotto la root iniziale.
+
+   Prima di seguire un symlink, il target viene risolto e confrontato con la
+   root reale dello scan. Se punta fuori root, viene saltato.
+
+   ```text
+   root/link -> /etc
+   target fuori root -> skip
+   ```
+
+5. Non attraversare filesystem diversi.
+
+   Lo scanner puo' salvare lo `st_dev` della root e saltare directory con
+   device diverso. E' simile alla logica `find -xdev`.
+
+6. Imporre un budget massimo di entry.
+
+   `max_entries` limita il danno in caso di albero enorme o policy sbagliata,
+   ma e' una rete di sicurezza, non una soluzione completa ai cicli.
+
+Per Alfred, una futura implementazione di `follow_symlinks = 1` dovrebbe avere
+almeno:
+
+```text
+visited set su (st_dev, st_ino)
+max_depth come safety net
+opzione per restare nello stesso device
+opzione per restare sotto la root iniziale
+```
+
+Finche' queste policy non sono progettate e testate, `follow_symlinks = 1`
+resta rimandato.
 
 ### Fase 4 - File e tipi speciali
 

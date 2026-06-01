@@ -39,6 +39,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/scanner/test_fs_scanner_dirs.c`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: avviata la fase symlink dello scanner. Il test ora
+  copre `include_symlinks = 1`, che emette il link simbolico come
+  `FS_SCAN_SYMLINK` senza seguirne il target. La documentazione rimanda
+  `follow_symlinks = 1` e registra le policy anti-cicli comuni: non seguire
+  symlink, visited set su `(st_dev, st_ino)`, `max_depth`, restare sotto la
+  root, restare sullo stesso device e `max_entries`.
 - `app/src/fs_scanner.c`, `tests/scanner/test_fs_scanner_dirs.c`,
   `tests/scanner/test_fs_scanner_dirs.sh`, `21-roadmap-scanner-resync.md`,
   `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e

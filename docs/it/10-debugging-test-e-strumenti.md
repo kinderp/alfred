@@ -699,6 +699,7 @@ Poi verifica che lo scanner:
 - rispetti `max_depth=1`
 - si fermi dopo `max_entries=2`
 - emetta il file quando `include_files=1`
+- emetta il symlink come entry `FS_SCAN_SYMLINK` quando `include_symlinks=1`
 - continui se una directory figlia sparisce tra emissione e discesa ricorsiva
 
 Questo target serve alla futura progettazione resync e indicizzazione. Non
