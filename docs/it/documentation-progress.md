@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: il probe `backend_resync_watch()` ora usa
+  `backend_resync_probe_result_t` per classificare gli esiti interni prima di
+  formattare `WATCH_RESYNC_FAILED`. Il comportamento resta conservativo, ma la
+  logica e' pronta per nuovi casi scanner/resync senza moltiplicare stringhe
+  diagnostiche sparse nel codice.
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
   `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e

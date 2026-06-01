@@ -1540,6 +1540,25 @@ all'oggetto spostato. Per questo il probe non riporta ancora il watch a
 `VALID`; se non puo' provare l'identita' del path, lascia il watch `STALE` e
 scrive `WATCH_RESYNC_FAILED`.
 
+Internamente il probe classifica l'esito con
+`backend_resync_probe_result_t`. Questa scelta evita di spargere stringhe di
+errore dentro la logica di recovery e prepara i passi successivi, dove dovremo
+distinguere casi molto diversi:
+
+| Esito interno | Significato |
+| --- | --- |
+| `MISSING_WATCH` | il `wd` non ha piu' una entry nella watcher table |
+| `NOT_STALE` | il probe e' stato invocato su un watch che non e' `STALE` |
+| `SET_RESYNCING_FAILED` | la transizione temporanea a `RESYNCING` e' fallita |
+| `PATH_UNREACHABLE` | il vecchio path non e' piu' raggiungibile con `stat()` |
+| `NOT_DIRECTORY` | il vecchio path esiste ma non e' una directory |
+| `SET_STALE_FAILED` | il ritorno conservativo a `STALE` e' fallito |
+| `IDENTITY_UNKNOWN` | il path e' raggiungibile, ma non sappiamo se e' lo stesso oggetto |
+
+Tutti questi esiti producono ancora lo stesso tipo di diagnostica:
+`WATCH_RESYNC_FAILED`. La differenza sta nel token `error=...`, che rende i log
+leggibili senza trasformare il probe in una nuova API pubblica.
+
 Questo comportamento e' importante per il caso normale di root spostata:
 `IN_MOVE_SELF` dice che l'oggetto osservato e' stato mosso, ma non fornisce il
 nuovo path. Se Alfred cercasse di "indovinare" la destinazione, rischierebbe di

@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after splitting the resync
+  probe result from the WATCH_RESYNC_FAILED formatter. Comments document the
+  internal result enum, the normalized failure logger, and why these diagnostic
+  tokens are not public semantic events
 - refreshed `modules/inotify/src/inotify_backend.c` after adding the first
   conservative `backend_resync_watch()` probe. Comments document why the helper
   only verifies the old watched path, why failure keeps the watch STALE, and

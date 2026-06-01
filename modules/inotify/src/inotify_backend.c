@@ -48,6 +48,16 @@ typedef struct backend_emit_context {
     int failed;
 } backend_emit_context_t;
 
+typedef enum backend_resync_probe_result {
+    BACKEND_RESYNC_PROBE_MISSING_WATCH,
+    BACKEND_RESYNC_PROBE_NOT_STALE,
+    BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
+    BACKEND_RESYNC_PROBE_PATH_UNREACHABLE,
+    BACKEND_RESYNC_PROBE_NOT_DIRECTORY,
+    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+    BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN
+} backend_resync_probe_result_t;
+
 /* ============================================================================
  * Local Declarations
  * ========================================================================== */
@@ -79,6 +89,17 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
 static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
+
+static const char *backend_resync_probe_result_name(
+    backend_resync_probe_result_t result
+);
+
+static void backend_log_resync_failure(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result,
+                                       int saved_errno);
 
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
@@ -529,25 +550,32 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
     if (ctx == NULL || reason == NULL)
         return;
 
+    backend_resync_probe_result_t result =
+        BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN;
+    int saved_errno = 0;
+
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, wd);
 
     if (path == NULL) {
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path= reason=%s error=missing-watch",
-                     wd,
-                     reason);
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   "",
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_MISSING_WATCH,
+                                   0);
         return;
     }
 
     if (watcher_get_state(&ctx->runtime->watchers, wd) !=
         WATCHER_STATE_STALE) {
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=not-stale",
-                     wd,
-                     path,
-                     reason);
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_NOT_STALE,
+                                   0);
         return;
     }
 
@@ -561,43 +589,65 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                           wd,
                           WATCHER_STATE_RESYNCING) != 0) {
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=set-resyncing",
-                     wd,
-                     path,
-                     reason);
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
+                                   0);
         return;
     }
 
     struct stat st;
 
     if (stat(path, &st) != 0) {
-        int saved_errno = errno;
+        saved_errno = errno;
+        result = BACKEND_RESYNC_PROBE_PATH_UNREACHABLE;
 
-        watcher_set_state(&ctx->runtime->watchers,
-                          wd,
-                          WATCHER_STATE_STALE);
+        if (watcher_set_state(&ctx->runtime->watchers,
+                              wd,
+                              WATCHER_STATE_STALE) != 0) {
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s errno=%d (%s)",
-                     wd,
-                     path,
-                     reason,
-                     saved_errno,
-                     strerror(saved_errno));
+            backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                       0);
+            return;
+        }
+
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   result,
+                                   saved_errno);
         return;
     }
 
     if (!S_ISDIR(st.st_mode)) {
-        watcher_set_state(&ctx->runtime->watchers,
-                          wd,
-                          WATCHER_STATE_STALE);
+        result = BACKEND_RESYNC_PROBE_NOT_DIRECTORY;
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=not-directory",
-                     wd,
-                     path,
-                     reason);
+        if (watcher_set_state(&ctx->runtime->watchers,
+                              wd,
+                              WATCHER_STATE_STALE) != 0) {
+
+            backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                       0);
+            return;
+        }
+
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   result,
+                                   0);
         return;
     }
 
@@ -605,19 +655,95 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                           wd,
                           WATCHER_STATE_STALE) != 0) {
 
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                   0);
+        return;
+    }
+
+    backend_log_resync_failure(ctx,
+                               wd,
+                               path,
+                               reason,
+                               result,
+                               0);
+}
+
+/*
+ * backend_resync_probe_result_name - convert a probe result to log text
+ * @result: internal classification produced by backend_resync_watch()
+ *
+ * These names are backend diagnostics, not public API. Keeping them behind an
+ * enum prevents the resync path from growing ad hoc string literals as new
+ * cases are added for scanner-based recovery, unmount, or overflow.
+ *
+ * Return: stable diagnostic token for @result.
+ */
+static const char *backend_resync_probe_result_name(
+    backend_resync_probe_result_t result
+)
+{
+    switch (result) {
+    case BACKEND_RESYNC_PROBE_MISSING_WATCH:
+        return "missing-watch";
+    case BACKEND_RESYNC_PROBE_NOT_STALE:
+        return "not-stale";
+    case BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED:
+        return "set-resyncing";
+    case BACKEND_RESYNC_PROBE_PATH_UNREACHABLE:
+        return "path-unreachable";
+    case BACKEND_RESYNC_PROBE_NOT_DIRECTORY:
+        return "not-directory";
+    case BACKEND_RESYNC_PROBE_SET_STALE_FAILED:
+        return "set-stale";
+    case BACKEND_RESYNC_PROBE_IDENTITY_UNKNOWN:
+        return "identity-unknown";
+    }
+
+    return "unknown";
+}
+
+/*
+ * backend_log_resync_failure - write a normalized resync failure diagnostic
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: inotify watch descriptor involved in the probe
+ * @path: watched path, or an empty string when the watch is already missing
+ * @reason: kernel/backend reason that triggered the probe
+ * @result: internal probe classification
+ * @saved_errno: errno captured at the failing syscall, or 0 when not relevant
+ *
+ * A single formatter keeps WATCH_RESYNC_FAILED readable while the internal
+ * decision tree grows. Syscall failures include errno because they usually
+ * need operating-system context; logical failures use only an error token.
+ */
+static void backend_log_resync_failure(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result,
+                                       int saved_errno)
+{
+    if (saved_errno != 0) {
         logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=set-stale",
+                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s errno=%d (%s)",
                      wd,
                      path,
-                     reason);
+                     reason,
+                     backend_resync_probe_result_name(result),
+                     saved_errno,
+                     strerror(saved_errno));
         return;
     }
 
     logger_event(ctx->logger,
-                 "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=identity-unknown",
+                 "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s",
                  wd,
                  path,
-                 reason);
+                 reason,
+                 backend_resync_probe_result_name(result));
 }
 
 /* ============================================================================
