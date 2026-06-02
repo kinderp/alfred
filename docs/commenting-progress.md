@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `docs/it/21-roadmap-scanner-resync.md` with the explicit rollback
+  test debt for multi-missing resync. The roadmap now records the untested
+  failure branch, why a bash race test would be fragile, and why an isolated C
+  helper is the preferred next option
 - refreshed `modules/inotify/src/inotify_backend.c` after enabling full
   multi-missing watch reinstallation for the trusted IN_MOVE_SELF resync scope.
   Comments now document the all-or-stale policy, rollback of watches installed
@@ -34,8 +38,8 @@ Latest refresh:
 - refreshed `modules/inotify/src/inotify_backend.c` after changing the resync
   scan context from a single first-missing buffer to an owned dynamic list of
   missing paths. Comments now explain callback path lifetime, list ownership,
-  allocation-failure handling, and why runtime still consumes only the first
-  entry until the multi-missing policy is implemented
+  and allocation-failure handling. This entry describes the preparatory step
+  before the later full multi-missing reinstall loop
 - refreshed `modules/inotify/src/inotify_backend.c` after documenting every
   `backend_resync_probe_result_t` value. The enum comments now explain when
   each stale-watch recovery outcome is used, why it remains backend diagnostic

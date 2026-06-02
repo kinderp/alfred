@@ -68,6 +68,46 @@ Questa scelta e' conservativa. Evita di presentare al core una situazione come
 affidabile quando il backend sa gia' che una parte della subtree non e'
 osservata.
 
+### Debito di test sul rollback
+
+Il ramo positivo della reinstallazione multi-missing e' coperto da
+`tests/backend/test_self_move_identity_match.sh`:
+
+```text
+missing=2
+-> reinstalla entrambi i watch
+-> parent VALID
+-> FILE_CREATED in entrambe le directory riparate
+```
+
+Il ramo di fallimento non e' ancora coperto da un test automatico:
+
+```text
+missing path A reinstallato
+missing path B fallisce
+-> rollback del watch A
+-> parent STALE
+-> WATCH_RESYNC_FAILED ... error=reinstall-failed
+```
+
+Questo debito e' intenzionale per la ripresa. Forzare il fallimento in un test
+bash end-to-end richiede una race artificiale: lo scanner deve vedere una
+directory missing, ma quella directory deve diventare non installabile prima
+della chiamata a `watch_manager_add()`. Un test cosi' rischia di essere fragile
+perche' dipende dal timing tra scan, modifica filesystem e reinstallazione.
+
+Opzioni alla ripresa:
+
+1. estrarre la logica di reinstallazione in un helper piu' isolabile e testarla
+   con un test C, simulando il fallimento di un path
+2. aggiungere un test bash con race controllata solo se troviamo un meccanismo
+   deterministico e ripetibile
+3. rimandare il test rollback ancora un passo, ma mantenere il debito esplicito
+   fino al merge del branch
+
+La scelta consigliata e' la prima: un helper dedicato permetterebbe di testare
+la policy all-or-stale senza introdurre un test end-to-end fragile.
+
 ## Stato corrente sugli eventi critici
 
 Questa sezione fotografa lo stato corrente degli eventi critici che hanno
@@ -2066,15 +2106,16 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. valutare se aggiungere un test mirato del ramo fallito, forzando una
-   reinstallazione impossibile e verificando `WATCH_RESYNC_REINSTALL_FAILED`,
-   rollback dei watch aggiunti nel tentativo e parent ancora `STALE`
-2. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
+1. decidere come coprire il debito di test sul rollback:
+   helper C isolabile, test bash deterministico o rinvio esplicito al merge
+2. se scegliamo l'helper C, separare la policy "reinstalla tutti o rollback" da
+   `backend_resync_watch_subtree_dirs()` senza cambiare il comportamento runtime
+3. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
    prodotti da `watch_manager_remove()` sono diagnostica sufficiente
-3. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
+4. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
    cioe' gli eventi che non hanno ancora una root affidabile semplice come il
    ramo positivo di `IN_MOVE_SELF`
-4. rimandare output CLI e JSON a un passo successivo
+5. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 

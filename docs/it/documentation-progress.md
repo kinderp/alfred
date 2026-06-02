@@ -39,6 +39,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: documentato il debito di test sul rollback
+  della reinstallazione multi-missing. La roadmap ora spiega il ramo non ancora
+  coperto (`A` reinstallato, `B` fallisce, rollback di `A`, parent `STALE`),
+  perche' un test bash end-to-end rischia di essere fragile e quali opzioni
+  valutare alla ripresa.
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata
@@ -48,10 +53,9 @@ Stati usati:
   `FILE_CREATED` dopo il ritorno a `VALID`.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: il context del resync scanner ora copia tutti
-  i missing path in una lista owned dal backend. Il runtime continua a
-  reinstallare solo il primo path, ma il prossimo passo potra' iterare sulla
-  lista senza riprogettare la callback. Documentata anche la ragione tecnica:
-  i path dello scanner sono validi solo durante la callback.
+  i missing path in una lista owned dal backend, preparando il ciclo completo di
+  reinstallazione senza riprogettare la callback. Documentata anche la ragione
+  tecnica: i path dello scanner sono validi solo durante la callback.
 - `21-roadmap-scanner-resync.md`: aggiunta una sezione di ripresa dopo stop
   lungo con branch, stato reale del codice, flusso attuale del resync
   `IN_MOVE_SELF`, policy conservativa consigliata per `missing>1` e prossimi
