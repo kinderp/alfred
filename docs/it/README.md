@@ -29,7 +29,8 @@ piu' dettaglio.
 20. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
 21. [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
 22. [Contratto dei log](22-contratto-log.md)
-23. [Glossario](glossario.md)
+23. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+24. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

@@ -33,6 +33,7 @@ Stati usati:
 | Completo | `20-matrice-eventi-inotify.md` |
 | Parziale | `21-roadmap-scanner-resync.md` |
 | Parziale | `22-contratto-log.md` |
+| Parziale | `23-roadmap-plugin-backend.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -40,6 +41,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `23-roadmap-plugin-backend.md` e `README.md`: aggiunta la roadmap per una
+  futura API comune dei backend/plugin Alfred. Il capitolo documenta backend
+  statici prima dei `.so`, contratto raw event + diagnostica strutturata,
+  relazione con output binario performante e futuro supporto a fanotify, audit,
+  eBPF, Windows e macOS.
+- `22-contratto-log.md`: ampliata la sezione sul futuro output strutturato.
+  Documentata la strategia progressiva testo -> JSON Lines -> MessagePack ->
+  Protobuf -> socket binaria pura, con mapping uno-a-uno tra riga testuale e
+  record strutturato e nota sulle prestazioni estreme come obiettivo futuro.
 - `22-contratto-log.md` e `README.md`: aggiunta una reference generale del
   contratto dei log di Alfred. Il nuovo capitolo distingue `raw.log`,
   `events.log`, `errors.log`, diagnostica backend `WATCH_*`, raw Alfred

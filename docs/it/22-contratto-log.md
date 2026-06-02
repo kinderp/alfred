@@ -60,6 +60,7 @@ In futuro Alfred potrebbe inviare gli stessi fatti a un altro device di uscita:
 - socket locale o di rete
 - pipe binaria
 - shared memory
+- JSON Lines
 - formato MessagePack
 - formato Protocol Buffers
 - scrittura diretta di strutture compatte definite da Alfred
@@ -68,7 +69,9 @@ Il punto architetturale e' che il contratto non deve essere "parse di stringhe".
 Il contratto deve essere il fatto strutturato:
 
 ```text
-kind       = WATCH_RESYNC_FAILED
+channel    = events
+category   = backend-diagnostic
+name       = WATCH_RESYNC_FAILED
 wd         = 7
 path       = /tmp/root
 reason     = IN_MOVE_SELF
@@ -96,6 +99,126 @@ In quel modello:
 
 Questa reference quindi va letta come contratto semantico dei campi, non solo
 come formato definitivo dei file `.log`.
+
+### Strategia consigliata
+
+La scelta consigliata e' progressiva:
+
+1. definire prima un record strutturato interno, indipendente dal formato
+2. mantenere il writer testuale attuale come serializzazione didattica/debug
+3. aggiungere JSON Lines come primo output strutturato leggibile e testabile
+4. aggiungere MessagePack quando serve un formato binario compatto e semplice
+5. valutare Protocol Buffers se Alfred avra' client esterni stabili in piu'
+   linguaggi e una API pubblica versionata
+6. valutare socket binaria pura se le prestazioni estreme diventano un
+   requisito competitivo del progetto
+
+Questa progressione evita di bloccare l'architettura troppo presto. JSON Lines
+aiuta a stabilizzare i campi; MessagePack puo' riusare quasi lo stesso modello;
+Protobuf aggiunge schema e compatibilita' forte; la socket binaria pura massimizza
+prestazioni e controllo, ma richiede disciplina molto maggiore su endianess,
+allineamento, versioning, compatibilita' e gestione delle stringhe.
+
+### Confronto dei formati
+
+| Formato | Vantaggi | Svantaggi | Quando usarlo |
+| --- | --- | --- | --- |
+| Testo attuale | leggibile, didattico, facile da verificare con `grep` | parsing fragile, costoso, ambiguo per client esterni | debug, test shell, lezioni |
+| JSON Lines | un record per riga, leggibile, facile da salvare e inviare su socket | piu' verboso, parsing piu' costoso di un binario | primo formato strutturato e testabile |
+| MessagePack | compatto, veloce, conserva modello tipo dizionario | schema meno rigoroso di Protobuf se non lo imponiamo noi | output binario pragmatico |
+| Protocol Buffers | schema IDL, campi numerati, compatibilita' tra versioni, molti linguaggi | toolchain e generazione codice, meno comodo in fase esplorativa | API pubblica stabile per client esterni |
+| Socket binaria pura | massimo controllo, minime allocazioni, massime prestazioni potenziali | formato da progettare e mantenere, rischio bug di compatibilita' | obiettivo performance estreme o prodotto commerciale |
+
+### Matching testo e record strutturato
+
+Ogni riga testuale deve poter essere descritta da un record strutturato
+equivalente. Il matching non deve avvenire facendo parsing della stringa: deve
+avvenire perche' entrambi i writer ricevono lo stesso record.
+
+Esempio:
+
+```text
+WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-mismatch
+```
+
+Record strutturato equivalente:
+
+| Campo strutturato | Valore |
+| --- | --- |
+| `channel` | `events` |
+| `category` | `backend-diagnostic` |
+| `name` | `WATCH_RESYNC_FAILED` |
+| `wd` | `7` |
+| `path` | `/tmp/root` |
+| `reason` | `IN_MOVE_SELF` |
+| `error` | `identity-mismatch` |
+
+JSON Lines possibile:
+
+```json
+{"channel":"events","category":"backend-diagnostic","name":"WATCH_RESYNC_FAILED","wd":7,"path":"/tmp/root","reason":"IN_MOVE_SELF","error":"identity-mismatch"}
+```
+
+MessagePack possibile:
+
+```text
+map {
+  "channel": "events",
+  "category": "backend-diagnostic",
+  "name": "WATCH_RESYNC_FAILED",
+  "wd": 7,
+  "path": "/tmp/root",
+  "reason": "IN_MOVE_SELF",
+  "error": "identity-mismatch"
+}
+```
+
+Socket binaria pura possibile:
+
+```text
+struct alfred_wire_record_header {
+    uint16_t version;
+    uint16_t type;
+    uint32_t flags;
+    uint64_t seq;
+    uint64_t ts_ns;
+    uint32_t payload_len;
+};
+
+payload:
+    fixed numeric fields
+    string table or length-prefixed UTF-8/byte strings
+```
+
+La socket binaria pura non dovrebbe copiare la forma testuale. Dovrebbe usare
+campi numerici per `type`, `category`, `reason`, `error` quando possibile, e
+stringhe length-prefixed per path o nomi non enumerabili. Questo riduce parsing,
+allocazioni e dimensione del messaggio, ma richiede una specifica precisa.
+
+### Regola architetturale
+
+La direzione corretta e':
+
+```text
+codice backend/core
+-> costruisce alfred_log_record_t
+-> writer testuale serializza in riga leggibile
+-> writer jsonl serializza in JSON Lines
+-> writer msgpack/protobuf/binario serializza in formato efficiente
+```
+
+La direzione da evitare e':
+
+```text
+codice backend/core
+-> costruisce stringa testuale
+-> parser rilegge la stringa
+-> convertitore produce messaggio binario
+```
+
+La seconda direzione spreca CPU, introduce ambiguita' e rende i test meno
+affidabili. Se Alfred punta a prestazioni alte, il testo deve essere solo uno
+dei writer, non la fonte primaria del dato.
 
 ## Diagnostica backend dei watch
 
@@ -194,3 +317,4 @@ emessi dal core e formattati in `events.log`.
 - [Scenari di test](14-scenari-test.md)
 - [Matrice eventi inotify](20-matrice-eventi-inotify.md)
 - [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
+- [Roadmap plugin backend](23-roadmap-plugin-backend.md)
