@@ -26,10 +26,10 @@ Stato del codice al momento della ripresa:
   directory-only sul vecchio path tornato affidabile
 - lo scan conta directory viste, directory gia' watched e directory missing
 - la callback dello scan copia tutti i missing path in una lista interna
-- se esiste almeno un missing path, Alfred reinstalla solo il primo watch
-  mancante con `watch_manager_add()`
-- se la prima reinstallazione riesce, il watch principale torna `VALID`
-- se lo scan fallisce o la prima reinstallazione fallisce, il watch principale
+- se esistono missing path, Alfred prova a reinstallarli tutti con
+  `watch_manager_add()`
+- se tutte le reinstallazioni riescono, il watch principale torna `VALID`
+- se lo scan fallisce o una reinstallazione fallisce, il watch principale
   resta `STALE`
 
 Il punto esatto in cui siamo fermi e':
@@ -39,19 +39,19 @@ IN_MOVE_SELF con identita' confermata
 -> fs_scan_tree(directory-only, emit_root=0)
 -> conta dirs/watched/missing
 -> copia tutti i missing path trovati
--> reinstalla il primo missing path
--> torna VALID solo se questa prima riparazione riesce
+-> reinstalla tutti i missing path
+-> torna VALID solo se tutta la riparazione riesce
 ```
 
-Il prossimo passo non e' aggiungere nuova semantica core. Il prossimo passo e'
-completare la policy backend di reinstallazione:
+Il prossimo passo non e' aggiungere nuova semantica core. La policy backend di
+reinstallazione su scope affidabile ora e' completa nel caso positivo:
 
 ```text
-da:  reinstalla solo il primo missing path
-a:   reinstalla tutti i missing path dentro lo scope affidabile
+tutti i missing path reinstallati -> parent VALID
+un missing path fallisce          -> parent STALE
 ```
 
-Decisione tecnica consigliata per ripartire:
+La decisione tecnica fissata e':
 
 - se tutti i missing watch vengono reinstallati, il watch principale puo'
   tornare `VALID`
@@ -61,6 +61,8 @@ Decisione tecnica consigliata per ripartire:
   non copertura parziale
 - i log backend devono rendere visibili sia i watch reinstallati sia il primo
   fallimento
+- se un fallimento avviene dopo alcune reinstallazioni riuscite, Alfred rimuove
+  i watch aggiunti in quel tentativo prima di lasciare il parent `STALE`
 
 Questa scelta e' conservativa. Evita di presentare al core una situazione come
 affidabile quando il backend sa gia' che una parte della subtree non e'
@@ -1618,8 +1620,8 @@ da scansionare e il motivo della recovery. Oggi viene chiamata dal ramo
 tramite identita' filesystem. La prima parte resta uno scan osservativo: conta
 le directory figlie, distingue quante sono gia' coperte da un watch e quante
 risultano mancanti e copia tutti i missing path in memoria backend. Subito
-dopo, pero', il backend esegue ancora solo una prima mutazione reale:
-reinstalla il primo missing path con `watch_manager_add()`.
+dopo, il backend esegue la mutazione reale: prova a reinstallare tutti i
+missing path con `watch_manager_add()`.
 
 Le opzioni dello scanner sono intenzionalmente conservative:
 
@@ -1635,10 +1637,10 @@ emit_root         = 0
 `emit_root = 0` e' la scelta importante. La root e' il watch che stiamo
 cercando di recuperare o lo scope gia' scelto come affidabile da una fase
 precedente. Lo scanner della fase 2 serve a vedere le directory figlie e a
-preparare la futura installazione dei watch mancanti; non deve trattare la root
-come una nuova directory scoperta.
+guidare l'installazione dei watch mancanti; non deve trattare la root come una
+nuova directory scoperta.
 
-#### Dry-run e prima watch reinstallation
+#### Dry-run e watch reinstallation completa sullo scope affidabile
 
 `Dry-run` significa: eseguire lo scan per osservare cosa c'e' nel filesystem,
 produrre diagnostica e misurare il caso reale. Questa parte resta separata dalla
@@ -1654,9 +1656,8 @@ mutazione del backend. Nella fase di scan Alfred:
 - non produce eventi core
 
 `Watch reinstallation` significa invece: usare il risultato dello scan per
-cambiare davvero lo stato di osservazione. Il primo passo implementato e'
-volutamente limitato: se esiste almeno una directory missing, Alfred prova a
-reinstallare solo il primo missing path con `watch_manager_add()`.
+cambiare davvero lo stato di osservazione. Se esistono directory missing,
+Alfred prova a reinstallarle tutte con `watch_manager_add()`.
 
 Questa e' gia' una mutazione reale:
 
@@ -1664,31 +1665,32 @@ Questa e' gia' una mutazione reale:
 - la watcher table riceve una nuova entry `wd -> path`
 - il nuovo watch salva anche identita' `(st_dev, st_ino)` tramite la stessa
   logica usata dai watch normali
-- il backend logga `WATCH_RESYNC_REINSTALLED`
+- il backend logga un `WATCH_RESYNC_REINSTALLED` per ogni watch reinstallato
 
-La raccolta completa dei missing path e' gia' preparata nel context dello scan.
-La fase completa non e' ancora implementata. In futuro Alfred dovra':
+La fase positiva su scope affidabile e' implementata: Alfred consuma la lista
+dei missing path raccolti dallo scan e prova a reinstallare ogni elemento. I
+passi futuri riguardano i casi negativi piu' sofisticati e gli eventi senza
+scope affidabile. In futuro Alfred dovra':
 
-- confrontare le directory viste dallo scanner con i watch gia' presenti
-- iterare sulla lista dei missing path raccolti, non solo sull'elemento 0
-- gestire gli errori di `inotify_add_watch()`
-- decidere se il resync puo' considerarsi riuscito o se il watch resta `STALE`
-- loggare diagnostiche che descrivono la riparazione reale, non solo lo scan
+- migliorare la diagnostica sui fallimenti parziali
+- decidere se servono log espliciti per il rollback dei watch reinstallati
+- riusare lo stesso modello per eventi che non hanno ancora una root affidabile
+- distinguere sempre diagnostica backend da semantica core
 
 La differenza e' sostanziale. La parte dry-run e' osservazione; la watch
 reinstallation e' una mutazione del backend. Per questo la reinstallazione e'
 stata collegata solo dopo identita' positiva: prima proviamo che lo scope e'
-affidabile, poi aggiungiamo al massimo un watch mancante.
+affidabile, poi aggiungiamo tutti i watch mancanti dentro quello scope.
 
 Tabella riassuntiva:
 
-| Aspetto | Scan/dry-run | Prima reinstallation implementata |
+| Aspetto | Scan/dry-run | Reinstallation implementata |
 | --- | --- | --- |
 | Scopo | Capire cosa vede lo scanner dentro uno scope affidabile | Riparare davvero la copertura dei watch ricorsivi |
-| Effetto su inotify | Nessuno | Chiama `inotify_add_watch()` tramite `watch_manager_add()` sul primo missing path |
-| Effetto sulla watcher table | Nessuno durante il conteggio | Aggiunge una entry `wd -> path` per il primo missing path se l'add riesce |
+| Effetto su inotify | Nessuno | Chiama `inotify_add_watch()` tramite `watch_manager_add()` su ogni missing path |
+| Effetto sulla watcher table | Nessuno durante il conteggio | Aggiunge una entry `wd -> path` per ogni missing path se tutti gli add riescono |
 | Effetto sul core | Nessuno | Nessuno diretto: resta diagnostica/backend state |
-| Log | `WATCH_RESYNC_SCAN_DONE ... dirs=N watched=M missing=K` / `WATCH_RESYNC_SCAN_FAILED` | `WATCH_RESYNC_REINSTALLED` oppure `WATCH_RESYNC_REINSTALL_FAILED` |
+| Log | `WATCH_RESYNC_SCAN_DONE ... dirs=N watched=M missing=K` / `WATCH_RESYNC_SCAN_FAILED` | uno o piu' `WATCH_RESYNC_REINSTALLED` oppure `WATCH_RESYNC_REINSTALL_FAILED` |
 | Rischio | Basso, perche' osserva soltanto | Piu' alto, perche' modifica stato kernel e stato Alfred |
 
 Esempio concreto:
@@ -1699,7 +1701,7 @@ Esempio concreto:
 /tmp/root/a/b          directory annidata
 ```
 
-Con il dry-run Alfred fa solo:
+Durante la fase osservativa Alfred fa:
 
 ```text
 fs_scan_tree("/tmp/root", emit_root=0)
@@ -1708,9 +1710,9 @@ vede /tmp/root/a/b
 logga WATCH_RESYNC_SCAN_DONE ... dirs=2
 ```
 
-Dopo questo log non possiamo ancora concludere che la copertura dei watch sia
-stata riparata. Abbiamo dimostrato che lo scope affidabile e' scansionabile e
-che contiene due directory figlie. Il dry-run ora misura anche la copertura
+Subito dopo questo log non possiamo ancora concludere che la copertura dei watch
+sia stata riparata. Abbiamo dimostrato che lo scope affidabile e' scansionabile
+e che contiene due directory figlie. Lo scan misura anche la copertura
 esistente:
 
 ```text
@@ -1725,10 +1727,9 @@ Questo significa:
 - `missing=1`: una directory e' visibile nello scan ma non ha ancora un watch
   attivo
 
-Con `missing=1`, Alfred oggi prova a reinstallare quel path. Con `missing>1`,
-Alfred oggi ha gia' raccolto tutti i path mancanti, ma reinstalla ancora solo il
-primo elemento della lista. La policy completa dovra' decidere come iterare sui
-missing successivi e cosa fare in caso di fallimento parziale.
+Con `missing=1`, Alfred prova a reinstallare quel path. Con `missing>1`, Alfred
+itera sulla lista raccolta e prova a reinstallare tutti i path mancanti. Il
+resync torna `VALID` solo se tutte le reinstallazioni riescono.
 
 Il dry-run trasforma poi i contatori in una classificazione leggibile:
 
@@ -1744,24 +1745,24 @@ La classificazione corrente e':
 | `scan-covered` | `dirs>0` e `missing=0` | tutte le directory viste hanno gia' un watch attivo |
 | `needs-reinstall` | `missing>0` | almeno una directory vista non ha un watch attivo |
 
-La classificazione e' ancora read-only, ma ora guida il primo ramo mutante:
-`needs-reinstall` porta al tentativo di reinstallare il primo missing path.
+La classificazione e' ancora read-only, ma ora guida il ramo mutante:
+`needs-reinstall` porta al tentativo di reinstallare tutti i missing path
+raccolti.
 
-Quando esiste almeno una directory missing, Alfred logga anche il primo path
-candidato:
+Quando esiste almeno una directory missing, Alfred logga ogni path candidato:
 
 ```text
 WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/b
 ```
 
-Per ora il log `WATCH_RESYNC_SCAN_MISSING` contiene solo il primo missing path,
-anche se il context interno ha gia' raccolto l'intera lista. Questa scelta
-mantiene stabile il contratto diagnostico mentre prepariamo la policy
-multi-missing. Subito dopo, Alfred prova a usare proprio quel primo path per
-installare un watch:
+Alfred logga un `WATCH_RESYNC_SCAN_MISSING` per ogni missing path raccolto.
+Subito dopo, prova a usare quello stesso path per installare un watch:
 
 ```text
+WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/b
 WATCH_RESYNC_REINSTALLED ... installed_path=/tmp/root/a/b
+WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/c
+WATCH_RESYNC_REINSTALLED ... installed_path=/tmp/root/a/c
 ```
 
 Se `watch_manager_add()` fallisce, Alfred logga:
@@ -1773,29 +1774,33 @@ WATCH_RESYNC_FAILED ... error=reinstall-failed
 
 In quel caso il watch principale torna `STALE` e Alfred non logga
 `WATCH_RESYNC_END ... result=valid`. Tornare `VALID` sarebbe fuorviante: lo
-scan ha dimostrato un buco di copertura e la prima riparazione e' fallita.
+scan ha dimostrato un buco di copertura e la riparazione completa e' fallita.
+Se il fallimento avviene dopo alcuni reinstall riusciti, Alfred rimuove i watch
+aggiunti durante quel tentativo prima di lasciare il parent `STALE`.
 
-Con la futura watch reinstallation completa Alfred dovra' fare un passo in piu':
+La watch reinstallation corrente segue questa forma:
 
 ```text
 per ogni directory vista dallo scanner:
     controlla se esiste gia' un watch affidabile
     se manca, chiama watch_manager_add()
-    se l'aggiunta fallisce, decide se lasciare il resync fallito o parziale
+    se l'aggiunta fallisce, rimuove i watch aggiunti nel tentativo
+    se l'aggiunta fallisce, lascia il parent STALE
 ```
 
-Solo questa fase completa potra' dire: "la subtree e' di nuovo osservata in
-modo completo". Il passo attuale conosce tutti i buchi trovati dallo scan, ma
-ripara al massimo il primo e lascia fuori la policy sui casi `missing>1`.
+Solo questa forma puo' dire: "la subtree e' di nuovo osservata in modo
+completo". Il passo attuale copre i casi `missing>1` nello scope affidabile,
+restando conservativo sugli errori.
 
 Il callback attuale, `backend_count_resync_scanned_dir()`, conta le directory
 viste, usa `watcher_has_path()` come query read-only sulla watcher table e copia
-i missing path in una lista owned dal context resync. Quando passeremo alla
-watch reinstallation completa, non dovremo piu' scoprire quali path mancano:
-dovremo consumare quella lista con una policy esplicita per:
+i missing path in una lista owned dal context resync. La watch reinstallation
+consuma quella lista con una policy esplicita:
 
 - aggiungere solo watch mancanti dentro uno scope affidabile
-- decidere cosa fare sugli errori parziali
+- lasciare il parent `STALE` se una reinstallazione fallisce
+- rimuovere i watch aggiunti durante il tentativo se la riparazione non e'
+  completa
 - distinguere diagnostica backend da semantica core
 
 I log dell'helper (`WATCH_RESYNC_SCAN_DONE` e `WATCH_RESYNC_SCAN_FAILED`) sono
@@ -1945,12 +1950,11 @@ flowchart TD
 
 Nel codice corrente e' implementata la prima versione mutante del flusso:
 `STALE -> RESYNCING -> VALID` quando il vecchio path e' ancora una directory,
-la sua identita' `(st_dev, st_ino)` coincide con quella salvata e l'eventuale
-primo watch mancante puo' essere reinstallato. Il ramo negativo resta
-`STALE -> RESYNCING -> STALE` con `WATCH_RESYNC_FAILED` se il vecchio path non
-e' piu' raggiungibile, non e' una directory, ha identita' diversa/mancante o se
-la prima reinstallazione fallisce. La reinstallazione completa di tutti i
-missing path resta nella roadmap.
+la sua identita' `(st_dev, st_ino)` coincide con quella salvata e tutti i watch
+mancanti nello scope affidabile possono essere reinstallati. Il ramo negativo
+resta `STALE -> RESYNCING -> STALE` con `WATCH_RESYNC_FAILED` se il vecchio path
+non e' piu' raggiungibile, non e' una directory, ha identita'
+diversa/mancante o se una reinstallazione fallisce.
 
 I test backend fissano entrambi i rami della scelta.
 
@@ -1964,13 +1968,14 @@ I test backend fissano entrambi i rami della scelta.
 5. Alfred riprende e processa IN_MOVE_SELF
 6. il path esiste e l'identita' coincide
 7. il backend esegue lo scan dry-run directory-only e logga
-   WATCH_RESYNC_SCAN_DONE ... dirs=2 watched=1 missing=1
-8. il backend logga WATCH_RESYNC_SCAN_MISSING ... missing_path=.../unwatched-child
-9. il backend reinstalla il primo watch mancante e logga
-   WATCH_RESYNC_REINSTALLED ... installed_path=.../unwatched-child
+   WATCH_RESYNC_SCAN_DONE ... dirs=3 watched=1 missing=2
+8. il backend logga due WATCH_RESYNC_SCAN_MISSING, uno per `unwatched-one` e
+   uno per `unwatched-two`
+9. il backend reinstalla entrambi i watch mancanti e logga due
+   WATCH_RESYNC_REINSTALLED
 10. il backend logga WATCH_RESYNC_END ... result=valid
-11. il test crea unwatched-child/proof.txt e verifica che Alfred emetta
-    FILE_CREATED per dimostrare che il watch reinstallato e' operativo
+11. il test crea `proof.txt` dentro entrambe le directory riparate e verifica
+    che Alfred emetta due FILE_CREATED
 ```
 
 `tests/backend/test_self_move_identity_mismatch.sh` copre il ramo negativo:
@@ -2010,8 +2015,8 @@ Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
 Non basta "non ho visto altri errori". La transizione `RESYNCING -> VALID`
 deve essere il risultato di una verifica esplicita. Oggi la verifica esplicita
 implementata comprende il confronto di identita' sul singolo watch, lo scan
-directory-only dello scope affidabile e la reinstallazione del primo missing
-path. La reinstallazione di tutti i missing path resta il passo futuro.
+directory-only dello scope affidabile e la reinstallazione di tutti i missing
+path trovati nello scope.
 
 #### Regola per restare STALE
 
@@ -2061,21 +2066,15 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. correggere `backend_resync_watch_subtree_dirs()` in modo che raccolga o
-   reinstalli tutti i missing path, non solo il primo
-2. mantenere la policy conservativa: se una reinstallazione fallisce, il watch
-   principale resta `STALE`
-3. aggiornare `test_self_move_identity_match.sh` o aggiungere un nuovo test
-   backend con almeno due directory missing create mentre Alfred e' fermo
-4. verificare nei log l'ordine:
-   `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_SCAN_CLASS`,
-   uno o piu' `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_END`
-5. documentare la nuova policy `missing>1` in `14-scenari-test.md`,
-   `21-roadmap-scanner-resync.md`, `documentation-progress.md` e
-   `commenting-progress.md`
-6. solo dopo la reinstallazione completa, tornare a discutere `IN_DELETE_SELF`,
-   `IN_UNMOUNT` e overflow
-7. rimandare output CLI e JSON a un passo successivo
+1. valutare se aggiungere un test mirato del ramo fallito, forzando una
+   reinstallazione impossibile e verificando `WATCH_RESYNC_REINSTALL_FAILED`,
+   rollback dei watch aggiunti nel tentativo e parent ancora `STALE`
+2. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
+   prodotti da `watch_manager_remove()` sono diagnostica sufficiente
+3. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
+   cioe' gli eventi che non hanno ancora una root affidabile semplice come il
+   ramo positivo di `IN_MOVE_SELF`
+4. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 

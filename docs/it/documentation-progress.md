@@ -39,6 +39,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata
+  la reinstallazione di tutti i missing watch nello scope affidabile di
+  `IN_MOVE_SELF`. Il test positivo ora crea due directory non watched mentre
+  Alfred e' fermo, verifica `missing=2`, due `WATCH_RESYNC_REINSTALLED` e due
+  `FILE_CREATED` dopo il ritorno a `VALID`.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: il context del resync scanner ora copia tutti
   i missing path in una lista owned dal backend. Il runtime continua a

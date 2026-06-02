@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after enabling full
+  multi-missing watch reinstallation for the trusted IN_MOVE_SELF resync scope.
+  Comments now document the all-or-stale policy, rollback of watches installed
+  during a failed resync attempt, and why the parent returns VALID only after
+  every missing watch has been restored
 - refreshed `modules/inotify/src/inotify_backend.c` after changing the resync
   scan context from a single first-missing buffer to an owned dynamic list of
   missing paths. Comments now explain callback path lifetime, list ownership,

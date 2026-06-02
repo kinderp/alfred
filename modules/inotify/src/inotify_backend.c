@@ -865,8 +865,9 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
 
     /*
      * The old path is now proven to be the original watched object. Run the
-     * scanner phase before returning to VALID. The first reinstallation step is
-     * intentionally narrow: it may add only the first missing child watch.
+     * scanner phase before returning to VALID. The resync helper must restore
+     * every missing child watch in the trusted scope; otherwise the parent
+     * remains STALE.
      */
     if (backend_resync_watch_subtree_dirs(ctx, wd, path, reason) != ERR_OK) {
         if (watcher_set_state(&ctx->runtime->watchers,
@@ -912,7 +913,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
 }
 
 /*
- * backend_resync_watch_subtree_dirs - scan subtree and reinstall one watch
+ * backend_resync_watch_subtree_dirs - scan subtree and reinstall missing watches
  * @ctx: narrowed backend context used by the poll path
  * @wd: stale watch descriptor that would own the recovery scope
  * @path: trusted root path to scan
@@ -925,9 +926,10 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
  * child directories to decide which recursive watches are missing.
  *
  * The callback counts discovered directories and copies every directory
- * missing from the watcher table. This helper still attempts to reinstall only
- * the first missing watch. Reinstalling every missing directory and handling
- * partial failure across a larger set is the next policy step.
+ * missing from the watcher table. This helper then attempts to reinstall every
+ * missing watch. The policy is deliberately all-or-stale: if any reinstall
+ * fails, watches added during this resync attempt are removed and the caller
+ * leaves the parent watch STALE.
  *
  * Return: ERR_OK on scan success, otherwise the scanner error code.
  */
@@ -1002,32 +1004,56 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  backend_resync_scan_class_name(scan_class));
 
     if (scan_context.missing_paths_count > 0) {
-        const char *first_missing_path = scan_context.missing_paths[0];
+        int *installed_wds =
+            calloc(scan_context.missing_paths_count, sizeof(int));
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     first_missing_path);
+        if (installed_wds == NULL) {
+            backend_resync_scan_context_destroy(&scan_context);
+            return ERR_ALLOC;
+        }
 
-        if (watch_manager_add(ctx, first_missing_path) < 0) {
+        size_t installed_count = 0;
+
+        for (size_t i = 0; i < scan_context.missing_paths_count; i++) {
+            const char *missing_path = scan_context.missing_paths[i];
+
             logger_event(ctx->logger,
-                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                         "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
                          wd,
                          path,
                          reason,
-                         first_missing_path);
-            backend_resync_scan_context_destroy(&scan_context);
-            return ERR_INOTIFY;
+                         missing_path);
+
+            int new_wd = watch_manager_add(ctx, missing_path);
+
+            if (new_wd < 0) {
+                logger_event(ctx->logger,
+                             "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                             wd,
+                             path,
+                             reason,
+                             missing_path);
+
+                for (size_t j = 0; j < installed_count; j++)
+                    (void)watch_manager_remove(ctx, installed_wds[j]);
+
+                free(installed_wds);
+                backend_resync_scan_context_destroy(&scan_context);
+                return ERR_INOTIFY;
+            }
+
+            installed_wds[installed_count] = new_wd;
+            installed_count++;
+
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
+                         wd,
+                         path,
+                         reason,
+                         missing_path);
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     first_missing_path);
+        free(installed_wds);
     }
 
     backend_resync_scan_context_destroy(&scan_context);
@@ -1041,9 +1067,9 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
  *
  * The scanner callback receives borrowed paths. Multi-missing reinstallation
  * needs those paths after fs_scan_tree() returns, so the backend stores private
- * copies in a growable array. The current runtime still consumes only the first
- * entry, but the collection step deliberately records every missing directory
- * seen before an allocation failure or scan stop.
+ * copies in a growable array. The reinstall phase later consumes the whole
+ * list so the parent watch returns VALID only after every missing watch in the
+ * trusted scope has been restored.
  *
  * Return: 0 on success, -1 on invalid input or allocation failure.
  */
