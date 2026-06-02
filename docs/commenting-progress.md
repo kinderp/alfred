@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/watch_manager.c` after adding the pre-watch
+  and post-watch stat(2) identity check. Comments now explain why the backend
+  captures identity before inotify_add_watch(), validates it after the kernel
+  watch is installed, and removes the watch if the path changed in between
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`,
   `modules/inotify/src/watch_manager.c`,

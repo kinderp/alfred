@@ -913,20 +913,33 @@ Questo blocco dice tre cose:
 
 ### Caso 6: aggiungi un nuovo test ufficiale
 
-Se aggiungi un nuovo script dentro una suite gia' esistente, per esempio:
+Se aggiungi un nuovo script dentro una suite gia' esistente, prima controlla il
+runner della suite. Alcuni runner enumerano i file, altri usano un pattern.
+
+Esempio con runner esplicito:
 
 ```text
 tests/core/test_new_scenario.sh
 ```
 
-potrebbe bastare aggiornare:
+se `tests/core/run_all.sh` non include automaticamente il nuovo file, aggiorna:
 
 ```text
 tests/core/run_all.sh
 ```
 
-In questo caso il Makefile non cambia, perche' `make test` entra gia' in
-`tests/core/` ed esegue `run_all.sh`.
+Esempio con runner automatico:
+
+```text
+tests/backend/test_new_diagnostic.sh
+```
+
+`tests/backend/run_all.sh` esegue tutti gli script `test_*.sh`, quindi un nuovo
+file backend con quel nome entra automaticamente in
+`make test-backend-diagnostics`.
+
+In entrambi i casi il Makefile non cambia, perche' il target entra gia' nella
+directory della suite ed esegue `run_all.sh`.
 
 Se invece aggiungi una nuova categoria di test, per esempio:
 

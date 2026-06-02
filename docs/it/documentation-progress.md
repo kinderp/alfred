@@ -39,6 +39,19 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/watch_manager.c`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: rafforzata la
+  cattura dell'identita' del watch con doppia `stat()`. `watch_manager_add()`
+  legge `st_dev/st_ino` prima e dopo `inotify_add_watch()`; se l'identita'
+  cambia, rimuove il watch kernel e fallisce l'installazione, evitando di
+  associare un `wd` all'oggetto sbagliato.
+- `11-come-contribuire.md`, `09-makefile-e-build-system.md`,
+  `14-scenari-test.md` e `21-roadmap-scanner-resync.md`: audit documentale
+  della mini-feature identity probe. La guida contributori ora spiega come
+  scegliere la suite corretta quando si aggiunge un test, quando aggiornare i
+  runner, quali documenti aggiornare e quali verifiche eseguire. La roadmap
+  resync chiarisce che il ritorno a `VALID` oggi richiede identita'
+  `(st_dev, st_ino)` coincidente, mentre lo scan directory-only resta futuro.
 - `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md` e
   `21-roadmap-scanner-resync.md`: aggiunto il test backend positivo del probe
   di identita'. Lo scenario sposta temporaneamente la root osservata e rimette
@@ -57,9 +70,9 @@ Stati usati:
   `10-debugging-test-e-strumenti.md`, `14-scenari-test.md`,
   `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: aggiunta la prova di identita' dei watch
-  basata su `(st_dev, st_ino)`. Il watch manager cattura l'identita' con
-  `stat()` dopo `inotify_add_watch()`, la watcher table la conserva e il probe
-  resync puo' tornare a `VALID` solo quando l'identita' corrente coincide.
+  basata su `(st_dev, st_ino)`. Il watch manager cattura l'identita', la
+  watcher table la conserva e il probe resync puo' tornare a `VALID` solo
+  quando l'identita' corrente coincide.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: il probe `backend_resync_watch()` ora usa
   `backend_resync_probe_result_t` per classificare gli esiti interni prima di

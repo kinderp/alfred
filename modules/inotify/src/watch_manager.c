@@ -3,7 +3,7 @@
  *
  * This file owns the operations that mutate the backend watcher table:
  *
- *   inotify_add_watch() -> stat() -> watcher_store_identity()
+ *   stat() -> inotify_add_watch() -> stat() -> watcher_store_identity()
  *   inotify_rm_watch()  -> watcher_remove()
  *
  * It deliberately does not classify filesystem events. WATCH_ADDED and
@@ -123,7 +123,9 @@ uint32_t watch_manager_default_mask(void)
  * On success the kernel returns a watch descriptor. The descriptor is then used
  * as an index into watcher_table_t, where watcher_store_identity() saves the
  * path and stat(2) identity needed later to reconstruct full event paths and
- * validate stale mappings during resync.
+ * validate stale mappings during resync. The identity is checked immediately
+ * before and after inotify_add_watch() so Alfred does not store identity for a
+ * different object if @path changes during watch installation.
  *
  * The WATCH_ADDED log documents that Alfred can now observe @path. It is not a
  * substitute for DIR_CREATED and must not be consumed as a semantic core event.
@@ -135,6 +137,24 @@ int watch_manager_add(inotify_backend_context_t *ctx,
 {
     if (!watch_manager_context_is_valid(ctx) || path == NULL)
         return -1;
+
+    struct stat before;
+    struct stat after;
+
+    /*
+     * First stat(2): capture the identity the caller asked Alfred to watch.
+     * A path is only a name; st_dev/st_ino are the filesystem identity that we
+     * will later use to detect whether the name still points to the same object.
+     */
+    if (stat(path, &before) != 0) {
+        logger_error(ctx->logger,
+                     "stat before watch failed path=%s errno=%d (%s)",
+                     path,
+                     errno,
+                     strerror(errno));
+
+        return -1;
+    }
 
     int wd =
         inotify_add_watch(ctx->runtime->fd,
@@ -152,11 +172,15 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    struct stat st;
-
-    if (stat(path, &st) != 0) {
+    /*
+     * Second stat(2): validate that the path still names the same object after
+     * the kernel accepted the watch. If another process replaced the path in
+     * this small window, keeping the watch would pair the wd with the wrong
+     * identity, so the only safe response is to remove it and fail the add.
+     */
+    if (stat(path, &after) != 0) {
         logger_error(ctx->logger,
-                     "stat failed for watched path=%s errno=%d (%s)",
+                     "stat after watch failed path=%s errno=%d (%s)",
                      path,
                      errno,
                      strerror(errno));
@@ -167,11 +191,24 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
+    if (before.st_dev != after.st_dev ||
+        before.st_ino != after.st_ino) {
+
+        logger_error(ctx->logger,
+                     "watched path changed during add path=%s",
+                     path);
+
+        inotify_rm_watch(ctx->runtime->fd,
+                         wd);
+
+        return -1;
+    }
+
     if (watcher_store_identity(&ctx->runtime->watchers,
                                wd,
                                path,
-                               st.st_dev,
-                               st.st_ino) != 0) {
+                               after.st_dev,
+                               after.st_ino) != 0) {
 
         logger_error(ctx->logger,
                      "watcher_store_identity failed wd=%d path=%s",

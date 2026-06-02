@@ -289,7 +289,7 @@ Scenari diagnostici riesaminati:
 | self move identity mismatch | `tests/backend/test_self_move_identity_mismatch.sh` | `IN_MOVE_SELF`, path osservato ricreato, `WATCH_RESYNC_FAILED ... error=identity-mismatch` | dimostra perche' il path da solo non basta: se la root osservata viene spostata e una nuova directory nasce nello stesso path, Alfred confronta `(st_dev, st_ino)` e lascia il watch `STALE` |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
-I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
+Gli scenari diagnostici sui watch sono gia' in `tests/backend/`.
 
 ## Test scanner
 
@@ -342,8 +342,15 @@ La regola pratica e':
   `tests/core/`
 - se il test parla di `WATCH_ADDED`, `WATCH_REMOVED`, watch descriptor o raw
   diagnostici, va in `tests/backend/`
+- se il test parla di scanner, opzioni di attraversamento, symlink o errori
+  parziali di scan, va in `tests/scanner/`
+- se il test parla direttamente di `watcher_table_t`, stati `VALID/STALE` o
+  identita' `st_dev/st_ino` senza avviare Alfred, va in `tests/watcher/`
 - se il test parla di differenze legacy/core, va archiviato con la storia dello
   shadow e non deve sopravvivere come controllo automatico ordinario
+
+La guida contributori contiene la procedura operativa completa per aggiungere
+un test: scelta della suite, runner, documentazione e verifiche locali.
 
 ### Scenario core: engine shadow invalido
 

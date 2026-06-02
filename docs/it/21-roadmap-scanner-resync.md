@@ -1545,10 +1545,13 @@ Per questo la raggiungibilita' del path non basta. Il probe riporta il watch a
 watch `STALE` e scrive `WATCH_RESYNC_FAILED`.
 
 La watcher table salva questa identita' quando il watch viene installato:
-`watch_manager_add()` chiama `inotify_add_watch()`, poi `stat()` sul path e
-infine `watcher_store_identity()`. La sequenza non crea semantica utente: serve
-solo a dare al backend una prova piu' forte del semplice path durante il futuro
-resync.
+`watch_manager_add()` chiama `stat()` prima di `inotify_add_watch()`, installa
+il watch kernel, poi chiama una seconda `stat()` sullo stesso path. Se
+`st_dev/st_ino` cambiano tra le due letture, Alfred rimuove subito il watch con
+`inotify_rm_watch()` e considera fallita l'installazione. Se coincidono, salva
+l'identita' con `watcher_store_identity()`. La sequenza non crea semantica
+utente: serve solo a evitare di associare un `wd` kernel all'identita' di un
+oggetto diverso quando il path cambia proprio durante l'installazione.
 
 Internamente il probe classifica l'esito con
 `backend_resync_probe_result_t`. Questa scelta evita di spargere stringhe di
@@ -1691,11 +1694,15 @@ path raggiungibile + identita' diversa -> WATCH_RESYNC_FAILED / STALE
 Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
 
 - il path associato al watch e' ancora raggiungibile
+- per il probe corrente su `IN_MOVE_SELF`, l'identita' corrente
+  `(st_dev, st_ino)` coincide con quella salvata nella watcher table
 - lo scan della root non fallisce con errore duro
 - i watch necessari per la subtree scelta sono installati o confermati
 
 Non basta "non ho visto altri errori". La transizione `RESYNCING -> VALID`
-deve essere il risultato di una verifica esplicita.
+deve essere il risultato di una verifica esplicita. Oggi la verifica esplicita
+implementata e' il confronto di identita' sul singolo watch; lo scan
+directory-only e la reinstallazione dei watch mancanti restano il passo futuro.
 
 #### Regola per restare STALE
 

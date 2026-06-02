@@ -208,6 +208,50 @@ stato di osservazione.
 Se modifichi solo documentazione, `make` puo' bastare. Se modifichi codice,
 Makefile, test o semantica eventi, esegui anche entrambe le suite.
 
+## Aggiungere un test
+
+Prima di scrivere un nuovo test, scegli la suite in base al contratto che vuoi
+proteggere:
+
+```text
+tests/core/     -> comportamento semantico visto dall'utente
+tests/backend/  -> diagnostica e stato interno del backend inotify
+tests/scanner/  -> attraversamento filesystem usato da scanner/resync
+tests/watcher/  -> struttura dati watcher senza kernel reale
+```
+
+Regola pratica:
+
+- se il test controlla eventi come `FILE_CREATED`, `DIR_RELOCATED` o
+  `FILE_READY`, va in `tests/core/`
+- se il test controlla log come `WATCH_ADDED`, `WATCH_REMOVED`,
+  `WATCH_RESYNC_FAILED` o watch descriptor, va in `tests/backend/`
+- se il test controlla opzioni di attraversamento directory, errori parziali,
+  symlink o limiti dello scanner, va in `tests/scanner/`
+- se il test controlla campi e transizioni di `watcher_table_t`, va in
+  `tests/watcher/`
+
+Quando aggiungi uno scenario:
+
+1. crea il file nella suite corretta
+2. segui lo stile dei test vicini, inclusi commenti solo dove servono davvero
+3. verifica se il runner esegue gia' automaticamente il nuovo file
+4. aggiorna `docs/it/14-scenari-test.md`
+5. aggiorna la documentazione specifica del componente toccato
+6. esegui la suite mirata e poi i controlli generali necessari
+
+Le suite shell non sono tutte uguali. `tests/backend/run_all.sh` esegue
+automaticamente tutti gli script `test_*.sh`, quindi aggiungere un nuovo test
+backend con quel nome basta per includerlo nel target
+`make test-backend-diagnostics`. Altre suite possono avere runner piu'
+espliciti: controlla sempre `run_all.sh` prima di assumere che il nuovo file
+venga eseguito.
+
+Se aggiungi una nuova categoria di test, non basta creare una directory: devi
+aggiungere un target nel Makefile, documentarlo in
+`docs/it/09-makefile-e-build-system.md` e spiegare quando usarlo in questa
+guida.
+
 ## Aggiornare la documentazione
 
 Ogni modifica che cambia comportamento, architettura, API, test, Makefile o

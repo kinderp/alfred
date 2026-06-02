@@ -112,8 +112,9 @@ Passi principali del ciclo backend:
    descriptor inotify non bloccante.
 2. `inotify_backend_add_startup_watch()` installa i watch sui path passati da
    riga di comando.
-3. `watch_manager_add()` chiama `inotify_add_watch()` usando
-   `config.inotify.watch_mask`.
+3. `watch_manager_add()` cattura l'identita' con `stat()`, chiama
+   `inotify_add_watch()` usando `config.inotify.watch_mask`, poi ricontrolla
+   l'identita' con una seconda `stat()`.
 4. `watcher_store_identity()` salva `wd -> path` e l'identita' `st_dev/st_ino`.
 5. `inotify_backend_poll()` legge uno o piu' record dal file descriptor.
 6. `watcher_get_path()` recupera la directory parent associata al `wd`.
@@ -139,7 +140,7 @@ Il backend modifica stato solo quando quello stato appartiene al backend:
 | Stato | Modificato da | Perche' appartiene al backend |
 | --- | --- | --- |
 | `inotify_backend_t.fd` | `inotify_backend_init()`, `inotify_backend_shutdown()` | e' il descrittore Linux letto dal backend |
-| `watcher_table_t` | `watcher_store()`, `watcher_remove()` | serve a tradurre `wd` in path |
+| `watcher_table_t` | `watcher_store_identity()`, `watcher_remove()` | serve a tradurre `wd` in path e conservare identita' backend |
 | watch ricorsivi startup | `watch_manager_add_recursive()` + `fs_scan_tree()` | installano watch sull'albero gia' esistente senza raw sintetici |
 | watch ricorsivi runtime | `backend_handle_dir_create()` + `fs_scan_tree()` | riparano nuove directory annidate e mantengono la policy raw sintetica nel backend |
 | raw sintetici per discovery | `backend_emit_synthetic_dir_create()` | riparano un limite di osservazione del backend |
@@ -535,13 +536,16 @@ sequenceDiagram
     participant Mask as watch_manager_default_mask()
     participant App as inotify_backend_init()
     participant Watch as watch_manager_add()
+    participant Stat as stat()
     participant Kernel as inotify_add_watch()
 
     Config->>InCfg: inizializza config_t.inotify
     InCfg->>Mask: richiede maschera predefinita
     Mask-->>InCfg: IN_CREATE | IN_DELETE | IN_MODIFY | ...
     App->>Watch: aggiungi path
+    Watch->>Stat: cattura identita' prima del watch
     Watch->>Kernel: fd, path, inotify.watch_mask
+    Watch->>Stat: valida identita' dopo il watch
 ```
 
 Il parsing delle capacita' usa una funzione dedicata invece di `atoi()`. Il
@@ -572,7 +576,7 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
-| `watchers` | tabella `wd -> path` e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
+| `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
 
 ### `watcher_table_t`
 
@@ -753,14 +757,17 @@ Sequenza:
 sequenceDiagram
     participant Backend as inotify_backend_add_startup_watch()
     participant Manager as watch_manager_add()
+    participant Stat as stat()
     participant Kernel as inotify_add_watch()
-    participant Table as watcher_store()
+    participant Table as watcher_store_identity()
     participant Logger as logger_event()
 
     Backend->>Manager: path=/tmp/progetto
+    Manager->>Stat: stat(path) prima del watch
     Manager->>Kernel: add watch con inotify.watch_mask
     Kernel-->>Manager: wd=3
-    Manager->>Table: store wd=3 path=/tmp/progetto
+    Manager->>Stat: stat(path) dopo il watch
+    Manager->>Table: store wd=3 path=/tmp/progetto identita'
     Table-->>Manager: ok
     Manager->>Logger: WATCH_ADDED wd=3 path=/tmp/progetto
 ```
@@ -771,12 +778,15 @@ Effetto sulla struttura dati:
 prima:
 items[3].active = 0
 
-dopo watcher_store():
-items[3].wd     = 3
-items[3].active = 1
-items[3].state  = WATCHER_STATE_VALID
-items[3].path   = "/tmp/progetto"
-count           = count + 1
+dopo watcher_store_identity():
+items[3].wd           = 3
+items[3].active       = 1
+items[3].state        = WATCHER_STATE_VALID
+items[3].has_identity = 1
+items[3].device_id    = st.st_dev
+items[3].inode_id     = st.st_ino
+items[3].path         = "/tmp/progetto"
+count                 = count + 1
 ```
 
 Il log `WATCH_ADDED` e' diagnostica backend. Non e' un evento semantico del
@@ -910,13 +920,13 @@ sequenceDiagram
     participant Backend as inotify_backend_poll()
     participant Scanner as fs_scan_tree()
     participant Manager as watch_manager_add()
-    participant Table as watcher_store()
+    participant Table as watcher_store_identity()
     participant Synthetic as backend_emit_synthetic_dir_create()
     participant Core as alfred_process()
 
     Kernel-->>Backend: IN_CREATE|IN_ISDIR one
     Backend->>Manager: add watch per one
-    Manager->>Table: store watch per one
+    Manager->>Table: store watch e identita' per one
     Backend->>Scanner: scan one con emit_root=0
     Scanner->>Backend: discovered one/two
     Backend->>Manager: add watch per one/two
@@ -1121,7 +1131,9 @@ frame 1:
   items[3].active = 0
 
 frame 2:
+  stat("/tmp/progetto") cattura identita' prima del watch
   inotify_add_watch() restituisce wd=3
+  stat("/tmp/progetto") ricontrolla identita' dopo il watch
 
 frame 3:
   watcher_store_identity() scrive:
@@ -1290,8 +1302,13 @@ frame 3b - startup ricorsivo:
 
 frame 4 - chiamata kernel:
   watch_manager_add()
+  stat("/tmp/progetto") prima del watch
   inotify_add_watch(fd, "/tmp/progetto", config.inotify.watch_mask)
   kernel restituisce wd=3
+  stat("/tmp/progetto") dopo il watch
+  se l'identita' e' cambiata:
+    inotify_rm_watch(fd, wd)
+    fallimento controllato
 
 frame 5 - aggiornamento watcher table:
   watcher_store_identity(wd=3, path="/tmp/progetto", st_dev, st_ino)
