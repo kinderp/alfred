@@ -103,8 +103,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
                                                 const char *path,
-                                                const char *reason)
-    __attribute__((unused));
+                                                const char *reason);
 
 static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
                                             void *userdata);
@@ -752,6 +751,14 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
         return;
     }
 
+    /*
+     * The old path is now proven to be the original watched object. Run the
+     * scanner phase as a dry-run before returning to VALID. Its result is only
+     * diagnostic for now: watch reinstallation and scan-failure policy are the
+     * next resync step, not part of the identity probe.
+     */
+    (void)backend_resync_watch_subtree_dirs(ctx, wd, path, reason);
+
     if (watcher_set_state(&ctx->runtime->watchers,
                           wd,
                           WATCHER_STATE_VALID) != 0) {
@@ -779,16 +786,16 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
  * @path: trusted root path to scan
  * @reason: kernel/backend reason that triggered recovery
  *
- * This helper is intentionally not wired into backend_resync_watch() yet. It
- * prepares phase two of recovery: a directory-only scan below a path that a
- * prior phase has proven trustworthy. The scan uses emit_root=0 because the
- * root is the watch being recovered; the future resync phase needs child
- * directories to decide which recursive watches are missing.
+ * This helper runs only after a prior phase has proven that the old path still
+ * names the original watched object. It prepares phase two of recovery: a
+ * directory-only scan below that trusted path. The scan uses emit_root=0
+ * because the root is the watch being recovered; the future resync phase needs
+ * child directories to decide which recursive watches are missing.
  *
  * For now the callback only counts discovered directories. It does not install
  * watches, emit raw Alfred events, or change watcher state. Those actions need
  * an explicit scanner-based resync policy before this helper is called from the
- * runtime path.
+ * runtime path beyond the current diagnostic dry-run.
  *
  * Return: ERR_OK on scan success, otherwise the scanner error code.
  */

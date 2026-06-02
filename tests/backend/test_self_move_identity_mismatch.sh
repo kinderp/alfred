@@ -53,6 +53,7 @@ assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_
              "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch"
 
 assert_not_contains "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF"
+assert_not_contains "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF"
 assert_not_contains "DIR_RELOCATED path="
 assert_not_contains "DIR_MOVED path="
 assert_not_contains "DIR_RENAMED path="

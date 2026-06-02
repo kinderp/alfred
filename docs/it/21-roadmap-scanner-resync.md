@@ -1547,8 +1547,9 @@ legge il vecchio path, confronta identita' e decide solo `VALID` oppure
 `STALE`. Lo scan della subtree, l'installazione di watch mancanti e le policy su
 replacement directory appartengono alla fase successiva.
 
-Il primo helper della fase 2 e' stato preparato come dry-run non collegato al
-runtime:
+Il primo helper della fase 2 e' stato preparato come dry-run collegato solo al
+ramo in cui il probe identita' ha gia' dimostrato che il vecchio path e' ancora
+lo stesso oggetto:
 
 ```c
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
@@ -1558,9 +1559,9 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
 ```
 
 La funzione riceve il context backend, il `wd` stale, il path root dello scope
-da scansionare e il motivo della recovery. Per ora non viene chiamata da
-`backend_resync_watch()`: esiste per fissare la forma della fase scanner-based
-senza cambiare ancora il comportamento osservabile di `IN_MOVE_SELF`.
+da scansionare e il motivo della recovery. Oggi viene chiamata solo come
+diagnostica dry-run: conta le directory figlie quando lo scope e' gia'
+affidabile, ma non ripara ancora i watch mancanti.
 
 Le opzioni dello scanner sono intenzionalmente conservative:
 
@@ -1579,21 +1580,97 @@ precedente. Lo scanner della fase 2 serve a vedere le directory figlie e a
 preparare la futura installazione dei watch mancanti; non deve trattare la root
 come una nuova directory scoperta.
 
+#### Dry-run e watch reinstallation
+
+`Dry-run` significa: eseguire lo scan per osservare cosa c'e' nel filesystem,
+produrre diagnostica e misurare il caso reale, senza modificare ancora lo stato
+del backend. Nel dry-run corrente Alfred:
+
+- chiama `fs_scan_tree()` in modalita' directory-only
+- conta le directory figlie viste
+- logga `WATCH_RESYNC_SCAN_DONE` oppure `WATCH_RESYNC_SCAN_FAILED`
+- non chiama `inotify_add_watch()`
+- non chiama `watch_manager_add()`
+- non emette raw Alfred sintetici
+- non cambia la watcher table in base alle directory trovate
+- non produce eventi core
+
+`Watch reinstallation` significa invece: usare il risultato dello scan per
+cambiare davvero lo stato di osservazione. In quella fase Alfred dovra':
+
+- confrontare le directory viste dallo scanner con i watch gia' presenti
+- decidere quali directory non hanno ancora un watch
+- chiamare `watch_manager_add()` sui watch mancanti
+- gestire gli errori di `inotify_add_watch()`
+- decidere se il resync puo' considerarsi riuscito o se il watch resta `STALE`
+- loggare diagnostiche che descrivono la riparazione reale, non solo lo scan
+
+La differenza e' sostanziale. Il dry-run e' osservazione senza side effect
+strutturali; la watch reinstallation e' una mutazione del backend. Per questo
+abbiamo scelto di collegare prima il dry-run solo al ramo identita' positiva:
+serve a controllare che lo scope sia scansionabile senza ancora decidere la
+policy di riparazione.
+
+Tabella riassuntiva:
+
+| Aspetto | Dry-run attuale | Watch reinstallation futura |
+| --- | --- | --- |
+| Scopo | Capire cosa vede lo scanner dentro uno scope affidabile | Riparare davvero la copertura dei watch ricorsivi |
+| Effetto su inotify | Nessuno | Chiama `inotify_add_watch()` tramite `watch_manager_add()` |
+| Effetto sulla watcher table | Nessuno basato sulle directory scansionate | Aggiunge entry `wd -> path` per directory mancanti |
+| Effetto sul core | Nessuno | Nessuno diretto: resta diagnostica/backend state |
+| Log | `WATCH_RESYNC_SCAN_DONE` / `WATCH_RESYNC_SCAN_FAILED` | Log futuri di watch aggiunti, riparazione riuscita o fallita |
+| Rischio | Basso, perche' osserva soltanto | Piu' alto, perche' modifica stato kernel e stato Alfred |
+
+Esempio concreto:
+
+```text
+/tmp/root              watch gia' noto, appena tornato affidabile
+/tmp/root/a            directory figlia
+/tmp/root/a/b          directory annidata
+```
+
+Con il dry-run Alfred fa solo:
+
+```text
+fs_scan_tree("/tmp/root", emit_root=0)
+vede /tmp/root/a
+vede /tmp/root/a/b
+logga WATCH_RESYNC_SCAN_DONE ... dirs=2
+```
+
+Dopo questo log non possiamo ancora concludere che la copertura dei watch sia
+stata riparata. Abbiamo solo dimostrato che lo scope affidabile e'
+scansionabile e che contiene due directory figlie. Non sappiamo ancora, in modo
+usato dal codice, se quelle directory abbiano gia' un watch oppure no.
+
+Con la futura watch reinstallation Alfred dovra' fare un passo in piu':
+
+```text
+per ogni directory vista dallo scanner:
+    controlla se esiste gia' un watch affidabile
+    se manca, chiama watch_manager_add()
+    se l'aggiunta fallisce, decide se lasciare il resync fallito o parziale
+```
+
+Solo questa seconda fase potra' dire: "la subtree e' di nuovo osservata in modo
+completo". Il dry-run non lo dice: prepara le informazioni e rende visibile nei
+log quanto lavoro ci sarebbe da fare.
+
 Il callback attuale, `backend_count_resync_scanned_dir()`, conta soltanto le
-directory viste. Non installa watch, non emette raw Alfred, non produce eventi
-core e non cambia stato nella watcher table. Quando la fase sara' collegata al
-runtime, dovremo sostituire o estendere questa callback con una policy esplicita
-per:
+directory viste. Quando passeremo alla watch reinstallation, dovremo sostituire
+o estendere questa callback con una policy esplicita per:
 
 - confrontare directory visibili e watch presenti
 - aggiungere solo watch mancanti dentro uno scope affidabile
 - decidere cosa fare sugli errori parziali
 - distinguere diagnostica backend da semantica core
 
-I log previsti dall'helper (`WATCH_RESYNC_SCAN_DONE` e
-`WATCH_RESYNC_SCAN_FAILED`) sono quindi preparatori. Non fanno ancora parte del
-contratto runtime dei test backend, perche' l'helper non e' invocato dal flusso
-`IN_MOVE_SELF`.
+I log dell'helper (`WATCH_RESYNC_SCAN_DONE` e `WATCH_RESYNC_SCAN_FAILED`) sono
+preparatori dal punto di vista della recovery completa, ma ora fanno parte del
+contratto diagnostico backend del ramo `IN_MOVE_SELF` con identita' confermata.
+Non sono eventi core e non indicano ancora che Alfred abbia reinstallato watch:
+indicano solo che lo scope affidabile e' stato scansionato in dry-run.
 
 Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
 produce raw Alfred. Controlla se il vecchio path associato al watch esiste
@@ -1750,7 +1827,9 @@ I test backend fissano entrambi i rami della scelta.
 4. la stessa directory viene rimessa nello stesso vecchio path
 5. Alfred riprende e processa IN_MOVE_SELF
 6. il path esiste e l'identita' coincide
-7. il backend logga WATCH_RESYNC_END ... result=valid
+7. il backend esegue lo scan dry-run directory-only e logga
+   WATCH_RESYNC_SCAN_DONE ... dirs=1
+8. il backend logga WATCH_RESYNC_END ... result=valid
 ```
 
 `tests/backend/test_self_move_identity_mismatch.sh` copre il ramo negativo:
@@ -1762,7 +1841,8 @@ I test backend fissano entrambi i rami della scelta.
 4. una nuova directory viene creata nello stesso vecchio path
 5. Alfred riprende e processa IN_MOVE_SELF
 6. il path esiste, ma l'identita' non coincide
-7. il backend logga WATCH_RESYNC_FAILED ... error=identity-mismatch
+7. il backend non esegue lo scan dry-run sul path riusato
+8. il backend logga WATCH_RESYNC_FAILED ... error=identity-mismatch
 ```
 
 Senza il confronto `(st_dev, st_ino)`, questo scenario sarebbe ambiguo: il

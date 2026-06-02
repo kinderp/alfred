@@ -39,6 +39,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: ampliata la spiegazione didattica della
+  differenza tra dry-run e futura watch reinstallation, con tabella comparativa
+  ed esempio su directory figlie scansionate ma non ancora trasformate in nuovi
+  watch.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`,
+  `tests/backend/test_self_move_identity_mismatch.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato lo
+  scan dry-run solo al ramo `IN_MOVE_SELF` con identita' confermata. Il ramo
+  positivo logga `WATCH_RESYNC_SCAN_DONE ... dirs=1` prima di tornare `VALID`;
+  il ramo identity mismatch conferma che lo scan non parte su un path riusato.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: aggiunto l'helper dry-run
   `backend_resync_watch_subtree_dirs()` per la futura fase scanner-based del

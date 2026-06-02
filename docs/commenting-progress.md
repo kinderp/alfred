@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after wiring the dry-run
+  subtree scanner into the identity-match branch. Comments now explain that the
+  scan runs only after the old path is proven to be the original object and
+  remains diagnostic until watch reinstallation policy is implemented
 - refreshed `modules/inotify/src/inotify_backend.c` after adding the dry-run
   scanner helper for future stale-watch subtree resync. Comments document why
   the helper is not wired into runtime yet, why it scans directories only with
