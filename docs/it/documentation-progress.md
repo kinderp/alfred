@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/backend/test_self_move_identity_mismatch.sh`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto un test backend deterministico per
+  il caso `IN_MOVE_SELF` in cui il vecchio path viene ricreato con identita'
+  diversa. Il test sospende Alfred con `SIGSTOP`, sposta la root osservata,
+  ricrea il vecchio path, riprende Alfred con `SIGCONT` e verifica
+  `WATCH_RESYNC_FAILED ... error=identity-mismatch`.
 - `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
   `modules/inotify/src/watch_manager.c`, `modules/inotify/src/inotify_backend.c`,
   `tests/watcher/test_watcher_state.c`, `09-makefile-e-build-system.md`,

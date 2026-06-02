@@ -1649,6 +1649,24 @@ la sua identita' `(st_dev, st_ino)` coincide con quella salvata, oppure
 e' piu' raggiungibile, non e' una directory o ha identita' diversa/mancante. Il
 blocco `fs_scan_tree()` e l'aggiunta dei watch mancanti restano nella roadmap.
 
+Il test backend `tests/backend/test_self_move_identity_mismatch.sh` fissa il
+caso piu' importante per questa scelta:
+
+```text
+1. Alfred osserva /tmp/alfred_backend_test_identity_mismatch
+2. il processo Alfred viene sospeso per non consumare subito la coda inotify
+3. la root osservata viene spostata
+4. una nuova directory viene creata nello stesso vecchio path
+5. Alfred riprende e processa IN_MOVE_SELF
+6. il path esiste, ma l'identita' non coincide
+7. il backend logga WATCH_RESYNC_FAILED ... error=identity-mismatch
+```
+
+Senza il confronto `(st_dev, st_ino)`, questo scenario sarebbe ambiguo: il
+vecchio path e' raggiungibile, ma non identifica piu' l'oggetto osservato
+inizialmente. Il test usa `SIGSTOP` / `SIGCONT` solo per rendere deterministico
+l'ordine: il filesystem cambia prima che Alfred consumi l'evento dalla coda.
+
 #### Regola per tornare VALID
 
 Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
