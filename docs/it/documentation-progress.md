@@ -40,6 +40,12 @@ Stati usati:
 ## Aggiornamenti recenti
 
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunto l'helper dry-run
+  `backend_resync_watch_subtree_dirs()` per la futura fase scanner-based del
+  resync. L'helper non e' ancora collegato al runtime, usa scanner
+  directory-only con `emit_root = 0` e conta le directory senza installare
+  watch o produrre eventi core.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: separato il wrapper
   `backend_resync_watch()` dal probe `backend_probe_stale_watch_identity()`.
   Il comportamento non cambia: oggi il wrapper delega al probe identita', ma il

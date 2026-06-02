@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after adding the dry-run
+  scanner helper for future stale-watch subtree resync. Comments document why
+  the helper is not wired into runtime yet, why it scans directories only with
+  `emit_root = 0`, and why its callback only counts entries until a watch
+  reinstallation policy is agreed
 - refreshed `modules/inotify/src/inotify_backend.c` after separating the stale
   watch recovery wrapper from the identity probe. Comments now document that
   `backend_resync_watch()` is the future orchestration point, while

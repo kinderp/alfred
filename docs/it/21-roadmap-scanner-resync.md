@@ -1547,6 +1547,54 @@ legge il vecchio path, confronta identita' e decide solo `VALID` oppure
 `STALE`. Lo scan della subtree, l'installazione di watch mancanti e le policy su
 replacement directory appartengono alla fase successiva.
 
+Il primo helper della fase 2 e' stato preparato come dry-run non collegato al
+runtime:
+
+```c
+static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
+                                                int wd,
+                                                const char *path,
+                                                const char *reason);
+```
+
+La funzione riceve il context backend, il `wd` stale, il path root dello scope
+da scansionare e il motivo della recovery. Per ora non viene chiamata da
+`backend_resync_watch()`: esiste per fissare la forma della fase scanner-based
+senza cambiare ancora il comportamento osservabile di `IN_MOVE_SELF`.
+
+Le opzioni dello scanner sono intenzionalmente conservative:
+
+```text
+include_dirs      = 1
+include_files     = 0
+include_symlinks  = 0
+include_other     = 0
+follow_symlinks   = 0
+emit_root         = 0
+```
+
+`emit_root = 0` e' la scelta importante. La root e' il watch che stiamo
+cercando di recuperare o lo scope gia' scelto come affidabile da una fase
+precedente. Lo scanner della fase 2 serve a vedere le directory figlie e a
+preparare la futura installazione dei watch mancanti; non deve trattare la root
+come una nuova directory scoperta.
+
+Il callback attuale, `backend_count_resync_scanned_dir()`, conta soltanto le
+directory viste. Non installa watch, non emette raw Alfred, non produce eventi
+core e non cambia stato nella watcher table. Quando la fase sara' collegata al
+runtime, dovremo sostituire o estendere questa callback con una policy esplicita
+per:
+
+- confrontare directory visibili e watch presenti
+- aggiungere solo watch mancanti dentro uno scope affidabile
+- decidere cosa fare sugli errori parziali
+- distinguere diagnostica backend da semantica core
+
+I log previsti dall'helper (`WATCH_RESYNC_SCAN_DONE` e
+`WATCH_RESYNC_SCAN_FAILED`) sono quindi preparatori. Non fanno ancora parte del
+contratto runtime dei test backend, perche' l'helper non e' invocato dal flusso
+`IN_MOVE_SELF`.
+
 Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
 produce raw Alfred. Controlla se il vecchio path associato al watch esiste
 ancora, e' una directory ispezionabile e ha la stessa identita' filesystem

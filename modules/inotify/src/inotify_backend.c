@@ -48,6 +48,10 @@ typedef struct backend_emit_context {
     int failed;
 } backend_emit_context_t;
 
+typedef struct backend_resync_scan_context {
+    size_t directories_seen;
+} backend_resync_scan_context_t;
+
 typedef enum backend_resync_probe_result {
     BACKEND_RESYNC_PROBE_MISSING_WATCH,
     BACKEND_RESYNC_PROBE_NOT_STALE,
@@ -95,6 +99,15 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
 static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                                int wd,
                                                const char *reason);
+
+static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
+                                                int wd,
+                                                const char *path,
+                                                const char *reason)
+    __attribute__((unused));
+
+static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
+                                            void *userdata);
 
 static const char *backend_resync_probe_result_name(
     backend_resync_probe_result_t result
@@ -757,6 +770,99 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                  wd,
                  path,
                  reason);
+}
+
+/*
+ * backend_resync_watch_subtree_dirs - dry-run directory scan for future resync
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: stale watch descriptor that would own the recovery scope
+ * @path: trusted root path to scan
+ * @reason: kernel/backend reason that triggered recovery
+ *
+ * This helper is intentionally not wired into backend_resync_watch() yet. It
+ * prepares phase two of recovery: a directory-only scan below a path that a
+ * prior phase has proven trustworthy. The scan uses emit_root=0 because the
+ * root is the watch being recovered; the future resync phase needs child
+ * directories to decide which recursive watches are missing.
+ *
+ * For now the callback only counts discovered directories. It does not install
+ * watches, emit raw Alfred events, or change watcher state. Those actions need
+ * an explicit scanner-based resync policy before this helper is called from the
+ * runtime path.
+ *
+ * Return: ERR_OK on scan success, otherwise the scanner error code.
+ */
+static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
+                                                int wd,
+                                                const char *path,
+                                                const char *reason)
+{
+    if (ctx == NULL || path == NULL || reason == NULL)
+        return ERR_INVALID_ARG;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_dirs = 1;
+    opts.include_files = 0;
+    opts.include_symlinks = 0;
+    opts.include_other = 0;
+    opts.follow_symlinks = 0;
+    opts.emit_root = 0;
+
+    backend_resync_scan_context_t scan_context;
+
+    memset(&scan_context, 0, sizeof(scan_context));
+
+    error_t rc =
+        fs_scan_tree(path,
+                     &opts,
+                     backend_count_resync_scanned_dir,
+                     &scan_context);
+
+    if (rc != ERR_OK) {
+        logger_error(ctx->logger,
+                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
+                     wd,
+                     path,
+                     reason,
+                     rc);
+        return rc;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s dirs=%zu",
+                 wd,
+                 path,
+                 reason,
+                 scan_context.directories_seen);
+
+    return ERR_OK;
+}
+
+/*
+ * backend_count_resync_scanned_dir - count directory facts seen by resync scan
+ * @entry: scanner entry produced by fs_scan_tree()
+ * @userdata: backend_resync_scan_context_t used by the dry-run helper
+ *
+ * The callback deliberately ignores non-directory facts. Current resync only
+ * cares about the recursive watch structure; file/symlink/other entries belong
+ * to future indexing or semantic recovery discussions.
+ *
+ * Return: always 0 so the dry-run scan continues.
+ */
+static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
+                                            void *userdata)
+{
+    backend_resync_scan_context_t *context =
+        (backend_resync_scan_context_t *)userdata;
+
+    if (context == NULL || entry == NULL || entry->type != FS_SCAN_DIR)
+        return 0;
+
+    context->directories_seen++;
+
+    return 0;
 }
 
 /*
