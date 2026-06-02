@@ -39,6 +39,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: separato il wrapper
+  `backend_resync_watch()` dal probe `backend_probe_stale_watch_identity()`.
+  Il comportamento non cambia: oggi il wrapper delega al probe identita', ma il
+  nome prepara il punto in cui aggiungere in futuro il resync scanner-based.
 - `20-matrice-eventi-inotify.md` e `21-roadmap-scanner-resync.md`: chiarita la
   policy per `IN_MOVE_SELF` quando il vecchio path e' di nuovo raggiungibile ma
   ha identita' `(st_dev, st_ino)` diversa. Il watch resta `STALE`; un eventuale

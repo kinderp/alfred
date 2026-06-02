@@ -92,6 +92,10 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
 
+static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
+                                               int wd,
+                                               const char *reason);
+
 static const char *backend_resync_probe_result_name(
     backend_resync_probe_result_t result
 );
@@ -532,7 +536,25 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
 }
 
 /*
- * backend_resync_watch - run the first conservative resync probe for one watch
+ * backend_resync_watch - orchestrate recovery for one stale watch
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: inotify watch descriptor whose mapping may need recovery
+ * @reason: kernel/backend reason that triggered recovery
+ *
+ * This wrapper is deliberately small. Today recovery has only one phase: a
+ * stat(2)-based identity probe on the old wd -> path mapping. Future
+ * scanner-based resync can be added here as a second phase without burying
+ * subtree scan policy inside the minimal identity check.
+ */
+static void backend_resync_watch(inotify_backend_context_t *ctx,
+                                 int wd,
+                                 const char *reason)
+{
+    backend_probe_stale_watch_identity(ctx, wd, reason);
+}
+
+/*
+ * backend_probe_stale_watch_identity - verify a stale watch's old path identity
  * @ctx: narrowed backend context used by the poll path
  * @wd: inotify watch descriptor whose mapping was marked stale
  * @reason: kernel/backend reason that triggered the probe
@@ -546,9 +568,9 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
  * Otherwise Alfred keeps the watch STALE and logs an explicit failure instead
  * of inventing raw Alfred events or semantic core events.
  */
-static void backend_resync_watch(inotify_backend_context_t *ctx,
-                                 int wd,
-                                 const char *reason)
+static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
+                                               int wd,
+                                               const char *reason)
 {
     if (ctx == NULL || reason == NULL)
         return;

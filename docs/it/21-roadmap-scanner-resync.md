@@ -1531,8 +1531,21 @@ secondo motore semantico parallelo al core.
 
 La v0 deve produrre solo diagnostica backend e mutazioni della watcher table.
 Il primo pezzo implementato e' volutamente piccolo: dopo `IN_MOVE_SELF`, il
-backend marca il watch `STALE` e chiama `backend_resync_watch()` come probe
-conservativo sul singolo `wd`.
+backend marca il watch `STALE` e chiama `backend_resync_watch()` come entry
+point di recovery per il singolo `wd`.
+
+`backend_resync_watch()` oggi e' volutamente un orchestratore minimo: delega
+subito a `backend_probe_stale_watch_identity()`. Questa separazione serve a non
+confondere due fasi diverse:
+
+- fase 1, gia' implementata: probe identita' sul vecchio mapping `wd -> path`
+- fase 2, futura: resync scanner-based directory-only su uno scope affidabile
+
+Quando aggiungeremo lo scanner nel backend, il posto naturale sara'
+`backend_resync_watch()`, non il probe identita'. Il probe deve restare piccolo:
+legge il vecchio path, confronta identita' e decide solo `VALID` oppure
+`STALE`. Lo scan della subtree, l'installazione di watch mancanti e le policy su
+replacement directory appartengono alla fase successiva.
 
 Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
 produce raw Alfred. Controlla se il vecchio path associato al watch esiste

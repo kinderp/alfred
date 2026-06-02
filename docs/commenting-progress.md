@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after separating the stale
+  watch recovery wrapper from the identity probe. Comments now document that
+  `backend_resync_watch()` is the future orchestration point, while
+  `backend_probe_stale_watch_identity()` is only the current stat(2)-identity
+  phase
 - refreshed `modules/inotify/src/inotify_backend.c` after clarifying the
   identity-mismatch branch of the stale watch probe. Comments now explain that
   a reachable old path with a different `(st_dev, st_ino)` is a reused path, not
