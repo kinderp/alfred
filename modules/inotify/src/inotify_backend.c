@@ -55,6 +55,12 @@ typedef struct backend_resync_scan_context {
     size_t directories_missing_watch;
 } backend_resync_scan_context_t;
 
+typedef enum backend_resync_scan_class {
+    BACKEND_RESYNC_SCAN_EMPTY,
+    BACKEND_RESYNC_SCAN_COVERED,
+    BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
+} backend_resync_scan_class_t;
+
 typedef enum backend_resync_probe_result {
     BACKEND_RESYNC_PROBE_MISSING_WATCH,
     BACKEND_RESYNC_PROBE_NOT_STALE,
@@ -110,6 +116,14 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
 
 static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
                                             void *userdata);
+
+static backend_resync_scan_class_t backend_classify_resync_scan(
+    const backend_resync_scan_context_t *scan_context
+);
+
+static const char *backend_resync_scan_class_name(
+    backend_resync_scan_class_t scan_class
+);
 
 static const char *backend_resync_probe_result_name(
     backend_resync_probe_result_t result
@@ -850,6 +864,16 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  scan_context.directories_watched,
                  scan_context.directories_missing_watch);
 
+    backend_resync_scan_class_t scan_class =
+        backend_classify_resync_scan(&scan_context);
+
+    logger_event(ctx->logger,
+                 "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
+                 wd,
+                 path,
+                 reason,
+                 backend_resync_scan_class_name(scan_class));
+
     return ERR_OK;
 }
 
@@ -885,6 +909,52 @@ static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
         context->directories_missing_watch++;
 
     return 0;
+}
+
+/*
+ * backend_classify_resync_scan - classify a dry-run resync scan result
+ * @scan_context: counters collected by backend_count_resync_scanned_dir()
+ *
+ * This function is the policy boundary before watch reinstallation. It turns
+ * read-only scan counters into a small decision label without mutating kernel
+ * watches or watcher-table entries. The next resync phase can switch on this
+ * label to decide whether it should call watch_manager_add().
+ *
+ * Return: scan classification used only for backend diagnostics for now.
+ */
+static backend_resync_scan_class_t backend_classify_resync_scan(
+    const backend_resync_scan_context_t *scan_context
+)
+{
+    if (scan_context == NULL || scan_context->directories_seen == 0)
+        return BACKEND_RESYNC_SCAN_EMPTY;
+
+    if (scan_context->directories_missing_watch > 0)
+        return BACKEND_RESYNC_SCAN_NEEDS_REINSTALL;
+
+    return BACKEND_RESYNC_SCAN_COVERED;
+}
+
+/*
+ * backend_resync_scan_class_name - convert scan classification to log text
+ * @scan_class: classification produced by backend_classify_resync_scan()
+ *
+ * Return: stable token used in WATCH_RESYNC_SCAN_CLASS diagnostics.
+ */
+static const char *backend_resync_scan_class_name(
+    backend_resync_scan_class_t scan_class
+)
+{
+    switch (scan_class) {
+    case BACKEND_RESYNC_SCAN_EMPTY:
+        return "scan-empty";
+    case BACKEND_RESYNC_SCAN_COVERED:
+        return "scan-covered";
+    case BACKEND_RESYNC_SCAN_NEEDS_REINSTALL:
+        return "needs-reinstall";
+    default:
+        return "unknown";
+    }
 }
 
 /*

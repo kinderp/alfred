@@ -26,6 +26,9 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after adding read-only
+  dry-run scan classification. Comments document the boundary between counting
+  missing watches and deciding later whether watch reinstallation should run
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`, `modules/inotify/src/inotify_backend.c`,
   and `tests/watcher/test_watcher_state.c` after adding the read-only

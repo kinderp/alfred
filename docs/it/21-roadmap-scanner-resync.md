@@ -1661,6 +1661,24 @@ Questo significa:
 Anche con `missing=1`, Alfred non chiama ancora `watch_manager_add()`. Il valore
 serve a rendere visibile il buco di copertura prima di progettare la riparazione.
 
+Il dry-run trasforma poi i contatori in una classificazione leggibile:
+
+```text
+WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall
+```
+
+La classificazione corrente e':
+
+| Risultato | Quando viene prodotto | Significato |
+| --- | --- | --- |
+| `scan-empty` | `dirs=0` | lo scope affidabile non contiene directory figlie da valutare |
+| `scan-covered` | `dirs>0` e `missing=0` | tutte le directory viste hanno gia' un watch attivo |
+| `needs-reinstall` | `missing>0` | almeno una directory vista non ha un watch attivo |
+
+Anche questa classificazione e' read-only. `needs-reinstall` non installa
+ancora watch: indica solo quale ramo della futura policy dovra' chiamare
+`watch_manager_add()` sulle directory mancanti.
+
 Con la futura watch reinstallation Alfred dovra' fare un passo in piu':
 
 ```text

@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunta la
+  classificazione read-only del dry-run resync con
+  `WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall`, preparando il punto in
+  cui una futura policy potra' passare alla watch reinstallation.
 - `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
   `modules/inotify/src/inotify_backend.c`, `tests/watcher/test_watcher_state.c`,
   `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
