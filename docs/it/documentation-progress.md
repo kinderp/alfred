@@ -39,6 +39,9 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: aggiunto checkpoint finale per riprendere
+  dopo la finestra settimanale, con commit di riferimento, stato ahead del
+  branch, comandi minimi di verifica e lista ordinata dei prossimi micro-step.
 - `21-roadmap-scanner-resync.md`: documentato il debito di test sul rollback
   della reinstallazione multi-missing. La roadmap ora spiega il ramo non ancora
   coperto (`A` reinstallato, `B` fallisce, rollback di `A`, parent `STALE`),

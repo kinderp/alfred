@@ -17,6 +17,9 @@ essere riusato in due contesti:
 Stato del codice al momento della ripresa:
 
 - branch di lavoro: `feature/resync-scanner`
+- stato branch al checkpoint: tre commit locali ahead rispetto a
+  `origin/feature/resync-scanner`
+- ultimo commit del checkpoint: `2ca9ed9 docs: record resync rollback test debt`
 - lo scanner generico `fs_scan_tree()` esiste ed e' testato
 - lo startup e la scoperta runtime delle directory usano gia' lo scanner
 - la watcher table salva identita' filesystem `(st_dev, st_ino)`
@@ -107,6 +110,39 @@ Opzioni alla ripresa:
 
 La scelta consigliata e' la prima: un helper dedicato permetterebbe di testare
 la policy all-or-stale senza introdurre un test end-to-end fragile.
+
+### Alla prossima sessione
+
+Prima di riprendere codice, riallineare e verificare il branch:
+
+```bash
+git switch feature/resync-scanner
+git pull --rebase
+git status --short --branch
+make
+make test-backend-diagnostics
+```
+
+Ultimi commit utili del checkpoint:
+
+```text
+2ca9ed9 docs: record resync rollback test debt
+f4bfd24 feat: reinstall all resync missing watches
+5ddbaa7 refactor: collect all resync missing paths
+58dccb6 docs: capture resync recovery checkpoint
+2c7d897 feat: reinstall first missing resync watch
+```
+
+Riprendere da qui:
+
+1. discutere se estrarre un helper C per la policy all-or-stale
+2. se si', farlo come micro-step senza cambiare comportamento runtime
+3. aggiungere un test C che simuli il fallimento dopo almeno un reinstall
+   riuscito
+4. solo dopo tornare a `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow
+
+Non iniziare dalla semantica core: per ora il lavoro aperto e' ancora sul
+contratto diagnostico e sul resync backend.
 
 ## Stato corrente sugli eventi critici
 
