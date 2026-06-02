@@ -41,6 +41,12 @@ Stati usati:
 
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: il dry-run
+  resync salva e logga il primo missing path con
+  `WATCH_RESYNC_SCAN_MISSING ... missing_path=...`, preparando il futuro ciclo
+  di reinstallazione senza chiamare ancora `watch_manager_add()`.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunta la
   classificazione read-only del dry-run resync con
   `WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall`, preparando il punto in

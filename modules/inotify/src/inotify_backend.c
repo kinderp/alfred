@@ -53,6 +53,8 @@ typedef struct backend_resync_scan_context {
     size_t directories_seen;
     size_t directories_watched;
     size_t directories_missing_watch;
+    int has_first_missing_path;
+    char first_missing_path[PATH_MAX];
 } backend_resync_scan_context_t;
 
 typedef enum backend_resync_scan_class {
@@ -874,6 +876,15 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  reason,
                  backend_resync_scan_class_name(scan_class));
 
+    if (scan_context.has_first_missing_path) {
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     scan_context.first_missing_path);
+    }
+
     return ERR_OK;
 }
 
@@ -903,10 +914,19 @@ static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
 
     context->directories_seen++;
 
-    if (watcher_has_path(&context->ctx->runtime->watchers, entry->path))
+    if (watcher_has_path(&context->ctx->runtime->watchers, entry->path)) {
         context->directories_watched++;
-    else
+    } else {
         context->directories_missing_watch++;
+
+        if (!context->has_first_missing_path) {
+            snprintf(context->first_missing_path,
+                     sizeof(context->first_missing_path),
+                     "%s",
+                     entry->path);
+            context->has_first_missing_path = 1;
+        }
+    }
 
     return 0;
 }

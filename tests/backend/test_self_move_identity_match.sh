@@ -50,6 +50,7 @@ assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_matc
 assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
 assert_contains "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1"
 assert_contains "WATCH_RESYNC_SCAN_CLASS wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=needs-reinstall"
+assert_contains "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child"
 assert_contains "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
@@ -58,6 +59,8 @@ assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_
 assert_order "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1" \
              "WATCH_RESYNC_SCAN_CLASS wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=needs-reinstall"
 assert_order "WATCH_RESYNC_SCAN_CLASS wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=needs-reinstall" \
+             "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child"
+assert_order "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child" \
              "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
 
 assert_not_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"

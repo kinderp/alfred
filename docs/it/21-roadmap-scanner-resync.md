@@ -1679,6 +1679,18 @@ Anche questa classificazione e' read-only. `needs-reinstall` non installa
 ancora watch: indica solo quale ramo della futura policy dovra' chiamare
 `watch_manager_add()` sulle directory mancanti.
 
+Quando esiste almeno una directory missing, Alfred logga anche il primo path
+candidato:
+
+```text
+WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/b
+```
+
+Per ora il log contiene solo il primo missing path. Questa scelta mantiene il
+micro-step piccolo e prepara la futura iterazione "per ogni missing path,
+chiama `watch_manager_add()`". Il path non viene ancora usato per installare un
+watch: e' un candidato osservato, non una riparazione.
+
 Con la futura watch reinstallation Alfred dovra' fare un passo in piu':
 
 ```text
@@ -1866,7 +1878,8 @@ I test backend fissano entrambi i rami della scelta.
 6. il path esiste e l'identita' coincide
 7. il backend esegue lo scan dry-run directory-only e logga
    WATCH_RESYNC_SCAN_DONE ... dirs=2 watched=1 missing=1
-8. il backend logga WATCH_RESYNC_END ... result=valid
+8. il backend logga WATCH_RESYNC_SCAN_MISSING ... missing_path=.../unwatched-child
+9. il backend logga WATCH_RESYNC_END ... result=valid
 ```
 
 `tests/backend/test_self_move_identity_mismatch.sh` copre il ramo negativo:

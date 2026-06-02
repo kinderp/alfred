@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after recording the first
+  missing path observed by the dry-run resync scan. Comments and diagnostics now
+  make clear that WATCH_RESYNC_SCAN_MISSING names a future reinstallation
+  candidate, not a watch that has already been added
 - refreshed `modules/inotify/src/inotify_backend.c` after adding read-only
   dry-run scan classification. Comments document the boundary between counting
   missing watches and deciding later whether watch reinstallation should run
