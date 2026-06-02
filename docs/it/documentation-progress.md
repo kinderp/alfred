@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il test backend positivo del probe
+  di identita'. Lo scenario sposta temporaneamente la root osservata e rimette
+  la stessa directory nel vecchio path prima che Alfred consumi `IN_MOVE_SELF`;
+  il backend verifica `(st_dev, st_ino)` e logga
+  `WATCH_RESYNC_END ... result=valid`.
 - `tests/backend/test_self_move_identity_mismatch.sh`, `14-scenari-test.md` e
   `21-roadmap-scanner-resync.md`: aggiunto un test backend deterministico per
   il caso `IN_MOVE_SELF` in cui il vecchio path viene ricreato con identita'
