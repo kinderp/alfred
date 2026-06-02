@@ -274,6 +274,39 @@ static void test_count_state_counts_only_active_entries(void)
 }
 
 /*
+ * test_has_path_checks_active_mappings - find watched paths without mutation
+ *
+ * Scanner-based resync needs to ask whether a directory found by fs_scan_tree()
+ * is already covered by any active watch. This must be a read-only query:
+ * removed slots are ignored and the table contents are not changed.
+ */
+static void test_has_path_checks_active_mappings(void)
+{
+    watcher_table_t table;
+
+    assert(watcher_init(&table, 1) == 0);
+    assert(watcher_has_path(&table, "/tmp/a") == 0);
+    assert(watcher_has_path(NULL, "/tmp/a") == 0);
+    assert(watcher_has_path(&table, NULL) == 0);
+
+    assert(watcher_store(&table, 1, "/tmp/a") == 0);
+    assert(watcher_store(&table, 4, "/tmp/b") == 0);
+
+    assert(watcher_has_path(&table, "/tmp/a") == 1);
+    assert(watcher_has_path(&table, "/tmp/b") == 1);
+    assert(watcher_has_path(&table, "/tmp/c") == 0);
+
+    assert(watcher_set_state(&table, 4, WATCHER_STATE_STALE) == 0);
+    assert(watcher_has_path(&table, "/tmp/b") == 1);
+
+    watcher_remove(&table, 1);
+    assert(watcher_has_path(&table, "/tmp/a") == 0);
+    assert(watcher_has_path(&table, "/tmp/b") == 1);
+
+    watcher_destroy(&table);
+}
+
+/*
  * test_foreach_state_visits_matching_active_entries - iterate by state
  *
  * Future resync code will need to visit stale watches one by one. The iterator
@@ -388,6 +421,7 @@ int main(void)
     test_remove_clears_state();
     test_invalid_state_changes_fail();
     test_count_state_counts_only_active_entries();
+    test_has_path_checks_active_mappings();
     test_foreach_state_visits_matching_active_entries();
     test_foreach_state_can_stop_early();
     test_foreach_state_rejects_invalid_inputs();

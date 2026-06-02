@@ -49,7 +49,10 @@ typedef struct backend_emit_context {
 } backend_emit_context_t;
 
 typedef struct backend_resync_scan_context {
+    inotify_backend_context_t *ctx;
     size_t directories_seen;
+    size_t directories_watched;
+    size_t directories_missing_watch;
 } backend_resync_scan_context_t;
 
 typedef enum backend_resync_probe_result {
@@ -820,6 +823,7 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
     backend_resync_scan_context_t scan_context;
 
     memset(&scan_context, 0, sizeof(scan_context));
+    scan_context.ctx = ctx;
 
     error_t rc =
         fs_scan_tree(path,
@@ -838,11 +842,13 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
     }
 
     logger_event(ctx->logger,
-                 "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s dirs=%zu",
+                 "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
                  wd,
                  path,
                  reason,
-                 scan_context.directories_seen);
+                 scan_context.directories_seen,
+                 scan_context.directories_watched,
+                 scan_context.directories_missing_watch);
 
     return ERR_OK;
 }
@@ -854,7 +860,9 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
  *
  * The callback deliberately ignores non-directory facts. Current resync only
  * cares about the recursive watch structure; file/symlink/other entries belong
- * to future indexing or semantic recovery discussions.
+ * to future indexing or semantic recovery discussions. The check is read-only:
+ * it asks the watcher table whether a path is already covered but does not
+ * install missing watches yet.
  *
  * Return: always 0 so the dry-run scan continues.
  */
@@ -864,10 +872,17 @@ static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
     backend_resync_scan_context_t *context =
         (backend_resync_scan_context_t *)userdata;
 
-    if (context == NULL || entry == NULL || entry->type != FS_SCAN_DIR)
+    if (context == NULL || context->ctx == NULL ||
+        entry == NULL || entry->type != FS_SCAN_DIR) {
         return 0;
+    }
 
     context->directories_seen++;
+
+    if (watcher_has_path(&context->ctx->runtime->watchers, entry->path))
+        context->directories_watched++;
+    else
+        context->directories_missing_watch++;
 
     return 0;
 }

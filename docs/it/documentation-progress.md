@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/inotify_backend.c`, `tests/watcher/test_watcher_state.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunta la
+  query read-only `watcher_has_path()` e usata nel dry-run resync per loggare
+  `dirs`, `watched` e `missing` senza installare watch mancanti.
 - `21-roadmap-scanner-resync.md`: ampliata la spiegazione didattica della
   differenza tra dry-run e futura watch reinstallation, con tabella comparativa
   ed esempio su directory figlie scansionate ma non ancora trasformate in nuovi

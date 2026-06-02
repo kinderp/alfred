@@ -374,6 +374,39 @@ int watcher_exists(const watcher_table_t *wt,
 }
 
 /*
+ * watcher_has_path - test whether an active watch already tracks a path
+ * @wt: table to inspect
+ * @path: path to search for
+ *
+ * This is a read-only helper for scanner-based resync. The backend can compare
+ * directory facts reported by fs_scan_tree() with active watcher entries
+ * without reaching into watcher_table_t internals and without installing a new
+ * watch. State is intentionally not filtered here: VALID, STALE, and RESYNCING
+ * are all active mappings. A later resync policy can decide whether a stale
+ * mapping is trustworthy enough for a specific repair.
+ *
+ * Return: 1 when an active entry has exactly @path, 0 otherwise.
+ */
+int watcher_has_path(const watcher_table_t *wt, const char *path)
+{
+    if (wt == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (strcmp(slot->path, path) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+/*
  * watcher_set_state - update the reliability state of an active watch
  * @wt: table to update
  * @wd: inotify watch descriptor to update

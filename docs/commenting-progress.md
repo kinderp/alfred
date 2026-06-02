@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, `modules/inotify/src/inotify_backend.c`,
+  and `tests/watcher/test_watcher_state.c` after adding the read-only
+  `watcher_has_path()` query. Comments document how scanner dry-runs can count
+  already watched and missing directories without mutating kernel watches or the
+  watcher table
 - refreshed `modules/inotify/src/inotify_backend.c` after wiring the dry-run
   subtree scanner into the identity-match branch. Comments now explain that the
   scan runs only after the old path is proven to be the original object and

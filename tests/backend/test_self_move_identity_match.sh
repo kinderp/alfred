@@ -24,10 +24,13 @@ sleep 1
 
 # SIGSTOP freezes Alfred before it can drain the inotify queue. This lets the
 # test move the watched root away and then move the same directory back while
-# the IN_MOVE_SELF event is still pending.
+# the IN_MOVE_SELF event is still pending. The extra child is created while
+# Alfred is stopped, so the dry-run scan can observe a directory that does not
+# yet have a watcher-table entry.
 kill -STOP "$ALFRED_PID"
 mv "$TEST_ROOT" "$MOVE_TARGET"
 mv "$MOVE_TARGET" "$TEST_ROOT"
+mkdir "$TEST_ROOT/unwatched-child"
 
 # SIGCONT resumes Alfred after the old path is reachable again and still points
 # to the original inode captured when the watch was installed.
@@ -45,13 +48,13 @@ fi
 
 assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
 assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
-assert_contains "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=1"
+assert_contains "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1"
 assert_contains "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
 assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF" \
-             "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=1"
-assert_order "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=1" \
+             "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1"
+assert_order "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1" \
              "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
 
 assert_not_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"

@@ -102,6 +102,7 @@ int watcher_get_identity(const watcher_table_t *wt,
                          dev_t *device_id,
                          ino_t *inode_id);
 int watcher_exists(const watcher_table_t *wt, int wd);
+int watcher_has_path(const watcher_table_t *wt, const char *path);
 int watcher_set_state(watcher_table_t *wt, int wd, watcher_state_t state);
 watcher_state_t watcher_get_state(const watcher_table_t *wt, int wd);
 int watcher_is_stale(const watcher_table_t *wt, int wd);
