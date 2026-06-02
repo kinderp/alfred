@@ -236,9 +236,15 @@ Quando aggiungi uno scenario:
 1. crea il file nella suite corretta
 2. segui lo stile dei test vicini, inclusi commenti solo dove servono davvero
 3. verifica se il runner esegue gia' automaticamente il nuovo file
-4. aggiorna `docs/it/14-scenari-test.md`
-5. aggiorna la documentazione specifica del componente toccato
-6. esegui la suite mirata e poi i controlli generali necessari
+4. se il test e' Bash, leggi la guida alle regex in
+   `docs/it/10-debugging-test-e-strumenti.md`
+5. aggiorna `docs/it/14-scenari-test.md`
+6. aggiorna la documentazione specifica del componente toccato
+7. esegui la suite mirata e poi i controlli generali necessari
+
+La guida alle regex serve a evitare due errori opposti: pattern troppo larghi,
+che passano anche quando l'evento e' sbagliato, e pattern troppo rigidi, che
+falliscono per dettagli instabili come directory temporanee o watch descriptor.
 
 Le suite shell non sono tutte uguali. `tests/backend/run_all.sh` esegue
 automaticamente tutti gli script `test_*.sh`, quindi aggiungere un nuovo test

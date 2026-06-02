@@ -39,6 +39,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `10-debugging-test-e-strumenti.md`: documentata la struttura dei test shell,
+  dal target Makefile al runner `run_all.sh`, fino ai singoli `test_*.sh` e
+  alla libreria `tests/core/test_lib.sh`. La sezione spiega ruolo di
+  `reset_env`, `start_alfred_core`, `stop_alfred`, `cleanup`,
+  `fail_with_log`, `assert_contains`, `assert_not_contains`, `assert_count` e
+  `assert_order`.
+- `10-debugging-test-e-strumenti.md`: aggiunta una sezione didattica sulle
+  regex usate nei test shell, con spiegazione di `grep -E`, degli helper
+  `assert_contains`, `assert_not_contains`, `assert_count`, `assert_order` e
+  dei caratteri speciali piu' frequenti nei pattern dei log.
+- `11-come-contribuire.md` e `14-scenari-test.md`: aggiunti rimandi alla guida
+  sulle regex per chi scrive o legge nuovi test Bash.
 - `modules/inotify/src/watch_manager.c`, `16-mappa-codice-e-strutture.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: rafforzata la
   cattura dell'identita' del watch con doppia `stat()`. `watch_manager_add()`

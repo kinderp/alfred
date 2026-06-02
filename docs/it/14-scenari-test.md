@@ -122,6 +122,12 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
+Gli script shell usano regex per cercare eventi nei log senza dipendere da path
+temporanei, `wd` o altri valori instabili. La sintassi dei pattern usati da
+`assert_contains`, `assert_not_contains`, `assert_count`, `assert_order` e
+`grep -E` e' spiegata in `docs/it/10-debugging-test-e-strumenti.md`, nella
+sezione "Leggere le regex nei test shell".
+
 ## Audit storico pre-rimozione dello shadow legacy
 
 Lo switch e' stato totale: lo shadow legacy non e' una modalita' conservata nel
