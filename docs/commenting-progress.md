@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after changing the resync
+  scan context from a single first-missing buffer to an owned dynamic list of
+  missing paths. Comments now explain callback path lifetime, list ownership,
+  allocation-failure handling, and why runtime still consumes only the first
+  entry until the multi-missing policy is implemented
 - refreshed `modules/inotify/src/inotify_backend.c` after documenting every
   `backend_resync_probe_result_t` value. The enum comments now explain when
   each stale-watch recovery outcome is used, why it remains backend diagnostic

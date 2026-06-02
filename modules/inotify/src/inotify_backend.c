@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -53,8 +54,23 @@ typedef struct backend_resync_scan_context {
     size_t directories_seen;
     size_t directories_watched;
     size_t directories_missing_watch;
-    int has_first_missing_path;
-    char first_missing_path[PATH_MAX];
+
+    /*
+     * Missing paths are copied because fs_scan_entry_t paths are borrowed from
+     * the scanner callback and expire when the callback returns. The current
+     * runtime still reinstalls only missing_paths[0], but collecting the full
+     * list makes the next multi-missing reinstallation step explicit.
+     */
+    char **missing_paths;
+    size_t missing_paths_count;
+    size_t missing_paths_capacity;
+
+    /*
+     * fs_scan_tree() treats callback stop as a successful bounded scan. If path
+     * collection fails, the callback records that fact here and stops early so
+     * the caller can keep the resync conservative.
+     */
+    int missing_paths_failed;
 } backend_resync_scan_context_t;
 
 typedef enum backend_resync_scan_class {
@@ -183,6 +199,15 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
                                                 const char *path,
                                                 const char *reason);
+
+static int backend_resync_scan_add_missing_path(
+    backend_resync_scan_context_t *scan_context,
+    const char *path
+);
+
+static void backend_resync_scan_context_destroy(
+    backend_resync_scan_context_t *scan_context
+);
 
 static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
                                             void *userdata);
@@ -899,10 +924,10 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
  * because the root is the watch being recovered; the future resync phase needs
  * child directories to decide which recursive watches are missing.
  *
- * The callback counts discovered directories and records the first directory
- * missing from the watcher table. This helper then attempts to reinstall only
- * that first missing watch. Reinstalling every missing directory and handling
- * partial failure across a larger set is a later policy step.
+ * The callback counts discovered directories and copies every directory
+ * missing from the watcher table. This helper still attempts to reinstall only
+ * the first missing watch. Reinstalling every missing directory and handling
+ * partial failure across a larger set is the next policy step.
  *
  * Return: ERR_OK on scan success, otherwise the scanner error code.
  */
@@ -942,7 +967,19 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                      path,
                      reason,
                      rc);
+        backend_resync_scan_context_destroy(&scan_context);
         return rc;
+    }
+
+    if (scan_context.missing_paths_failed) {
+        logger_error(ctx->logger,
+                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
+                     wd,
+                     path,
+                     reason,
+                     ERR_ALLOC);
+        backend_resync_scan_context_destroy(&scan_context);
+        return ERR_ALLOC;
     }
 
     logger_event(ctx->logger,
@@ -964,21 +1001,24 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  reason,
                  backend_resync_scan_class_name(scan_class));
 
-    if (scan_context.has_first_missing_path) {
+    if (scan_context.missing_paths_count > 0) {
+        const char *first_missing_path = scan_context.missing_paths[0];
+
         logger_event(ctx->logger,
                      "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
                      wd,
                      path,
                      reason,
-                     scan_context.first_missing_path);
+                     first_missing_path);
 
-        if (watch_manager_add(ctx, scan_context.first_missing_path) < 0) {
+        if (watch_manager_add(ctx, first_missing_path) < 0) {
             logger_event(ctx->logger,
                          "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
                          wd,
                          path,
                          reason,
-                         scan_context.first_missing_path);
+                         first_missing_path);
+            backend_resync_scan_context_destroy(&scan_context);
             return ERR_INOTIFY;
         }
 
@@ -987,25 +1027,107 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                      wd,
                      path,
                      reason,
-                     scan_context.first_missing_path);
+                     first_missing_path);
     }
 
+    backend_resync_scan_context_destroy(&scan_context);
     return ERR_OK;
+}
+
+/*
+ * backend_resync_scan_add_missing_path - copy one missing watch candidate
+ * @scan_context: resync scan state that owns the copied path list
+ * @path: borrowed scanner path to persist after the callback returns
+ *
+ * The scanner callback receives borrowed paths. Multi-missing reinstallation
+ * needs those paths after fs_scan_tree() returns, so the backend stores private
+ * copies in a growable array. The current runtime still consumes only the first
+ * entry, but the collection step deliberately records every missing directory
+ * seen before an allocation failure or scan stop.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_resync_scan_add_missing_path(
+    backend_resync_scan_context_t *scan_context,
+    const char *path
+)
+{
+    if (scan_context == NULL || path == NULL)
+        return -1;
+
+    if (scan_context->missing_paths_count ==
+        scan_context->missing_paths_capacity) {
+
+        size_t new_capacity = scan_context->missing_paths_capacity;
+
+        if (new_capacity == 0)
+            new_capacity = 4;
+        else
+            new_capacity *= 2;
+
+        char **tmp =
+            realloc(scan_context->missing_paths,
+                    new_capacity * sizeof(char *));
+
+        if (tmp == NULL)
+            return -1;
+
+        scan_context->missing_paths = tmp;
+        scan_context->missing_paths_capacity = new_capacity;
+    }
+
+    size_t path_len = strlen(path) + 1;
+    char *copy = malloc(path_len);
+
+    if (copy == NULL)
+        return -1;
+
+    memcpy(copy, path, path_len);
+
+    scan_context->missing_paths[scan_context->missing_paths_count] = copy;
+    scan_context->missing_paths_count++;
+
+    return 0;
+}
+
+/*
+ * backend_resync_scan_context_destroy - release paths owned by a scan context
+ * @scan_context: context initialized on the stack by the resync helper
+ *
+ * Only missing_paths contains heap allocations. Counters and ctx are borrowed
+ * or scalar state and do not need cleanup.
+ */
+static void backend_resync_scan_context_destroy(
+    backend_resync_scan_context_t *scan_context
+)
+{
+    if (scan_context == NULL)
+        return;
+
+    for (size_t i = 0; i < scan_context->missing_paths_count; i++)
+        free(scan_context->missing_paths[i]);
+
+    free(scan_context->missing_paths);
+
+    scan_context->missing_paths = NULL;
+    scan_context->missing_paths_count = 0;
+    scan_context->missing_paths_capacity = 0;
 }
 
 /*
  * backend_count_resync_scanned_dir - count directory facts seen by resync scan
  * @entry: scanner entry produced by fs_scan_tree()
- * @userdata: backend_resync_scan_context_t used by the dry-run helper
+ * @userdata: backend_resync_scan_context_t used by the resync helper
  *
  * The callback deliberately ignores non-directory facts. Current resync only
  * cares about the recursive watch structure; file/symlink/other entries belong
  * to future indexing or semantic recovery discussions. The check is read-only:
  * it asks the watcher table whether a path is already covered but does not
- * install missing watches. The caller performs the first limited
- * reinstallation step after the scan has completed.
+ * install missing watches. It only copies missing candidates into the resync
+ * context so the caller can decide how many watches to reinstall after the scan
+ * has completed.
  *
- * Return: always 0 so the dry-run scan continues.
+ * Return: 0 to continue scanning, nonzero to stop after a collection failure.
  */
 static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
                                             void *userdata)
@@ -1025,12 +1147,9 @@ static int backend_count_resync_scanned_dir(const fs_scan_entry_t *entry,
     } else {
         context->directories_missing_watch++;
 
-        if (!context->has_first_missing_path) {
-            snprintf(context->first_missing_path,
-                     sizeof(context->first_missing_path),
-                     "%s",
-                     entry->path);
-            context->has_first_missing_path = 1;
+        if (backend_resync_scan_add_missing_path(context, entry->path) != 0) {
+            context->missing_paths_failed = 1;
+            return 1;
         }
     }
 

@@ -39,6 +39,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: il context del resync scanner ora copia tutti
+  i missing path in una lista owned dal backend. Il runtime continua a
+  reinstallare solo il primo path, ma il prossimo passo potra' iterare sulla
+  lista senza riprogettare la callback. Documentata anche la ragione tecnica:
+  i path dello scanner sono validi solo durante la callback.
 - `21-roadmap-scanner-resync.md`: aggiunta una sezione di ripresa dopo stop
   lungo con branch, stato reale del codice, flusso attuale del resync
   `IN_MOVE_SELF`, policy conservativa consigliata per `missing>1` e prossimi

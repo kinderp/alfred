@@ -25,6 +25,7 @@ Stato del codice al momento della ripresa:
 - il ramo `IN_MOVE_SELF` con identita' confermata esegue uno scan
   directory-only sul vecchio path tornato affidabile
 - lo scan conta directory viste, directory gia' watched e directory missing
+- la callback dello scan copia tutti i missing path in una lista interna
 - se esiste almeno un missing path, Alfred reinstalla solo il primo watch
   mancante con `watch_manager_add()`
 - se la prima reinstallazione riesce, il watch principale torna `VALID`
@@ -37,6 +38,7 @@ Il punto esatto in cui siamo fermi e':
 IN_MOVE_SELF con identita' confermata
 -> fs_scan_tree(directory-only, emit_root=0)
 -> conta dirs/watched/missing
+-> copia tutti i missing path trovati
 -> reinstalla il primo missing path
 -> torna VALID solo se questa prima riparazione riesce
 ```
@@ -1615,8 +1617,9 @@ da scansionare e il motivo della recovery. Oggi viene chiamata dal ramo
 `IN_MOVE_SELF` solo dopo che il vecchio path e' stato provato come affidabile
 tramite identita' filesystem. La prima parte resta uno scan osservativo: conta
 le directory figlie, distingue quante sono gia' coperte da un watch e quante
-risultano mancanti. Subito dopo, pero', il backend esegue gia' una prima
-mutazione reale: reinstalla il primo missing path con `watch_manager_add()`.
+risultano mancanti e copia tutti i missing path in memoria backend. Subito
+dopo, pero', il backend esegue ancora solo una prima mutazione reale:
+reinstalla il primo missing path con `watch_manager_add()`.
 
 Le opzioni dello scanner sono intenzionalmente conservative:
 
@@ -1644,6 +1647,8 @@ mutazione del backend. Nella fase di scan Alfred:
 - chiama `fs_scan_tree()` in modalita' directory-only
 - conta le directory figlie viste
 - usa `watcher_has_path()` per capire se ogni directory ha gia' un watch attivo
+- copia ogni missing path, perche' i path ricevuti dalla callback dello scanner
+  sono validi solo durante la callback
 - logga `WATCH_RESYNC_SCAN_DONE` oppure `WATCH_RESYNC_SCAN_FAILED`
 - non emette raw Alfred sintetici
 - non produce eventi core
@@ -1661,10 +1666,11 @@ Questa e' gia' una mutazione reale:
   logica usata dai watch normali
 - il backend logga `WATCH_RESYNC_REINSTALLED`
 
+La raccolta completa dei missing path e' gia' preparata nel context dello scan.
 La fase completa non e' ancora implementata. In futuro Alfred dovra':
 
 - confrontare le directory viste dallo scanner con i watch gia' presenti
-- iterare su tutti i missing path, non solo sul primo
+- iterare sulla lista dei missing path raccolti, non solo sull'elemento 0
 - gestire gli errori di `inotify_add_watch()`
 - decidere se il resync puo' considerarsi riuscito o se il watch resta `STALE`
 - loggare diagnostiche che descrivono la riparazione reale, non solo lo scan
@@ -1719,10 +1725,10 @@ Questo significa:
 - `missing=1`: una directory e' visibile nello scan ma non ha ancora un watch
   attivo
 
-Con `missing=1`, Alfred oggi prova a reinstallare solo il primo missing path. Il
-valore resta comunque importante: quando `missing>1`, la policy completa dovra'
-decidere come iterare sui missing successivi e cosa fare in caso di fallimento
-parziale.
+Con `missing=1`, Alfred oggi prova a reinstallare quel path. Con `missing>1`,
+Alfred oggi ha gia' raccolto tutti i path mancanti, ma reinstalla ancora solo il
+primo elemento della lista. La policy completa dovra' decidere come iterare sui
+missing successivi e cosa fare in caso di fallimento parziale.
 
 Il dry-run trasforma poi i contatori in una classificazione leggibile:
 
@@ -1748,8 +1754,10 @@ candidato:
 WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/b
 ```
 
-Per ora il log contiene solo il primo missing path. Questa scelta mantiene il
-micro-step piccolo. Subito dopo, Alfred prova a usare proprio quel path per
+Per ora il log `WATCH_RESYNC_SCAN_MISSING` contiene solo il primo missing path,
+anche se il context interno ha gia' raccolto l'intera lista. Questa scelta
+mantiene stabile il contratto diagnostico mentre prepariamo la policy
+multi-missing. Subito dopo, Alfred prova a usare proprio quel primo path per
 installare un watch:
 
 ```text
@@ -1777,15 +1785,15 @@ per ogni directory vista dallo scanner:
 ```
 
 Solo questa fase completa potra' dire: "la subtree e' di nuovo osservata in
-modo completo". Il passo attuale ripara al massimo il primo buco e lascia fuori
-la policy sui casi `missing>1`.
+modo completo". Il passo attuale conosce tutti i buchi trovati dallo scan, ma
+ripara al massimo il primo e lascia fuori la policy sui casi `missing>1`.
 
 Il callback attuale, `backend_count_resync_scanned_dir()`, conta le directory
-viste e usa `watcher_has_path()` come query read-only sulla watcher table.
-Quando passeremo alla watch reinstallation, dovremo sostituire o estendere
-questa callback con una policy esplicita per:
+viste, usa `watcher_has_path()` come query read-only sulla watcher table e copia
+i missing path in una lista owned dal context resync. Quando passeremo alla
+watch reinstallation completa, non dovremo piu' scoprire quali path mancano:
+dovremo consumare quella lista con una policy esplicita per:
 
-- confrontare directory visibili e watch presenti
 - aggiungere solo watch mancanti dentro uno scope affidabile
 - decidere cosa fare sugli errori parziali
 - distinguere diagnostica backend da semantica core
