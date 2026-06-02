@@ -688,6 +688,13 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
         stored_inode_id != st.st_ino) {
         result = BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH;
 
+        /*
+         * The old path is reachable, but it now names a different object.
+         * Do not add a watch here: that would silently subscribe a reused path
+         * while the stale wd still represents the moved object. A future
+         * scanner-based resync must decide whether the configured/root scope is
+         * trustworthy enough to watch the replacement directory.
+         */
         if (watcher_set_state(&ctx->runtime->watchers,
                               wd,
                               WATCHER_STATE_STALE) != 0) {

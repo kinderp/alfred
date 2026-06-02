@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after clarifying the
+  identity-mismatch branch of the stale watch probe. Comments now explain that
+  a reachable old path with a different `(st_dev, st_ino)` is a reused path, not
+  proof that the stale watch can be repaired or that a replacement directory
+  should be watched immediately
 - refreshed `modules/inotify/src/watch_manager.c` after adding the pre-watch
   and post-watch stat(2) identity check. Comments now explain why the backend
   captures identity before inotify_add_watch(), validates it after the kernel

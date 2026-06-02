@@ -277,6 +277,21 @@ il nuovo path. Senza destinazione Alfred non puo' produrre correttamente
   semantica core immediata
 - `IN_IGNORED`: manutenzione backend della tabella watch, non evento core
 
+Se dopo `IN_MOVE_SELF` il vecchio path torna raggiungibile, Alfred non deve
+fidarsi del solo nome. Il path puo' essere stato riusato da una directory nuova.
+Per questo il probe corrente confronta `(st_dev, st_ino)` con l'identita'
+salvata quando il watch era stato installato:
+
+```text
+stessa identita'  -> il watch puo' tornare VALID
+identita' diversa -> il watch resta STALE
+```
+
+Nel secondo caso Alfred non aggiunge immediatamente un watch alla directory
+nuova. Quel path non rappresenta piu' l'oggetto osservato dal vecchio `wd`;
+installare un watch li' sarebbe una nuova subscription e deve essere deciso da
+una futura procedura di resync scanner-based su uno scope affidabile.
+
 Il caso move ha anche un problema di correttezza dei path. Un watch inotify puo'
 restare associato allo stesso inode anche dopo lo spostamento della directory
 osservata. Se Alfred non gestisce `IN_MOVE_SELF`, la tabella `wd -> path` puo'

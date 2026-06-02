@@ -39,6 +39,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md` e `21-roadmap-scanner-resync.md`: chiarita la
+  policy per `IN_MOVE_SELF` quando il vecchio path e' di nuovo raggiungibile ma
+  ha identita' `(st_dev, st_ino)` diversa. Il watch resta `STALE`; un eventuale
+  watch sulla directory nuova deve essere deciso dal futuro resync
+  scanner-based su uno scope affidabile, non dal probe minimo.
+- `modules/inotify/src/inotify_backend.c` e `docs/commenting-progress.md`:
+  aggiunto un commento nel ramo `identity-mismatch` del probe stale watch per
+  spiegare perche' il backend non installa subito un watch sul path riusato.
 - `10-debugging-test-e-strumenti.md`: documentata la struttura dei test shell,
   dal target Makefile al runner `run_all.sh`, fino ai singoli `test_*.sh` e
   alla libreria `tests/core/test_lib.sh`. La sezione spiega ruolo di

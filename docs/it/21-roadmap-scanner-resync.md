@@ -1544,6 +1544,31 @@ Per questo la raggiungibilita' del path non basta. Il probe riporta il watch a
 `VALID` solo se la coppia `(st_dev, st_ino)` coincide; altrimenti lascia il
 watch `STALE` e scrive `WATCH_RESYNC_FAILED`.
 
+Se il vecchio path esiste ma l'identita' e' diversa, il probe non deve
+aggiungere subito un nuovo watch su quel path. Sarebbe una decisione troppo
+forte: il `wd` stale riguarda l'oggetto originale, mentre il path ora puo'
+indicare una directory nuova creata da un altro processo. Aggiungere un watch in
+questo punto mischerebbe due fatti diversi:
+
+- recupero del vecchio watch diventato non affidabile
+- nuova subscription su un oggetto che ha riusato lo stesso nome
+
+La subscription sulla directory nuova deve essere una decisione del resync
+scanner-based, non del probe minimo. Il resync dovra' partire da una root o da
+uno scope considerato affidabile, scansionare le directory visibili e solo dopo
+decidere quali watch mancanti installare. In altre parole:
+
+```text
+path vecchio raggiungibile + identita' diversa
+-> il vecchio watch resta STALE
+-> il nuovo oggetto potra' ricevere un watch solo durante resync di scope
+   affidabile
+```
+
+Questa scelta evita di trasformare una diagnosi locale in una riparazione
+globale non dimostrata. E' particolarmente importante per `IN_MOVE_SELF`, dove
+il kernel non fornisce la destinazione dello spostamento.
+
 La watcher table salva questa identita' quando il watch viene installato:
 `watch_manager_add()` chiama `stat()` prima di `inotify_add_watch()`, installa
 il watch kernel, poi chiama una seconda `stat()` sullo stesso path. Se
@@ -1622,7 +1647,8 @@ resync attraversi direttamente `watcher_table_t.items`.
 | Condizione | Stato prima | Azione v0 | Stato dopo |
 | --- | --- | --- | --- |
 | path del watch esiste, e' directory e ha stessa identita' | `STALE` | probe minimo: confrontare `(st_dev, st_ino)` salvati con `stat()` corrente | `VALID` |
-| path del watch esiste ma ha identita' diversa o mancante | `STALE` | probe minimo: log diagnostico `WATCH_RESYNC_FAILED` | resta `STALE` |
+| path del watch esiste ma ha identita' diversa | `STALE` | probe minimo: log diagnostico `WATCH_RESYNC_FAILED`; non aggiungere watch sul nuovo oggetto | resta `STALE` |
+| path del watch esiste ma manca identita' salvata | `STALE` | probe minimo: log diagnostico `WATCH_RESYNC_FAILED`; serve evidenza prima di tornare `VALID` | resta `STALE` |
 | path del watch non esiste piu' | `STALE` | probe minimo: `WATCH_RESYNC_BEGIN`, verifica path, `WATCH_RESYNC_FAILED` | resta `STALE` |
 | path esiste ma scan fallisce sulla root | `STALE` | log errore/recovery fallita | `STALE` |
 | directory figlia sparisce durante scan | `RESYNCING` | saltare la figlia e continuare | resta `RESYNCING`, poi `VALID` se non ci sono errori duri |
