@@ -28,7 +28,8 @@ piu' dettaglio.
 19. [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)
 20. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
 21. [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
-22. [Glossario](glossario.md)
+22. [Contratto dei log](22-contratto-log.md)
+23. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

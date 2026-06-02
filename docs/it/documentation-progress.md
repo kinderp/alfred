@@ -32,6 +32,7 @@ Stati usati:
 | Parziale | `19-roadmap-cli-e-man-page.md` |
 | Completo | `20-matrice-eventi-inotify.md` |
 | Parziale | `21-roadmap-scanner-resync.md` |
+| Parziale | `22-contratto-log.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -39,6 +40,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `22-contratto-log.md` e `README.md`: aggiunta una reference generale del
+  contratto dei log di Alfred. Il nuovo capitolo distingue `raw.log`,
+  `events.log`, `errors.log`, diagnostica backend `WATCH_*`, raw Alfred
+  `ALFRED_RAW_*` ed eventi semantici core `FILE_*`, `DIR_*`, `OVERFLOW`.
+- `tests/backend/test_self_events_root_watch.sh`,
+  `tests/backend/test_self_move_identity_match.sh` e
+  `tests/backend/test_self_move_identity_mismatch.sh`: aggiunti commenti
+  didattici in inglese nei test backend self-event/resync. Ogni file ora apre
+  con il contratto dei log attesi/vietati e i commenti vicino agli assert
+  spiegano quale operazione del test produce ogni log, perche' gli assert sono
+  in quell'ordine e quali eventi semantici Alfred non deve inventare.
 - `21-roadmap-scanner-resync.md`: aggiunto checkpoint finale per riprendere
   dopo la finestra settimanale, con commit di riferimento, stato ahead del
   branch, comandi minimi di verifica e lista ordinata dei prossimi micro-step.
