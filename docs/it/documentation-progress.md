@@ -41,6 +41,13 @@ Stati usati:
 
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata
+  la prima watch reinstallation reale sul primo missing path rilevato dal
+  resync scanner. In caso di fallimento il watch principale resta `STALE`; in
+  caso di successo il test dimostra il nuovo watch creando un file dentro
+  `unwatched-child`.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: il dry-run
   resync salva e logga il primo missing path con
   `WATCH_RESYNC_SCAN_MISSING ... missing_path=...`, preparando il futuro ciclo

@@ -63,16 +63,84 @@ typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
 } backend_resync_scan_class_t;
 
+/*
+ * backend_resync_probe_result - internal outcomes of stale-watch recovery
+ *
+ * These values are diagnostic states for the backend resync probe. They are
+ * deliberately not Alfred semantic events: the core must not infer filesystem
+ * meaning from them. The backend uses the values to keep WATCH_RESYNC_FAILED
+ * messages normalized while the resync implementation grows in small steps.
+ */
 typedef enum backend_resync_probe_result {
+    /*
+     * The watcher table no longer has an entry for the watch descriptor that
+     * produced the self-event. There is no stable path or saved identity to
+     * probe, so recovery must stop immediately.
+     */
     BACKEND_RESYNC_PROBE_MISSING_WATCH,
+
+    /*
+     * The recovery path was called for a watch that is not currently STALE.
+     * Resync is valid only after IN_MOVE_SELF/IN_DELETE_SELF style handling has
+     * marked the watch as stale; otherwise probing would race normal operation.
+     */
     BACKEND_RESYNC_PROBE_NOT_STALE,
+
+    /*
+     * The backend could not move the watch from STALE to RESYNCING. Without the
+     * intermediate state, later logs would suggest a recovery attempt that the
+     * watcher table did not actually record.
+     */
     BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
+
+    /*
+     * stat(2) could not reach the old watched path. The original object may
+     * still exist elsewhere, but the backend cannot repair this watch through
+     * the saved path.
+     */
     BACKEND_RESYNC_PROBE_PATH_UNREACHABLE,
+
+    /*
+     * The old path is reachable but is no longer a directory. Recursive watch
+     * recovery is directory-scoped, so this path cannot be used as a safe resync
+     * root.
+     */
     BACKEND_RESYNC_PROBE_NOT_DIRECTORY,
+
+    /*
+     * The backend tried to leave a failed probe in STALE state but the watcher
+     * table update failed. This is a bookkeeping failure after another recovery
+     * check has already failed.
+     */
     BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+
+    /*
+     * The probe succeeded, but the backend could not move the watch back to
+     * VALID. Keeping this as a distinct outcome makes state-transition bugs
+     * visible in diagnostic logs.
+     */
     BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
+
+    /*
+     * The watcher entry has no saved filesystem identity. The backend cannot
+     * compare the current path with the originally watched object, so it refuses
+     * to trust the path.
+     */
     BACKEND_RESYNC_PROBE_MISSING_IDENTITY,
-    BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH
+
+    /*
+     * The old path exists, but its current (st_dev, st_ino) pair differs from
+     * the identity captured when the watch was installed. This means the path
+     * was reused by another object and must not be repaired as the old watch.
+     */
+    BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH,
+
+    /*
+     * The identity check passed and the scanner found a missing child watch,
+     * but the first limited watch reinstallation failed. The parent watch is
+     * left STALE because the subtree coverage is known to be incomplete.
+     */
+    BACKEND_RESYNC_PROBE_REINSTALL_FAILED
 } backend_resync_probe_result_t;
 
 /* ============================================================================
@@ -772,11 +840,31 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
 
     /*
      * The old path is now proven to be the original watched object. Run the
-     * scanner phase as a dry-run before returning to VALID. Its result is only
-     * diagnostic for now: watch reinstallation and scan-failure policy are the
-     * next resync step, not part of the identity probe.
+     * scanner phase before returning to VALID. The first reinstallation step is
+     * intentionally narrow: it may add only the first missing child watch.
      */
-    (void)backend_resync_watch_subtree_dirs(ctx, wd, path, reason);
+    if (backend_resync_watch_subtree_dirs(ctx, wd, path, reason) != ERR_OK) {
+        if (watcher_set_state(&ctx->runtime->watchers,
+                              wd,
+                              WATCHER_STATE_STALE) != 0) {
+
+            backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                                       0);
+            return;
+        }
+
+        backend_log_resync_failure(ctx,
+                                   wd,
+                                   path,
+                                   reason,
+                                   BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
+                                   0);
+        return;
+    }
 
     if (watcher_set_state(&ctx->runtime->watchers,
                           wd,
@@ -799,7 +887,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
 }
 
 /*
- * backend_resync_watch_subtree_dirs - dry-run directory scan for future resync
+ * backend_resync_watch_subtree_dirs - scan subtree and reinstall one watch
  * @ctx: narrowed backend context used by the poll path
  * @wd: stale watch descriptor that would own the recovery scope
  * @path: trusted root path to scan
@@ -811,10 +899,10 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
  * because the root is the watch being recovered; the future resync phase needs
  * child directories to decide which recursive watches are missing.
  *
- * For now the callback only counts discovered directories. It does not install
- * watches, emit raw Alfred events, or change watcher state. Those actions need
- * an explicit scanner-based resync policy before this helper is called from the
- * runtime path beyond the current diagnostic dry-run.
+ * The callback counts discovered directories and records the first directory
+ * missing from the watcher table. This helper then attempts to reinstall only
+ * that first missing watch. Reinstalling every missing directory and handling
+ * partial failure across a larger set is a later policy step.
  *
  * Return: ERR_OK on scan success, otherwise the scanner error code.
  */
@@ -883,6 +971,23 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                      path,
                      reason,
                      scan_context.first_missing_path);
+
+        if (watch_manager_add(ctx, scan_context.first_missing_path) < 0) {
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                         wd,
+                         path,
+                         reason,
+                         scan_context.first_missing_path);
+            return ERR_INOTIFY;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     scan_context.first_missing_path);
     }
 
     return ERR_OK;
@@ -897,7 +1002,8 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
  * cares about the recursive watch structure; file/symlink/other entries belong
  * to future indexing or semantic recovery discussions. The check is read-only:
  * it asks the watcher table whether a path is already covered but does not
- * install missing watches yet.
+ * install missing watches. The caller performs the first limited
+ * reinstallation step after the scan has completed.
  *
  * Return: always 0 so the dry-run scan continues.
  */
@@ -1010,6 +1116,8 @@ static const char *backend_resync_probe_result_name(
         return "missing-identity";
     case BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH:
         return "identity-mismatch";
+    case BACKEND_RESYNC_PROBE_REINSTALL_FAILED:
+        return "reinstall-failed";
     }
 
     return "unknown";

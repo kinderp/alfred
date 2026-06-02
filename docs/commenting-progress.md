@@ -26,6 +26,14 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after documenting every
+  `backend_resync_probe_result_t` value. The enum comments now explain when
+  each stale-watch recovery outcome is used, why it remains backend diagnostic
+  state, and how it relates to normalized WATCH_RESYNC_FAILED logs
+- refreshed `modules/inotify/src/inotify_backend.c` after adding the first real
+  watch reinstallation step. Comments document that the resync scan may now
+  call `watch_manager_add()` only for the first missing path, while full
+  multi-missing and partial-failure policy remains future work
 - refreshed `modules/inotify/src/inotify_backend.c` after recording the first
   missing path observed by the dry-run resync scan. Comments and diagnostics now
   make clear that WATCH_RESYNC_SCAN_MISSING names a future reinstallation

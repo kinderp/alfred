@@ -37,6 +37,9 @@ mkdir "$TEST_ROOT/unwatched-child"
 kill -CONT "$ALFRED_PID"
 sleep 1
 
+touch "$TEST_ROOT/unwatched-child/proof.txt"
+sleep 1
+
 if ! grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_identity_match name=" \
     ./raw.log; then
 
@@ -51,7 +54,9 @@ assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identi
 assert_contains "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF dirs=2 watched=1 missing=1"
 assert_contains "WATCH_RESYNC_SCAN_CLASS wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=needs-reinstall"
 assert_contains "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child"
+assert_contains "WATCH_RESYNC_REINSTALLED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF installed_path=.*/alfred_backend_test_identity_match/unwatched-child"
 assert_contains "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
+assert_contains "FILE_CREATED path=.*/alfred_backend_test_identity_match/unwatched-child/proof.txt"
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
 assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF" \
@@ -61,7 +66,11 @@ assert_order "WATCH_RESYNC_SCAN_DONE wd=[0-9]+ path=.*/alfred_backend_test_ident
 assert_order "WATCH_RESYNC_SCAN_CLASS wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=needs-reinstall" \
              "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child"
 assert_order "WATCH_RESYNC_SCAN_MISSING wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF missing_path=.*/alfred_backend_test_identity_match/unwatched-child" \
+             "WATCH_RESYNC_REINSTALLED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF installed_path=.*/alfred_backend_test_identity_match/unwatched-child"
+assert_order "WATCH_RESYNC_REINSTALLED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF installed_path=.*/alfred_backend_test_identity_match/unwatched-child" \
              "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid"
+assert_order "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF result=valid" \
+             "FILE_CREATED path=.*/alfred_backend_test_identity_match/unwatched-child/proof.txt"
 
 assert_not_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
 assert_not_contains "DIR_RELOCATED path="

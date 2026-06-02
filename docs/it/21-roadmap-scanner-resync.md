@@ -1581,47 +1581,54 @@ precedente. Lo scanner della fase 2 serve a vedere le directory figlie e a
 preparare la futura installazione dei watch mancanti; non deve trattare la root
 come una nuova directory scoperta.
 
-#### Dry-run e watch reinstallation
+#### Dry-run e prima watch reinstallation
 
 `Dry-run` significa: eseguire lo scan per osservare cosa c'e' nel filesystem,
-produrre diagnostica e misurare il caso reale, senza modificare ancora lo stato
-del backend. Nel dry-run corrente Alfred:
+produrre diagnostica e misurare il caso reale. Questa parte resta separata dalla
+mutazione del backend. Nella fase di scan Alfred:
 
 - chiama `fs_scan_tree()` in modalita' directory-only
 - conta le directory figlie viste
 - usa `watcher_has_path()` per capire se ogni directory ha gia' un watch attivo
 - logga `WATCH_RESYNC_SCAN_DONE` oppure `WATCH_RESYNC_SCAN_FAILED`
-- non chiama `inotify_add_watch()`
-- non chiama `watch_manager_add()`
 - non emette raw Alfred sintetici
-- non cambia la watcher table in base alle directory trovate
 - non produce eventi core
 
 `Watch reinstallation` significa invece: usare il risultato dello scan per
-cambiare davvero lo stato di osservazione. In quella fase Alfred dovra':
+cambiare davvero lo stato di osservazione. Il primo passo implementato e'
+volutamente limitato: se esiste almeno una directory missing, Alfred prova a
+reinstallare solo il primo missing path con `watch_manager_add()`.
+
+Questa e' gia' una mutazione reale:
+
+- `watch_manager_add()` chiama `inotify_add_watch()`
+- la watcher table riceve una nuova entry `wd -> path`
+- il nuovo watch salva anche identita' `(st_dev, st_ino)` tramite la stessa
+  logica usata dai watch normali
+- il backend logga `WATCH_RESYNC_REINSTALLED`
+
+La fase completa non e' ancora implementata. In futuro Alfred dovra':
 
 - confrontare le directory viste dallo scanner con i watch gia' presenti
-- decidere quali directory non hanno ancora un watch
-- chiamare `watch_manager_add()` sui watch mancanti
+- iterare su tutti i missing path, non solo sul primo
 - gestire gli errori di `inotify_add_watch()`
 - decidere se il resync puo' considerarsi riuscito o se il watch resta `STALE`
 - loggare diagnostiche che descrivono la riparazione reale, non solo lo scan
 
-La differenza e' sostanziale. Il dry-run e' osservazione senza side effect
-strutturali; la watch reinstallation e' una mutazione del backend. Per questo
-abbiamo scelto di collegare prima il dry-run solo al ramo identita' positiva:
-serve a controllare che lo scope sia scansionabile senza ancora decidere la
-policy di riparazione.
+La differenza e' sostanziale. La parte dry-run e' osservazione; la watch
+reinstallation e' una mutazione del backend. Per questo la reinstallazione e'
+stata collegata solo dopo identita' positiva: prima proviamo che lo scope e'
+affidabile, poi aggiungiamo al massimo un watch mancante.
 
 Tabella riassuntiva:
 
-| Aspetto | Dry-run attuale | Watch reinstallation futura |
+| Aspetto | Scan/dry-run | Prima reinstallation implementata |
 | --- | --- | --- |
 | Scopo | Capire cosa vede lo scanner dentro uno scope affidabile | Riparare davvero la copertura dei watch ricorsivi |
-| Effetto su inotify | Nessuno | Chiama `inotify_add_watch()` tramite `watch_manager_add()` |
-| Effetto sulla watcher table | Nessuno basato sulle directory scansionate | Aggiunge entry `wd -> path` per directory mancanti |
+| Effetto su inotify | Nessuno | Chiama `inotify_add_watch()` tramite `watch_manager_add()` sul primo missing path |
+| Effetto sulla watcher table | Nessuno durante il conteggio | Aggiunge una entry `wd -> path` per il primo missing path se l'add riesce |
 | Effetto sul core | Nessuno | Nessuno diretto: resta diagnostica/backend state |
-| Log | `WATCH_RESYNC_SCAN_DONE ... dirs=N watched=M missing=K` / `WATCH_RESYNC_SCAN_FAILED` | Log futuri di watch aggiunti, riparazione riuscita o fallita |
+| Log | `WATCH_RESYNC_SCAN_DONE ... dirs=N watched=M missing=K` / `WATCH_RESYNC_SCAN_FAILED` | `WATCH_RESYNC_REINSTALLED` oppure `WATCH_RESYNC_REINSTALL_FAILED` |
 | Rischio | Basso, perche' osserva soltanto | Piu' alto, perche' modifica stato kernel e stato Alfred |
 
 Esempio concreto:
@@ -1658,8 +1665,10 @@ Questo significa:
 - `missing=1`: una directory e' visibile nello scan ma non ha ancora un watch
   attivo
 
-Anche con `missing=1`, Alfred non chiama ancora `watch_manager_add()`. Il valore
-serve a rendere visibile il buco di copertura prima di progettare la riparazione.
+Con `missing=1`, Alfred oggi prova a reinstallare solo il primo missing path. Il
+valore resta comunque importante: quando `missing>1`, la policy completa dovra'
+decidere come iterare sui missing successivi e cosa fare in caso di fallimento
+parziale.
 
 Il dry-run trasforma poi i contatori in una classificazione leggibile:
 
@@ -1675,9 +1684,8 @@ La classificazione corrente e':
 | `scan-covered` | `dirs>0` e `missing=0` | tutte le directory viste hanno gia' un watch attivo |
 | `needs-reinstall` | `missing>0` | almeno una directory vista non ha un watch attivo |
 
-Anche questa classificazione e' read-only. `needs-reinstall` non installa
-ancora watch: indica solo quale ramo della futura policy dovra' chiamare
-`watch_manager_add()` sulle directory mancanti.
+La classificazione e' ancora read-only, ma ora guida il primo ramo mutante:
+`needs-reinstall` porta al tentativo di reinstallare il primo missing path.
 
 Quando esiste almeno una directory missing, Alfred logga anche il primo path
 candidato:
@@ -1687,11 +1695,25 @@ WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a/b
 ```
 
 Per ora il log contiene solo il primo missing path. Questa scelta mantiene il
-micro-step piccolo e prepara la futura iterazione "per ogni missing path,
-chiama `watch_manager_add()`". Il path non viene ancora usato per installare un
-watch: e' un candidato osservato, non una riparazione.
+micro-step piccolo. Subito dopo, Alfred prova a usare proprio quel path per
+installare un watch:
 
-Con la futura watch reinstallation Alfred dovra' fare un passo in piu':
+```text
+WATCH_RESYNC_REINSTALLED ... installed_path=/tmp/root/a/b
+```
+
+Se `watch_manager_add()` fallisce, Alfred logga:
+
+```text
+WATCH_RESYNC_REINSTALL_FAILED ... missing_path=/tmp/root/a/b
+WATCH_RESYNC_FAILED ... error=reinstall-failed
+```
+
+In quel caso il watch principale torna `STALE` e Alfred non logga
+`WATCH_RESYNC_END ... result=valid`. Tornare `VALID` sarebbe fuorviante: lo
+scan ha dimostrato un buco di copertura e la prima riparazione e' fallita.
+
+Con la futura watch reinstallation completa Alfred dovra' fare un passo in piu':
 
 ```text
 per ogni directory vista dallo scanner:
@@ -1700,9 +1722,9 @@ per ogni directory vista dallo scanner:
     se l'aggiunta fallisce, decide se lasciare il resync fallito o parziale
 ```
 
-Solo questa seconda fase potra' dire: "la subtree e' di nuovo osservata in modo
-completo". Il dry-run non lo dice: prepara le informazioni e rende visibile nei
-log quanto lavoro ci sarebbe da fare.
+Solo questa fase completa potra' dire: "la subtree e' di nuovo osservata in
+modo completo". Il passo attuale ripara al massimo il primo buco e lascia fuori
+la policy sui casi `missing>1`.
 
 Il callback attuale, `backend_count_resync_scanned_dir()`, conta le directory
 viste e usa `watcher_has_path()` come query read-only sulla watcher table.
@@ -1858,12 +1880,14 @@ flowchart TD
     I -- "si" --> J["set VALID<br/>WATCH_RESYNC_END"]
 ```
 
-Nel codice corrente e' implementata solo la parte iniziale del flusso:
-`STALE -> RESYNCING -> VALID` quando il vecchio path e' ancora una directory e
-la sua identita' `(st_dev, st_ino)` coincide con quella salvata, oppure
+Nel codice corrente e' implementata la prima versione mutante del flusso:
+`STALE -> RESYNCING -> VALID` quando il vecchio path e' ancora una directory,
+la sua identita' `(st_dev, st_ino)` coincide con quella salvata e l'eventuale
+primo watch mancante puo' essere reinstallato. Il ramo negativo resta
 `STALE -> RESYNCING -> STALE` con `WATCH_RESYNC_FAILED` se il vecchio path non
-e' piu' raggiungibile, non e' una directory o ha identita' diversa/mancante. Il
-blocco `fs_scan_tree()` e l'aggiunta dei watch mancanti restano nella roadmap.
+e' piu' raggiungibile, non e' una directory, ha identita' diversa/mancante o se
+la prima reinstallazione fallisce. La reinstallazione completa di tutti i
+missing path resta nella roadmap.
 
 I test backend fissano entrambi i rami della scelta.
 
@@ -1879,7 +1903,11 @@ I test backend fissano entrambi i rami della scelta.
 7. il backend esegue lo scan dry-run directory-only e logga
    WATCH_RESYNC_SCAN_DONE ... dirs=2 watched=1 missing=1
 8. il backend logga WATCH_RESYNC_SCAN_MISSING ... missing_path=.../unwatched-child
-9. il backend logga WATCH_RESYNC_END ... result=valid
+9. il backend reinstalla il primo watch mancante e logga
+   WATCH_RESYNC_REINSTALLED ... installed_path=.../unwatched-child
+10. il backend logga WATCH_RESYNC_END ... result=valid
+11. il test crea unwatched-child/proof.txt e verifica che Alfred emetta
+    FILE_CREATED per dimostrare che il watch reinstallato e' operativo
 ```
 
 `tests/backend/test_self_move_identity_mismatch.sh` copre il ramo negativo:
