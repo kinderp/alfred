@@ -39,6 +39,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: aggiunta una sezione di ripresa dopo stop
+  lungo con branch, stato reale del codice, flusso attuale del resync
+  `IN_MOVE_SELF`, policy conservativa consigliata per `missing>1` e prossimi
+  micro-step. Corrette le frasi obsolete che descrivevano ancora il probe come
+  solo dry-run senza `fs_scan_tree()` e senza watch reinstallation.
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
   `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata

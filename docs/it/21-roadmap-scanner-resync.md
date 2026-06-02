@@ -1,7 +1,7 @@
 # Roadmap scanner e resync
 
-Questo capitolo raccoglie la progettazione iniziale dello scanner filesystem e
-della futura logica di resync. Nasce dalla discussione sugli eventi
+Questo capitolo raccoglie la progettazione dello scanner filesystem e della
+logica di resync in costruzione. Nasce dalla discussione sugli eventi
 `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_Q_OVERFLOW` e `IN_UNMOUNT`.
 
 L'obiettivo e' evitare di aggiungere piccole patch scollegate al backend
@@ -11,6 +11,58 @@ essere riusato in due contesti:
 - recovery/resync del backend quando lo stato osservato non e' piu' affidabile
 - indicizzazione esplicita di un albero, eventualmente esposta in futuro dalla
   riga di comando
+
+## Punto di ripresa dopo uno stop lungo
+
+Stato del codice al momento della ripresa:
+
+- branch di lavoro: `feature/resync-scanner`
+- lo scanner generico `fs_scan_tree()` esiste ed e' testato
+- lo startup e la scoperta runtime delle directory usano gia' lo scanner
+- la watcher table salva identita' filesystem `(st_dev, st_ino)`
+- i watch possono passare tra `VALID`, `STALE`, `RESYNCING` e `REMOVED`
+- `IN_MOVE_SELF` marca il watch come `STALE`
+- il ramo `IN_MOVE_SELF` con identita' confermata esegue uno scan
+  directory-only sul vecchio path tornato affidabile
+- lo scan conta directory viste, directory gia' watched e directory missing
+- se esiste almeno un missing path, Alfred reinstalla solo il primo watch
+  mancante con `watch_manager_add()`
+- se la prima reinstallazione riesce, il watch principale torna `VALID`
+- se lo scan fallisce o la prima reinstallazione fallisce, il watch principale
+  resta `STALE`
+
+Il punto esatto in cui siamo fermi e':
+
+```text
+IN_MOVE_SELF con identita' confermata
+-> fs_scan_tree(directory-only, emit_root=0)
+-> conta dirs/watched/missing
+-> reinstalla il primo missing path
+-> torna VALID solo se questa prima riparazione riesce
+```
+
+Il prossimo passo non e' aggiungere nuova semantica core. Il prossimo passo e'
+completare la policy backend di reinstallazione:
+
+```text
+da:  reinstalla solo il primo missing path
+a:   reinstalla tutti i missing path dentro lo scope affidabile
+```
+
+Decisione tecnica consigliata per ripartire:
+
+- se tutti i missing watch vengono reinstallati, il watch principale puo'
+  tornare `VALID`
+- se anche un solo missing watch fallisce, il watch principale deve restare
+  `STALE`
+- il ritorno a `VALID` deve significare copertura completa dello scope scelto,
+  non copertura parziale
+- i log backend devono rendere visibili sia i watch reinstallati sia il primo
+  fallimento
+
+Questa scelta e' conservativa. Evita di presentare al core una situazione come
+affidabile quando il backend sa gia' che una parte della subtree non e'
+osservata.
 
 ## Stato corrente sugli eventi critici
 
@@ -1559,10 +1611,12 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
 ```
 
 La funzione riceve il context backend, il `wd` stale, il path root dello scope
-da scansionare e il motivo della recovery. Oggi viene chiamata solo come
-diagnostica dry-run: conta le directory figlie quando lo scope e' gia'
-affidabile, distingue quante sono gia' coperte da un watch e quante risultano
-mancanti, ma non ripara ancora i watch mancanti.
+da scansionare e il motivo della recovery. Oggi viene chiamata dal ramo
+`IN_MOVE_SELF` solo dopo che il vecchio path e' stato provato come affidabile
+tramite identita' filesystem. La prima parte resta uno scan osservativo: conta
+le directory figlie, distingue quante sono gia' coperte da un watch e quante
+risultano mancanti. Subito dopo, pero', il backend esegue gia' una prima
+mutazione reale: reinstalla il primo missing path con `watch_manager_add()`.
 
 Le opzioni dello scanner sono intenzionalmente conservative:
 
@@ -1739,19 +1793,20 @@ questa callback con una policy esplicita per:
 I log dell'helper (`WATCH_RESYNC_SCAN_DONE` e `WATCH_RESYNC_SCAN_FAILED`) sono
 preparatori dal punto di vista della recovery completa, ma ora fanno parte del
 contratto diagnostico backend del ramo `IN_MOVE_SELF` con identita' confermata.
-Non sono eventi core e non indicano ancora che Alfred abbia reinstallato watch:
-indicano solo che lo scope affidabile e' stato scansionato in dry-run e quanta
-copertura watch risulta gia' presente.
+Non sono eventi core e non producono raw Alfred sintetici: descrivono lo stato
+interno del backend mentre misura e ripara la copertura watch.
 
-Il probe non usa ancora `fs_scan_tree()`, non reinstalla watch mancanti e non
-produce raw Alfred. Controlla se il vecchio path associato al watch esiste
+Il probe usa gia' `fs_scan_tree()` nel ramo positivo, ma solo dopo il confronto
+di identita'. Prima controlla se il vecchio path associato al watch esiste
 ancora, e' una directory ispezionabile e ha la stessa identita' filesystem
 salvata nella watcher table. Questa terza condizione e' essenziale: dopo
 `IN_MOVE_SELF` un altro processo potrebbe ricreare una directory con lo stesso
 vecchio path mentre il watch kernel continua a riferirsi all'oggetto spostato.
-Per questo la raggiungibilita' del path non basta. Il probe riporta il watch a
-`VALID` solo se la coppia `(st_dev, st_ino)` coincide; altrimenti lascia il
-watch `STALE` e scrive `WATCH_RESYNC_FAILED`.
+Per questo la raggiungibilita' del path non basta. Solo se la coppia
+`(st_dev, st_ino)` coincide, il backend scansiona la subtree, misura la
+copertura e prova a reinstallare il primo watch mancante. Il watch torna
+`VALID` solo se anche questa prima riparazione riesce; altrimenti resta
+`STALE` e scrive `WATCH_RESYNC_FAILED`.
 
 Se il vecchio path esiste ma l'identita' e' diversa, il probe non deve
 aggiungere subito un nuovo watch su quel path. Sarebbe una decisione troppo
@@ -1946,8 +2001,9 @@ Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
 
 Non basta "non ho visto altri errori". La transizione `RESYNCING -> VALID`
 deve essere il risultato di una verifica esplicita. Oggi la verifica esplicita
-implementata e' il confronto di identita' sul singolo watch; lo scan
-directory-only e la reinstallazione dei watch mancanti restano il passo futuro.
+implementata comprende il confronto di identita' sul singolo watch, lo scan
+directory-only dello scope affidabile e la reinstallazione del primo missing
+path. La reinstallazione di tutti i missing path resta il passo futuro.
 
 #### Regola per restare STALE
 
@@ -1956,6 +2012,8 @@ Il watch resta `STALE` quando Alfred non ha abbastanza informazioni:
 - `IN_MOVE_SELF` ha spostato il path e non conosciamo la nuova destinazione
 - lo scan non puo' partire da una root affidabile
 - la root esiste ma non e' accessibile
+- lo scan fallisce con un errore duro sulla root affidabile
+- il primo watch mancante non puo' essere reinstallato
 - la recovery e' stata interrotta
 
 In questi casi Alfred deve preferire diagnostica esplicita a eventi utente
@@ -1995,11 +2053,21 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. progettare l'uso dello scanner per `IN_MOVE_SELF`, `IN_DELETE_SELF`,
+1. correggere `backend_resync_watch_subtree_dirs()` in modo che raccolga o
+   reinstalli tutti i missing path, non solo il primo
+2. mantenere la policy conservativa: se una reinstallazione fallisce, il watch
+   principale resta `STALE`
+3. aggiornare `test_self_move_identity_match.sh` o aggiungere un nuovo test
+   backend con almeno due directory missing create mentre Alfred e' fermo
+4. verificare nei log l'ordine:
+   `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_SCAN_CLASS`,
+   uno o piu' `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_END`
+5. documentare la nuova policy `missing>1` in `14-scenari-test.md`,
+   `21-roadmap-scanner-resync.md`, `documentation-progress.md` e
+   `commenting-progress.md`
+6. solo dopo la reinstallazione completa, tornare a discutere `IN_DELETE_SELF`,
    `IN_UNMOUNT` e overflow
-2. definire quali diagnostiche servono quando un resync non puo' ricostruire lo
-   stato in modo affidabile
-3. rimandare output CLI e JSON a un passo successivo
+7. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 
@@ -2007,5 +2075,6 @@ Questo approccio evita di mescolare subito tre problemi:
 - decidere la semantica di `IN_MOVE_SELF`
 - aggiungere una feature utente di indicizzazione
 
-Prima facciamo uno scanner piccolo, misurabile e testato. Poi decidiamo come
-usarlo per resync.
+Prima completiamo il resync backend su uno scope gia' affidabile. Poi decidiamo
+come estendere lo stesso modello agli eventi che non hanno ancora una root
+affidabile o che richiedono una recovery piu' ampia.
