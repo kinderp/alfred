@@ -34,6 +34,7 @@ Stati usati:
 | Parziale | `21-roadmap-scanner-resync.md` |
 | Parziale | `22-contratto-log.md` |
 | Parziale | `23-roadmap-plugin-backend.md` |
+| Parziale | `24-roadmap-ai-agent-guardrail.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -41,6 +42,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `24-roadmap-ai-agent-guardrail.md` e `README.md`: aggiunta la roadmap che
+  posiziona Alfred come AI agent runtime security/guardrail. Il capitolo
+  documenta prompt context, tool action, effetti OS, policy engine,
+  allow/warn/approval/block, limiti di inotify, necessita' di fanotify/audit/eBPF
+  e relazione con plugin backend e output strutturato.
 - `23-roadmap-plugin-backend.md` e `README.md`: aggiunta la roadmap per una
   futura API comune dei backend/plugin Alfred. Il capitolo documenta backend
   statici prima dei `.so`, contratto raw event + diagnostica strutturata,

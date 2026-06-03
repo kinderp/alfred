@@ -243,6 +243,24 @@ allora Alfred puo':
 
 Il testo diventa un writer, non la fonte primaria del dato.
 
+## Relazione con AI agent guardrail
+
+La roadmap plugin nasce anche per l'obiettivo piu' ampio di Alfred: diventare
+un runtime security layer per agenti AI.
+
+Un guardrail per agenti non puo' osservare solo il filesystem. Deve poter
+correlare prompt, tool call, processi, rete, accesso a credenziali e modifiche
+reali sul sistema. Questo richiede backend diversi:
+
+- `inotify` per cambiamenti filesystem
+- `fanotify` per permission event su file
+- audit/eBPF per processi, exec, rete e segnali kernel
+- backend Windows/macOS per ambienti non Linux
+
+Il contratto plugin deve quindi restare abbastanza generale da supportare eventi
+di sicurezza, non solo eventi filesystem. La semantica filesystem resta il
+primo passo; il guardrail agentico e' la direzione di prodotto piu' ampia.
+
 ## Come inotify deve evolvere
 
 Il backend inotify corrente e' il prototipo da cui partire.
