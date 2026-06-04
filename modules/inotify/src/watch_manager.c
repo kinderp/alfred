@@ -1,35 +1,39 @@
 /* ============================================================================
- * watch_manager.c - inotify watch installation and recursive discovery
+ * watch_manager.c - inotify watch installation
  *
  * This file owns the operations that mutate the backend watcher table:
  *
- *   inotify_add_watch() -> watcher_store()
+ *   stat() -> inotify_add_watch() -> stat() -> watcher_store_identity()
  *   inotify_rm_watch()  -> watcher_remove()
  *
  * It deliberately does not classify filesystem events. WATCH_ADDED and
  * WATCH_REMOVED are backend diagnostics about Alfred's observation state, not
- * semantic filesystem events. Recursive discovery reports directory facts to
- * the backend through a callback; the core later decides whether those facts
- * become DIR_CREATED events.
+ * semantic filesystem events. Startup recursive watching consumes fs_scanner
+ * directory facts to install watches. Runtime recursive discovery also uses
+ * fs_scanner, but its synthetic raw-event policy stays in the backend.
  * ========================================================================== */
 
 #include "watch_manager.h"
+#include "fs_scanner.h"
 #include "watcher.h"
 #include "logger.h"
-#include "utils.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-#include <unistd.h>
-#include <dirent.h>
 #include <limits.h>
 #include <sys/inotify.h>
+#include <sys/stat.h>
 
 /* ============================================================================
  * INTERNAL HELPERS
  * ========================================================================== */
+
+typedef struct watch_manager_scan_context {
+    inotify_backend_context_t *ctx;
+    int failed;
+} watch_manager_scan_context_t;
 
 /*
  * watch_manager_context_is_valid - validate borrowed backend dependencies
@@ -46,6 +50,37 @@ static int watch_manager_context_is_valid(
            ctx->logger != NULL;
 }
 
+/*
+ * watch_manager_add_scanned_dir - add a watch for one scanner directory fact
+ * @entry: filesystem entry reported by fs_scan_tree()
+ * @userdata: watch_manager_scan_context_t used for watch installation
+ *
+ * Startup recursive watching needs no raw synthetic events: all directories
+ * already exist before the event loop starts. The scanner only reports facts;
+ * this adapter turns directory facts into inotify watches and records whether
+ * watch installation failed.
+ *
+ * Return: 0 to keep scanning, nonzero to stop after a watch failure.
+ */
+static int watch_manager_add_scanned_dir(const fs_scan_entry_t *entry,
+                                         void *userdata)
+{
+    watch_manager_scan_context_t *scan_ctx =
+        (watch_manager_scan_context_t *)userdata;
+
+    if (scan_ctx == NULL || scan_ctx->ctx == NULL ||
+        entry == NULL || entry->type != FS_SCAN_DIR) {
+        return 0;
+    }
+
+    if (watch_manager_add(scan_ctx->ctx, entry->path) < 0) {
+        scan_ctx->failed = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
 /* ============================================================================
  * DEFAULT WATCH MASK
  * ========================================================================== */
@@ -53,9 +88,10 @@ static int watch_manager_context_is_valid(
 /*
  * watch_manager_default_mask - return the default inotify subscription mask
  *
- * The mask includes creation/deletion, modify/attrib/close-write, move pairs,
- * watch removal diagnostics, and queue overflow. It is stored in config_t so
- * future configuration can override it without changing watch_manager_add().
+ * The mask includes creation/deletion, modify/attrib/close-write, child move
+ * pairs, watched-object self events, watch removal diagnostics, and queue
+ * overflow. It is stored in config_t so future configuration can override it
+ * without changing watch_manager_add().
  *
  * Return: OR-ed IN_* mask flags.
  */
@@ -70,6 +106,7 @@ uint32_t watch_manager_default_mask(void)
         IN_MOVED_FROM  |
         IN_MOVED_TO    |
         IN_DELETE_SELF |
+        IN_MOVE_SELF   |
         IN_IGNORED     |
         IN_Q_OVERFLOW;
 }
@@ -84,8 +121,11 @@ uint32_t watch_manager_default_mask(void)
  * @path: filesystem path to watch
  *
  * On success the kernel returns a watch descriptor. The descriptor is then used
- * as an index into watcher_table_t, where watcher_store() saves the path needed
- * later to reconstruct full event paths from inotify records.
+ * as an index into watcher_table_t, where watcher_store_identity() saves the
+ * path and stat(2) identity needed later to reconstruct full event paths and
+ * validate stale mappings during resync. The identity is checked immediately
+ * before and after inotify_add_watch() so Alfred does not store identity for a
+ * different object if @path changes during watch installation.
  *
  * The WATCH_ADDED log documents that Alfred can now observe @path. It is not a
  * substitute for DIR_CREATED and must not be consumed as a semantic core event.
@@ -97,6 +137,24 @@ int watch_manager_add(inotify_backend_context_t *ctx,
 {
     if (!watch_manager_context_is_valid(ctx) || path == NULL)
         return -1;
+
+    struct stat before;
+    struct stat after;
+
+    /*
+     * First stat(2): capture the identity the caller asked Alfred to watch.
+     * A path is only a name; st_dev/st_ino are the filesystem identity that we
+     * will later use to detect whether the name still points to the same object.
+     */
+    if (stat(path, &before) != 0) {
+        logger_error(ctx->logger,
+                     "stat before watch failed path=%s errno=%d (%s)",
+                     path,
+                     errno,
+                     strerror(errno));
+
+        return -1;
+    }
 
     int wd =
         inotify_add_watch(ctx->runtime->fd,
@@ -114,12 +172,46 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    if (watcher_store(&ctx->runtime->watchers,
-                      wd,
-                      path) != 0) {
+    /*
+     * Second stat(2): validate that the path still names the same object after
+     * the kernel accepted the watch. If another process replaced the path in
+     * this small window, keeping the watch would pair the wd with the wrong
+     * identity, so the only safe response is to remove it and fail the add.
+     */
+    if (stat(path, &after) != 0) {
+        logger_error(ctx->logger,
+                     "stat after watch failed path=%s errno=%d (%s)",
+                     path,
+                     errno,
+                     strerror(errno));
+
+        inotify_rm_watch(ctx->runtime->fd,
+                         wd);
+
+        return -1;
+    }
+
+    if (before.st_dev != after.st_dev ||
+        before.st_ino != after.st_ino) {
 
         logger_error(ctx->logger,
-                     "watcher_store failed wd=%d path=%s",
+                     "watched path changed during add path=%s",
+                     path);
+
+        inotify_rm_watch(ctx->runtime->fd,
+                         wd);
+
+        return -1;
+    }
+
+    if (watcher_store_identity(&ctx->runtime->watchers,
+                               wd,
+                               path,
+                               after.st_dev,
+                               after.st_ino) != 0) {
+
+        logger_error(ctx->logger,
+                     "watcher_store_identity failed wd=%d path=%s",
                      wd,
                      path);
 
@@ -190,93 +282,6 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
 }
 
 /* ============================================================================
- * INTERNAL RECURSIVE WALK
- * ========================================================================== */
-
-/*
- * recursive_walk - add watches for a directory tree
- * @ctx: borrowed backend context containing runtime, config, and logger
- * @root: directory currently being scanned
- * @on_discovered: optional callback for discovered directories
- * @userdata: opaque callback data
- * @notify_root: nonzero to report @root through @on_discovered
- *
- * The root passed by the public entry point is not reported because its real
- * inotify create event is already being processed by the backend. Nested
- * directories are reported because they may have been created before a watch
- * existed on their parent, which means the kernel could not deliver their
- * create event to Alfred.
- *
- * This function mutates backend observation state only. It never emits raw or
- * semantic events directly; the optional callback lets the backend decide how
- * to represent discovered directories to the core.
- *
- * Return: 0 on success, -1 on opendir failure.
- */
-static int recursive_walk(inotify_backend_context_t *ctx,
-                          const char *root,
-                          watch_manager_discovered_dir_fn on_discovered,
-                          void *userdata,
-                          int notify_root)
-{
-    DIR *dir = opendir(root);
-
-    if (dir == NULL) {
-
-        logger_error(ctx->logger,
-                     "opendir failed path=%s",
-                     root);
-
-        return -1;
-    }
-
-    /*
-     * Add the watch before reporting discovery. This ordering means any
-     * synthetic raw create emitted by the backend describes a directory that is
-     * already watched for subsequent changes.
-     */
-    watch_manager_add(ctx, root);
-
-    if (notify_root && on_discovered != NULL) {
-        on_discovered(ctx, root, userdata);
-    }
-
-    struct dirent *ent;
-
-    while ((ent = readdir(dir)) != NULL) {
-
-        if (strcmp(ent->d_name, ".") == 0)
-            continue;
-
-        if (strcmp(ent->d_name, "..") == 0)
-            continue;
-
-        if (ent->d_type != DT_DIR)
-            continue;
-
-        char child[PATH_MAX];
-
-        if (path_join(child,
-                      sizeof(child),
-                      root,
-                      ent->d_name) != 0) {
-
-            continue;
-        }
-
-        recursive_walk(ctx,
-                       child,
-                       on_discovered,
-                       userdata,
-                       1);
-    }
-
-    closedir(dir);
-
-    return 0;
-}
-
-/* ============================================================================
  * ADD RECURSIVE
  * ========================================================================== */
 
@@ -285,8 +290,10 @@ static int recursive_walk(inotify_backend_context_t *ctx,
  * @ctx: borrowed backend context containing runtime, config, and logger
  * @root: root directory to scan
  *
- * Used for startup recursive watching, where discovered children already exist
- * before Alfred starts and should not be emitted as create events.
+ * Used for startup recursive watching, where directories already exist before
+ * Alfred starts and must not be emitted as create events. The filesystem walk
+ * is delegated to fs_scan_tree(); this function only adapts scanner directory
+ * facts into watch_manager_add() calls.
  *
  * Return: 0 on success, -1 on failure.
  */
@@ -296,37 +303,23 @@ int watch_manager_add_recursive(inotify_backend_context_t *ctx,
     if (!watch_manager_context_is_valid(ctx) || root == NULL)
         return -1;
 
-    return recursive_walk(ctx, root, NULL, NULL, 0);
-}
+    fs_scan_options_t opts;
 
-/*
- * watch_manager_add_recursive_with_discovery - add watches and report children
- * @ctx: borrowed backend context containing runtime, config, and logger
- * @root: newly created directory to scan
- * @on_discovered: callback for nested directories found during scanning
- * @userdata: opaque callback data
- *
- * Used after an inotify IN_CREATE|IN_ISDIR event while recursive mode is active.
- * The backend already has the real create event for @root. The discovery
- * callback reports nested directories that may have been missed in fast
- * recursive creation scenarios such as `mkdir -p one/two/three`.
- *
- * The callback receives discovery facts, not final events. In the current
- * backend those facts become synthetic ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR
- * records, while the core owns semantic emission. Generic create
- * deduplication is not implemented yet and must be added as an explicit
- * policy if a future scenario needs it.
- *
- * Return: 0 on success, -1 on failure.
- */
-int watch_manager_add_recursive_with_discovery(
-    inotify_backend_context_t *ctx,
-    const char *root,
-    watch_manager_discovered_dir_fn on_discovered,
-    void *userdata)
-{
-    if (!watch_manager_context_is_valid(ctx) || root == NULL)
+    fs_scan_options_defaults(&opts);
+
+    watch_manager_scan_context_t scan_ctx;
+
+    scan_ctx.ctx = ctx;
+    scan_ctx.failed = 0;
+
+    error_t rc =
+        fs_scan_tree(root,
+                     &opts,
+                     watch_manager_add_scanned_dir,
+                     &scan_ctx);
+
+    if (rc != ERR_OK || scan_ctx.failed)
         return -1;
 
-    return recursive_walk(ctx, root, on_discovered, userdata, 0);
+    return 0;
 }

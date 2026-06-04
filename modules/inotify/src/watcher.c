@@ -4,7 +4,8 @@
  * The inotify backend needs to reconstruct full paths from kernel events.
  * Kernel records contain a watch descriptor and an optional name; they do not
  * repeat the watched directory path. This table stores that missing directory
- * path and lets the backend perform direct lookup by wd.
+ * path, tracks whether the mapping is still reliable, stores optional
+ * stat(2)-based identity, and lets the backend perform direct lookup by wd.
  *
  * The table may be sparse because inotify watch descriptors are kernel-assigned
  * integers. watcher_expand() grows the array until the descriptor can be used
@@ -68,6 +69,42 @@ static int watcher_expand(watcher_table_t *wt, int required_wd)
     wt->capacity = new_capacity;
 
     return 0;
+}
+
+/*
+ * watcher_state_is_valid - validate a public watcher state value
+ * @state: state value supplied by a caller
+ *
+ * Return: nonzero when @state is part of watcher_state_t.
+ */
+static int watcher_state_is_valid(watcher_state_t state)
+{
+    return state == WATCHER_STATE_REMOVED ||
+           state == WATCHER_STATE_VALID ||
+           state == WATCHER_STATE_STALE ||
+           state == WATCHER_STATE_RESYNCING;
+}
+
+/*
+ * watcher_state_name - convert a watcher state to a debug string
+ * @state: state value to render
+ *
+ * Return: static string used by watcher_dump().
+ */
+static const char *watcher_state_name(watcher_state_t state)
+{
+    switch (state) {
+    case WATCHER_STATE_REMOVED:
+        return "removed";
+    case WATCHER_STATE_VALID:
+        return "valid";
+    case WATCHER_STATE_STALE:
+        return "stale";
+    case WATCHER_STATE_RESYNCING:
+        return "resyncing";
+    default:
+        return "unknown";
+    }
 }
 
 /* ============================================================================
@@ -149,8 +186,66 @@ int watcher_store(watcher_table_t *wt,
     if (!slot->active)
         wt->count++;
 
-    slot->wd     = wd;
-    slot->active = 1;
+    slot->wd           = wd;
+    slot->active       = 1;
+    slot->state        = WATCHER_STATE_VALID;
+    slot->has_identity = 0;
+    slot->device_id    = 0;
+    slot->inode_id     = 0;
+
+    snprintf(slot->path,
+             sizeof(slot->path),
+             "%s",
+             path);
+
+    return 0;
+}
+
+/*
+ * watcher_store_identity - store a wd -> path mapping with filesystem identity
+ * @wt: table to update
+ * @wd: inotify watch descriptor
+ * @path: watched path to copy into the table
+ * @device_id: st_dev captured for @path when the watch was installed
+ * @inode_id: st_ino captured for @path when the watch was installed
+ *
+ * The identity pair is not a semantic event. It is backend evidence used by
+ * future resync policy: if a stale path is later reachable again, Alfred can
+ * compare the current stat(2) identity with the identity captured at watch
+ * installation time before trusting that path.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+int watcher_store_identity(watcher_table_t *wt,
+                           int wd,
+                           const char *path,
+                           dev_t device_id,
+                           ino_t inode_id)
+{
+    if (wt == NULL || path == NULL)
+        return -1;
+
+    if (wd < 0)
+        return -1;
+
+    if (watcher_expand(wt, wd) != 0)
+        return -1;
+
+    watcher_entry_t *slot = &wt->items[wd];
+
+    /*
+     * Replacing an active slot updates its path but does not create another
+     * active watcher.
+     */
+    if (!slot->active)
+        wt->count++;
+
+    slot->wd           = wd;
+    slot->active       = 1;
+    slot->state        = WATCHER_STATE_VALID;
+    slot->has_identity = 1;
+    slot->device_id    = device_id;
+    slot->inode_id     = inode_id;
 
     snprintf(slot->path,
              sizeof(slot->path),
@@ -186,6 +281,10 @@ void watcher_remove(watcher_table_t *wt, int wd)
 
     slot->active = 0;
     slot->wd     = -1;
+    slot->state  = WATCHER_STATE_REMOVED;
+    slot->has_identity = 0;
+    slot->device_id    = 0;
+    slot->inode_id     = 0;
     slot->path[0] = '\0';
 
     if (wt->count > 0)
@@ -221,6 +320,38 @@ const char* watcher_get_path(const watcher_table_t *wt,
 }
 
 /*
+ * watcher_get_identity - read the filesystem identity captured for a watch
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ * @device_id: output pointer for st_dev
+ * @inode_id: output pointer for st_ino
+ *
+ * Return: 0 when an active watch has captured identity, -1 otherwise.
+ */
+int watcher_get_identity(const watcher_table_t *wt,
+                         int wd,
+                         dev_t *device_id,
+                         ino_t *inode_id)
+{
+    if (device_id == NULL || inode_id == NULL)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    const watcher_entry_t *slot =
+        &wt->items[wd];
+
+    if (!slot->has_identity)
+        return -1;
+
+    *device_id = slot->device_id;
+    *inode_id  = slot->inode_id;
+
+    return 0;
+}
+
+/*
  * watcher_exists - test whether a watch descriptor has an active mapping
  * @wt: table to inspect
  * @wd: inotify watch descriptor
@@ -243,6 +374,101 @@ int watcher_exists(const watcher_table_t *wt,
 }
 
 /*
+ * watcher_has_path - test whether an active watch already tracks a path
+ * @wt: table to inspect
+ * @path: path to search for
+ *
+ * This is a read-only helper for scanner-based resync. The backend can compare
+ * directory facts reported by fs_scan_tree() with active watcher entries
+ * without reaching into watcher_table_t internals and without installing a new
+ * watch. State is intentionally not filtered here: VALID, STALE, and RESYNCING
+ * are all active mappings. A later resync policy can decide whether a stale
+ * mapping is trustworthy enough for a specific repair.
+ *
+ * Return: 1 when an active entry has exactly @path, 0 otherwise.
+ */
+int watcher_has_path(const watcher_table_t *wt, const char *path)
+{
+    if (wt == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (strcmp(slot->path, path) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * watcher_set_state - update the reliability state of an active watch
+ * @wt: table to update
+ * @wd: inotify watch descriptor to update
+ * @state: new reliability state
+ *
+ * Removed is represented by watcher_remove(), not by changing the state of an
+ * active slot. This keeps "slot is active" and "slot reliability" separate and
+ * prevents callers from leaving an active wd that says it is removed.
+ *
+ * Return: 0 on success, -1 on invalid input or inactive watch descriptor.
+ */
+int watcher_set_state(watcher_table_t *wt,
+                      int wd,
+                      watcher_state_t state)
+{
+    if (wt == NULL)
+        return -1;
+
+    if (!watcher_state_is_valid(state))
+        return -1;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    wt->items[wd].state = state;
+
+    return 0;
+}
+
+/*
+ * watcher_get_state - read the reliability state of a watch descriptor
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ *
+ * Return: stored state for active slots, WATCHER_STATE_REMOVED otherwise.
+ */
+watcher_state_t watcher_get_state(const watcher_table_t *wt,
+                                  int wd)
+{
+    if (!watcher_exists(wt, wd))
+        return WATCHER_STATE_REMOVED;
+
+    return wt->items[wd].state;
+}
+
+/*
+ * watcher_is_stale - test whether a watch mapping is no longer reliable
+ * @wt: table to inspect
+ * @wd: inotify watch descriptor
+ *
+ * Return: 1 for active stale watches, 0 otherwise.
+ */
+int watcher_is_stale(const watcher_table_t *wt,
+                     int wd)
+{
+    return watcher_get_state(wt, wd) == WATCHER_STATE_STALE ? 1 : 0;
+}
+
+/*
  * watcher_count - return the number of active watcher mappings
  * @wt: table to inspect
  *
@@ -254,6 +480,103 @@ size_t watcher_count(const watcher_table_t *wt)
         return 0;
 
     return wt->count;
+}
+
+/*
+ * watcher_count_state - count active watcher mappings in one reliability state
+ * @wt: table to inspect
+ * @state: reliability state to count
+ *
+ * This is a small diagnostic helper for future resync policy. Counting stale
+ * or resyncing watches lets the backend report how much state is no longer
+ * trusted without exposing the table internals. REMOVED is treated specially:
+ * removed slots are inactive, so the count is always zero even if unused array
+ * slots contain the zero-valued REMOVED state.
+ *
+ * Return: number of active entries with @state, or 0 for NULL/invalid state.
+ */
+size_t watcher_count_state(const watcher_table_t *wt,
+                           watcher_state_t state)
+{
+    if (wt == NULL)
+        return 0;
+
+    if (!watcher_state_is_valid(state))
+        return 0;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return 0;
+
+    size_t count = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (slot->state == state)
+            count++;
+    }
+
+    return count;
+}
+
+/*
+ * watcher_foreach_state - visit active watcher entries in one state
+ * @wt: table to inspect
+ * @state: reliability state to visit
+ * @callback: function invoked for each matching entry
+ * @userdata: opaque pointer passed to @callback
+ *
+ * Future resync code needs to inspect stale or resyncing watches without
+ * reaching into watcher_table_t internals. The callback receives a const entry
+ * so it can read wd, path, and state, but cannot mutate the table while it is
+ * being iterated through this API.
+ *
+ * REMOVED is not iterable because removed slots are inactive and do not
+ * represent live watches. If @callback returns nonzero, iteration stops early
+ * and that nonzero value is returned to the caller.
+ *
+ * Return: number of visited entries on success, -1 on invalid input, or the
+ * callback's nonzero return value when iteration is stopped early.
+ */
+int watcher_foreach_state(const watcher_table_t *wt,
+                          watcher_state_t state,
+                          watcher_iter_fn callback,
+                          void *userdata)
+{
+    if (wt == NULL || callback == NULL)
+        return -1;
+
+    if (!watcher_state_is_valid(state))
+        return -1;
+
+    if (state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    int visited = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot =
+            &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (slot->state != state)
+            continue;
+
+        int rc = callback(slot, userdata);
+
+        if (rc != 0)
+            return rc;
+
+        visited++;
+    }
+
+    return visited;
 }
 
 /*
@@ -278,8 +601,12 @@ void watcher_dump(const watcher_table_t *wt)
         if (!e->active)
             continue;
 
-        printf("wd=%d path=%s\n",
+        printf("wd=%d state=%s identity=%s dev=%llu ino=%llu path=%s\n",
                e->wd,
+               watcher_state_name(e->state),
+               e->has_identity ? "yes" : "no",
+               (unsigned long long)e->device_id,
+               (unsigned long long)e->inode_id,
                e->path);
     }
 

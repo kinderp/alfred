@@ -31,6 +31,10 @@ Stati usati:
 | Parziale | `18-modello-licenze.md` |
 | Parziale | `19-roadmap-cli-e-man-page.md` |
 | Completo | `20-matrice-eventi-inotify.md` |
+| Parziale | `21-roadmap-scanner-resync.md` |
+| Parziale | `22-contratto-log.md` |
+| Parziale | `23-roadmap-plugin-backend.md` |
+| Parziale | `24-roadmap-ai-agent-guardrail.md` |
 | Completo | `../code-browser/README.md` |
 | Completo | `../sourcebot-browser/README.md` |
 | Parziale | `../kythe-browser/README.md` |
@@ -38,6 +42,372 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_self_events_root_watch.sh`,
+  `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: fissata la policy per eventi kernel ricevuti su un
+  `wd` gia' `STALE`. Il backend mantiene il raw log diagnostico kernel, ma non
+  inoltra raw/core event con path non affidabile; registra invece
+  `WATCH_STALE_EVENT_DROPPED`.
+- `21-roadmap-scanner-resync.md`: aggiunti casi reali con comandi Linux per il
+  ramo `IN_MOVE_SELF` e il ritorno a `VALID`. La documentazione chiarisce che
+  Alfred non cerca ricorsivamente una directory con lo stesso `(st_dev, st_ino)`,
+  ma verifica solo il vecchio path salvato per il `wd`; lo scan della subtree
+  parte solo dopo identita' confermata.
+- `fs_scanner.h`, `fs_scanner.c`, `inotify_backend.c`,
+  `21-roadmap-scanner-resync.md` e `14-scenari-test.md`: corretto il contratto
+  dello scanner emerso dalla review PR #7. Gli early stop non devono perdere
+  file descriptor e il resync usa `strict_child_errors = 1` per distinguere uno
+  scan completo da uno scan parziale: una directory figlia non attraversabile
+  mantiene il watch principale `STALE` invece di permettere un falso `VALID`.
+- `21-roadmap-scanner-resync.md`: aggiunto un diagramma Mermaid di stato del
+  resync con trigger `T0..T12` e note sugli stati logici. Il diagramma distingue
+  gli stati reali della watcher table (`VALID`, `STALE`, `RESYNCING`,
+  `REMOVED`) dagli stati didattici della transazione (`PROBE_IDENTITY`,
+  `SCAN_SCOPE`, `REINSTALL_WATCHES`, `ROLLBACK`).
+- `00-regole-operative.md`, `10-debugging-test-e-strumenti.md` e
+  `tests/backend/test_resync_reinstall_policy.c`: formalizzata la regola del
+  blocco iniziale `Expected log contract` nei test che verificano log o eventi.
+  Il nuovo test C di rollback ora dichiara raw log assente, stream eventi
+  atteso, eventi vietati e significato dello scenario prima degli assert.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_resync_reinstall_policy.c`, `22-contratto-log.md`,
+  `21-roadmap-scanner-resync.md`, `14-scenari-test.md`,
+  `10-debugging-test-e-strumenti.md` e `docs/commenting-progress.md`: aggiunta
+  la diagnostica esplicita `WATCH_RESYNC_ROLLBACK` per distinguere il cleanup
+  di una reinstallazione parziale fallita da una rimozione ordinaria di watch.
+  Il test C ora verifica anche il frammento di log prodotto dal logger.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_resync_reinstall_policy.c`,
+  `tests/backend/test_resync_reinstall_policy.sh`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: chiuso il debito di test sul rollback della
+  watch reinstallation. Il backend usa ora una piccola tabella interna di
+  operazioni add/remove; il runtime passa il watch manager reale, mentre il test
+  C passa fake operations per simulare un fallimento deterministico dopo una
+  reinstallazione riuscita.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: estratta la policy all-or-stale di
+  reinstallazione dei missing watch in
+  `backend_resync_reinstall_missing_watches()`. La roadmap ora chiarisce che il
+  test rollback C richiede ancora un seam pulito per simulare
+  `watch_manager_add()` fallito senza introdurre race end-to-end fragili.
+- `24-roadmap-ai-agent-guardrail.md` e `README.md`: aggiunta la roadmap che
+  posiziona Alfred come AI agent runtime security/guardrail. Il capitolo
+  documenta prompt context, tool action, effetti OS, policy engine,
+  allow/warn/approval/block, limiti di inotify, necessita' di fanotify/audit/eBPF
+  e relazione con plugin backend e output strutturato.
+- `23-roadmap-plugin-backend.md` e `README.md`: aggiunta la roadmap per una
+  futura API comune dei backend/plugin Alfred. Il capitolo documenta backend
+  statici prima dei `.so`, contratto raw event + diagnostica strutturata,
+  relazione con output binario performante e futuro supporto a fanotify, audit,
+  eBPF, Windows e macOS.
+- `22-contratto-log.md`: ampliata la sezione sul futuro output strutturato.
+  Documentata la strategia progressiva testo -> JSON Lines -> MessagePack ->
+  Protobuf -> socket binaria pura, con mapping uno-a-uno tra riga testuale e
+  record strutturato e nota sulle prestazioni estreme come obiettivo futuro.
+- `22-contratto-log.md` e `README.md`: aggiunta una reference generale del
+  contratto dei log di Alfred. Il nuovo capitolo distingue `raw.log`,
+  `events.log`, `errors.log`, diagnostica backend `WATCH_*`, raw Alfred
+  `ALFRED_RAW_*` ed eventi semantici core `FILE_*`, `DIR_*`, `OVERFLOW`.
+- `tests/backend/test_self_events_root_watch.sh`,
+  `tests/backend/test_self_move_identity_match.sh` e
+  `tests/backend/test_self_move_identity_mismatch.sh`: aggiunti commenti
+  didattici in inglese nei test backend self-event/resync. Ogni file ora apre
+  con il contratto dei log attesi/vietati e i commenti vicino agli assert
+  spiegano quale operazione del test produce ogni log, perche' gli assert sono
+  in quell'ordine e quali eventi semantici Alfred non deve inventare.
+- `21-roadmap-scanner-resync.md`: aggiunto checkpoint finale per riprendere
+  dopo la finestra settimanale, con commit di riferimento, stato ahead del
+  branch, comandi minimi di verifica e lista ordinata dei prossimi micro-step.
+- `21-roadmap-scanner-resync.md`: documentato il debito di test sul rollback
+  della reinstallazione multi-missing. La roadmap ora spiega il ramo non ancora
+  coperto (`A` reinstallato, `B` fallisce, rollback di `A`, parent `STALE`),
+  perche' un test bash end-to-end rischia di essere fragile e quali opzioni
+  valutare alla ripresa.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata
+  la reinstallazione di tutti i missing watch nello scope affidabile di
+  `IN_MOVE_SELF`. Il test positivo ora crea due directory non watched mentre
+  Alfred e' fermo, verifica `missing=2`, due `WATCH_RESYNC_REINSTALLED` e due
+  `FILE_CREATED` dopo il ritorno a `VALID`.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: il context del resync scanner ora copia tutti
+  i missing path in una lista owned dal backend, preparando il ciclo completo di
+  reinstallazione senza riprogettare la callback. Documentata anche la ragione
+  tecnica: i path dello scanner sono validi solo durante la callback.
+- `21-roadmap-scanner-resync.md`: aggiunta una sezione di ripresa dopo stop
+  lungo con branch, stato reale del codice, flusso attuale del resync
+  `IN_MOVE_SELF`, policy conservativa consigliata per `missing>1` e prossimi
+  micro-step. Corrette le frasi obsolete che descrivevano ancora il probe come
+  solo dry-run senza `fs_scan_tree()` e senza watch reinstallation.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: implementata
+  la prima watch reinstallation reale sul primo missing path rilevato dal
+  resync scanner. In caso di fallimento il watch principale resta `STALE`; in
+  caso di successo il test dimostra il nuovo watch creando un file dentro
+  `unwatched-child`.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: il dry-run
+  resync salva e logga il primo missing path con
+  `WATCH_RESYNC_SCAN_MISSING ... missing_path=...`, preparando il futuro ciclo
+  di reinstallazione senza chiamare ancora `watch_manager_add()`.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunta la
+  classificazione read-only del dry-run resync con
+  `WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall`, preparando il punto in
+  cui una futura policy potra' passare alla watch reinstallation.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/inotify_backend.c`, `tests/watcher/test_watcher_state.c`,
+  `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunta la
+  query read-only `watcher_has_path()` e usata nel dry-run resync per loggare
+  `dirs`, `watched` e `missing` senza installare watch mancanti.
+- `21-roadmap-scanner-resync.md`: ampliata la spiegazione didattica della
+  differenza tra dry-run e futura watch reinstallation, con tabella comparativa
+  ed esempio su directory figlie scansionate ma non ancora trasformate in nuovi
+  watch.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_move_identity_match.sh`,
+  `tests/backend/test_self_move_identity_mismatch.sh`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato lo
+  scan dry-run solo al ramo `IN_MOVE_SELF` con identita' confermata. Il ramo
+  positivo logga `WATCH_RESYNC_SCAN_DONE ... dirs=1` prima di tornare `VALID`;
+  il ramo identity mismatch conferma che lo scan non parte su un path riusato.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunto l'helper dry-run
+  `backend_resync_watch_subtree_dirs()` per la futura fase scanner-based del
+  resync. L'helper non e' ancora collegato al runtime, usa scanner
+  directory-only con `emit_root = 0` e conta le directory senza installare
+  watch o produrre eventi core.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: separato il wrapper
+  `backend_resync_watch()` dal probe `backend_probe_stale_watch_identity()`.
+  Il comportamento non cambia: oggi il wrapper delega al probe identita', ma il
+  nome prepara il punto in cui aggiungere in futuro il resync scanner-based.
+- `20-matrice-eventi-inotify.md` e `21-roadmap-scanner-resync.md`: chiarita la
+  policy per `IN_MOVE_SELF` quando il vecchio path e' di nuovo raggiungibile ma
+  ha identita' `(st_dev, st_ino)` diversa. Il watch resta `STALE`; un eventuale
+  watch sulla directory nuova deve essere deciso dal futuro resync
+  scanner-based su uno scope affidabile, non dal probe minimo.
+- `modules/inotify/src/inotify_backend.c` e `docs/commenting-progress.md`:
+  aggiunto un commento nel ramo `identity-mismatch` del probe stale watch per
+  spiegare perche' il backend non installa subito un watch sul path riusato.
+- `10-debugging-test-e-strumenti.md`: documentata la struttura dei test shell,
+  dal target Makefile al runner `run_all.sh`, fino ai singoli `test_*.sh` e
+  alla libreria `tests/core/test_lib.sh`. La sezione spiega ruolo di
+  `reset_env`, `start_alfred_core`, `stop_alfred`, `cleanup`,
+  `fail_with_log`, `assert_contains`, `assert_not_contains`, `assert_count` e
+  `assert_order`.
+- `10-debugging-test-e-strumenti.md`: aggiunta una sezione didattica sulle
+  regex usate nei test shell, con spiegazione di `grep -E`, degli helper
+  `assert_contains`, `assert_not_contains`, `assert_count`, `assert_order` e
+  dei caratteri speciali piu' frequenti nei pattern dei log.
+- `11-come-contribuire.md` e `14-scenari-test.md`: aggiunti rimandi alla guida
+  sulle regex per chi scrive o legge nuovi test Bash.
+- `modules/inotify/src/watch_manager.c`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: rafforzata la
+  cattura dell'identita' del watch con doppia `stat()`. `watch_manager_add()`
+  legge `st_dev/st_ino` prima e dopo `inotify_add_watch()`; se l'identita'
+  cambia, rimuove il watch kernel e fallisce l'installazione, evitando di
+  associare un `wd` all'oggetto sbagliato.
+- `11-come-contribuire.md`, `09-makefile-e-build-system.md`,
+  `14-scenari-test.md` e `21-roadmap-scanner-resync.md`: audit documentale
+  della mini-feature identity probe. La guida contributori ora spiega come
+  scegliere la suite corretta quando si aggiunge un test, quando aggiornare i
+  runner, quali documenti aggiornare e quali verifiche eseguire. La roadmap
+  resync chiarisce che il ritorno a `VALID` oggi richiede identita'
+  `(st_dev, st_ino)` coincidente, mentre lo scan directory-only resta futuro.
+- `tests/backend/test_self_move_identity_match.sh`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il test backend positivo del probe
+  di identita'. Lo scenario sposta temporaneamente la root osservata e rimette
+  la stessa directory nel vecchio path prima che Alfred consumi `IN_MOVE_SELF`;
+  il backend verifica `(st_dev, st_ino)` e logga
+  `WATCH_RESYNC_END ... result=valid`.
+- `tests/backend/test_self_move_identity_mismatch.sh`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto un test backend deterministico per
+  il caso `IN_MOVE_SELF` in cui il vecchio path viene ricreato con identita'
+  diversa. Il test sospende Alfred con `SIGSTOP`, sposta la root osservata,
+  ricrea il vecchio path, riprende Alfred con `SIGCONT` e verifica
+  `WATCH_RESYNC_FAILED ... error=identity-mismatch`.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/watch_manager.c`, `modules/inotify/src/inotify_backend.c`,
+  `tests/watcher/test_watcher_state.c`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunta la prova di identita' dei watch
+  basata su `(st_dev, st_ino)`. Il watch manager cattura l'identita', la
+  watcher table la conserva e il probe resync puo' tornare a `VALID` solo
+  quando l'identita' corrente coincide.
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: il probe `backend_resync_watch()` ora usa
+  `backend_resync_probe_result_t` per classificare gli esiti interni prima di
+  formattare `WATCH_RESYNC_FAILED`. Il comportamento resta conservativo, ma la
+  logica e' pronta per nuovi casi scanner/resync senza moltiplicare stringhe
+  diagnostiche sparse nel codice.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: aggiunto il primo probe runtime
+  `backend_resync_watch()` dopo `IN_MOVE_SELF`. Il probe usa solo il vecchio
+  path del watch per distinguere path ancora raggiungibile da path non piu'
+  affidabile e logga `WATCH_RESYNC_BEGIN` / `WATCH_RESYNC_FAILED` quando non
+  puo' provare l'identita' dell'oggetto osservato, senza produrre raw Alfred o
+  eventi core.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunto
+  `watcher_foreach_state()` come iteratore read-only sui watch attivi in uno
+  stato richiesto. Il test copre filtro per stato, ordine sui wd sparsi,
+  esclusione degli slot rimossi, stop anticipato della callback e input
+  invalidi.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: aggiunto
+  `watcher_count_state()` come building block diagnostico per resync v0. La
+  funzione conta solo watch attivi nello stato richiesto, preparando futuri log
+  sul numero di watch `STALE` o `RESYNCING`.
+- `21-roadmap-scanner-resync.md`: aggiunta la proposta di policy `resync v0`.
+  La documentazione chiarisce che il primo resync deve essere diagnostico e
+  watch-state only, senza raw Alfred o eventi core sintetici, definendo scope,
+  dati da confrontare, output diagnostici candidati, tabella decisionale,
+  flowchart Mermaid e regole per tornare `VALID` o restare `STALE`.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato
+  anche `IN_DELETE_SELF` al modello watch `STALE`. Il backend ora logga
+  `WATCH_STALE ... reason=IN_DELETE_SELF` prima del cleanup `WATCH_REMOVED`
+  generato da `IN_IGNORED`, senza produrre raw Alfred delete per il path
+  osservato direttamente e senza inventare delete per i figli.
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/src/inotify_config.c`,
+  `modules/inotify/include/inotify_config.h`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md`,
+  `21-roadmap-scanner-resync.md` e `docs/commenting-progress.md`: collegato
+  `IN_MOVE_SELF` al modello watch `STALE`. Alfred ora richiede e nomina
+  `IN_MOVE_SELF`, lo accetta in `inotify_watch_mask`, marca il watch come
+  `WATCHER_STATE_STALE` e logga `WATCH_STALE`, senza produrre raw Alfred o
+  eventi core di move/rename/relocation.
+- `21-roadmap-scanner-resync.md`, `16-mappa-codice-e-strutture.md`: aggiunto il
+  diagramma di stato Mermaid dei watch, con transizioni da `REMOVED` a `VALID`,
+  passaggi futuri verso `STALE` causati da eventi critici inotify, fase
+  `RESYNCING` e cleanup tramite `watcher_remove()`/`IN_IGNORED`.
+- `modules/inotify/include/watcher.h`, `modules/inotify/src/watcher.c`,
+  `tests/watcher/test_watcher_state.c`, `tests/watcher/run_all.sh`,
+  `Makefile`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: implementato il primo supporto dati per il
+  modello watch `stale`. La watcher table ora contiene `watcher_state_t`, con
+  stati `REMOVED`, `VALID`, `STALE` e `RESYNCING`; aggiunta la suite
+  `make test-watcher` per fissare il contratto senza coinvolgere il kernel.
+- `21-roadmap-scanner-resync.md` e `20-matrice-eventi-inotify.md`: avviata la
+  progettazione della Fase 6 sul resync dopo eventi critici. La documentazione
+  introduce il modello concettuale di watch `stale`, distingue `valid`,
+  `removed`, `stale` e `resyncing`, e spiega perche' `IN_MOVE_SELF`,
+  `IN_DELETE_SELF`, `IN_UNMOUNT` e `IN_Q_OVERFLOW` devono essere trattati prima
+  come problemi di affidabilita' dello stato backend e solo dopo come possibili
+  eventi semantici.
+- `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/include/watch_manager.h`, `05-modulo-inotify.md`,
+  `15-todo-switch-core.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: completato il cleanup della Fase 5 dello
+  scanner. Rimossi `recursive_walk()`,
+  `watch_manager_add_recursive_with_discovery()` e il typedef callback di
+  discovery. Lo startup e la discovery runtime usano ora `fs_scan_tree()` come
+  unico attraversatore, mentre il watch manager resta responsabile solo dello
+  stato dei watch.
+- `modules/inotify/src/inotify_backend.c`,
+  `modules/inotify/src/watch_manager.c`,
+  `modules/inotify/include/watch_manager.h`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md`, `15-todo-switch-core.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: migrato allo scanner anche il percorso runtime
+  `IN_CREATE | IN_ISDIR`. Il backend aggiunge il watch sulla root reale, esegue
+  `fs_scan_tree()` con `emit_root = 0`, aggiunge watch alle directory annidate
+  e mantiene nel backend l'emissione dei raw create sintetici.
+- `modules/inotify/src/watch_manager.c`, `05-modulo-inotify.md`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: implementato il primo refactor di integrazione
+  scanner/watch manager. Il percorso startup `watch_manager_add_recursive()`
+  ora usa `fs_scan_tree()` in modalita' directory-only e chiama
+  `watch_manager_add()` per ogni directory trovata. Il percorso runtime
+  storico e' documentato solo come passaggio della migrazione.
+- `21-roadmap-scanner-resync.md`: completato l'audit iniziale della Fase 5,
+  integrazione scanner/watch manager. La roadmap documenta il flusso corrente
+  storico, i percorsi startup e runtime `IN_CREATE | IN_ISDIR`, i
+  limiti della ricorsione attuale, la divisione target tra scanner, watch
+  manager, backend e core, la regola `emit_root = 0` per evitare doppi raw
+  create sintetici e una strategia di migrazione a passi piccoli.
+- `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: completato il contratto iniziale dei tipi pubblici
+  dello scanner con `include_other = 1`. Il test usa una FIFO creata con
+  `mkfifo`, verificata come `FS_SCAN_OTHER`, per evitare dipendenze da privilegi
+  o setup piu' fragile richiesti da device file e socket.
+- `tests/scanner/test_fs_scanner_dirs.c`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: avviata la fase symlink dello scanner. Il test ora
+  copre `include_symlinks = 1`, che emette il link simbolico come
+  `FS_SCAN_SYMLINK` senza seguirne il target. La documentazione rimanda
+  `follow_symlinks = 1` e registra le policy anti-cicli comuni: non seguire
+  symlink, visited set su `(st_dev, st_ino)`, `max_depth`, restare sotto la
+  root, restare sullo stesso device e `max_entries`.
+- `app/src/fs_scanner.c`, `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`, `21-roadmap-scanner-resync.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `docs/commenting-progress.md`: implementato il primo passo della policy sugli
+  errori parziali dello scanner. La root resta un errore duro, mentre una
+  directory figlia rimossa, trasformata o non accessibile durante la discesa
+  viene saltata e lo scan continua. Il test simula una race rimuovendo una
+  directory `volatile` dalla callback prima della ricorsione.
+- `21-roadmap-scanner-resync.md`: aggiunta una roadmap completa delle fasi
+  scanner. Il documento ora separa contratto base, errori parziali, symlink,
+  file/tipi speciali, integrazione con watch manager, resync sugli eventi
+  critici, futura CLI di indicizzazione e performance. Aggiunta anche una
+  spiegazione didattica di `readdir()`, `fstatat()`, `openat()`,
+  `fdopendir()`, `path_join()` ed `ERR_IO` per preparare la discussione sulla
+  policy degli errori parziali.
+- `tests/scanner/test_fs_scanner_dirs.c`,
+  `tests/scanner/test_fs_scanner_dirs.sh`,
+  `21-roadmap-scanner-resync.md`, `10-debugging-test-e-strumenti.md` e
+  `14-scenari-test.md`: estesa la copertura scanner alle opzioni pubbliche
+  `emit_root`, `max_depth`, `max_entries` e `include_files`. La roadmap ora
+  include anche una guida pratica all'uso dell'API `fs_scan_tree()` dal codice.
+- `21-roadmap-scanner-resync.md`: ampliata la spiegazione tecnica dello scanner
+  filesystem. La nuova sezione chiarisce perche' sono state scelte primitive
+  come `openat()`, `fdopendir()`, `readdir()` e `fstatat()`, quali vantaggi
+  danno su controllo, prestazioni, symlink e race, e perche' l'eventuale uso di
+  `d_type` resta una possibile ottimizzazione futura invece che il contratto
+  corrente.
+- `app/include/fs_scanner.h`, `app/src/fs_scanner.c` e
+  `tests/scanner/test_fs_scanner_dirs.c`: rafforzata la documentazione interna
+  del primo scanner filesystem. I commenti spiegano confini di responsabilita',
+  durata dei puntatori passati alla callback, opzioni di attraversamento,
+  stop anticipato, limiti di profondita'/numero entry e uso di
+  `openat()`/`fstatat()`. I test restano commentati in modo leggero, coerente
+  con il livello della suite esistente.
+- `21-roadmap-scanner-resync.md` e `README.md`: aperta la progettazione dello
+  scanner filesystem e della futura policy di resync. Il documento registra lo
+  stato corrente di `IN_DELETE_SELF` e `IN_MOVE_SELF`, chiarisce che non esiste
+  ancora mapping semantico runtime per questi eventi, valuta `nftw()` e propone
+  uno scanner custom riusabile anche per indicizzazione futura.
+- `app/include/fs_scanner.h`, `app/src/fs_scanner.c`, `tests/scanner/`,
+  `Makefile`, `README.md`, `09-makefile-e-build-system.md`,
+  `10-debugging-test-e-strumenti.md`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: implementato il primo step dello scanner
+  filesystem. Il target `make test-scanner` verifica lo scan directory-only,
+  callback con `userdata` e symlink non seguiti.
 - `20-matrice-eventi-inotify.md`, `README.md`, `05-modulo-inotify.md` e
   `13-semantica-eventi.md`: aggiunta una matrice completa degli eventi e flag
   `inotify(7)`. La tabella distingue eventi richiedibili, bit restituiti dal

@@ -110,6 +110,7 @@ IN_CLOSE_WRITE
 IN_MOVED_FROM
 IN_MOVED_TO
 IN_DELETE_SELF
+IN_MOVE_SELF
 IN_IGNORED
 IN_Q_OVERFLOW
 ```
@@ -145,7 +146,10 @@ ritorna `ERR_CONFIG` e Alfred non parte: un errore come `IN_ATRIB` non deve
 essere ignorato silenziosamente.
 
 Il parser non accetta tutti i flag esistenti di inotify. Accetta solo quelli che
-Alfred sa gia' mostrare nel raw log e convertire verso la raw mask del core.
+Alfred sa gia' mostrare nel raw log e che sa gestire in uno dei due livelli
+interni: conversione verso la raw mask del core oppure diagnostica/stato
+backend. `IN_MOVE_SELF`, per esempio, non diventa un raw Alfred semantico, ma
+marca il watch come `STALE` e produce il log diagnostico `WATCH_STALE`.
 Questa scelta evita configurazioni apparentemente valide ma non osservabili in
 modo chiaro da Alfred.
 
@@ -333,16 +337,37 @@ mkdir -p one/two/three
 prima che Alfred riesca ad aggiungere il watch su `one`.
 
 Per mitigare il problema, il watch manager attraversa ricorsivamente la nuova
-directory e aggiunge watch alle sottodirectory gia' presenti. Ora esiste anche
-una variante con callback di discovery:
+directory e aggiunge watch alle sottodirectory gia' presenti. In passato questa
+discovery runtime era una variante callback del watch manager; ora il codice
+usa lo scanner filesystem generico anche per questo caso.
 
-```c
-watch_manager_add_recursive_with_discovery(...)
+Per lo startup, `watch_manager_add_recursive()` usa lo scanner filesystem
+generico:
+
+```text
+watch_manager_add_recursive()
+    -> fs_scan_tree()
+    -> watch_manager_add() per ogni FS_SCAN_DIR
 ```
 
-Questa funzione continua ad aggiungere i watch, ma quando scopre una
-sottodirectory gia' esistente chiama una callback. Oggi la callback e' gestita
-dal backend inotify in:
+Questo percorso non genera raw sintetici perche' le directory esistono gia'
+prima dell'avvio del polling.
+
+Il percorso runtime `IN_CREATE | IN_ISDIR` ora usa lo scanner direttamente nel
+backend:
+
+```text
+backend_handle_dir_create()
+    -> watch_manager_add() sulla root creata
+    -> fs_scan_tree(..., emit_root = 0)
+    -> watch_manager_add() sulle directory annidate
+    -> backend_emit_synthetic_dir_create() sulle directory annidate
+```
+
+La vecchia API callback del watch manager e' stata rimossa. La logica dei raw
+create sintetici vive nel backend, non nel watch manager.
+
+Il backend inotify gestisce questa discovery in:
 
 ```text
 modules/inotify/src/inotify_backend.c
@@ -352,10 +377,11 @@ Il backend genera un raw event sintetico verso lo stesso percorso usato dagli
 eventi reali, cosi' il core puo' emettere il `DIR_CREATED` che inotify non ha
 potuto consegnare.
 
-Il watch manager non decide direttamente la semantica. Si limita a segnalare:
+Il watch manager non decide direttamente la semantica. Nel percorso runtime si
+limita ad aggiungere il watch richiesto dal backend:
 
 ```text
-ho scoperto questa directory durante lo scan
+aggiungi un watch su questa directory
 ```
 
 La trasformazione in `DIR_CREATED` resta responsabilita' del core.

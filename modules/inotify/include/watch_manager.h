@@ -3,12 +3,12 @@
  *
  * This module is backend state management, not event semantics. It adds and
  * removes kernel watches, stores the wd -> path mapping through watcher.c, and
- * can recursively discover directories that need watches.
+ * can recursively install watches below an existing startup root.
  *
  * WATCH_ADDED and WATCH_REMOVED are diagnostics about the watch table, not core
- * events. Recursive discovery may report already-existing child directories
- * through a callback. The callback consumer decides what to do with that fact;
- * the watch manager itself must not emit raw or semantic FILE_* or DIR_* events.
+ * events. Runtime scanner discovery lives in the inotify backend because that
+ * is where synthetic raw-event recovery policy belongs. The watch manager
+ * itself must not emit raw or semantic FILE_* or DIR_* events.
  * ========================================================================== */
 
 #ifndef WATCH_MANAGER_H
@@ -17,22 +17,6 @@
 #include "inotify_backend.h"
 
 #include <stdint.h>
-
-/*
- * watch_manager_discovered_dir_fn - report a directory found during recursion
- * @ctx: backend context used while recursive discovery is running
- * @path: discovered directory path
- * @userdata: opaque pointer supplied by the caller
- *
- * The callback reports observation facts, not semantic decisions. The inotify
- * backend currently turns those facts into synthetic raw directory-create
- * events for the core.
- */
-typedef void (*watch_manager_discovered_dir_fn)(
-    inotify_backend_context_t *ctx,
-    const char *path,
-    void *userdata
-);
 
 /*
  * watch_manager_add - add one inotify watch and store wd -> path
@@ -65,28 +49,6 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
  */
 int watch_manager_add_recursive(inotify_backend_context_t *ctx,
                                 const char *root);
-
-/*
- * watch_manager_add_recursive_with_discovery - recursive add with callbacks
- * @ctx: borrowed backend context containing runtime, config, and logger
- * @root: root directory to scan
- * @on_discovered: optional callback for discovered child directories
- * @userdata: opaque pointer passed to @on_discovered
- *
- * The root is watched but not reported as discovered. Child directories found
- * during the recursive walk are reported after their watch is added. This lets
- * the backend repair missed create notifications from fast recursive mkdir
- * scenarios without moving raw-event emission or semantic decisions into the
- * watch manager.
- *
- * Return: 0 on success, -1 on failure.
- */
-int watch_manager_add_recursive_with_discovery(
-    inotify_backend_context_t *ctx,
-    const char *root,
-    watch_manager_discovered_dir_fn on_discovered,
-    void *userdata
-);
 
 /*
  * watch_manager_default_mask - return the default inotify subscription mask

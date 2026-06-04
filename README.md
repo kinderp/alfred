@@ -115,6 +115,12 @@ Run backend diagnostics:
 make test-backend-diagnostics
 ```
 
+Run scanner component tests:
+
+```bash
+make test-scanner
+```
+
 The CI workflow runs the same commands on pull requests targeting `main` and on
 pushes to `main`.
 
@@ -151,6 +157,7 @@ Detailed documentation is currently maintained in Italian:
 - [Licensing model notes](docs/it/18-modello-licenze.md)
 - [CLI and man page roadmap](docs/it/19-roadmap-cli-e-man-page.md)
 - [Inotify event matrix](docs/it/20-matrice-eventi-inotify.md)
+- [Scanner and resync roadmap](docs/it/21-roadmap-scanner-resync.md)
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 

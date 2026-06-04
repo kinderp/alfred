@@ -122,6 +122,12 @@ controllati senza dipendere dal timing del kernel. Gli scenari end-to-end in
 `tests/core/` verificano invece il risultato finale che useranno le
 applicazioni.
 
+Gli script shell usano regex per cercare eventi nei log senza dipendere da path
+temporanei, `wd` o altri valori instabili. La sintassi dei pattern usati da
+`assert_contains`, `assert_not_contains`, `assert_count`, `assert_order` e
+`grep -E` e' spiegata in `docs/it/10-debugging-test-e-strumenti.md`, nella
+sezione "Leggere le regex nei test shell".
+
 ## Audit storico pre-rimozione dello shadow legacy
 
 Lo switch e' stato totale: lo shadow legacy non e' una modalita' conservata nel
@@ -284,10 +290,45 @@ Scenari diagnostici riesaminati:
 | attrib raw log | `tests/backend/test_attrib_raw_log.sh` | `IN_ATTRIB` nel raw log dopo `chmod` | verifica che la maschera osservi cambiamenti di attributi e che `events.log` non riceva nuove righe semantiche o diagnostiche dopo `chmod` |
 | watch mask disable attrib | `tests/backend/test_watch_mask_disable_attrib.sh` | assenza di `IN_ATTRIB` dopo `inotify_watch_mask=default,-IN_ATTRIB` | verifica che la maschera configurata cambi davvero gli eventi osservati dal backend |
 | watch mask invalid token | `tests/backend/test_watch_mask_invalid_token.sh` | avvio fallito con `IN_ATRIB` | verifica che i typo nella maschera siano errori di configurazione, non token ignorati |
-| self events root watch | `tests/backend/test_self_events_root_watch.sh` | `IN_DELETE_SELF`, `IN_IGNORED` e comportamento della root spostata | verifica osservativa per distinguere eventi sul path osservato da eventi sui figli; il caso move resta diagnostico per la futura gestione dei path stale |
+| self events root watch | `tests/backend/test_self_events_root_watch.sh` | `IN_DELETE_SELF`, `IN_IGNORED`, `IN_MOVE_SELF`, `WATCH_STALE`, `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED`, `WATCH_STALE_EVENT_DROPPED`, `WATCH_REMOVED` e comportamento della root spostata | verifica osservativa per distinguere eventi sul path osservato da eventi sui figli; delete-self marca il watch stale e attende cleanup, move-self avvia un probe resync conservativo senza inventare delete dei figli o relocation semantica; gli eventi successivi su un `wd` stale restano diagnostica e non diventano raw/core con path falso |
+| self move identity match | `tests/backend/test_self_move_identity_match.sh` | `IN_MOVE_SELF`, path osservato ripristinato con la stessa identita', `WATCH_RESYNC_SCAN_DONE ... dirs=3 watched=1 missing=2`, `WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall`, due `WATCH_RESYNC_REINSTALLED`, due `FILE_CREATED` nelle directory riparate | verifica il ramo positivo del probe: se la root osservata viene spostata e rimessa nello stesso path prima del resync, `(st_dev, st_ino)` coincidono, Alfred misura la copertura, reinstalla tutti i watch mancanti nello scope affidabile e dimostra che i nuovi watch vedono file creati in entrambe le directory riparate |
+| self move identity mismatch | `tests/backend/test_self_move_identity_mismatch.sh` | `IN_MOVE_SELF`, path osservato ricreato, `WATCH_RESYNC_FAILED ... error=identity-mismatch`, nessun `WATCH_RESYNC_SCAN_DONE` | dimostra perche' il path da solo non basta: se la root osservata viene spostata e una nuova directory nasce nello stesso path, Alfred confronta `(st_dev, st_ino)`, non scansiona il path riusato e lascia il watch `STALE` |
+| resync reinstall policy | `tests/backend/test_resync_reinstall_policy.sh` + `tests/backend/test_resync_reinstall_policy.c` | helper statico `backend_resync_reinstall_missing_watches()` con fake add/remove e log `WATCH_RESYNC_ROLLBACK` | verifica senza race filesystem la policy all-or-stale: se un missing watch fallisce dopo una reinstallazione riuscita, Alfred logga il rollback, rimuove i watch installati in quel tentativo e ritorna `ERR_INOTIFY` |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
-I tre scenari diagnostici sui watch sono gia' in `tests/backend/`.
+Gli scenari diagnostici sui watch sono gia' in `tests/backend/`.
+
+## Test scanner
+
+La suite scanner si esegue con:
+
+```bash
+make test-scanner
+```
+
+Questi test non avviano Alfred come processo di monitoraggio e non controllano
+eventi semantici. Servono a verificare il componente di attraversamento
+filesystem che useremo per resync e, in futuro, indicizzazione.
+
+| Scenario | Script | Cosa controlla | Perche' serve |
+| --- | --- | --- | --- |
+| scanner directories and options | `tests/scanner/test_fs_scanner_dirs.sh` | default directory-only, `emit_root=0`, `max_depth=1`, `max_entries=2`, assenza di leak fd su scan bounded ripetuti, `include_files=1`, `include_symlinks=1`, `include_other=1`, symlink non seguito, directory figlia rimossa durante lo scan in modalita' default e strict | fissa il contratto iniziale dello scanner, delle opzioni pubbliche, della ownership dei file descriptor e della differenza tra scan best-effort e scan strict usato dal resync |
+
+## Test watcher table
+
+La suite watcher si esegue con:
+
+```bash
+make test-watcher
+```
+
+Questi test non avviano Alfred e non usano eventi reali del kernel. Servono a
+verificare direttamente la struttura dati che conserva il mapping `wd -> path`
+e lo stato di affidabilita' del watch.
+
+| Scenario | Script | Cosa controlla | Perche' serve |
+| --- | --- | --- | --- |
+| watcher reliability states | `tests/watcher/test_watcher_state.c` | store iniziale `VALID`, identita' `st_dev/st_ino`, transizioni a `STALE` e `RESYNCING`, remove a `REMOVED`, rifiuto di `REMOVED` su slot attivo, conteggio per stato, iterazione per stato e stop anticipato | prepara la futura gestione `IN_MOVE_SELF` e resync senza dipendere da timing o dettagli del kernel |
 
 Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
 `IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,
@@ -308,8 +349,15 @@ La regola pratica e':
   `tests/core/`
 - se il test parla di `WATCH_ADDED`, `WATCH_REMOVED`, watch descriptor o raw
   diagnostici, va in `tests/backend/`
+- se il test parla di scanner, opzioni di attraversamento, symlink o errori
+  parziali di scan, va in `tests/scanner/`
+- se il test parla direttamente di `watcher_table_t`, stati `VALID/STALE` o
+  identita' `st_dev/st_ino` senza avviare Alfred, va in `tests/watcher/`
 - se il test parla di differenze legacy/core, va archiviato con la storia dello
   shadow e non deve sopravvivere come controllo automatico ordinario
+
+La guida contributori contiene la procedura operativa completa per aggiungere
+un test: scelta della suite, runner, documentazione e verifiche locali.
 
 ### Scenario core: engine shadow invalido
 

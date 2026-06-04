@@ -43,6 +43,7 @@ static const inotify_mask_name_t INOTIFY_MASK_NAMES[] = {
     { "IN_DELETE", IN_DELETE },
     { "IN_DELETE_SELF", IN_DELETE_SELF },
     { "IN_MODIFY", IN_MODIFY },
+    { "IN_MOVE_SELF", IN_MOVE_SELF },
     { "IN_MOVED_FROM", IN_MOVED_FROM },
     { "IN_MOVED_TO", IN_MOVED_TO },
     { "IN_IGNORED", IN_IGNORED },

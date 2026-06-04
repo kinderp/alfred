@@ -348,6 +348,706 @@ I browser del codice aiutano nella fase di comprensione, non nella validazione
 finale. Dopo ogni modifica restano necessari build e test descritti nella
 sezione successiva.
 
+## Come sono strutturati i test shell
+
+I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,
+in modo che ogni parte abbia una responsabilita' chiara:
+
+```text
+Makefile target
+-> tests/<suite>/run_all.sh
+-> tests/<suite>/test_*.sh
+-> tests/core/test_lib.sh
+-> alfred + filesystem reale + log
+```
+
+Il target Makefile e' il punto di ingresso usato da sviluppatori, studenti e CI.
+Per esempio:
+
+```make
+test-core:
+	$(MAKE) all
+	cd tests/core && bash run_all.sh
+```
+
+Questo significa:
+
+1. ricompila il progetto con `make all`
+2. entra nella directory `tests/core`
+3. esegue il runner `run_all.sh`
+
+Il cambio directory e' importante. Gli script usano path relativi come
+`../../alfred`, `./events.log` e `./raw.log`; questi path funzionano perche' il
+runner viene lanciato dalla directory della suite.
+
+### Il ruolo di `run_all.sh`
+
+Ogni suite shell ha un runner:
+
+```text
+tests/core/run_all.sh
+tests/backend/run_all.sh
+tests/scanner/run_all.sh
+```
+
+Il runner stampa un'intestazione leggibile, poi esegue tutti gli script
+`test_*.sh`:
+
+```bash
+for test_script in test_*.sh; do
+    echo "Running $test_script"
+    bash "$test_script"
+    echo ""
+done
+```
+
+Questo meccanismo rende semplice aggiungere un test: se il nuovo file si chiama
+`test_qualcosa.sh` e si trova nella directory giusta, il runner lo esegue
+automaticamente. La suite core contiene anche `test_lib.sh`, quindi il runner
+core lo salta esplicitamente:
+
+```bash
+if [[ "$test_script" == "test_lib.sh" ]]; then
+    continue
+fi
+```
+
+`test_lib.sh` non e' uno scenario. E' una libreria di funzioni condivise; se
+venisse eseguita come test, non avrebbe un caso concreto da verificare.
+
+I runner usano:
+
+```bash
+set -euo pipefail
+```
+
+Significato:
+
+- `-e`: se un comando fallisce, lo script termina
+- `-u`: usare una variabile non definita e' errore
+- `-o pipefail`: una pipeline fallisce se fallisce uno dei comandi interni
+
+Queste opzioni rendono i test piu' severi. Senza di esse, un errore potrebbe
+passare inosservato e il runner potrebbe stampare `PASSED` anche se un comando
+intermedio e' fallito.
+
+### Il ruolo di un singolo `test_*.sh`
+
+Un test core tipico ha questa forma:
+
+```bash
+#!/usr/bin/env bash
+
+source ./test_lib.sh
+trap cleanup EXIT
+
+start_alfred_core
+
+printf "rename\n" > "$TEST_ROOT/old.txt"
+sleep 1
+mv "$TEST_ROOT/old.txt" "$TEST_ROOT/new.txt"
+sleep 1
+
+assert_contains "FILE_CREATED path=.*/old.txt"
+assert_contains "FILE_RENAMED from=.*/old.txt to=.*/new.txt"
+assert_order "FILE_CREATED path=.*/old.txt" \
+             "FILE_RENAMED from=.*/old.txt to=.*/new.txt"
+```
+
+Le fasi sono:
+
+1. caricare la libreria con `source ./test_lib.sh`
+2. registrare `cleanup` con `trap cleanup EXIT`
+3. avviare Alfred sulla directory temporanea
+4. produrre azioni reali sul filesystem
+5. aspettare brevemente che inotify consegni gli eventi
+6. controllare i log con gli assert
+
+`source` esegue il file indicato nella shell corrente. Questo e' diverso da
+`bash ./test_lib.sh`: se eseguissimo la libreria in un nuovo processo, le
+funzioni definite dentro non sarebbero disponibili nel test chiamante.
+
+`trap cleanup EXIT` dice alla shell: "quando questo script termina, anche in
+caso di errore, chiama `cleanup`". Questo evita di lasciare Alfred in esecuzione
+o directory temporanee sporche.
+
+### Variabili condivise della libreria
+
+`tests/core/test_lib.sh` definisce alcune variabili comuni:
+
+```bash
+ALFRED_BIN="${ALFRED_BIN:-../../alfred}"
+TEST_ROOT="${TEST_ROOT:-/tmp/alfred_core_test}"
+LOG_FILE="${LOG_FILE:-./events.log}"
+ALFRED_PID=""
+```
+
+`ALFRED_BIN` indica il binario da avviare. La sintassi:
+
+```bash
+${ALFRED_BIN:-../../alfred}
+```
+
+significa: se la variabile `ALFRED_BIN` e' gia' definita nell'ambiente, usa quel
+valore; altrimenti usa `../../alfred`. Questo permette di sovrascrivere il
+binario da testare senza modificare lo script.
+
+`TEST_ROOT` e' la directory temporanea osservata da Alfred. I test creano,
+modificano, spostano e cancellano file dentro questa directory.
+
+`LOG_FILE` e' il log semantico principale, di solito `events.log`. Alcuni test
+leggono anche `raw.log` ed `errors.log`, che vengono preparati dalla libreria.
+
+`ALFRED_PID` conserva il process id del processo Alfred avviato dal test. Serve
+per fermarlo in modo controllato alla fine.
+
+### `reset_env()`
+
+`reset_env()` prepara un ambiente pulito:
+
+```bash
+reset_env() {
+    rm -rf "$TEST_ROOT"
+    mkdir -p "$TEST_ROOT"
+    : > "$LOG_FILE"
+    : > ./raw.log
+    : > ./errors.log
+}
+```
+
+Passaggi:
+
+- rimuove la vecchia directory temporanea
+- la ricrea vuota
+- svuota `events.log`
+- svuota `raw.log`
+- svuota `errors.log`
+
+La sintassi:
+
+```bash
+: > "$LOG_FILE"
+```
+
+usa il comando shell `:`. `:` non fa nulla e termina con successo. La
+redirezione `>` pero' tronca il file, cioe' lo crea vuoto o lo svuota se esiste
+gia'. E' un modo compatto per dire: "prepara un file vuoto".
+
+### `start_alfred_core()`
+
+`start_alfred_core()` pulisce l'ambiente e avvia Alfred:
+
+```bash
+start_alfred_core() {
+    reset_env
+
+    ALFRED_EVENT_ENGINE=core "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
+    ALFRED_PID=$!
+
+    sleep 1
+}
+```
+
+La variabile `ALFRED_EVENT_ENGINE=core` forza il percorso core ufficiale. Oggi
+e' anche il default, ma nei test resta esplicita per rendere chiaro quale
+contratto stiamo verificando.
+
+Il simbolo `&` avvia Alfred in background. Il test deve continuare a eseguire
+comandi sul filesystem mentre Alfred resta attivo e osserva la directory.
+
+`$!` contiene il PID dell'ultimo processo avviato in background. Lo salviamo in
+`ALFRED_PID` per poterlo fermare dopo.
+
+`>/dev/null 2>&1` manda stdout e stderr di Alfred fuori dall'output del test. I
+test non leggono lo stdout del processo: leggono i file di log prodotti da
+Alfred.
+
+`sleep 1` lascia ad Alfred il tempo di inizializzare inotify e installare i
+watch. Senza questa attesa, il test potrebbe creare file prima che il backend
+sia pronto.
+
+### `stop_alfred()`
+
+`stop_alfred()` ferma Alfred se e' ancora in esecuzione:
+
+```bash
+stop_alfred() {
+    if [[ -n "$ALFRED_PID" ]] && kill -0 "$ALFRED_PID" 2>/dev/null; then
+        kill -INT "$ALFRED_PID"
+        wait "$ALFRED_PID" || true
+    fi
+}
+```
+
+`[[ -n "$ALFRED_PID" ]]` controlla che la variabile non sia vuota.
+
+`kill -0 "$ALFRED_PID"` non invia un vero segnale di terminazione. Serve a
+chiedere al sistema: "questo processo esiste ancora ed e' raggiungibile?".
+
+`kill -INT "$ALFRED_PID"` invia `SIGINT`, lo stesso tipo di interruzione che si
+ottiene con `Ctrl-C`. Alfred puo' cosi' uscire in modo controllato.
+
+`wait "$ALFRED_PID"` aspetta la fine del processo. `|| true` evita che un codice
+di uscita non zero durante lo shutdown faccia fallire la pulizia del test.
+
+### `cleanup()`
+
+`cleanup()` e' la funzione registrata con `trap`:
+
+```bash
+cleanup() {
+    stop_alfred
+    rm -rf "$TEST_ROOT"
+
+    if [[ "${ALFRED_KEEP_TEST_LOGS:-0}" != "1" ]]; then
+        rm -f "$LOG_FILE" ./raw.log ./errors.log
+    fi
+}
+```
+
+Prima ferma Alfred, poi rimuove la directory temporanea. Infine cancella i log,
+a meno che l'utente abbia chiesto di conservarli:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make test
+```
+
+Questa variabile e' utile quando un test fallisce e si vuole leggere con calma
+`events.log`, `raw.log` ed `errors.log`.
+
+### `fail_with_log()`
+
+`fail_with_log()` centralizza il messaggio di errore:
+
+```bash
+fail_with_log() {
+    local message="$1"
+
+    echo "FAIL: $message"
+    echo "----- events.log -----"
+    cat "$LOG_FILE" || true
+    exit 1
+}
+```
+
+Ogni assert lo usa per stampare il motivo del fallimento e il contenuto di
+`events.log`. Questo rende il debug piu' rapido: lo studente vede subito quali
+eventi sono stati prodotti davvero.
+
+### `assert_contains()`
+
+`assert_contains()` verifica che almeno una riga di `events.log` corrisponda a
+una regex:
+
+```bash
+assert_contains() {
+    local pattern="$1"
+
+    if ! grep -Eq "$pattern" "$LOG_FILE"; then
+        fail_with_log "missing pattern: $pattern"
+    fi
+}
+```
+
+Esempio:
+
+```bash
+assert_contains "FILE_CREATED path=.*/old.txt"
+```
+
+Il test passa se `events.log` contiene una riga compatibile con quel pattern.
+Se non la trova, fallisce e stampa il log.
+
+### `assert_not_contains()`
+
+`assert_not_contains()` fa il controllo opposto:
+
+```bash
+assert_not_contains() {
+    local pattern="$1"
+
+    if grep -Eq "$pattern" "$LOG_FILE"; then
+        fail_with_log "unexpected pattern: $pattern"
+    fi
+}
+```
+
+Serve quando un evento non deve essere prodotto. Per esempio, un test puo'
+verificare che un move+rename core non emetta due eventi legacy separati:
+
+```bash
+assert_not_contains "FILE_MOVED from=.*/src/old.txt to=.*/dst/new.txt"
+assert_not_contains "FILE_RENAMED from=.*/src/old.txt to=.*/dst/new.txt"
+```
+
+### `assert_count()`
+
+`assert_count()` verifica quante righe corrispondono a una regex:
+
+```bash
+assert_count() {
+    local pattern="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(grep -Ec "$pattern" "$LOG_FILE" || true)
+
+    if [[ "$actual" != "$expected" ]]; then
+        fail_with_log "wrong count for pattern: $pattern (expected $expected, got $actual)"
+    fi
+}
+```
+
+`grep -Ec` conta le righe che corrispondono. `|| true` e' necessario perche'
+`grep` restituisce errore quando non trova match; per un conteggio, zero match
+e' un risultato valido, non un errore di shell.
+
+### `assert_order()`
+
+`assert_order()` controlla che un evento compaia prima di un altro:
+
+```bash
+assert_order() {
+    local first="$1"
+    local second="$2"
+    local first_line
+    local second_line
+
+    first_line=$(grep -En "$first" "$LOG_FILE" | head -n 1 | cut -d: -f1 || true)
+    second_line=$(grep -En "$second" "$LOG_FILE" | head -n 1 | cut -d: -f1 || true)
+
+    if [[ -z "$first_line" || -z "$second_line" ]]; then
+        fail_with_log "cannot check order: $first before $second"
+    fi
+
+    if (( first_line >= second_line )); then
+        fail_with_log "wrong order: $first must appear before $second"
+    fi
+}
+```
+
+`grep -En` stampa le righe nel formato:
+
+```text
+numero:riga
+```
+
+`head -n 1` prende il primo match. `cut -d: -f1` tiene solo il numero di riga.
+Alla fine la funzione confronta i numeri:
+
+```bash
+if (( first_line >= second_line )); then
+```
+
+Questa sintassi e' aritmetica Bash. Il test fallisce se il primo evento appare
+dopo il secondo o sulla stessa riga.
+
+`assert_order` non richiede che le due righe siano consecutive. Richiede solo
+che l'ordine relativo sia quello atteso.
+
+### Differenza fra test core e test backend
+
+I test core usano `events.log` come contratto semantico ufficiale. Sono quelli
+che verificano eventi come:
+
+```text
+FILE_CREATED
+FILE_READY
+DIR_RELOCATED
+WATCH_RESYNC_END
+```
+
+I test backend possono leggere anche `raw.log`, perche' controllano eventi
+inotify grezzi o diagnostica interna del backend. Per esempio:
+
+```bash
+grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_identity_match name=" \
+    ./raw.log
+```
+
+Questa differenza e' importante: un test core deve proteggere cio' che
+l'applicazione espone come semantica; un test backend puo' proteggere anche
+dettagli tecnici necessari al resync, ai watch e alla diagnosi.
+
+## Leggere le regex nei test shell
+
+Molti test end-to-end di Alfred sono script Bash. Questi script non confrontano
+quasi mai una riga di log completa carattere per carattere: cercano invece
+pattern dentro `events.log` o `raw.log`. Il motivo e' pratico. Alcune parti del
+log cambiano a ogni esecuzione:
+
+- directory temporanee sotto `/tmp`
+- watch descriptor, cioe' numeri `wd`
+- cookie inotify
+- ordine di alcuni eventi ravvicinati
+
+Per questo i test usano espressioni regolari, spesso abbreviate in "regex". Una
+regex descrive una famiglia di stringhe accettabili. Per esempio:
+
+```text
+DIR_CREATED path=.*/one$
+```
+
+non significa "cerca letteralmente i caratteri punto e asterisco". Significa:
+"trova una riga che contenga `DIR_CREATED path=`, poi qualunque prefisso di
+path, e che finisca con `/one`".
+
+### Dove vengono usate
+
+Nei test core gli helper principali sono in `tests/core/test_lib.sh`:
+
+```bash
+assert_contains "FILE_RENAMED from=.*/old.txt to=.*/new.txt"
+assert_not_contains "core seq="
+assert_order "FILE_CREATED path=.*/old.txt" "FILE_READY path=.*/old.txt"
+```
+
+Questi helper usano `grep -E`:
+
+- `grep` cerca testo dentro un file
+- `-E` abilita le regex estese, chiamate ERE
+- `-q` rende la ricerca silenziosa e usa solo il codice di uscita
+- `-n` stampa anche il numero di riga, utile per controllare l'ordine
+- `-c` conta quante righe corrispondono al pattern
+
+Esempi dal codice:
+
+```bash
+grep -Eq "$pattern" "$LOG_FILE"
+grep -Ec "$pattern" "$LOG_FILE"
+grep -En "$first" "$LOG_FILE"
+```
+
+`assert_contains` passa se almeno una riga di `events.log` corrisponde alla
+regex. `assert_not_contains` passa se nessuna riga corrisponde. `assert_order`
+trova la prima riga che corrisponde al primo pattern e la prima riga che
+corrisponde al secondo pattern; poi verifica che la prima venga prima della
+seconda.
+
+Alcuni test backend controllano direttamente `raw.log`, perche' vogliono
+verificare che il kernel abbia prodotto un evento inotify specifico:
+
+```bash
+grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_identity_match name=" \
+    ./raw.log
+```
+
+In questo caso non stiamo controllando un evento semantico utente. Stiamo
+controllando la diagnostica grezza del backend.
+
+### Regex e glob della shell non sono la stessa cosa
+
+Un errore comune e' confondere regex e glob.
+
+Il glob e' usato dalla shell per espandere nomi di file:
+
+```bash
+ls *.c
+```
+
+Qui `*.c` significa "tutti i file che finiscono con `.c`" nella directory
+corrente.
+
+La regex e' usata da `grep` per riconoscere testo:
+
+```bash
+grep -E "FILE_CREATED path=.*/a.txt" events.log
+```
+
+Qui `.*` significa "qualunque sequenza di caratteri" dentro una riga di log.
+Nei test Alfred, quando parliamo di regex, parliamo dei pattern passati a
+`grep`, non dei glob usati dalla shell per trovare file.
+
+### Caratteri speciali usati nei test
+
+| Simbolo | Significato in regex | Esempio dai test |
+| --- | --- | --- |
+| `.` | un qualunque singolo carattere | `FILE_CREATED path=.*/a.txt` |
+| `*` | ripete il token precedente zero o piu' volte | `.*` |
+| `.*` | qualunque sequenza di caratteri, anche vuota | `.*/one/two` |
+| `[0-9]` | un carattere numerico da `0` a `9` | `wd=[0-9]+` |
+| `+` | ripete il token precedente una o piu' volte | `[0-9]+` |
+| `$` | fine della riga | `path=.*/one$` |
+| `^` | inizio della riga | `^DIR_CREATED` |
+| `|` | alternativa, cioe' "oppure" | `WATCH_REMOVED|DIR_DELETED` |
+| `()` | raggruppa parti della regex | `(FILE|DIR)_CREATED` |
+| `\` | rende letterale un carattere speciale | `app_t \*app` |
+
+Il pattern piu' frequente e':
+
+```text
+.*
+```
+
+E' composto da:
+
+- `.`: un carattere qualunque
+- `*`: ripeti il carattere precedente zero o piu' volte
+
+Quindi `.*` significa "qualunque testo". Nei test serve per ignorare parti
+variabili, per esempio il prefisso assoluto della directory temporanea:
+
+```bash
+assert_contains "DIR_CREATED path=.*/one$"
+```
+
+Questa regex puo' riconoscere:
+
+```text
+DIR_CREATED path=/tmp/alfred_core_test/one
+DIR_CREATED path=/tmp/qualunque-altro-root/one
+```
+
+Non riconosce invece:
+
+```text
+DIR_CREATED path=/tmp/alfred_core_test/one/two
+```
+
+perche' il `$` richiede che la riga finisca subito dopo `/one`.
+
+### Perche' usare `$`
+
+Il simbolo `$` e' importante quando un path puo' essere prefisso di un altro
+path. Per esempio:
+
+```bash
+assert_contains "DIR_CREATED path=.*/one$"
+assert_contains "DIR_CREATED path=.*/one/two$"
+```
+
+Senza `$`, il primo pattern potrebbe trovare anche:
+
+```text
+DIR_CREATED path=/tmp/alfred_core_test/one/two
+```
+
+Questo renderebbe il test piu' debole, perche' non dimostrerebbe davvero che
+esiste un evento separato per `one`.
+
+### Perche' usare `[0-9]+`
+
+I watch descriptor inotify sono numeri assegnati dal kernel. Non possiamo
+sapere in anticipo se un test vedra' `wd=1`, `wd=2` o un altro valore. Quindi i
+test cercano:
+
+```bash
+assert_contains "WATCH_ADDED wd=[0-9]+ path=.*/a$"
+```
+
+`[0-9]` significa "una cifra". `+` significa "una o piu' ripetizioni". Quindi
+`[0-9]+` riconosce:
+
+```text
+1
+12
+2048
+```
+
+Questa sintassi richiede `grep -E`. Con `grep` base, senza `-E`, il `+` non ha
+lo stesso significato.
+
+### Perche' quotare le regex
+
+Nei test i pattern sono quasi sempre tra virgolette:
+
+```bash
+assert_contains "FILE_RELOCATED from=.*/src/old.txt to=.*/dst/new.txt"
+```
+
+Le virgolette servono a passare tutta la regex come un solo argomento alla
+funzione Bash. Senza virgolette, gli spazi dividerebbero il pattern in piu'
+argomenti e la shell potrebbe interpretare alcuni caratteri prima che arrivino
+a `grep`.
+
+Le virgolette doppie permettono anche l'espansione di variabili shell se
+necessaria. Le virgolette singole sono piu' rigide: proteggono il testo senza
+espandere variabili. Nei test Alfred usiamo spesso virgolette doppie per
+coerenza con gli script esistenti.
+
+### Come leggere alcuni pattern reali
+
+```bash
+assert_contains "FILE_RENAMED from=.*/old.txt to=.*/new.txt"
+```
+
+Lettura:
+
+- cerca un evento `FILE_RENAMED`
+- il vecchio path deve finire con `old.txt`
+- il nuovo path deve finire con `new.txt`
+- non importa quale sia la directory temporanea usata dal test
+
+```bash
+assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch"
+```
+
+Lettura:
+
+- cerca una diagnostica backend `WATCH_RESYNC_FAILED`
+- accetta qualunque numero di watch descriptor
+- il path deve finire con `alfred_backend_test_identity_mismatch`
+- il motivo deve essere `IN_MOVE_SELF`
+- l'errore deve essere `identity-mismatch`
+
+```bash
+assert_order "WATCH_STALE wd=[0-9]+ path=.*/root reason=IN_MOVE_SELF" \
+             "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/root reason=IN_MOVE_SELF"
+```
+
+Lettura:
+
+- entrambe le righe devono esistere in `events.log`
+- la prima riga deve comparire prima della seconda
+- il test non richiede che siano consecutive
+
+### Regola pratica per scrivere nuove regex nei test
+
+Quando scrivi un test shell:
+
+- usa testo letterale per la parte semantica importante
+- usa `.*` solo per parti davvero variabili
+- usa `[0-9]+` per numeri assegnati dal kernel o dal runtime
+- usa `$` quando vuoi fissare la fine del path
+- non rendere il pattern troppo generico, altrimenti il test passa anche con
+  eventi sbagliati
+- non rendere il pattern troppo specifico su dettagli instabili, altrimenti il
+  test diventa fragile
+
+Un buon test non deve dimostrare che il log e' identico byte per byte. Deve
+dimostrare che il contratto importante e' rispettato.
+
+### Contratto atteso in testa ai test
+
+Ogni test che verifica log o eventi deve dichiarare in testa al file il
+contratto atteso. Usiamo un blocco commentato con questa forma:
+
+```text
+Expected log contract:
+
+raw.log:
+- IN_MOVE_SELF ... path=*/root name=
+
+events.log:
+- WATCH_STALE ... reason=IN_MOVE_SELF
+- WATCH_RESYNC_FAILED ... error=identity-mismatch
+
+Forbidden events:
+- DIR_RELOCATED
+- DIR_MOVED
+
+Meaning:
+Spiegazione breve dello scenario e del motivo per cui quelle righe devono
+comparire o non comparire.
+```
+
+Questo blocco non sostituisce gli assert: serve al lettore. Prima ancora di
+leggere `assert_contains`, `grep -Eq` o le funzioni fake di un test C, uno
+studente deve capire quale contratto il test sta fissando. Nei test C che non
+scrivono davvero `raw.log` o `events.log`, la sezione puo' nominare lo stream
+equivalente, per esempio `events log stream` quando il test usa un `tmpfile()`
+del logger.
+
 ## Esempio di ricognizione prima di un micro-refactor
 
 Questa sezione mostra un esempio concreto del metodo da usare prima di
@@ -568,11 +1268,16 @@ git diff --check
 make
 make test
 make test-backend-diagnostics
+make test-scanner
+make test-watcher
 ```
 
 Questi comandi non sono intercambiabili: l'ordine serve a controllare prima i
 problemi piu' semplici, poi il comportamento core e infine la diagnostica
-backend che non fa parte dello stream semantico.
+backend che non fa parte dello stream semantico. `make test-scanner` e'
+separato perche' verifica il componente di attraversamento filesystem, non il
+runtime inotify -> core. `make test-watcher` e' ancora piu' mirato: controlla la
+tabella `wd -> path` e lo stato di affidabilita' dei watch senza avviare Alfred.
 
 ### 1. `git diff --check`
 
@@ -664,7 +1369,80 @@ Questo passo risponde alla domanda:
 il backend inotify mantiene correttamente il proprio stato interno?
 ```
 
-### 5. Nessun `test-legacy-shadow`
+### 5. `make test-scanner`
+
+Il comando:
+
+```bash
+make test-scanner
+```
+
+esegue i test del componente `fs_scanner`.
+
+Nel primo step dello scanner, il test costruisce un piccolo albero:
+
+```text
+root/
+    a/
+        b/
+        file.txt
+    c/
+    pipe.fifo
+    volatile/
+    link_to_a -> a/
+```
+
+Poi verifica che lo scanner:
+
+- emetta la root
+- emetta le directory `a`, `a/b` e `c`
+- non emetta il file, perche' la configurazione iniziale e' directory-only
+- non segua il symlink, perche' `follow_symlinks` e' disabilitato di default
+- rispetti `emit_root=0`
+- rispetti `max_depth=1`
+- si fermi dopo `max_entries=2`
+- emetta il file quando `include_files=1`
+- emetta il symlink come entry `FS_SCAN_SYMLINK` quando `include_symlinks=1`
+- emetta la FIFO come entry `FS_SCAN_OTHER` quando `include_other=1`
+- continui se una directory figlia sparisce tra emissione e discesa ricorsiva
+
+Questo target serve alla futura progettazione resync e indicizzazione. Non
+sostituisce `make test` o `make test-backend-diagnostics`.
+
+### 6. `make test-watcher`
+
+Il comando:
+
+```bash
+make test-watcher
+```
+
+compila ed esegue un test C diretto in:
+
+```text
+tests/watcher/
+```
+
+Questa suite verifica la watcher table, cioe' la struttura che il backend usa
+per tradurre un `wd` in path e, da ora, per ricordare se quel mapping e'
+affidabile. Non usa inotify reale e non produce log semantici.
+
+Il primo test controlla che:
+
+- `watcher_store()` renda lo slot `WATCHER_STATE_VALID`
+- `watcher_store_identity()` salvi anche identita' `st_dev/st_ino`
+- `watcher_set_state()` possa passare a `WATCHER_STATE_STALE`
+- `watcher_set_state()` possa passare a `WATCHER_STATE_RESYNCING`
+- `watcher_remove()` riporti lo slot a `WATCHER_STATE_REMOVED`
+- `WATCHER_STATE_REMOVED` non venga impostato su uno slot ancora attivo
+- `watcher_count_state()` conti solo watch attivi nello stato richiesto
+- `watcher_foreach_state()` visiti solo watch attivi nello stato richiesto e
+  rispetti lo stop anticipato della callback
+
+Questo serve alla futura gestione `IN_MOVE_SELF`: prima fissiamo il contratto
+della struttura dati, poi colleghiamo gli eventi critici alla policy di resync.
+
+### 7. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
@@ -693,6 +1471,8 @@ Esempi:
 - se fallisce `make test`, analizza il comportamento semantico del core
 - se fallisce `make test-backend-diagnostics`, controlla log diagnostici,
   watch descriptor e manutenzione della tabella dei watch
+- se fallisce `make test-scanner`, controlla attraversamento directory,
+  symlink, limiti e callback dello scanner
 
 Per modifiche solo documentali, questa sequenza completa puo' essere eccessiva:
 in quel caso almeno `git diff --check` resta obbligatorio. Se pero' la
@@ -872,6 +1652,10 @@ make test-backend-diagnostics
 Questi test avviano Alfred in `ALFRED_EVENT_ENGINE=core`, ma non controllano il
 contratto semantico utente. Controllano invece la diagnostica del backend
 inotify che oggi viene ancora scritta in `events.log` tramite `logger_event()`.
+La maggior parte degli script e' end-to-end e usa filesystem, kernel inotify e
+processo Alfred reali. Alcuni script possono pero' compilare un piccolo test C
+quando la cosa da verificare e' una policy interna che sarebbe fragile da
+forzare con una race filesystem.
 
 La copertura iniziale include:
 
@@ -881,6 +1665,12 @@ La copertura iniziale include:
   verifica che il backend registri `WATCH_REMOVED`
 - `test_recursive_slow_watch_tree.sh`: crea lentamente `a`, `a/b` e `a/b/c` e
   verifica che ogni directory riceva il proprio `WATCH_ADDED`
+- `test_resync_reinstall_policy.sh`: compila
+  `test_resync_reinstall_policy.c`, che include il backend nello stesso
+  translation unit per testare un helper statico senza esportarlo come API
+  pubblica. Il test usa fake `add/remove` per simulare un fallimento dopo una
+  reinstallazione riuscita, legge il `tmpfile()` usato dal logger e verifica il
+  rollback all-or-stale con diagnostica `WATCH_RESYNC_ROLLBACK`
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

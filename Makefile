@@ -93,6 +93,7 @@ APP_SRCS := \
 	$(APP_DIR)/src/app.c \
 	$(APP_DIR)/src/core_logger.c \
 	$(APP_DIR)/src/config.c \
+	$(APP_DIR)/src/fs_scanner.c \
 	$(APP_DIR)/src/logger.c \
 	$(APP_DIR)/src/utils.c
 
@@ -221,6 +222,12 @@ test-backend-diagnostics:
 	$(MAKE) all
 	cd tests/backend && bash run_all.sh
 
+test-scanner:
+	cd tests/scanner && bash run_all.sh
+
+test-watcher:
+	cd tests/watcher && bash run_all.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -298,6 +305,8 @@ banner:
 	run \
 	test \
 	test-core \
+	test-scanner \
+	test-watcher \
 	test-backend-diagnostics \
 	valgrind \
 	gdb \

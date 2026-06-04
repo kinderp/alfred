@@ -913,20 +913,33 @@ Questo blocco dice tre cose:
 
 ### Caso 6: aggiungi un nuovo test ufficiale
 
-Se aggiungi un nuovo script dentro una suite gia' esistente, per esempio:
+Se aggiungi un nuovo script dentro una suite gia' esistente, prima controlla il
+runner della suite. Alcuni runner enumerano i file, altri usano un pattern.
+
+Esempio con runner esplicito:
 
 ```text
 tests/core/test_new_scenario.sh
 ```
 
-potrebbe bastare aggiornare:
+se `tests/core/run_all.sh` non include automaticamente il nuovo file, aggiorna:
 
 ```text
 tests/core/run_all.sh
 ```
 
-In questo caso il Makefile non cambia, perche' `make test` entra gia' in
-`tests/core/` ed esegue `run_all.sh`.
+Esempio con runner automatico:
+
+```text
+tests/backend/test_new_diagnostic.sh
+```
+
+`tests/backend/run_all.sh` esegue tutti gli script `test_*.sh`, quindi un nuovo
+file backend con quel nome entra automaticamente in
+`make test-backend-diagnostics`.
+
+In entrambi i casi il Makefile non cambia, perche' il target entra gia' nella
+directory della suite ed esegue `run_all.sh`.
 
 Se invece aggiungi una nuova categoria di test, per esempio:
 
@@ -1213,6 +1226,8 @@ Nel progetto sono phony target come:
 - `test`
 - `test-core`
 - `test-backend-diagnostics`
+- `test-scanner`
+- `test-watcher`
 - `format`
 - `scan`
 - `tidy`
@@ -1253,6 +1268,48 @@ make scan
 
 Esegue `cppcheck`, uno strumento di analisi statica.
 
+### test-scanner
+
+```bash
+make test-scanner
+```
+
+Esegue i test del componente `fs_scanner`. Questa suite non controlla lo stream
+semantico del core e non controlla la diagnostica inotify: verifica solo che lo
+scanner filesystem attraversi l'albero secondo il contratto scelto.
+
+Nel primo passo lo scanner visita directory, non segue symlink e usa una
+callback con `userdata`. Il test compila un piccolo helper C in
+`tests/scanner/` e lo esegue su un albero temporaneo.
+
+### test-watcher
+
+```bash
+make test-watcher
+```
+
+Esegue i test diretti della watcher table:
+
+```text
+tests/watcher/
+```
+
+Questa suite non avvia Alfred e non legge eventi reali dal kernel. Compila un
+piccolo test C contro `modules/inotify/src/watcher.c` e verifica il contratto
+della struttura dati `watcher_table_t`.
+
+Il primo scenario controlla lo stato di affidabilita' dei watch:
+
+- `watcher_store()` crea uno slot `VALID`
+- `watcher_store_identity()` crea uno slot `VALID` con identita' `st_dev/st_ino`
+- `watcher_set_state()` puo' marcare uno slot `STALE` o `RESYNCING`
+- `watcher_remove()` riporta lo slot a `REMOVED`
+- uno slot rimosso non viene considerato stale
+
+Questo target serve alla futura gestione `IN_MOVE_SELF` e resync. Lo teniamo
+separato dai test backend perche' qui non vogliamo testare timing o dettagli
+del kernel: vogliamo fissare il contratto interno della tabella.
+
 ### tidy
 
 ```bash
@@ -1273,6 +1330,8 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
+| Eseguire test scanner filesystem | `make test-scanner` |
+| Eseguire test watcher table | `make test-watcher` |
 | Cercare problemi memoria | `make valgrind` |
 | Debuggare | `make gdb` |
 | Formattare codice | `make format` |
