@@ -196,6 +196,11 @@ Modified files:
 - Aggiornare `docs/it/documentation-progress.md` quando cambiano codice, test o
   documentazione rilevante.
 - Aggiornare i file di scenario quando cambiano eventi attesi o semantica.
+- Quando un test controlla log o eventi, inserire in testa al file un blocco
+  `Expected log contract` che descriva le righe attese in `raw.log`,
+  `events.log` o nello stream di log usato dal test, le righe vietate e il
+  significato dello scenario. Questo vale anche per test C che usano un logger
+  temporaneo invece dei file `.log` del runtime.
 - Aggiornare `docs/commenting-style.md` e `docs/commenting-progress.md` se il
   passo riguarda commenti nel codice o stile dei commenti.
 - Quando si documentano flussi complessi, strutture dati o responsabilita' tra

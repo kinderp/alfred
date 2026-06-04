@@ -26,6 +26,15 @@ runtime architecture.
 
 Latest refresh:
 
+- expanded `tests/backend/test_resync_reinstall_policy.c` with the same
+  Expected log contract style used by shell backend diagnostics. The header now
+  states the expected event stream, forbidden success log, and scenario meaning
+  before the individual assertions.
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_resync_reinstall_policy.c` after adding
+  WATCH_RESYNC_ROLLBACK diagnostics. Comments and tests now make clear that the
+  rollback log is emitted before removing a watch installed during the failed
+  resync attempt.
 - expanded comments for the resync reinstall operation seam and
   `tests/backend/test_resync_reinstall_policy.c`. The code now documents why
   the internal helper type exists, why production still uses the real watch

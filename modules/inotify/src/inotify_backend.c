@@ -1191,8 +1191,16 @@ static error_t backend_resync_reinstall_missing_watches(
                          reason,
                          missing_path);
 
-            for (size_t j = 0; j < installed_count; j++)
+            for (size_t j = 0; j < installed_count; j++) {
+                logger_event(ctx->logger,
+                             "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
+                             wd,
+                             path,
+                             reason,
+                             installed_wds[j]);
+
                 (void)ops->remove(ctx, installed_wds[j]);
+            }
 
             free(installed_wds);
             return ERR_INOTIFY;

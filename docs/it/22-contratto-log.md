@@ -244,6 +244,7 @@ diventato `STALE`.
 | `WATCH_RESYNC_SCAN_MISSING wd=N path=P reason=R missing_path=Q` | per ogni directory vista dallo scan ma non coperta da watch | `Q` e' candidata a ricevere un nuovo watch | non e' `DIR_CREATED`; descrive un buco di copertura watch |
 | `WATCH_RESYNC_REINSTALLED wd=N path=P reason=R installed_path=Q` | dopo `watch_manager_add()` riuscito per un missing path | Alfred ha reinstallato un watch su `Q` durante il resync | non e' evento semantico; e' riparazione della copertura backend |
 | `WATCH_RESYNC_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante il resync | la riparazione completa non e' riuscita | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
+| `WATCH_RESYNC_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato; indica cleanup interno del tentativo di resync |
 | `WATCH_RESYNC_FAILED wd=N path=P reason=R error=E` | recovery interrotta o non affidabile | il watch resta `STALE`; `E` spiega il ramo fallito | non e' evento utente; e' diagnostica backend |
 | `WATCH_RESYNC_END wd=N path=P reason=R result=valid` | recovery riuscita | tutti i controlli necessari sono passati e il watch torna `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 

@@ -1017,6 +1017,37 @@ Quando scrivi un test shell:
 Un buon test non deve dimostrare che il log e' identico byte per byte. Deve
 dimostrare che il contratto importante e' rispettato.
 
+### Contratto atteso in testa ai test
+
+Ogni test che verifica log o eventi deve dichiarare in testa al file il
+contratto atteso. Usiamo un blocco commentato con questa forma:
+
+```text
+Expected log contract:
+
+raw.log:
+- IN_MOVE_SELF ... path=*/root name=
+
+events.log:
+- WATCH_STALE ... reason=IN_MOVE_SELF
+- WATCH_RESYNC_FAILED ... error=identity-mismatch
+
+Forbidden events:
+- DIR_RELOCATED
+- DIR_MOVED
+
+Meaning:
+Spiegazione breve dello scenario e del motivo per cui quelle righe devono
+comparire o non comparire.
+```
+
+Questo blocco non sostituisce gli assert: serve al lettore. Prima ancora di
+leggere `assert_contains`, `grep -Eq` o le funzioni fake di un test C, uno
+studente deve capire quale contratto il test sta fissando. Nei test C che non
+scrivono davvero `raw.log` o `events.log`, la sezione puo' nominare lo stream
+equivalente, per esempio `events log stream` quando il test usa un `tmpfile()`
+del logger.
+
 ## Esempio di ricognizione prima di un micro-refactor
 
 Questa sezione mostra un esempio concreto del metodo da usare prima di
@@ -1638,7 +1669,8 @@ La copertura iniziale include:
   `test_resync_reinstall_policy.c`, che include il backend nello stesso
   translation unit per testare un helper statico senza esportarlo come API
   pubblica. Il test usa fake `add/remove` per simulare un fallimento dopo una
-  reinstallazione riuscita e verificare il rollback all-or-stale
+  reinstallazione riuscita, legge il `tmpfile()` usato dal logger e verifica il
+  rollback all-or-stale con diagnostica `WATCH_RESYNC_ROLLBACK`
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

@@ -42,6 +42,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `00-regole-operative.md`, `10-debugging-test-e-strumenti.md` e
+  `tests/backend/test_resync_reinstall_policy.c`: formalizzata la regola del
+  blocco iniziale `Expected log contract` nei test che verificano log o eventi.
+  Il nuovo test C di rollback ora dichiara raw log assente, stream eventi
+  atteso, eventi vietati e significato dello scenario prima degli assert.
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_resync_reinstall_policy.c`, `22-contratto-log.md`,
+  `21-roadmap-scanner-resync.md`, `14-scenari-test.md`,
+  `10-debugging-test-e-strumenti.md` e `docs/commenting-progress.md`: aggiunta
+  la diagnostica esplicita `WATCH_RESYNC_ROLLBACK` per distinguere il cleanup
+  di una reinstallazione parziale fallita da una rimozione ordinaria di watch.
+  Il test C ora verifica anche il frammento di log prodotto dal logger.
 - `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_resync_reinstall_policy.c`,
   `tests/backend/test_resync_reinstall_policy.sh`, `10-debugging-test-e-strumenti.md`,

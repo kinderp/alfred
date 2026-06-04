@@ -11,6 +11,27 @@
  * backend_resync_reinstall_missing_watches() helper without exporting that
  * helper through the public backend header. The helper receives fake watch
  * operations, so no kernel inotify watch is installed.
+ *
+ * Expected log contract:
+ *
+ * raw.log:
+ * - none; this is a focused C test and does not read the kernel inotify queue
+ *
+ * events log stream:
+ * - WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/a
+ * - WATCH_RESYNC_SCAN_MISSING ... missing_path=/tmp/root/b
+ * - WATCH_RESYNC_REINSTALLED ... installed_path=/tmp/root/a
+ * - WATCH_RESYNC_REINSTALL_FAILED ... missing_path=/tmp/root/b
+ * - WATCH_RESYNC_ROLLBACK ... removed_wd=101
+ *
+ * Forbidden events:
+ * - WATCH_RESYNC_END ... result=valid in the failure scenario
+ *
+ * Meaning:
+ * The helper is given two missing paths. The fake add operation succeeds for
+ * the first one and fails for the second one. Alfred must log the failed
+ * reinstall, log the rollback of the first fake wd, call the fake remove, and
+ * return ERR_INOTIFY so the caller can keep the parent watch STALE.
  */
 
 #include <assert.h>
@@ -151,6 +172,36 @@ static inotify_backend_context_t make_backend_context(logger_t *logger)
 }
 
 /*
+ * assert_event_log_contains - verify one diagnostic was written by the helper
+ * @logger: logger whose event stream is a temporary file
+ * @needle: diagnostic fragment expected in the event stream
+ *
+ * The production logger writes timestamps before each event, so this helper
+ * checks for a stable fragment rather than an entire line. It lets the test
+ * verify the new WATCH_RESYNC_ROLLBACK contract without depending on the
+ * timestamp format.
+ */
+static void assert_event_log_contains(logger_t *logger, const char *needle)
+{
+    char buffer[4096];
+    size_t bytes_read;
+
+    assert(logger != NULL);
+    assert(logger->event != NULL);
+    assert(needle != NULL);
+
+    fflush(logger->event);
+    rewind(logger->event);
+
+    bytes_read = fread(buffer, 1, sizeof(buffer) - 1, logger->event);
+    assert(bytes_read < sizeof(buffer));
+
+    buffer[bytes_read] = '\0';
+
+    assert(strstr(buffer, needle) != NULL);
+}
+
+/*
  * test_empty_missing_list_is_noop - covered scope needs no watch operations
  *
  * If the scanner found no missing paths, the helper must return success
@@ -248,6 +299,11 @@ static void test_failure_rolls_back_installed_watches(logger_t *logger)
     assert(strcmp(fake_state.added_paths[0], "/tmp/root/a") == 0);
     assert(strcmp(fake_state.added_paths[1], "/tmp/root/b") == 0);
     assert(fake_state.removed_wds[0] == 101);
+
+    assert_event_log_contains(
+        logger,
+        "WATCH_RESYNC_ROLLBACK wd=7 path=/tmp/root reason=IN_MOVE_SELF removed_wd=101"
+    );
 }
 
 int main(void)

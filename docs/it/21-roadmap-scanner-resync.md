@@ -100,6 +100,7 @@ Lo scenario fissato e':
 ```text
 missing path A reinstallato
 missing path B fallisce
+-> WATCH_RESYNC_ROLLBACK per A
 -> rollback del watch A
 -> parent STALE
 -> WATCH_RESYNC_FAILED ... error=reinstall-failed
@@ -148,9 +149,9 @@ f4bfd24 feat: reinstall all resync missing watches
 
 Riprendere da qui:
 
-1. decidere se i `WATCH_REMOVED` prodotti dal rollback sono diagnostica
-   sufficiente o se serve un log esplicito `WATCH_RESYNC_ROLLBACK`
-2. solo dopo tornare a `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow
+1. tornare a `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow
+2. valutare se il resync globale deve riusare la stessa policy all-or-stale
+   oppure introdurre una policy diversa per scope non localizzati
 
 Non iniziare dalla semantica core: per ora il lavoro aperto e' ancora sul
 contratto diagnostico e sul resync backend.
@@ -1856,6 +1857,7 @@ Se `watch_manager_add()` fallisce, Alfred logga:
 
 ```text
 WATCH_RESYNC_REINSTALL_FAILED ... missing_path=/tmp/root/a/b
+WATCH_RESYNC_ROLLBACK ... removed_wd=12
 WATCH_RESYNC_FAILED ... error=reinstall-failed
 ```
 
@@ -1863,7 +1865,11 @@ In quel caso il watch principale torna `STALE` e Alfred non logga
 `WATCH_RESYNC_END ... result=valid`. Tornare `VALID` sarebbe fuorviante: lo
 scan ha dimostrato un buco di copertura e la riparazione completa e' fallita.
 Se il fallimento avviene dopo alcuni reinstall riusciti, Alfred rimuove i watch
-aggiunti durante quel tentativo prima di lasciare il parent `STALE`.
+aggiunti durante quel tentativo prima di lasciare il parent `STALE`. Ogni
+rimozione di rollback produce un log esplicito `WATCH_RESYNC_ROLLBACK` prima
+della chiamata a `watch_manager_remove()`, cosi' nei log e' chiaro che il
+successivo `WATCH_REMOVED` fa parte della recovery fallita e non di una
+rimozione ordinaria del watch.
 
 La watch reinstallation corrente segue questa forma:
 
@@ -2098,8 +2104,9 @@ sarebbe fragile da forzare con filesystem reale:
 2. passa al helper statico fake operations invece del watch manager reale
 3. il fake add riesce sul primo path e restituisce wd=101
 4. il fake add fallisce sul secondo path
-5. il helper chiama il fake remove su wd=101
-6. il helper ritorna ERR_INOTIFY
+5. il helper logga `WATCH_RESYNC_ROLLBACK ... removed_wd=101`
+6. il helper chiama il fake remove su wd=101
+7. il helper ritorna ERR_INOTIFY
 ```
 
 Questo test non controlla il kernel inotify. Controlla la policy interna:
@@ -2170,12 +2177,10 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
-   prodotti da `watch_manager_remove()` sono diagnostica sufficiente
-2. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
+1. tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
    cioe' gli eventi che non hanno ancora una root affidabile semplice come il
    ramo positivo di `IN_MOVE_SELF`
-3. rimandare output CLI e JSON a un passo successivo
+2. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 
