@@ -2039,8 +2039,93 @@ flowchart TD
     F -- "no" --> H["aggiungi watch mancanti"]
     H --> I{"watch installati?"}
     I -- "no" --> G
-    I -- "si" --> J["set VALID<br/>WATCH_RESYNC_END"]
+I -- "si" --> J["set VALID<br/>WATCH_RESYNC_END"]
 ```
+
+#### Diagramma di stato del resync
+
+Il diagramma precedente mostra il flusso decisionale. Il diagramma seguente
+mostra invece gli stati logici della procedura di resync. Non tutti questi nomi
+sono stati salvati nella watcher table: nella struttura `watcher_entry_t`
+esistono solo `VALID`, `STALE`, `RESYNCING` e `REMOVED`. Gli stati intermedi
+`PROBE_IDENTITY`, `SCAN_SCOPE`, `REINSTALL_WATCHES` e `ROLLBACK` servono a
+leggere il codice e i log come una transazione.
+
+```mermaid
+stateDiagram-v2
+    [*] --> VALID: T0 watch installato
+
+    VALID --> STALE: T1 IN_MOVE_SELF
+    VALID --> STALE: T2 IN_DELETE_SELF
+    VALID --> STALE: T3 perdita affidabilita futura
+
+    STALE --> PROBE_IDENTITY: T4 backend_resync_watch()
+    PROBE_IDENTITY --> STALE: T5 identita non provata
+    PROBE_IDENTITY --> SCAN_SCOPE: T6 identita confermata
+
+    SCAN_SCOPE --> STALE: T7 scan root fallisce
+    SCAN_SCOPE --> REINSTALL_WATCHES: T8 scan completato
+
+    REINSTALL_WATCHES --> VALID: T9 tutti i missing watch reinstallati
+    REINSTALL_WATCHES --> ROLLBACK: T10 un reinstall fallisce
+    ROLLBACK --> STALE: T11 rollback completato
+
+    VALID --> REMOVED: T12 IN_IGNORED o watcher_remove()
+    STALE --> REMOVED: T12 IN_IGNORED o watcher_remove()
+    PROBE_IDENTITY --> REMOVED: T12 IN_IGNORED o watcher_remove()
+    SCAN_SCOPE --> REMOVED: T12 IN_IGNORED o watcher_remove()
+    REINSTALL_WATCHES --> REMOVED: T12 IN_IGNORED o watcher_remove()
+    ROLLBACK --> REMOVED: T12 IN_IGNORED o watcher_remove()
+
+    note right of VALID
+      Il mapping wd -> path e' affidabile.
+      Gli eventi figli possono essere
+      ricostruiti usando questo path.
+    end note
+
+    note right of STALE
+      Il path resta nella tabella per
+      diagnostica e recovery, ma non
+      deve essere trattato come verita'
+      semantica.
+    end note
+
+    note right of PROBE_IDENTITY
+      Confronta stat(2) corrente con
+      st_dev/st_ino salvati quando il
+      watch e' stato installato.
+    end note
+
+    note right of REINSTALL_WATCHES
+      La policy e' all-or-stale:
+      il parent torna VALID solo se
+      ogni missing path viene coperto.
+    end note
+
+    note right of ROLLBACK
+      Rimuove i watch installati in
+      questo tentativo e logga
+      WATCH_RESYNC_ROLLBACK.
+    end note
+```
+
+Trigger del diagramma:
+
+| Trigger | Evento o condizione | Effetto |
+| --- | --- | --- |
+| `T0` | `watch_manager_add()` / `watcher_store_identity()` riusciti | nasce un watch `VALID` con path e identita' salvati |
+| `T1` | il kernel invia `IN_MOVE_SELF` sul path osservato direttamente | Alfred non conosce la destinazione, quindi marca il watch `STALE` e logga `WATCH_STALE` |
+| `T2` | il kernel invia `IN_DELETE_SELF` sul path osservato direttamente | Alfred marca il watch `STALE`; il cleanup finale resta a `IN_IGNORED` |
+| `T3` | futuro `IN_UNMOUNT`, `IN_Q_OVERFLOW` o altra perdita di affidabilita' | il backend dovra' marcare uno scope come non affidabile prima del resync |
+| `T4` | `backend_resync_watch()` viene chiamata su un watch `STALE` | la watcher table passa temporaneamente a `RESYNCING` e parte `WATCH_RESYNC_BEGIN` |
+| `T5` | path non raggiungibile, non directory, identita' mancante o identita' diversa | Alfred logga `WATCH_RESYNC_FAILED` e lascia il watch `STALE` |
+| `T6` | il path e' raggiungibile, e' directory e ha la stessa `(st_dev, st_ino)` salvata | lo scope locale e' abbastanza affidabile per uno scan directory-only |
+| `T7` | `fs_scan_tree()` fallisce sulla root affidabile o la raccolta dei missing path fallisce | Alfred logga fallimento e torna `STALE` |
+| `T8` | lo scan termina e produce contatori `dirs`, `watched`, `missing` | Alfred classifica lo scan e decide se reinstallare missing watch |
+| `T9` | ogni missing path viene reinstallato con successo | Alfred puo' tornare `VALID` e loggare `WATCH_RESYNC_END ... result=valid` |
+| `T10` | almeno un `watch_manager_add()` fallisce durante la reinstallazione | la riparazione e' parziale; Alfred entra in rollback |
+| `T11` | rollback dei watch installati nel tentativo completato | il parent resta `STALE` e la recovery termina con `WATCH_RESYNC_FAILED ... error=reinstall-failed` |
+| `T12` | `IN_IGNORED`, `watch_manager_remove()` o shutdown rimuovono il watch | lo slot diventa `REMOVED`; il `wd` non deve piu' essere usato |
 
 Nel codice corrente e' implementata la prima versione mutante del flusso:
 `STALE -> RESYNCING -> VALID` quando il vecchio path e' ancora una directory,

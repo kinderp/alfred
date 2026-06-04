@@ -42,6 +42,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: aggiunto un diagramma Mermaid di stato del
+  resync con trigger `T0..T12` e note sugli stati logici. Il diagramma distingue
+  gli stati reali della watcher table (`VALID`, `STALE`, `RESYNCING`,
+  `REMOVED`) dagli stati didattici della transazione (`PROBE_IDENTITY`,
+  `SCAN_SCOPE`, `REINSTALL_WATCHES`, `ROLLBACK`).
 - `00-regole-operative.md`, `10-debugging-test-e-strumenti.md` e
   `tests/backend/test_resync_reinstall_policy.c`: formalizzata la regola del
   blocco iniziale `Expected log contract` nei test che verificano log o eventi.
