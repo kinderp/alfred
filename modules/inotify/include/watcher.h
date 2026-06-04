@@ -94,6 +94,7 @@ int watcher_store_identity(watcher_table_t *wt,
                            const char *path,
                            dev_t device_id,
                            ino_t inode_id);
+int watcher_update_path(watcher_table_t *wt, int wd, const char *path);
 void watcher_remove(watcher_table_t *wt, int wd);
 
 const char* watcher_get_path(const watcher_table_t *wt, int wd);

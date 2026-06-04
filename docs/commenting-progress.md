@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding watcher_update_path().
+  Comments now explain why lost-scope recovery needs a path-only update that
+  preserves state and identity instead of reusing watcher_store_identity().
 - refreshed `modules/inotify/src/inotify_backend.c` and added
   `tests/backend/test_lost_scope_recovery.c` after introducing synchronous
   lost-scope identity search. Comments document why the helper consumes one

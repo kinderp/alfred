@@ -330,7 +330,7 @@ e lo stato di affidabilita' del watch.
 
 | Scenario | Script | Cosa controlla | Perche' serve |
 | --- | --- | --- | --- |
-| watcher reliability states | `tests/watcher/test_watcher_state.c` | store iniziale `VALID`, identita' `st_dev/st_ino`, transizioni a `STALE` e `RESYNCING`, remove a `REMOVED`, rifiuto di `REMOVED` su slot attivo, conteggio per stato, iterazione per stato e stop anticipato | prepara la futura gestione `IN_MOVE_SELF` e resync senza dipendere da timing o dettagli del kernel |
+| watcher reliability states | `tests/watcher/test_watcher_state.c` | store iniziale `VALID`, identita' `st_dev/st_ino`, `watcher_update_path()` che preserva stato/identita', transizioni a `STALE` e `RESYNCING`, remove a `REMOVED`, rifiuto di `REMOVED` su slot attivo, conteggio per stato, iterazione per stato e stop anticipato | prepara la futura gestione `IN_MOVE_SELF` e resync senza dipendere da timing o dettagli del kernel |
 
 Lo scenario `attrib raw log` usa `chmod` come caso rappresentativo di
 `IN_ATTRIB`. La documentazione Linux elenca anche timestamp, attributi estesi,

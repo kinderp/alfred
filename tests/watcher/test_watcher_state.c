@@ -123,6 +123,43 @@ static void test_store_identity_records_device_and_inode(void)
 }
 
 /*
+ * test_update_path_preserves_state_and_identity - rename path without reset
+ *
+ * Lost-scope recovery needs to rewrite the textual path of an existing kernel
+ * watch after finding the same filesystem identity elsewhere. That operation
+ * must not behave like watcher_store_identity(): it must not reset state to
+ * VALID and must not overwrite the saved identity evidence.
+ */
+static void test_update_path_preserves_state_and_identity(void)
+{
+    watcher_table_t table;
+    dev_t device_id = 0;
+    ino_t inode_id = 0;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store_identity(&table,
+                                  3,
+                                  "/tmp/old",
+                                  (dev_t)55,
+                                  (ino_t)77) == 0);
+    assert(watcher_set_state(&table, 3, WATCHER_STATE_STALE) == 0);
+
+    assert(watcher_update_path(&table, 3, "/tmp/new") == 0);
+    assert(strcmp(watcher_get_path(&table, 3), "/tmp/new") == 0);
+    assert(watcher_get_state(&table, 3) == WATCHER_STATE_STALE);
+    assert(watcher_get_identity(&table, 3, &device_id, &inode_id) == 0);
+    assert(device_id == (dev_t)55);
+    assert(inode_id == (ino_t)77);
+
+    assert(watcher_update_path(&table, 99, "/tmp/missing") == -1);
+    assert(watcher_update_path(&table, 3, NULL) == -1);
+    assert(watcher_update_path(NULL, 3, "/tmp/none") == -1);
+
+    watcher_destroy(&table);
+}
+
+/*
  * test_state_can_be_marked_stale_and_restored - exercise active-state changes
  *
  * The important distinction is that STALE and RESYNCING are still active
@@ -417,6 +454,7 @@ int main(void)
 {
     test_store_starts_valid();
     test_store_identity_records_device_and_inode();
+    test_update_path_preserves_state_and_identity();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();

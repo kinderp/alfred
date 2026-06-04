@@ -2838,10 +2838,41 @@ Questo e' il punto minimo che ci serve prima di progettare l'aggiornamento dei
 path e dei prefissi. Prima Alfred deve sapere ritrovare un oggetto. Solo dopo
 puo' decidere se e come ricollegare watch e subtree.
 
+#### Aggiornamento path del watch principale
+
+Il building block successivo e' `watcher_update_path()`. La funzione vive nella
+watcher table e aggiorna solo il path testuale di un `wd` attivo. Preserva:
+
+- `wd`
+- `active`
+- `state`
+- `has_identity`
+- `device_id`
+- `inode_id`
+
+Questa scelta evita di riusare `watcher_store_identity()` per la recovery:
+quella funzione registra un watch come se fosse appena installato e imposta lo
+stato a `VALID`. Dopo `WATCH_LOST_FOUND`, invece, Alfred non puo' ancora tornare
+automaticamente `VALID`: ha ritrovato il watch principale, ma deve ancora
+aggiornare i prefissi dei figli e verificare la copertura della subtree.
+
+Quindi il micro-step e' volutamente preparatorio:
+
+```text
+watcher_update_path(wd, new_path)
+    aggiorna solo items[wd].path
+    conserva identita' e stato corrente
+    non installa watch
+    non produce log
+```
+
+Il collegamento tra `WATCH_LOST_FOUND` e `watcher_update_path()` resta il passo
+successivo.
+
 Restano i passi successivi:
 
-1. aggiornare path del watch principale quando `WATCH_LOST_FOUND` individua la
-   nuova posizione
+1. collegare `WATCH_LOST_FOUND` a `watcher_update_path()` per il watch
+   principale
 2. aggiornare i prefissi dei figli watched sotto la directory ritrovata
 3. eseguire scan strict e reinstall all-or-stale
 4. solo dopo aggiungere worker thread, debounce e backoff

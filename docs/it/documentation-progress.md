@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `watcher.h`, `watcher.c`, `test_watcher_state.c`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `14-scenari-test.md`: aggiunto e documentato `watcher_update_path()`, helper
+  che aggiorna solo il path testuale di un watch attivo preservando stato e
+  identita'. Serve come building block per collegare in seguito
+  `WATCH_LOST_FOUND` al path del watch principale senza dichiarare subito la
+  subtree `VALID`.
 - `inotify_backend.c`, `test_lost_scope_recovery.c`, `14-scenari-test.md`,
   `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: implementata e
   documentata la prima recovery sincrona read-only della `lost_scope_queue`.

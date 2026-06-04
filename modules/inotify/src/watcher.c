@@ -256,6 +256,38 @@ int watcher_store_identity(watcher_table_t *wt,
 }
 
 /*
+ * watcher_update_path - replace the path of an active watch only
+ * @wt: table to update
+ * @wd: inotify watch descriptor whose path should be replaced
+ * @path: new trusted path to copy into the existing slot
+ *
+ * Lost-scope recovery may find that an already active kernel watch now lives at
+ * a different textual path. Updating that path is not the same as storing a new
+ * watch: the function preserves active state, reliability state, and captured
+ * filesystem identity. The caller must decide separately whether the watch can
+ * move to VALID after prefix updates, strict scan, and watch reinstallation.
+ *
+ * Return: 0 on success, -1 on invalid input or inactive watch descriptor.
+ */
+int watcher_update_path(watcher_table_t *wt, int wd, const char *path)
+{
+    if (wt == NULL || path == NULL)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    watcher_entry_t *slot = &wt->items[wd];
+
+    snprintf(slot->path,
+             sizeof(slot->path),
+             "%s",
+             path);
+
+    return 0;
+}
+
+/*
  * watcher_remove - clear one wd -> path mapping
  * @wt: table to update
  * @wd: inotify watch descriptor to clear
