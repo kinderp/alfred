@@ -987,6 +987,7 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
     opts.include_symlinks = 0;
     opts.include_other = 0;
     opts.follow_symlinks = 0;
+    opts.strict_child_errors = 1;
     opts.emit_root = 0;
 
     backend_resync_scan_context_t scan_context;

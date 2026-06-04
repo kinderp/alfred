@@ -312,7 +312,7 @@ filesystem che useremo per resync e, in futuro, indicizzazione.
 
 | Scenario | Script | Cosa controlla | Perche' serve |
 | --- | --- | --- | --- |
-| scanner directories and options | `tests/scanner/test_fs_scanner_dirs.sh` | default directory-only, `emit_root=0`, `max_depth=1`, `max_entries=2`, `include_files=1`, `include_symlinks=1`, `include_other=1`, symlink non seguito, directory figlia rimossa durante lo scan | fissa il contratto iniziale dello scanner, delle opzioni pubbliche e della prima policy sugli errori parziali prima di usarlo per resync |
+| scanner directories and options | `tests/scanner/test_fs_scanner_dirs.sh` | default directory-only, `emit_root=0`, `max_depth=1`, `max_entries=2`, assenza di leak fd su scan bounded ripetuti, `include_files=1`, `include_symlinks=1`, `include_other=1`, symlink non seguito, directory figlia rimossa durante lo scan in modalita' default e strict | fissa il contratto iniziale dello scanner, delle opzioni pubbliche, della ownership dei file descriptor e della differenza tra scan best-effort e scan strict usato dal resync |
 
 ## Test watcher table
 

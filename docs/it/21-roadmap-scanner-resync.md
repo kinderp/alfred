@@ -489,9 +489,12 @@ Opzioni utili:
 
 ```c
 typedef struct {
-    int include_files;
     int include_dirs;
+    int include_files;
+    int include_symlinks;
+    int include_other;
     int follow_symlinks;
+    int strict_child_errors;
     int emit_root;
     int max_depth;
     size_t max_entries;
@@ -666,6 +669,7 @@ Le opzioni principali sono:
 | `include_symlinks` | `0` | emette link simbolici come entry proprie |
 | `include_other` | `0` | emette fifo, socket, device e altri tipi |
 | `follow_symlinks` | `0` | segue i symlink invece di classificarli come symlink |
+| `strict_child_errors` | `0` | trasforma errori sui figli in errore dello scan |
 | `emit_root` | `1` | emette anche il path root con profondita' `0` |
 | `max_depth` | `-1` | profondita' massima; `-1` significa nessun limite |
 | `max_entries` | `0` | numero massimo di callback; `0` significa nessun limite |
@@ -684,6 +688,9 @@ opts.max_entries = 100;
 
 /* Directory e file regolari. */
 opts.include_files = 1;
+
+/* Scan strict: se una directory figlia non e' attraversabile, fallisce. */
+opts.strict_child_errors = 1;
 ```
 
 La distinzione importante e':
@@ -758,9 +765,15 @@ Caso importante:
 4. fstatat() fallisce
 ```
 
-Oggi lo scanner salta quell'entry e continua. Questa scelta e' ragionevole per
-entry figlie transitorie, perche' durante un resync e' normale che il mondo
-cambi sotto i nostri piedi.
+In modalita' default lo scanner salta quell'entry e continua. Questa scelta e'
+ragionevole per scansioni generiche o indicizzazione best-effort, perche' il
+filesystem puo' cambiare mentre viene letto.
+
+Nel resync, pero', questa tolleranza non basta. Se vogliamo riportare un watch
+da `STALE` a `VALID`, dobbiamo sapere che lo scope affidabile e' stato davvero
+attraversato. Per questo il backend usa `strict_child_errors = 1`: un errore su
+una entry figlia non viene nascosto, ma fa fallire lo scan e mantiene il watch
+in stato `STALE`.
 
 ### `openat()`
 
@@ -786,26 +799,33 @@ Possibili fallimenti:
 - il filesystem ha restituito un errore I/O
 - il path e' ancora visibile ma non e' piu' apribile
 
-Qui dobbiamo scegliere la policy. Per un resync robusto, fallire tutto per una
-singola directory figlia non leggibile potrebbe essere troppo aggressivo.
-Tuttavia ignorare sempre l'errore senza registrarlo potrebbe nascondere problemi
-reali.
+Qui la policy dipende dallo scopo dello scan. Per una scansione generica o una
+futura indicizzazione, fallire tutto per una singola directory figlia non
+leggibile puo' essere troppo aggressivo. Per il resync, invece, ignorare la
+directory figlia rende lo scan parziale: Alfred potrebbe reinstallare solo una
+parte dei watch mancanti e dichiarare `VALID` uno scope non completamente
+verificato.
 
-Scelta implementata per il primo passo:
+Scelta implementata:
 
 ```text
-root non apribile             -> ERR_IO
-directory figlia sparita      -> skip + continua
-directory figlia senza permessi -> skip + continua
-entry trasformata in non-dir  -> skip + continua
-errore I/O non classificato   -> ERR_IO
+root non apribile                         -> ERR_IO
+directory figlia sparita, default         -> skip + continua
+directory figlia senza permessi, default  -> skip + continua
+entry trasformata in non-dir, default     -> skip + continua
+directory figlia sparita, strict          -> ERR_IO
+directory figlia senza permessi, strict   -> ERR_IO
+entry trasformata in non-dir, strict      -> ERR_IO
+errore I/O non classificato               -> ERR_IO
 ```
 
 Nel codice questa decisione e' concentrata in
-`child_open_error_is_recoverable()`. La funzione considera recuperabili
-`ENOENT`, `ENOTDIR`, `EACCES` ed `EPERM` quando l'errore riguarda una directory
-figlia aperta con `openat()`. La root resta gestita da `fs_scan_tree()` e quindi
-continua a fallire con `ERR_IO` se non e' leggibile o non e' apribile.
+`handle_child_scan_error()`, che usa `strict_child_errors` per decidere se un
+errore normalmente recuperabile deve essere saltato oppure diventare `ERR_IO`.
+La funzione `child_open_error_is_recoverable()` resta la tabella degli errori
+figli recuperabili in modalita' default: `ENOENT`, `ENOTDIR`, `EACCES` ed
+`EPERM`. La root resta gestita da `fs_scan_tree()` e quindi continua a fallire
+con `ERR_IO` se non e' leggibile o non e' apribile.
 
 ### `fdopendir()`
 
@@ -888,16 +908,22 @@ o cambia durante lo scan.
 Decisioni fissate:
 
 - root non leggibile: hard failure
-- entry sparita tra `readdir()` e `fstatat()`: skip
+- entry sparita tra `readdir()` e `fstatat()`: skip in default, hard failure
+  in strict
 - directory figlia non apribile per `ENOENT`, `ENOTDIR`, `EACCES` o `EPERM`:
-  skip
+  skip in default, hard failure in strict
 - path troppo lungo: hard failure
 
 Il test scanner crea una directory `volatile`. La callback la rimuove dopo che
 lo scanner l'ha osservata ma prima della discesa ricorsiva. Questo simula una
 race reale: `fstatat()` vede una directory, poi `openat()` fallisce perche' la
-directory non esiste piu'. Il contratto atteso e' che lo scan continui e ritorni
-`ERR_OK`.
+directory non esiste piu'. Il contratto atteso e' doppio:
+
+- con `strict_child_errors = 0`, lo scan continua e ritorna `ERR_OK`
+- con `strict_child_errors = 1`, lo scan ritorna `ERR_IO`
+
+Questa distinzione evita di confondere due usi diversi dello stesso scanner:
+scansione generica best-effort e prova di copertura completa per il resync.
 
 Decisioni ancora aperte:
 
@@ -1719,6 +1745,7 @@ include_files     = 0
 include_symlinks  = 0
 include_other     = 0
 follow_symlinks   = 0
+strict_child_errors = 1
 emit_root         = 0
 ```
 
@@ -1727,6 +1754,14 @@ cercando di recuperare o lo scope gia' scelto come affidabile da una fase
 precedente. Lo scanner della fase 2 serve a vedere le directory figlie e a
 guidare l'installazione dei watch mancanti; non deve trattare la root come una
 nuova directory scoperta.
+
+`strict_child_errors = 1` e' altrettanto importante per il resync. La modalita'
+default dello scanner puo' saltare directory figlie sparite o non apribili e
+continuare. Questo e' utile per una futura modalita' scan/index best-effort, ma
+non e' sufficiente per riparare i watch: se Alfred non attraversa una directory
+figlia, non puo' sapere se sotto quella directory esistono altri watch mancanti.
+Nel resync, quindi, uno scan parziale diventa fallimento e il watch principale
+resta `STALE`.
 
 #### Dry-run e watch reinstallation completa sullo scope affidabile
 
@@ -2022,7 +2057,7 @@ resync attraversi direttamente `watcher_table_t.items`.
 | path del watch esiste ma manca identita' salvata | `STALE` | probe minimo: log diagnostico `WATCH_RESYNC_FAILED`; serve evidenza prima di tornare `VALID` | resta `STALE` |
 | path del watch non esiste piu' | `STALE` | probe minimo: `WATCH_RESYNC_BEGIN`, verifica path, `WATCH_RESYNC_FAILED` | resta `STALE` |
 | path esiste ma scan fallisce sulla root | `STALE` | log errore/recovery fallita | `STALE` |
-| directory figlia sparisce durante scan | `RESYNCING` | saltare la figlia e continuare | resta `RESYNCING`, poi `VALID` se non ci sono errori duri |
+| directory figlia sparisce durante scan strict | `RESYNCING` | `fs_scan_tree()` ritorna `ERR_IO`, log errore/recovery fallita | resta `STALE` |
 | overflow globale | qualsiasi | marcare stato non affidabile e rimandare recovery ampia | `STALE` su scope scelto |
 | unmount | qualsiasi | diagnostica di perdita subtree | `STALE` o `REMOVED`, da decidere |
 

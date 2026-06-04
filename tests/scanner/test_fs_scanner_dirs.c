@@ -10,8 +10,10 @@
 
 #include "fs_scanner.h"
 
+#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 /* Compact set of observations collected from the scanner callback. */
@@ -107,6 +109,59 @@ static int run_scan(const char *root,
         fprintf(stderr, "callback failed\n");
         return 1;
     }
+
+    return 0;
+}
+
+static error_t run_scan_raw(const char *root,
+                            const fs_scan_options_t *opts,
+                            scan_seen_t *seen)
+{
+    return fs_scan_tree(root, opts, on_entry, seen);
+}
+
+/*
+ * count_open_fds - count descriptors visible through procfs
+ *
+ * This Linux-only test suite already targets inotify behavior. Counting
+ * /proc/self/fd lets the scanner test prove that early-stop traversal does not
+ * leak directory descriptors when a directory callback or max_entries stops the
+ * walk before recursion.
+ *
+ * Return: descriptor count on success, -1 on procfs failure.
+ */
+static int count_open_fds(void)
+{
+    DIR *dir = opendir("/proc/self/fd");
+
+    if (dir == NULL)
+        return -1;
+
+    int count = 0;
+    struct dirent *ent;
+
+    while ((ent = readdir(dir)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 ||
+            strcmp(ent->d_name, "..") == 0) {
+            continue;
+        }
+
+        count++;
+    }
+
+    closedir(dir);
+
+    return count;
+}
+
+static int recreate_volatile_dir(const char *root)
+{
+    char path[4096];
+
+    snprintf(path, sizeof(path), "%s/volatile", root);
+
+    if (mkdir(path, 0700) != 0)
+        return 1;
 
     return 0;
 }
@@ -217,6 +272,38 @@ static int expect_max_entries_two(const char *root)
 
     if (seen.count != 2) {
         fprintf(stderr, "max_entries=2 mismatch count=%d\n", seen.count);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int expect_max_entries_does_not_leak_fds(const char *root)
+{
+    int before = count_open_fds();
+
+    if (before < 0) {
+        fprintf(stderr, "cannot count open fds before scan\n");
+        return 1;
+    }
+
+    for (int i = 0; i < 32; i++) {
+        if (expect_max_entries_two(root) != 0)
+            return 1;
+    }
+
+    int after = count_open_fds();
+
+    if (after < 0) {
+        fprintf(stderr, "cannot count open fds after scan\n");
+        return 1;
+    }
+
+    if (before != after) {
+        fprintf(stderr,
+                "fd leak after bounded scans before=%d after=%d\n",
+                before,
+                after);
         return 1;
     }
 
@@ -347,6 +434,42 @@ static int expect_removed_child_directory_is_skipped(const char *root)
     return 0;
 }
 
+static int expect_strict_removed_child_directory_fails(const char *root)
+{
+    fs_scan_options_t opts;
+    scan_seen_t seen;
+    error_t rc;
+
+    fs_scan_options_defaults(&opts);
+    opts.strict_child_errors = 1;
+    memset(&seen, 0, sizeof(seen));
+    seen.remove_volatile = 1;
+
+    rc = run_scan_raw(root, &opts, &seen);
+
+    if (rc != ERR_IO) {
+        fprintf(stderr, "strict child error mismatch rc=%d\n", rc);
+        return 1;
+    }
+
+    if (!seen.saw_volatile) {
+        fprintf(stderr, "strict volatile directory was not observed\n");
+        return 1;
+    }
+
+    if (seen.callback_failed) {
+        fprintf(stderr, "strict volatile callback failed\n");
+        return 1;
+    }
+
+    if (recreate_volatile_dir(root) != 0) {
+        fprintf(stderr, "failed to recreate volatile directory\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2) {
@@ -358,9 +481,11 @@ int main(int argc, char **argv)
         expect_no_root(argv[1]) != 0 ||
         expect_max_depth_one(argv[1]) != 0 ||
         expect_max_entries_two(argv[1]) != 0 ||
+        expect_max_entries_does_not_leak_fds(argv[1]) != 0 ||
         expect_include_files(argv[1]) != 0 ||
         expect_include_symlinks(argv[1]) != 0 ||
         expect_include_other(argv[1]) != 0 ||
+        expect_strict_removed_child_directory_fails(argv[1]) != 0 ||
         expect_removed_child_directory_is_skipped(argv[1]) != 0) {
         return 1;
     }

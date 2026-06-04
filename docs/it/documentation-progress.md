@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `fs_scanner.h`, `fs_scanner.c`, `inotify_backend.c`,
+  `21-roadmap-scanner-resync.md` e `14-scenari-test.md`: corretto il contratto
+  dello scanner emerso dalla review PR #7. Gli early stop non devono perdere
+  file descriptor e il resync usa `strict_child_errors = 1` per distinguere uno
+  scan completo da uno scan parziale: una directory figlia non attraversabile
+  mantiene il watch principale `STALE` invece di permettere un falso `VALID`.
 - `21-roadmap-scanner-resync.md`: aggiunto un diagramma Mermaid di stato del
   resync con trigger `T0..T12` e note sugli stati logici. Il diagramma distingue
   gli stati reali della watcher table (`VALID`, `STALE`, `RESYNCING`,

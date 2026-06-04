@@ -194,6 +194,31 @@ static int child_open_error_is_recoverable(int err)
 }
 
 /*
+ * handle_child_scan_error - apply child traversal error policy
+ * @state: active scan state
+ * @err: errno value captured immediately after the failed child operation
+ *
+ * Generic scans tolerate common races inside the tree: a child may disappear or
+ * become inaccessible after readdir() or fstatat(). Resync scans need stronger
+ * evidence. When strict_child_errors is enabled, even a normally recoverable
+ * child error makes the whole scan fail so the backend does not mark a partially
+ * inspected subtree as VALID.
+ *
+ * Return: ERR_OK when the caller may skip the child and continue, ERR_IO when
+ * the scan must fail.
+ */
+static error_t handle_child_scan_error(const fs_scan_state_t *state, int err)
+{
+    if (state->opts.strict_child_errors)
+        return ERR_IO;
+
+    if (child_open_error_is_recoverable(err))
+        return ERR_OK;
+
+    return ERR_IO;
+}
+
+/*
  * scan_dir_fd - recursively scan an already-open directory
  * @state: active scan state
  * @path: printable path corresponding to @fd
@@ -214,11 +239,15 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
                            int fd,
                            int depth)
 {
-    if (state->stop)
+    if (state->stop) {
+        close(fd);
         return ERR_OK;
+    }
 
-    if (state->opts.max_depth >= 0 && depth > state->opts.max_depth)
+    if (state->opts.max_depth >= 0 && depth > state->opts.max_depth) {
+        close(fd);
         return ERR_OK;
+    }
 
     DIR *dir = fdopendir(fd);
 
@@ -255,12 +284,19 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
 
         /*
          * A filesystem can change while it is being scanned. If an entry
-         * disappears between readdir() and fstatat(), skip it for now rather
-         * than failing the whole scan. The broader partial-error policy is still
-         * documented as a future resync decision.
+         * disappears between readdir() and fstatat(), default scans skip it.
+         * Strict scans fail instead, because resync must not treat partial
+         * subtree coverage as proof that a watch can return to VALID.
          */
-        if (fstatat(dirfd(dir), ent->d_name, &st, stat_flags) != 0)
-            continue;
+        if (fstatat(dirfd(dir), ent->d_name, &st, stat_flags) != 0) {
+            error_t rc = handle_child_scan_error(state, errno);
+
+            if (rc == ERR_OK)
+                continue;
+
+            closedir(dir);
+            return rc;
+        }
 
         fs_scan_type_t type = mode_to_type(st.st_mode);
         int child_depth = depth + 1;
@@ -277,6 +313,9 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
         if (emit_entry(state, child, type, child_depth, &st) != ERR_OK)
             break;
 
+        if (state->stop)
+            break;
+
         if (type == FS_SCAN_DIR &&
             (state->opts.max_depth < 0 ||
              child_depth < state->opts.max_depth)) {
@@ -287,11 +326,13 @@ static error_t scan_dir_fd(fs_scan_state_t *state,
                        directory_open_flags(&state->opts));
 
             if (child_fd < 0) {
-                if (child_open_error_is_recoverable(errno))
+                error_t rc = handle_child_scan_error(state, errno);
+
+                if (rc == ERR_OK)
                     continue;
 
                 closedir(dir);
-                return ERR_IO;
+                return rc;
             }
 
             error_t rc = scan_dir_fd(state, child, child_fd, child_depth);
@@ -339,6 +380,7 @@ void fs_scan_options_defaults(fs_scan_options_t *opts)
     opts->include_symlinks = 0;
     opts->include_other = 0;
     opts->follow_symlinks = 0;
+    opts->strict_child_errors = 0;
     opts->emit_root = 1;
     opts->max_depth = -1;
     opts->max_entries = 0;

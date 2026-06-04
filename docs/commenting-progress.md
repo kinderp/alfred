@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `app/include/fs_scanner.h`, `app/src/fs_scanner.c`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/scanner/test_fs_scanner_dirs.c` after fixing the PR #7 scanner review
+  findings. Comments now explain fd ownership on early stop and the
+  `strict_child_errors` policy that lets generic scans remain best-effort while
+  resync scans fail on partial subtree traversal.
 - expanded `tests/backend/test_resync_reinstall_policy.c` with the same
   Expected log contract style used by shell backend diagnostics. The header now
   states the expected event stream, forbidden success log, and scenario meaning

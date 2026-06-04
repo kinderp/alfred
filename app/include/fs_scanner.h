@@ -87,6 +87,13 @@ typedef struct {
      */
     int follow_symlinks;
 
+    /*
+     * Treat child traversal errors as scan failures. Disabled by default for
+     * generic/indexing scans, but enabled by resync callers that need complete
+     * subtree coverage before trusting the result.
+     */
+    int strict_child_errors;
+
     /* Emit the root path before scanning its children. Enabled by default. */
     int emit_root;
 
