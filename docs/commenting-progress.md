@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after documenting
+  backend_lost_scope_recovery_result_t and backend_lost_scope_scan_context_t.
+  Comments now explain each recovery outcome, every scan context field, and why
+  WATCH_LOST_FOUND updates only the main watch path while leaving subtree
+  validity for later steps.
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`, and
   `tests/watcher/test_watcher_state.c` after adding watcher_update_path().

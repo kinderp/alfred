@@ -20,8 +20,9 @@
  * The test verifies the first delayed recovery building block: consume one
  * queued stale scope and search one monitored root for the saved filesystem
  * identity. A renamed directory is found by st_dev/st_ino even though its old
- * textual path is stale. A deleted directory is not found. The helper must not
- * update watcher paths, reinstall watches, or emit semantic filesystem events.
+ * textual path is stale. The helper updates only the main watcher-table path
+ * after a match; it must not reinstall watches, mark the subtree VALID, or emit
+ * semantic filesystem events. A deleted directory is not found.
  */
 
 #include <assert.h>
@@ -38,8 +39,8 @@
  * @runtime: backend runtime whose lost_scopes queue has been initialized
  * @logger: logger with a temporary event stream
  *
- * The recovery helper needs only the queue and logger in this micro-step. It
- * does not open inotify, mutate watcher_table_t, or install watches.
+ * The recovery helper needs only the queue, watcher table, and logger in this
+ * micro-step. It does not open inotify or install watches.
  *
  * Return: initialized backend context borrowing @runtime and @logger.
  */
@@ -107,7 +108,9 @@ static void assert_event_log_contains(logger_t *logger, const char *needle)
  * @root: monitored root used as bounded scan scope
  *
  * The stale entry records the old path, but the scan must find the directory at
- * its new path by comparing the saved st_dev/st_ino pair.
+ * its new path by comparing the saved st_dev/st_ino pair. Once found, the
+ * helper updates only the main watch path and keeps the state STALE so later
+ * prefix and coverage checks still have to run.
  */
 static void test_renamed_directory_is_found_by_identity(
     inotify_backend_context_t *ctx,
@@ -124,6 +127,14 @@ static void test_renamed_directory_is_found_by_identity(
 
     assert(mkdir(original, 0700) == 0);
     assert(stat(original, &st) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  7,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             7,
+                             WATCHER_STATE_STALE) == 0);
     assert(rename(original, renamed) == 0);
 
     assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
@@ -141,6 +152,10 @@ static void test_renamed_directory_is_found_by_identity(
                                            sizeof(found)) ==
            BACKEND_LOST_SCOPE_RECOVERY_FOUND);
     assert(strcmp(found, renamed) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 7),
+                  renamed) == 0);
+    assert(watcher_get_state(&ctx->runtime->watchers, 7) ==
+           WATCHER_STATE_STALE);
     assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
 
     assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
@@ -156,7 +171,7 @@ static void test_renamed_directory_is_found_by_identity(
  *
  * If the directory identity is no longer anywhere under the scanned root, the
  * helper reports NOT_FOUND. It does not invent a delete event and does not
- * remove or rewrite any watcher-table entry.
+ * rewrite the watcher-table path.
  */
 static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
                                                 const char *root)
@@ -169,6 +184,14 @@ static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
 
     assert(mkdir(gone, 0700) == 0);
     assert(stat(gone, &st) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  8,
+                                  gone,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             8,
+                             WATCHER_STATE_STALE) == 0);
     assert(rmdir(gone) == 0);
 
     assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
@@ -186,6 +209,10 @@ static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
                                            sizeof(found)) ==
            BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND);
     assert(found[0] == '\0');
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 8),
+                  gone) == 0);
+    assert(watcher_get_state(&ctx->runtime->watchers, 8) ==
+           WATCHER_STATE_STALE);
     assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
 
     assert_event_log_contains(ctx->logger, "WATCH_LOST_NOT_FOUND");
@@ -220,6 +247,7 @@ int main(int argc, char **argv)
     memset(&logger, 0, sizeof(logger));
 
     assert(backend_lost_scope_queue_init(&runtime.lost_scopes, 1) == 0);
+    assert(watcher_init(&runtime.watchers, 4) == 0);
 
     logger.event = tmpfile();
     assert(logger.event != NULL);
@@ -232,6 +260,7 @@ int main(int argc, char **argv)
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);
+    watcher_destroy(&runtime.watchers);
     backend_lost_scope_queue_destroy(&runtime.lost_scopes);
 
     return 0;

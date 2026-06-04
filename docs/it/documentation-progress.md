@@ -42,6 +42,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: commentati in dettaglio
+  `backend_lost_scope_recovery_result_t` e
+  `backend_lost_scope_scan_context_t`; collegato `WATCH_LOST_FOUND`
+  all'aggiornamento del path del watch principale tramite
+  `watcher_update_path()`. La recovery resta conservativa: path principale
+  aggiornato, stato ancora `STALE`, prefissi figli e reinstallazione watch
+  rimandati ai passi successivi.
 - `watcher.h`, `watcher.c`, `test_watcher_state.c`,
   `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
   `14-scenari-test.md`: aggiunto e documentato `watcher_update_path()`, helper

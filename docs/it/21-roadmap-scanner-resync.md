@@ -2814,11 +2814,13 @@ Il micro-step successivo e' implementato con
 `lost_scope_queue`, scansiona una sola root passata dal chiamante e cerca una
 directory con la stessa identita' `(st_dev, st_ino)` salvata nella entry.
 
-Questo passo e' volutamente read-only rispetto alla watcher table:
+Questo passo era inizialmente read-only; ora aggiorna solo il path del watch
+principale quando trova l'identita'. Resta invece conservativo sul resto della
+subtree:
 
-- non aggiorna il path del watch principale
 - non aggiorna prefissi dei figli
 - non installa nuovi watch
+- non riporta il watch a `VALID`
 - non emette raw Alfred o eventi core
 
 Il suo contratto e' solo:
@@ -2826,17 +2828,19 @@ Il suo contratto e' solo:
 ```text
 entry in queue + root monitorata
     -> WATCH_LOST_SCAN_BEGIN
-    -> WATCH_LOST_FOUND / WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
+    -> WATCH_LOST_FOUND aggiorna path principale
+       oppure WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
 ```
 
 Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
 
-- una directory rinominata viene ritrovata sotto la root tramite identita'
+- una directory rinominata viene ritrovata sotto la root tramite identita' e il
+  path del watch principale viene aggiornato restando `STALE`
 - una directory cancellata non viene trovata e non produce eventi semantici
 
 Questo e' il punto minimo che ci serve prima di progettare l'aggiornamento dei
-path e dei prefissi. Prima Alfred deve sapere ritrovare un oggetto. Solo dopo
-puo' decidere se e come ricollegare watch e subtree.
+prefissi. Alfred ora sa ritrovare un oggetto e aggiornare il path principale;
+solo dopo puo' decidere come ricollegare watch figli e subtree.
 
 #### Aggiornamento path del watch principale
 
@@ -2866,16 +2870,14 @@ watcher_update_path(wd, new_path)
     non produce log
 ```
 
-Il collegamento tra `WATCH_LOST_FOUND` e `watcher_update_path()` resta il passo
-successivo.
+Il collegamento tra `WATCH_LOST_FOUND` e `watcher_update_path()` e' ora
+implementato dentro `backend_lost_scope_recover_next()`.
 
 Restano i passi successivi:
 
-1. collegare `WATCH_LOST_FOUND` a `watcher_update_path()` per il watch
-   principale
-2. aggiornare i prefissi dei figli watched sotto la directory ritrovata
-3. eseguire scan strict e reinstall all-or-stale
-4. solo dopo aggiungere worker thread, debounce e backoff
+1. aggiornare i prefissi dei figli watched sotto la directory ritrovata
+2. eseguire scan strict e reinstall all-or-stale
+3. solo dopo aggiungere worker thread, debounce e backoff
 
 #### Log di lost-scope recovery
 

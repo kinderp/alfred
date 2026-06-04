@@ -105,13 +105,54 @@ typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
 } backend_resync_scan_class_t;
 
+/*
+ * backend_lost_scope_recovery_result - outcome of one queued identity search
+ *
+ * These values describe only the delayed lost-scope search step. They are not
+ * semantic events and they do not say that the watcher table is fully repaired.
+ * FOUND means "the same filesystem object was located"; later steps still need
+ * to update watcher paths, child prefixes, and watch coverage before returning
+ * a subtree to VALID.
+ */
 typedef enum backend_lost_scope_recovery_result {
+    /*
+     * The lost-scope queue had no entry to process. This is a normal idle
+     * result for a future worker and should not produce diagnostics.
+     */
     BACKEND_LOST_SCOPE_RECOVERY_EMPTY,
+
+    /*
+     * A directory with the queued (st_dev, st_ino) identity was found under the
+     * scanned root. The caller may use the discovered path as candidate input
+     * for later watcher-table repair.
+     */
     BACKEND_LOST_SCOPE_RECOVERY_FOUND,
+
+    /*
+     * The scan completed but did not find the queued identity in the selected
+     * root. The object may be gone or may live outside the scanned scope.
+     */
     BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND,
+
+    /*
+     * The scanner could not complete reliably. Recovery must stay conservative
+     * because a partial scan cannot prove that the lost identity is absent.
+     */
     BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED
 } backend_lost_scope_recovery_result_t;
 
+/*
+ * backend_lost_scope_scan_context - state for one identity-search scan
+ * @entry: queued lost-scope record whose saved identity is being searched
+ * @found_path: caller-owned buffer that receives the matching path
+ * @found_path_size: size of @found_path in bytes
+ * @found: set to nonzero when the callback finds @entry identity
+ *
+ * fs_scan_tree() calls backend_lost_scope_scan_for_identity() with borrowed
+ * paths and stat data. This context keeps the queued identity and the caller's
+ * output buffer together so the callback can stop at the first matching
+ * directory and copy its current path out of the scanner's temporary storage.
+ */
 typedef struct backend_lost_scope_scan_context {
     const inotify_lost_scope_entry_t *entry;
     char *found_path;
@@ -660,6 +701,17 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
     }
 
     if (scan_context.found) {
+        if (watcher_update_path(&ctx->runtime->watchers,
+                                entry.wd,
+                                found_path) != 0) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
+                         entry.wd,
+                         entry.old_path,
+                         entry.reason);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
         logger_event(ctx->logger,
                      "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
                      entry.wd,
