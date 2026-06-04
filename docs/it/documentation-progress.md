@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: estratta la policy all-or-stale di
+  reinstallazione dei missing watch in
+  `backend_resync_reinstall_missing_watches()`. La roadmap ora chiarisce che il
+  test rollback C richiede ancora un seam pulito per simulare
+  `watch_manager_add()` fallito senza introdurre race end-to-end fragili.
 - `24-roadmap-ai-agent-guardrail.md` e `README.md`: aggiunta la roadmap che
   posiziona Alfred come AI agent runtime security/guardrail. Il capitolo
   documenta prompt context, tool action, effetti OS, policy engine,

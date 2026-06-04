@@ -99,17 +99,37 @@ directory missing, ma quella directory deve diventare non installabile prima
 della chiamata a `watch_manager_add()`. Un test cosi' rischia di essere fragile
 perche' dipende dal timing tra scan, modifica filesystem e reinstallazione.
 
-Opzioni alla ripresa:
+Stato della ripresa:
 
-1. estrarre la logica di reinstallazione in un helper piu' isolabile e testarla
-   con un test C, simulando il fallimento di un path
+- la logica di reinstallazione e' stata estratta in
+  `backend_resync_reinstall_missing_watches()`
+- `backend_resync_watch_subtree_dirs()` resta responsabile di scan,
+  classificazione e orchestrazione
+- il nuovo helper concentra la policy all-or-stale:
+  `missing -> watch_manager_add() -> rollback se un add fallisce`
+- il test C diretto non e' ancora stato aggiunto, perche' il nuovo helper e'
+  ancora statico dentro `inotify_backend.c` e usa `watch_manager_add()` /
+  `watch_manager_remove()` reali
+
+Questa separazione e' comunque utile: ora il comportamento da testare e'
+contenuto in un solo punto. Il prossimo passo tecnico e' decidere se introdurre
+una piccola interfaccia interna di test, oppure se mantenere il helper statico e
+coprire il fallimento con un test end-to-end solo quando esiste un meccanismo
+deterministico.
+
+Opzioni rimaste:
+
+1. aggiungere un seam di test C per simulare `watch_manager_add()` fallito dopo
+   almeno una reinstallazione riuscita
 2. aggiungere un test bash con race controllata solo se troviamo un meccanismo
    deterministico e ripetibile
 3. rimandare il test rollback ancora un passo, ma mantenere il debito esplicito
    fino al merge del branch
 
-La scelta consigliata e' la prima: un helper dedicato permetterebbe di testare
-la policy all-or-stale senza introdurre un test end-to-end fragile.
+La scelta consigliata resta la prima, ma solo se il seam non sporca l'API
+pubblica del backend. Il test deve verificare che un fallimento dopo una
+reinstallazione parziale produca rollback dei watch appena aggiunti e lasci il
+parent `STALE`.
 
 ### Alla prossima sessione
 

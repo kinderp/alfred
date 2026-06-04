@@ -200,6 +200,14 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 const char *path,
                                                 const char *reason);
 
+static error_t backend_resync_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context
+);
+
 static int backend_resync_scan_add_missing_path(
     backend_resync_scan_context_t *scan_context,
     const char *path
@@ -926,12 +934,10 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
  * child directories to decide which recursive watches are missing.
  *
  * The callback counts discovered directories and copies every directory
- * missing from the watcher table. This helper then attempts to reinstall every
- * missing watch. The policy is deliberately all-or-stale: if any reinstall
- * fails, watches added during this resync attempt are removed and the caller
- * leaves the parent watch STALE.
+ * missing from the watcher table. This helper then delegates the actual
+ * watch reinstallation policy to backend_resync_reinstall_missing_watches().
  *
- * Return: ERR_OK on scan success, otherwise the scanner error code.
+ * Return: ERR_OK when scan and reinstallation succeed, otherwise error_t.
  */
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
@@ -1003,60 +1009,103 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  reason,
                  backend_resync_scan_class_name(scan_class));
 
-    if (scan_context.missing_paths_count > 0) {
-        int *installed_wds =
-            calloc(scan_context.missing_paths_count, sizeof(int));
+    rc = backend_resync_reinstall_missing_watches(ctx,
+                                                  wd,
+                                                  path,
+                                                  reason,
+                                                  &scan_context);
 
-        if (installed_wds == NULL) {
-            backend_resync_scan_context_destroy(&scan_context);
-            return ERR_ALLOC;
-        }
-
-        size_t installed_count = 0;
-
-        for (size_t i = 0; i < scan_context.missing_paths_count; i++) {
-            const char *missing_path = scan_context.missing_paths[i];
-
-            logger_event(ctx->logger,
-                         "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
-
-            int new_wd = watch_manager_add(ctx, missing_path);
-
-            if (new_wd < 0) {
-                logger_event(ctx->logger,
-                             "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
-                             wd,
-                             path,
-                             reason,
-                             missing_path);
-
-                for (size_t j = 0; j < installed_count; j++)
-                    (void)watch_manager_remove(ctx, installed_wds[j]);
-
-                free(installed_wds);
-                backend_resync_scan_context_destroy(&scan_context);
-                return ERR_INOTIFY;
-            }
-
-            installed_wds[installed_count] = new_wd;
-            installed_count++;
-
-            logger_event(ctx->logger,
-                         "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
-        }
-
-        free(installed_wds);
+    if (rc != ERR_OK) {
+        backend_resync_scan_context_destroy(&scan_context);
+        return rc;
     }
 
     backend_resync_scan_context_destroy(&scan_context);
+    return ERR_OK;
+}
+
+/*
+ * backend_resync_reinstall_missing_watches - restore all missing child watches
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: parent watch descriptor whose trusted scope was scanned
+ * @path: trusted parent path used for diagnostic logs
+ * @reason: kernel/backend reason that triggered recovery
+ * @scan_context: completed scan context with owned missing path copies
+ *
+ * This helper owns the all-or-stale policy for a trusted resync scope. A
+ * missing path is logged before each add attempt, then watch_manager_add()
+ * installs the watch. If every missing path succeeds, the caller may safely
+ * continue toward WATCHER_STATE_VALID. If any path fails, the helper removes
+ * every watch installed during this attempt and returns ERR_INOTIFY so the
+ * caller keeps the parent watch STALE.
+ *
+ * The rollback intentionally uses watch_manager_remove(), so normal
+ * WATCH_REMOVED diagnostics remain visible for each watch undone by a failed
+ * resync attempt.
+ *
+ * Return: ERR_OK on complete coverage, otherwise error_t.
+ */
+static error_t backend_resync_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context
+)
+{
+    if (ctx == NULL || path == NULL || reason == NULL || scan_context == NULL)
+        return ERR_INVALID_ARG;
+
+    if (scan_context->missing_paths_count == 0)
+        return ERR_OK;
+
+    int *installed_wds =
+        calloc(scan_context->missing_paths_count, sizeof(int));
+
+    if (installed_wds == NULL)
+        return ERR_ALLOC;
+
+    size_t installed_count = 0;
+
+    for (size_t i = 0; i < scan_context->missing_paths_count; i++) {
+        const char *missing_path = scan_context->missing_paths[i];
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     missing_path);
+
+        int new_wd = watch_manager_add(ctx, missing_path);
+
+        if (new_wd < 0) {
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                         wd,
+                         path,
+                         reason,
+                         missing_path);
+
+            for (size_t j = 0; j < installed_count; j++)
+                (void)watch_manager_remove(ctx, installed_wds[j]);
+
+            free(installed_wds);
+            return ERR_INOTIFY;
+        }
+
+        installed_wds[installed_count] = new_wd;
+        installed_count++;
+
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     missing_path);
+    }
+
+    free(installed_wds);
     return ERR_OK;
 }
 

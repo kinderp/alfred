@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` after extracting the
+  all-or-stale missing-watch reinstall policy into
+  `backend_resync_reinstall_missing_watches()`. Comments now separate subtree
+  scan orchestration from rollback/reinstall policy and document why rollback
+  uses `watch_manager_remove()` diagnostics.
 - refreshed `docs/it/21-roadmap-scanner-resync.md` with the explicit rollback
   test debt for multi-missing resync. The roadmap now records the untested
   failure branch, why a bash race test would be fragile, and why an isolated C
