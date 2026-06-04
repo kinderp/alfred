@@ -57,9 +57,9 @@ typedef struct backend_resync_scan_context {
 
     /*
      * Missing paths are copied because fs_scan_entry_t paths are borrowed from
-     * the scanner callback and expire when the callback returns. The current
-     * runtime still reinstalls only missing_paths[0], but collecting the full
-     * list makes the next multi-missing reinstallation step explicit.
+     * the scanner callback and expire when the callback returns. The resync
+     * reinstall phase consumes the whole list after fs_scan_tree() completes,
+     * so every path stored here must be owned by the backend context.
      */
     char **missing_paths;
     size_t missing_paths_count;
@@ -72,6 +72,26 @@ typedef struct backend_resync_scan_context {
      */
     int missing_paths_failed;
 } backend_resync_scan_context_t;
+
+/*
+ * backend_resync_watch_ops - watch operations used by resync reinstall policy
+ * @add: install a watch for one missing directory path
+ * @remove: remove one watch descriptor installed during this resync attempt
+ *
+ * The reinstall policy is easier to reason about if it is separated from the
+ * concrete watch implementation. In production, these callbacks are thin
+ * wrappers around watch_manager_add() and watch_manager_remove(). In focused
+ * tests, they are fake callbacks that can deterministically say "the first add
+ * succeeds, the second add fails".
+ *
+ * This is not a public plugin/backend API. It is a tiny internal seam used to
+ * test a failure branch that would otherwise require a fragile race between
+ * fs_scan_tree(), filesystem mutation, and inotify_add_watch().
+ */
+typedef struct backend_resync_watch_ops {
+    int (*add)(inotify_backend_context_t *ctx, const char *path);
+    int (*remove)(inotify_backend_context_t *ctx, int wd);
+} backend_resync_watch_ops_t;
 
 typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_EMPTY,
@@ -205,8 +225,15 @@ static error_t backend_resync_reinstall_missing_watches(
     int wd,
     const char *path,
     const char *reason,
-    const backend_resync_scan_context_t *scan_context
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
 );
+
+static int backend_resync_watch_manager_add(inotify_backend_context_t *ctx,
+                                            const char *path);
+
+static int backend_resync_watch_manager_remove(inotify_backend_context_t *ctx,
+                                               int wd);
 
 static int backend_resync_scan_add_missing_path(
     backend_resync_scan_context_t *scan_context,
@@ -255,6 +282,11 @@ static int backend_emit_synthetic_dir_create(
     inotify_backend_event_fn on_event,
     void *userdata
 );
+
+static const backend_resync_watch_ops_t BACKEND_RESYNC_WATCH_MANAGER_OPS = {
+    .add = backend_resync_watch_manager_add,
+    .remove = backend_resync_watch_manager_remove
+};
 
 /* ============================================================================
  * Lifecycle
@@ -1009,11 +1041,20 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                  reason,
                  backend_resync_scan_class_name(scan_class));
 
+    /*
+     * Runtime recovery must mutate the real watcher table and kernel watches.
+     * The indirection exists only so the same policy can be tested with fake
+     * operations; production always uses the watch manager wrappers below.
+     */
+    const backend_resync_watch_ops_t *watch_ops =
+        &BACKEND_RESYNC_WATCH_MANAGER_OPS;
+
     rc = backend_resync_reinstall_missing_watches(ctx,
                                                   wd,
                                                   path,
                                                   reason,
-                                                  &scan_context);
+                                                  &scan_context,
+                                                  watch_ops);
 
     if (rc != ERR_OK) {
         backend_resync_scan_context_destroy(&scan_context);
@@ -1025,23 +1066,59 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
 }
 
 /*
+ * backend_resync_watch_manager_add - production add operation for resync
+ * @ctx: backend context containing fd, watcher table, config, and logger
+ * @path: missing directory path to watch
+ *
+ * This wrapper intentionally contains no policy. It adapts the real watch
+ * manager function to backend_resync_watch_ops_t so the reinstall helper can be
+ * tested without exporting itself or depending directly on the concrete watch
+ * manager symbol.
+ *
+ * Return: new watch descriptor on success, -1 on failure.
+ */
+static int backend_resync_watch_manager_add(inotify_backend_context_t *ctx,
+                                            const char *path)
+{
+    return watch_manager_add(ctx, path);
+}
+
+/*
+ * backend_resync_watch_manager_remove - production rollback operation
+ * @ctx: backend context containing fd, watcher table, config, and logger
+ * @wd: watch descriptor installed earlier in the same resync attempt
+ *
+ * A failed all-or-stale reinstall attempt must undo only the watches it added
+ * during that attempt. Delegating to watch_manager_remove() keeps normal
+ * watcher table cleanup and WATCH_REMOVED diagnostics in one place.
+ *
+ * Return: 0 on success, -1 on failure.
+ */
+static int backend_resync_watch_manager_remove(inotify_backend_context_t *ctx,
+                                               int wd)
+{
+    return watch_manager_remove(ctx, wd);
+}
+
+/*
  * backend_resync_reinstall_missing_watches - restore all missing child watches
  * @ctx: narrowed backend context used by the poll path
  * @wd: parent watch descriptor whose trusted scope was scanned
  * @path: trusted parent path used for diagnostic logs
  * @reason: kernel/backend reason that triggered recovery
  * @scan_context: completed scan context with owned missing path copies
+ * @ops: watch installation/removal operations used by runtime or tests
  *
  * This helper owns the all-or-stale policy for a trusted resync scope. A
- * missing path is logged before each add attempt, then watch_manager_add()
- * installs the watch. If every missing path succeeds, the caller may safely
- * continue toward WATCHER_STATE_VALID. If any path fails, the helper removes
- * every watch installed during this attempt and returns ERR_INOTIFY so the
- * caller keeps the parent watch STALE.
+ * missing path is logged before each add attempt, then ops->add installs the
+ * watch. If every missing path succeeds, the caller may safely continue toward
+ * WATCHER_STATE_VALID. If any path fails, the helper removes every watch
+ * installed during this attempt and returns ERR_INOTIFY so the caller keeps
+ * the parent watch STALE.
  *
- * The rollback intentionally uses watch_manager_remove(), so normal
- * WATCH_REMOVED diagnostics remain visible for each watch undone by a failed
- * resync attempt.
+ * Runtime passes the real watch manager operations. Unit tests can pass fake
+ * operations to force a deterministic failure after one or more successful
+ * reinstalls, avoiding a fragile filesystem race.
  *
  * Return: ERR_OK on complete coverage, otherwise error_t.
  */
@@ -1050,15 +1127,33 @@ static error_t backend_resync_reinstall_missing_watches(
     int wd,
     const char *path,
     const char *reason,
-    const backend_resync_scan_context_t *scan_context
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
 )
 {
-    if (ctx == NULL || path == NULL || reason == NULL || scan_context == NULL)
+    /*
+     * Treat missing callbacks as a programmer error. Without both operations
+     * the helper could install watches without being able to roll them back,
+     * which would break the all-or-stale guarantee.
+     */
+    if (ctx == NULL || path == NULL || reason == NULL ||
+        scan_context == NULL || ops == NULL || ops->add == NULL ||
+        ops->remove == NULL) {
         return ERR_INVALID_ARG;
+    }
 
+    /*
+     * A covered subtree is already healthy. Return success without allocating
+     * rollback storage or touching the watch manager.
+     */
     if (scan_context->missing_paths_count == 0)
         return ERR_OK;
 
+    /*
+     * Store only descriptors installed by this resync attempt. On a later
+     * failure, rollback must remove these new watches, not pre-existing watches
+     * that were already part of the trusted scope.
+     */
     int *installed_wds =
         calloc(scan_context->missing_paths_count, sizeof(int));
 
@@ -1070,6 +1165,10 @@ static error_t backend_resync_reinstall_missing_watches(
     for (size_t i = 0; i < scan_context->missing_paths_count; i++) {
         const char *missing_path = scan_context->missing_paths[i];
 
+        /*
+         * Log the candidate before mutation. If the following add fails, the
+         * diagnostic still shows exactly which missing path broke the repair.
+         */
         logger_event(ctx->logger,
                      "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
                      wd,
@@ -1077,9 +1176,14 @@ static error_t backend_resync_reinstall_missing_watches(
                      reason,
                      missing_path);
 
-        int new_wd = watch_manager_add(ctx, missing_path);
+        int new_wd = ops->add(ctx, missing_path);
 
         if (new_wd < 0) {
+            /*
+             * The trusted scope is now known to be only partially covered.
+             * Roll back every watch installed in this attempt and report a
+             * backend error so the caller leaves the parent watch STALE.
+             */
             logger_event(ctx->logger,
                          "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
                          wd,
@@ -1088,7 +1192,7 @@ static error_t backend_resync_reinstall_missing_watches(
                          missing_path);
 
             for (size_t j = 0; j < installed_count; j++)
-                (void)watch_manager_remove(ctx, installed_wds[j]);
+                (void)ops->remove(ctx, installed_wds[j]);
 
             free(installed_wds);
             return ERR_INOTIFY;

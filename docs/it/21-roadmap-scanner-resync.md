@@ -14,12 +14,18 @@ essere riusato in due contesti:
 
 ## Punto di ripresa dopo uno stop lungo
 
-Stato del codice al momento della ripresa:
+Stato storico del codice al checkpoint di ripresa:
 
 - branch di lavoro: `feature/resync-scanner`
-- stato branch al checkpoint: tre commit locali ahead rispetto a
-  `origin/feature/resync-scanner`
 - ultimo commit del checkpoint: `2ca9ed9 docs: record resync rollback test debt`
+
+Il numero di commit locali rispetto a `origin/feature/resync-scanner` non viene
+fissato qui, perche' cambia a ogni micro-step. Per riprendere dopo una pausa,
+usare sempre `git status --short --branch` e leggere gli ultimi commit del
+branch.
+
+Stato funzionale dopo i micro-step successivi:
+
 - lo scanner generico `fs_scan_tree()` esiste ed e' testato
 - lo startup e la scoperta runtime delle directory usano gia' lo scanner
 - la watcher table salva identita' filesystem `(st_dev, st_ino)`
@@ -83,7 +89,13 @@ missing=2
 -> FILE_CREATED in entrambe le directory riparate
 ```
 
-Il ramo di fallimento non e' ancora coperto da un test automatico:
+Il ramo di fallimento e' ora coperto da un test C mirato:
+
+```text
+tests/backend/test_resync_reinstall_policy.c
+```
+
+Lo scenario fissato e':
 
 ```text
 missing path A reinstallato
@@ -93,11 +105,11 @@ missing path B fallisce
 -> WATCH_RESYNC_FAILED ... error=reinstall-failed
 ```
 
-Questo debito e' intenzionale per la ripresa. Forzare il fallimento in un test
-bash end-to-end richiede una race artificiale: lo scanner deve vedere una
-directory missing, ma quella directory deve diventare non installabile prima
-della chiamata a `watch_manager_add()`. Un test cosi' rischia di essere fragile
-perche' dipende dal timing tra scan, modifica filesystem e reinstallazione.
+Forzare lo stesso fallimento in un test bash end-to-end richiederebbe una race
+artificiale: lo scanner dovrebbe vedere una directory missing, ma quella
+directory dovrebbe diventare non installabile prima della chiamata a
+`watch_manager_add()`. Un test cosi' rischierebbe di essere fragile perche'
+dipenderebbe dal timing tra scan, modifica filesystem e reinstallazione.
 
 Stato della ripresa:
 
@@ -107,29 +119,10 @@ Stato della ripresa:
   classificazione e orchestrazione
 - il nuovo helper concentra la policy all-or-stale:
   `missing -> watch_manager_add() -> rollback se un add fallisce`
-- il test C diretto non e' ancora stato aggiunto, perche' il nuovo helper e'
-  ancora statico dentro `inotify_backend.c` e usa `watch_manager_add()` /
-  `watch_manager_remove()` reali
-
-Questa separazione e' comunque utile: ora il comportamento da testare e'
-contenuto in un solo punto. Il prossimo passo tecnico e' decidere se introdurre
-una piccola interfaccia interna di test, oppure se mantenere il helper statico e
-coprire il fallimento con un test end-to-end solo quando esiste un meccanismo
-deterministico.
-
-Opzioni rimaste:
-
-1. aggiungere un seam di test C per simulare `watch_manager_add()` fallito dopo
-   almeno una reinstallazione riuscita
-2. aggiungere un test bash con race controllata solo se troviamo un meccanismo
-   deterministico e ripetibile
-3. rimandare il test rollback ancora un passo, ma mantenere il debito esplicito
-   fino al merge del branch
-
-La scelta consigliata resta la prima, ma solo se il seam non sporca l'API
-pubblica del backend. Il test deve verificare che un fallimento dopo una
-reinstallazione parziale produca rollback dei watch appena aggiunti e lasci il
-parent `STALE`.
+- il helper resta statico dentro `inotify_backend.c`
+- il test C include il `.c` del backend nello stesso translation unit e passa
+  fake operations al helper, senza esportarlo nell'header pubblico
+- il runtime passa invece le operazioni reali del watch manager
 
 ### Alla prossima sessione
 
@@ -155,11 +148,9 @@ f4bfd24 feat: reinstall all resync missing watches
 
 Riprendere da qui:
 
-1. discutere se estrarre un helper C per la policy all-or-stale
-2. se si', farlo come micro-step senza cambiare comportamento runtime
-3. aggiungere un test C che simuli il fallimento dopo almeno un reinstall
-   riuscito
-4. solo dopo tornare a `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow
+1. decidere se i `WATCH_REMOVED` prodotti dal rollback sono diagnostica
+   sufficiente o se serve un log esplicito `WATCH_RESYNC_ROLLBACK`
+2. solo dopo tornare a `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow
 
 Non iniziare dalla semantica core: per ora il lavoro aperto e' ancora sul
 contratto diagnostico e sul resync backend.
@@ -1913,9 +1904,9 @@ salvata nella watcher table. Questa terza condizione e' essenziale: dopo
 vecchio path mentre il watch kernel continua a riferirsi all'oggetto spostato.
 Per questo la raggiungibilita' del path non basta. Solo se la coppia
 `(st_dev, st_ino)` coincide, il backend scansiona la subtree, misura la
-copertura e prova a reinstallare il primo watch mancante. Il watch torna
-`VALID` solo se anche questa prima riparazione riesce; altrimenti resta
-`STALE` e scrive `WATCH_RESYNC_FAILED`.
+copertura e prova a reinstallare tutti i watch mancanti. Il watch torna
+`VALID` solo se la riparazione completa riesce; altrimenti resta `STALE` e
+scrive `WATCH_RESYNC_FAILED`.
 
 Se il vecchio path esiste ma l'identita' e' diversa, il probe non deve
 aggiungere subito un nuovo watch su quel path. Sarebbe una decisione troppo
@@ -1967,6 +1958,7 @@ distinguere casi molto diversi:
 | `SET_VALID_FAILED` | la transizione a `VALID` dopo identita' confermata e' fallita |
 | `MISSING_IDENTITY` | la watcher table non ha una coppia `st_dev/st_ino` salvata |
 | `IDENTITY_MISMATCH` | il path e' raggiungibile, ma non e' lo stesso oggetto |
+| `REINSTALL_FAILED` | lo scan ha trovato missing path, ma almeno un watch non e' stato reinstallato |
 
 Tutti questi esiti producono ancora lo stesso tipo di diagnostica:
 `WATCH_RESYNC_FAILED`. La differenza sta nel token `error=...`, che rende i log
@@ -2098,6 +2090,22 @@ path raggiungibile + identita' uguale   -> WATCH_RESYNC_END / VALID
 path raggiungibile + identita' diversa -> WATCH_RESYNC_FAILED / STALE
 ```
 
+`tests/backend/test_resync_reinstall_policy.c` copre il ramo di rollback che
+sarebbe fragile da forzare con filesystem reale:
+
+```text
+1. il test costruisce una scan_context con due missing path
+2. passa al helper statico fake operations invece del watch manager reale
+3. il fake add riesce sul primo path e restituisce wd=101
+4. il fake add fallisce sul secondo path
+5. il helper chiama il fake remove su wd=101
+6. il helper ritorna ERR_INOTIFY
+```
+
+Questo test non controlla il kernel inotify. Controlla la policy interna:
+se la riparazione non e' completa, i watch installati durante quel tentativo
+vengono rimossi e il chiamante puo' lasciare il parent `STALE`.
+
 #### Regola per tornare VALID
 
 Un watch puo' tornare `VALID` solo se il backend ha una prova positiva:
@@ -2122,7 +2130,7 @@ Il watch resta `STALE` quando Alfred non ha abbastanza informazioni:
 - lo scan non puo' partire da una root affidabile
 - la root esiste ma non e' accessibile
 - lo scan fallisce con un errore duro sulla root affidabile
-- il primo watch mancante non puo' essere reinstallato
+- almeno un watch mancante non puo' essere reinstallato
 - la recovery e' stata interrotta
 
 In questi casi Alfred deve preferire diagnostica esplicita a eventi utente
@@ -2162,16 +2170,12 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. decidere come coprire il debito di test sul rollback:
-   helper C isolabile, test bash deterministico o rinvio esplicito al merge
-2. se scegliamo l'helper C, separare la policy "reinstalla tutti o rollback" da
-   `backend_resync_watch_subtree_dirs()` senza cambiare il comportamento runtime
-3. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
+1. decidere se aggiungere log espliciti di rollback oppure se i `WATCH_REMOVED`
    prodotti da `watch_manager_remove()` sono diagnostica sufficiente
-4. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
+2. solo dopo, tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
    cioe' gli eventi che non hanno ancora una root affidabile semplice come il
    ramo positivo di `IN_MOVE_SELF`
-5. rimandare output CLI e JSON a un passo successivo
+3. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 

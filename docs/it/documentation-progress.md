@@ -42,6 +42,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_resync_reinstall_policy.c`,
+  `tests/backend/test_resync_reinstall_policy.sh`, `10-debugging-test-e-strumenti.md`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `docs/commenting-progress.md`: chiuso il debito di test sul rollback della
+  watch reinstallation. Il backend usa ora una piccola tabella interna di
+  operazioni add/remove; il runtime passa il watch manager reale, mentre il test
+  C passa fake operations per simulare un fallimento deterministico dopo una
+  reinstallazione riuscita.
 - `modules/inotify/src/inotify_backend.c`, `21-roadmap-scanner-resync.md` e
   `docs/commenting-progress.md`: estratta la policy all-or-stale di
   reinstallazione dei missing watch in

@@ -1621,6 +1621,10 @@ make test-backend-diagnostics
 Questi test avviano Alfred in `ALFRED_EVENT_ENGINE=core`, ma non controllano il
 contratto semantico utente. Controllano invece la diagnostica del backend
 inotify che oggi viene ancora scritta in `events.log` tramite `logger_event()`.
+La maggior parte degli script e' end-to-end e usa filesystem, kernel inotify e
+processo Alfred reali. Alcuni script possono pero' compilare un piccolo test C
+quando la cosa da verificare e' una policy interna che sarebbe fragile da
+forzare con una race filesystem.
 
 La copertura iniziale include:
 
@@ -1630,6 +1634,11 @@ La copertura iniziale include:
   verifica che il backend registri `WATCH_REMOVED`
 - `test_recursive_slow_watch_tree.sh`: crea lentamente `a`, `a/b` e `a/b/c` e
   verifica che ogni directory riceva il proprio `WATCH_ADDED`
+- `test_resync_reinstall_policy.sh`: compila
+  `test_resync_reinstall_policy.c`, che include il backend nello stesso
+  translation unit per testare un helper statico senza esportarlo come API
+  pubblica. Il test usa fake `add/remove` per simulare un fallimento dopo una
+  reinstallazione riuscita e verificare il rollback all-or-stale
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

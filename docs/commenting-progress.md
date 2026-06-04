@@ -26,6 +26,16 @@ runtime architecture.
 
 Latest refresh:
 
+- expanded comments for the resync reinstall operation seam and
+  `tests/backend/test_resync_reinstall_policy.c`. The code now documents why
+  the internal helper type exists, why production still uses the real watch
+  manager, how fake add/remove callbacks make rollback deterministic, and why
+  the test uses a temporary logger stream instead of repository log files.
+- refreshed `modules/inotify/src/inotify_backend.c` and added
+  `tests/backend/test_resync_reinstall_policy.c` after introducing the
+  resync watch operation seam. Comments explain why runtime uses the real
+  watch manager, why the test passes fake operations, and how the rollback
+  branch enforces the all-or-stale contract without a filesystem race.
 - refreshed `modules/inotify/src/inotify_backend.c` after extracting the
   all-or-stale missing-watch reinstall policy into
   `backend_resync_reinstall_missing_watches()`. Comments now separate subtree
