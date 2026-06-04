@@ -26,6 +26,14 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`,
+  `tests/backend/test_self_move_identity_match.sh`, and
+  `tests/backend/test_self_move_identity_mismatch.sh` after wiring the
+  lost-scope queue to local IN_MOVE_SELF recovery failures. Comments now
+  explain which probe failures become delayed wide recovery, why successful
+  identity-match resync must not enqueue anything, and why WATCH_LOST_QUEUED is
+  diagnostic backend state rather than raw/core semantics.
 - refreshed `modules/inotify/include/inotify_backend.h`,
   `modules/inotify/src/inotify_backend.c`, and
   `tests/backend/test_lost_scope_queue.c` after adding the first lost-scope

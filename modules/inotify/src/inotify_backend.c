@@ -115,6 +115,13 @@ typedef enum backend_resync_scan_class {
  */
 typedef enum backend_resync_probe_result {
     /*
+     * The stale watch was repaired through the local old-path probe and can
+     * return to VALID. This is the only non-failure result and is never logged
+     * as WATCH_RESYNC_FAILED.
+     */
+    BACKEND_RESYNC_PROBE_VALID,
+
+    /*
      * The watcher table no longer has an entry for the watch descriptor that
      * produced the self-event. There is no stable path or saved identity to
      * probe, so recovery must stop immediately.
@@ -217,9 +224,21 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
 
-static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
-                                               int wd,
-                                               const char *reason);
+static backend_resync_probe_result_t backend_probe_stale_watch_identity(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *reason
+);
+
+static int backend_resync_probe_result_needs_lost_scope(
+    backend_resync_probe_result_t result
+);
+
+static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result);
 
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
@@ -994,7 +1013,19 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason)
 {
-    backend_probe_stale_watch_identity(ctx, wd, reason);
+    if (ctx == NULL || reason == NULL)
+        return;
+
+    backend_resync_probe_result_t result =
+        backend_probe_stale_watch_identity(ctx, wd, reason);
+
+    if (!backend_resync_probe_result_needs_lost_scope(result))
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, wd);
+
+    backend_enqueue_lost_scope(ctx, wd, path ? path : "", reason, result);
 }
 
 /*
@@ -1011,13 +1042,18 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
  * location. Only a matching identity can move the watch back to VALID.
  * Otherwise Alfred keeps the watch STALE and logs an explicit failure instead
  * of inventing raw Alfred events or semantic core events.
+ *
+ * Return: BACKEND_RESYNC_PROBE_VALID on local recovery, otherwise the failure
+ * classification already logged as WATCH_RESYNC_FAILED.
  */
-static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
-                                               int wd,
-                                               const char *reason)
+static backend_resync_probe_result_t backend_probe_stale_watch_identity(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *reason
+)
 {
     if (ctx == NULL || reason == NULL)
-        return;
+        return BACKEND_RESYNC_PROBE_MISSING_WATCH;
 
     backend_resync_probe_result_t result;
     int saved_errno = 0;
@@ -1032,7 +1068,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_MISSING_WATCH,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_MISSING_WATCH;
     }
 
     if (watcher_get_state(&ctx->runtime->watchers, wd) !=
@@ -1044,7 +1080,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_NOT_STALE,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_NOT_STALE;
     }
 
     logger_event(ctx->logger,
@@ -1063,7 +1099,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED;
     }
 
     struct stat st;
@@ -1082,7 +1118,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -1091,7 +1127,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    saved_errno);
-        return;
+        return result;
     }
 
     if (!S_ISDIR(st.st_mode)) {
@@ -1107,7 +1143,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -1116,7 +1152,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     dev_t stored_device_id;
@@ -1138,7 +1174,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -1147,7 +1183,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     if (stored_device_id != st.st_dev ||
@@ -1171,7 +1207,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -1180,7 +1216,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     /*
@@ -1200,7 +1236,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -1209,7 +1245,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_REINSTALL_FAILED;
     }
 
     if (watcher_set_state(&ctx->runtime->watchers,
@@ -1222,7 +1258,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_SET_VALID_FAILED;
     }
 
     logger_event(ctx->logger,
@@ -1230,6 +1266,94 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                  wd,
                  path,
                  reason);
+
+    return BACKEND_RESYNC_PROBE_VALID;
+}
+
+/*
+ * backend_resync_probe_result_needs_lost_scope - classify wide recovery need
+ * @result: outcome produced by backend_probe_stale_watch_identity()
+ *
+ * The lost-scope queue is for path-trust failures where saved filesystem
+ * identity can still help a later scan find the moved object in monitored
+ * roots. It is not used for programming/bookkeeping failures, missing identity,
+ * or reinstall failures where the old path was already proven trustworthy.
+ *
+ * Return: nonzero when @result should enqueue delayed lost-scope recovery.
+ */
+static int backend_resync_probe_result_needs_lost_scope(
+    backend_resync_probe_result_t result
+)
+{
+    return result == BACKEND_RESYNC_PROBE_PATH_UNREACHABLE ||
+           result == BACKEND_RESYNC_PROBE_NOT_DIRECTORY ||
+           result == BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH;
+}
+
+/*
+ * backend_enqueue_lost_scope - record one failed local recovery for later scan
+ * @ctx: narrowed backend context used by the resync path
+ * @wd: stale watch descriptor that could not be locally repaired
+ * @path: last known path for @wd, possibly no longer trustworthy
+ * @reason: kernel/backend reason that triggered the recovery attempt
+ * @result: local probe failure that made wide recovery necessary
+ *
+ * This helper is the bridge between the immediate self-event path and the
+ * future delayed scanner. It copies the saved filesystem identity from the
+ * watcher table and stores it with the stale path, but it does not scan yet and
+ * does not emit raw/core events. WATCH_LOST_QUEUED is diagnostic evidence that
+ * Alfred has recovery work queued, not proof that the directory was found.
+ */
+static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result)
+{
+    if (ctx == NULL || path == NULL || reason == NULL)
+        return;
+
+    dev_t device_id;
+    ino_t inode_id;
+
+    if (watcher_get_identity(&ctx->runtime->watchers,
+                             wd,
+                             &device_id,
+                             &inode_id) != 0) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s error=missing-identity",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    uint64_t now_ns = backend_now_ns();
+
+    if (backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                         wd,
+                                         path,
+                                         device_id,
+                                         inode_id,
+                                         reason,
+                                         now_ns,
+                                         now_ns) != 0) {
+        logger_error(ctx->logger,
+                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s error=%s",
+                     wd,
+                     path,
+                     reason,
+                     backend_resync_probe_result_name(result));
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s pending=%zu",
+                 wd,
+                 path,
+                 reason,
+                 backend_resync_probe_result_name(result),
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
 }
 
 /*
@@ -1685,6 +1809,8 @@ static const char *backend_resync_probe_result_name(
 )
 {
     switch (result) {
+    case BACKEND_RESYNC_PROBE_VALID:
+        return "valid";
     case BACKEND_RESYNC_PROBE_MISSING_WATCH:
         return "missing-watch";
     case BACKEND_RESYNC_PROBE_NOT_STALE:

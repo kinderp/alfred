@@ -42,6 +42,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_self_events_root_watch.sh`,
+  `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: collegato l'enqueue
+  della `lost_scope_queue` ai fallimenti locali `IN_MOVE_SELF` che conservano
+  identita' utile (`path-unreachable`, `not-directory`,
+  `identity-mismatch`). Il nuovo log reale `WATCH_LOST_QUEUED` documenta che
+  Alfred ha accodato recovery ampia posticipata senza emettere raw/core event.
 - `inotify_backend.h`, `inotify_backend.c`, `test_lost_scope_queue.c`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
   `21-roadmap-scanner-resync.md`: implementato e documentato il primo

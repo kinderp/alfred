@@ -12,6 +12,7 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_identity_mismatch_moved}"
 # - WATCH_STALE ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_BEGIN ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_FAILED ... reason=IN_MOVE_SELF error=identity-mismatch
+# - WATCH_LOST_QUEUED ... reason=IN_MOVE_SELF error=identity-mismatch
 #
 # Forbidden events:
 # - WATCH_RESYNC_END ... result=valid
@@ -25,7 +26,8 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_identity_mismatch_moved}"
 # The watched root is moved away, then a new directory is created at the old
 # path. The path is reachable, but its st_dev/st_ino identity differs from the
 # original watched object. Alfred must keep the watch STALE, skip subtree scan,
-# and avoid inventing semantic move/create events.
+# enqueue delayed wide recovery by saved identity, and avoid inventing semantic
+# move/create events.
 
 source ../core/test_lib.sh
 
@@ -83,12 +85,19 @@ assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identi
 # watched directory. Alfred must refuse to trust it and keep the watch stale.
 assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch"
 
-# The failure must happen after the stale marker and resync begin marker, which
-# documents the guarded recovery order for this negative branch.
+# Identity mismatch still leaves Alfred with the original saved identity, so the
+# backend queues delayed wide recovery instead of dropping the scope forever.
+assert_contains "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch pending=1"
+
+# The failure and queue marker must happen after the stale marker and resync
+# begin marker, which documents the guarded recovery order for this negative
+# branch.
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF"
 assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch"
+assert_order "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch" \
+             "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_identity_mismatch reason=IN_MOVE_SELF error=identity-mismatch pending=1"
 
 # Identity mismatch stops recovery before subtree scan and before VALID. Alfred
 # must not watch the new directory just because it reused the old path.

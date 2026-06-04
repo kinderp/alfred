@@ -2739,29 +2739,41 @@ gestiscono una FIFO interna, con crescita del buffer circolare e copie stabili
 di path/reason. Il test `tests/backend/test_lost_scope_queue.c` fissa questo
 contratto senza leggere eventi kernel e senza produrre log runtime.
 
+Il secondo micro-step collega l'enqueue al runtime: quando `IN_MOVE_SELF` porta
+a `WATCH_RESYNC_FAILED` con `error=path-unreachable`, `error=not-directory` o
+`error=identity-mismatch`, il backend conserva nella queue `wd`, vecchio path,
+identita' `(st_dev, st_ino)`, motivo e timestamp monotono. Il log
+`WATCH_LOST_QUEUED ... pending=K` dice solo che Alfred ha registrato lavoro di
+recovery ampia; non significa che la directory sia stata ritrovata. Non vengono
+prodotti raw Alfred o eventi semantici del core.
+
+Non vengono invece accodati errori di bookkeeping, `missing-watch`,
+`not-stale`, `missing-identity` o `reinstall-failed`: in quei casi manca
+evidenza utile per cercare un oggetto perso, oppure il problema non e' un path
+perduto ma una copertura watch incompleta su uno scope gia' provato affidabile.
+
 Restano i passi successivi:
 
-1. enqueue quando `IN_MOVE_SELF` fallisce il probe locale
-2. aggiungere una funzione di recovery sincrona chiamabile dai test
-3. cercare identita' dentro una root monitorata
-4. aggiornare path del watch principale e prefissi dei figli
-5. eseguire scan strict e reinstall all-or-stale
-6. solo dopo aggiungere worker thread, debounce e backoff
+1. aggiungere una recovery sincrona richiamabile dai test
+2. cercare identita' dentro una root monitorata
+3. aggiornare path del watch principale e prefissi dei figli
+4. eseguire scan strict e reinstall all-or-stale
+5. solo dopo aggiungere worker thread, debounce e backoff
 
-#### Log futuri proposti
+#### Log di lost-scope recovery
 
-Questi log non sono ancora implementati. Servono a fissare la direzione del
-contratto diagnostico:
+`WATCH_LOST_QUEUED` e' implementato. Gli altri log restano futuri e servono a
+fissare la direzione del contratto diagnostico:
 
-| Log futuro | Significato |
-| --- | --- |
-| `WATCH_LOST_QUEUED wd=N path=P reason=R` | il watch e' stato inserito nella coda di recovery ampia |
-| `WATCH_LOST_SCAN_BEGIN roots=K pending=N` | parte una scansione batch degli scope monitorati |
-| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q` | trovata una directory con la stessa identita' del watch perso |
-| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | aggiornati i path del subtree watched |
-| `WATCH_LOST_NOT_FOUND wd=N path=P retry=N` | identita' non trovata negli scope consentiti |
-| `WATCH_LOST_RECOVERY_FAILED wd=N path=P error=E` | recovery ampia fallita; il watch resta `STALE` |
-| `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | recovery ampia completata e subtree tornata affidabile |
+| Log | Stato | Significato |
+| --- | --- | --- |
+| `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | implementato | il watch e' stato inserito nella coda di recovery ampia |
+| `WATCH_LOST_SCAN_BEGIN roots=K pending=N` | futuro | parte una scansione batch degli scope monitorati |
+| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q` | futuro | trovata una directory con la stessa identita' del watch perso |
+| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | futuro | aggiornati i path del subtree watched |
+| `WATCH_LOST_NOT_FOUND wd=N path=P retry=N` | futuro | identita' non trovata negli scope consentiti |
+| `WATCH_LOST_RECOVERY_FAILED wd=N path=P error=E` | futuro | recovery ampia fallita; il watch resta `STALE` |
+| `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | futuro | recovery ampia completata e subtree tornata affidabile |
 
 #### Decisione per Alfred
 
@@ -2819,12 +2831,10 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. collegare l'enqueue della `lost_scope_queue` al ramo `IN_MOVE_SELF` che non
-   riesce a tornare `VALID` con il probe locale
-2. aggiungere una recovery sincrona richiamabile dai test per cercare una
+1. aggiungere una recovery sincrona richiamabile dai test per cercare una
    identita' dentro una root monitorata
-3. solo dopo valutare worker thread, debounce, retry e backoff
-4. rimandare output CLI e JSON a un passo successivo
+2. solo dopo valutare worker thread, debounce, retry e backoff
+3. rimandare output CLI e JSON a un passo successivo
 
 Questo approccio evita di mescolare subito tre problemi:
 

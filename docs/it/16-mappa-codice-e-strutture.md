@@ -578,7 +578,7 @@ Campi:
 | --- | --- | --- | --- |
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
 | `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
-| `lost_scopes` | coda FIFO degli scope stale che richiederanno una recovery ampia posticipata | `backend_lost_scope_queue_init()`, `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_destroy()` | futuro worker/resync scanner |
+| `lost_scopes` | coda FIFO degli scope stale che richiederanno una recovery ampia posticipata | `backend_lost_scope_queue_init()`, `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, futuro worker/resync scanner |
 
 `lost_scopes` non contiene eventi Alfred. Contiene debito tecnico del backend:
 "ho perso fiducia nel path di questo `wd`, ma ho ancora identita' filesystem
@@ -605,7 +605,7 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `items` | buffer circolare di entry da recuperare | `backend_lost_scope_queue_init()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()` |
-| `count` | numero di scope in attesa di recovery | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, futuro scheduler resync |
+| `count` | numero di scope in attesa di recovery | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, log `WATCH_LOST_QUEUED`, futuro scheduler resync |
 | `capacity` | numero di slot allocati nel buffer | `backend_lost_scope_queue_init()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()` |
 | `head` | indice del prossimo elemento FIFO da estrarre | `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()` |
 
@@ -635,14 +635,14 @@ Campi:
 
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
-| `wd` | watch descriptor che ha perso affidabilita' del path | `backend_lost_scope_queue_enqueue()` | futuro scanner/recovery |
-| `device_id` | `st_dev` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | futuro match per identita' |
-| `inode_id` | `st_ino` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | futuro match per identita' |
-| `first_seen_ns` | timestamp monotono del primo enqueue | `backend_lost_scope_queue_enqueue()` | futuro debounce e diagnostica |
+| `wd` | watch descriptor che ha perso affidabilita' del path | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro scanner/recovery |
+| `device_id` | `st_dev` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro match per identita' |
+| `inode_id` | `st_ino` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro match per identita' |
+| `first_seen_ns` | timestamp monotono del primo enqueue | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro debounce e diagnostica |
 | `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()` | futuro scheduler/backoff |
 | `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()` | futuro retry/backoff |
-| `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | diagnostica e futuro aggiornamento prefissi |
-| `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | diagnostica e policy futura |
+| `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e futuro aggiornamento prefissi |
+| `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e policy futura |
 
 `old_path` e `reason` sono copiati nella entry. Questa scelta evita che la
 recovery posticipata dipenda da puntatori presi dalla watcher table o da stringhe

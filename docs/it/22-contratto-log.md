@@ -247,6 +247,7 @@ diventato `STALE`.
 | `WATCH_RESYNC_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante il resync | la riparazione completa non e' riuscita | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
 | `WATCH_RESYNC_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato; indica cleanup interno del tentativo di resync |
 | `WATCH_RESYNC_FAILED wd=N path=P reason=R error=E` | recovery interrotta o non affidabile | il watch resta `STALE`; `E` spiega il ramo fallito | non e' evento utente; e' diagnostica backend |
+| `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |
 | `WATCH_RESYNC_END wd=N path=P reason=R result=valid` | recovery riuscita | tutti i controlli necessari sono passati e il watch torna `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 
 ### Errori di `WATCH_RESYNC_FAILED`
