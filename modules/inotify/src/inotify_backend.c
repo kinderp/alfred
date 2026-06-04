@@ -534,6 +534,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         const char *parent =
             watcher_get_path(&ctx->runtime->watchers, ev->wd);
+        int stale_watch =
+            watcher_is_stale(&ctx->runtime->watchers, ev->wd);
 
         backend_raw_event_name_from_mask(ev->mask,
                                          mask_str,
@@ -549,7 +551,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
         char full_path[PATH_MAX];
         const alfred_raw_event_t *raw_ptr = NULL;
 
-        if (parent != NULL) {
+        if (parent != NULL && !stale_watch) {
             if (inotify_adapter_build_raw(ev,
                                           parent,
                                           full_path,
@@ -562,6 +564,20 @@ static int backend_poll(inotify_backend_context_t *ctx,
                              "failed to build core raw event wd=%d",
                              ev->wd);
             }
+        }
+        else if (parent != NULL && stale_watch) {
+            /*
+             * A stale wd may still receive kernel events because inotify watches
+             * the filesystem object, not the textual path Alfred saved earlier.
+             * Until resync proves a trustworthy path again, forwarding a raw
+             * event would give the core a path that may now be false.
+             */
+            logger_event(ctx->logger,
+                         "WATCH_STALE_EVENT_DROPPED wd=%d path=%s mask=%s name=%s",
+                         ev->wd,
+                         parent,
+                         mask_str,
+                         ev->len ? ev->name : "");
         }
 
         int callback_status =
@@ -1513,6 +1529,9 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
         watcher_get_path(&ctx->runtime->watchers, ev->wd);
 
     if (base == NULL)
+        return;
+
+    if (watcher_is_stale(&ctx->runtime->watchers, ev->wd))
         return;
 
     char full[PATH_MAX];

@@ -2216,6 +2216,230 @@ path raggiungibile + identita' uguale   -> WATCH_RESYNC_END / VALID
 path raggiungibile + identita' diversa -> WATCH_RESYNC_FAILED / STALE
 ```
 
+#### Casi reali con comandi Linux
+
+Il punto piu' facile da fraintendere e' questo: quando arriva `IN_MOVE_SELF`,
+Alfred non cerca in tutto il filesystem una directory con lo stesso
+`(st_dev, st_ino)`. Non parte da `/`, non parte dalla root monitorata e non fa
+una ricerca ricorsiva della destinazione. `IN_MOVE_SELF` non contiene il nuovo
+path, quindi il backend non puo' sapere dove l'oggetto sia stato spostato.
+
+La verifica implementata e' molto piu' stretta:
+
+```text
+1. prendi il wd dell'evento IN_MOVE_SELF
+2. leggi dalla watcher table il vecchio path associato a quel wd
+3. esegui stat(old_path)
+4. confronta st_dev/st_ino correnti con quelli salvati all'installazione
+```
+
+In codice, la parte importante e':
+
+```c
+const char *path = watcher_get_path(&ctx->runtime->watchers, wd);
+stat(path, &st);
+watcher_get_identity(&ctx->runtime->watchers,
+                     wd,
+                     &stored_device_id,
+                     &stored_inode_id);
+```
+
+Quindi Alfred risponde solo a questa domanda:
+
+```text
+Il vecchio path salvato per questo wd punta ancora allo stesso oggetto?
+```
+
+Non risponde ancora a questa domanda:
+
+```text
+Dove e' finita la directory se e' stata spostata altrove?
+```
+
+Questa scelta e' intenzionale. Cercare la directory spostata partendo da `/`
+e confrontando tutti gli inode sarebbe una recovery globale, non il probe
+locale di un singolo watch. Sarebbe costosa, dipenderebbe dai permessi, potrebbe
+uscire dallo scope scelto dall'utente, sarebbe fragile con namespace, container,
+chroot, bind mount e mount diversi, e potrebbe produrre risultati manipolabili
+da un filesystem che cambia mentre Alfred cammina. Per un runtime security tool,
+inventare una nuova destinazione tramite ricerca globale e' piu' rischioso che
+ammettere che il path non e' piu' affidabile.
+
+Un altro punto importante: il watch kernel puo' continuare a esistere anche se
+il path testuale e' cambiato. Inotify osserva l'oggetto filesystem associato al
+watch descriptor, non la stringa del path salvata da Alfred. Dopo:
+
+```bash
+mv /tmp/demo/watched /tmp/demo/renamed
+touch /tmp/demo/renamed/file.txt
+```
+
+il kernel puo' ancora inviare un evento `IN_CREATE` con lo stesso `wd` della
+vecchia directory osservata. Il problema e' che Alfred ha ancora in tabella:
+
+```text
+wd=7 -> /tmp/demo/watched
+```
+
+ma il path reale dell'oggetto e':
+
+```text
+/tmp/demo/renamed
+```
+
+Se Alfred inoltrasse quel raw event al core usando il vecchio mapping, il core
+potrebbe produrre:
+
+```text
+FILE_CREATED path=/tmp/demo/watched/file.txt
+```
+
+che sarebbe falso. Per questo la policy e':
+
+```text
+wd VALID  -> raw/core event consentito
+wd STALE  -> log diagnostico consentito, raw/core event bloccato
+```
+
+Il backend logga quindi un evento diagnostico come:
+
+```text
+WATCH_STALE_EVENT_DROPPED wd=7 path=/tmp/demo/watched mask=IN_CREATE name=file.txt
+```
+
+Questo log dice: "il kernel ha continuato a inviare un fatto per il vecchio
+`wd`, ma Alfred non lo ha inoltrato al core perche' il path salvato non e'
+affidabile". Quando il resync riesce e il watch torna `VALID`, gli eventi
+possono di nuovo essere trasformati in raw/core con un path affidabile.
+
+Caso positivo: la directory viene spostata via e poi lo stesso oggetto torna al
+vecchio path.
+
+```bash
+mkdir -p /tmp/demo/watched/sub
+
+# Alfred sta osservando /tmp/demo/watched.
+
+old_id=$(stat -c '%d:%i' /tmp/demo/watched)
+
+mv /tmp/demo/watched /tmp/demo/watched.tmp
+mv /tmp/demo/watched.tmp /tmp/demo/watched
+
+new_id=$(stat -c '%d:%i' /tmp/demo/watched)
+printf 'old=%s new=%s\n' "$old_id" "$new_id"
+```
+
+Se `old_id` e `new_id` coincidono, il path `/tmp/demo/watched` e' tornato a
+puntare allo stesso oggetto filesystem. Questo e' il caso reale in cui Alfred
+puo' passare:
+
+```text
+VALID -> STALE -> RESYNCING -> VALID
+```
+
+Puo' accadere con script che spostano temporaneamente una directory e poi la
+rimettono al suo posto:
+
+```bash
+mv /srv/project /srv/project.offline
+do_something
+mv /srv/project.offline /srv/project
+```
+
+oppure con operazioni di deploy, manutenzione o test che usano rename
+temporanei:
+
+```bash
+mv app app.previous
+mv app.previous app
+```
+
+Il caso e' raro nel normale uso manuale, ma e' importante per il backend perche'
+dimostra una cosa precisa: il vecchio path puo' tornare affidabile solo se
+identifica lo stesso oggetto, non solo perche' esiste di nuovo.
+
+Caso negativo: la directory viene spostata via e il vecchio path resta
+inesistente.
+
+```bash
+mkdir -p /tmp/demo/watched
+
+# Alfred sta osservando /tmp/demo/watched.
+
+mv /tmp/demo/watched /tmp/demo/elsewhere
+stat /tmp/demo/watched
+```
+
+Qui `stat("/tmp/demo/watched")` fallisce. Alfred non sa che la directory ora si
+chiama `/tmp/demo/elsewhere`, perche' `IN_MOVE_SELF` non contiene la
+destinazione. Il watch resta:
+
+```text
+VALID -> STALE -> RESYNCING -> STALE
+```
+
+con diagnostica simile a:
+
+```text
+WATCH_RESYNC_FAILED ... error=path-unreachable
+```
+
+Caso negativo: il vecchio path viene riusato da una directory nuova.
+
+```bash
+mkdir -p /tmp/demo/watched
+
+# Alfred sta osservando /tmp/demo/watched.
+
+old_id=$(stat -c '%d:%i' /tmp/demo/watched)
+
+mv /tmp/demo/watched /tmp/demo/elsewhere
+mkdir /tmp/demo/watched
+
+new_id=$(stat -c '%d:%i' /tmp/demo/watched)
+printf 'old=%s new=%s\n' "$old_id" "$new_id"
+```
+
+Qui `stat("/tmp/demo/watched")` riesce, ma `new_id` e' diverso da `old_id`.
+Senza confronto di identita' Alfred potrebbe sbagliare e fidarsi di una
+directory nuova solo perche' ha lo stesso nome. Invece lascia il watch `STALE`
+e logga:
+
+```text
+WATCH_RESYNC_FAILED ... error=identity-mismatch
+```
+
+Caso negativo: l'identita' del vecchio path coincide, ma la riparazione dei
+watch figli non e' completa.
+
+```bash
+mkdir -p /tmp/demo/watched/a /tmp/demo/watched/b
+
+# Alfred sta osservando /tmp/demo/watched.
+
+mv /tmp/demo/watched /tmp/demo/watched.tmp
+mv /tmp/demo/watched.tmp /tmp/demo/watched
+
+# Durante lo scan strict o la reinstallazione dei watch figli, una directory
+# figlia sparisce o watch_manager_add() fallisce.
+```
+
+In questo caso il probe identita' e' positivo, ma Alfred non torna comunque
+`VALID`: il resync e' all-or-stale. Se lo scan e' parziale, oppure se anche un
+solo missing watch non viene reinstallato, il parent resta `STALE`.
+
+La regola finale e':
+
+```text
+old path non esiste                         -> STALE
+old path esiste ma identita' diversa        -> STALE
+old path esiste e identita' uguale,
+ma scan/reinstallazione non completa        -> STALE
+old path esiste e identita' uguale,
+scan strict completo e watch mancanti ok    -> VALID
+evento kernel su wd ancora STALE            -> solo diagnostica, niente raw/core
+```
+
 `tests/backend/test_resync_reinstall_policy.c` copre il ramo di rollback che
 sarebbe fragile da forzare con filesystem reale:
 

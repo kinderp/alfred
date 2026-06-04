@@ -230,6 +230,7 @@ sono eventi semantici del core.
 | `WATCH_ADDED wd=N path=P` | `watch_manager_add()` | dopo un `inotify_add_watch()` riuscito | Alfred sta osservando `P` con il watch descriptor `N` | non significa `DIR_CREATED`; una directory puo' esistere gia' e ricevere solo ora un watch | `test_watch_added_create_dir.sh`, `test_recursive_slow_watch_tree.sh` |
 | `WATCH_REMOVED wd=N path=P` | `watch_manager_remove()` | dopo rimozione esplicita o cleanup da `IN_IGNORED` | Alfred non osserva piu' `P` con quel watch | non significa `DIR_DELETED`; la rimozione del watch e la cancellazione del path sono fatti diversi | `test_watch_removed_delete_dir.sh`, `test_self_events_root_watch.sh` |
 | `WATCH_STALE wd=N path=P reason=R` | backend self-event handling | dopo `IN_MOVE_SELF` o `IN_DELETE_SELF` sul path osservato direttamente | il mapping `wd -> path` non e' piu' affidabile e non va usato come se fosse valido | non significa delete, move o rename semantico; e' stato interno del backend | `test_self_events_root_watch.sh`, `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh` |
+| `WATCH_STALE_EVENT_DROPPED wd=N path=P mask=M name=Q` | `backend_poll()` | il kernel invia un evento per un `wd` ancora attivo ma marcato `STALE` | Alfred ha visto un fatto kernel, ma non lo inoltra al core perche' `P` non e' piu' affidabile | non significa che l'evento non sia accaduto; significa che Alfred non puo' costruire un raw/core event con path corretto | `test_self_events_root_watch.sh` |
 
 ## Diagnostica backend del resync
 

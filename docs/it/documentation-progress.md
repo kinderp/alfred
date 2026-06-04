@@ -42,6 +42,17 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_self_events_root_watch.sh`,
+  `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: fissata la policy per eventi kernel ricevuti su un
+  `wd` gia' `STALE`. Il backend mantiene il raw log diagnostico kernel, ma non
+  inoltra raw/core event con path non affidabile; registra invece
+  `WATCH_STALE_EVENT_DROPPED`.
+- `21-roadmap-scanner-resync.md`: aggiunti casi reali con comandi Linux per il
+  ramo `IN_MOVE_SELF` e il ritorno a `VALID`. La documentazione chiarisce che
+  Alfred non cerca ricorsivamente una directory con lo stesso `(st_dev, st_ino)`,
+  ma verifica solo il vecchio path salvato per il `wd`; lo scan della subtree
+  parte solo dopo identita' confermata.
 - `fs_scanner.h`, `fs_scanner.c`, `inotify_backend.c`,
   `21-roadmap-scanner-resync.md` e `14-scenari-test.md`: corretto il contratto
   dello scanner emerso dalla review PR #7. Gli early stop non devono perdere

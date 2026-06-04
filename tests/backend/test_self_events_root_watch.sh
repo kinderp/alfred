@@ -29,6 +29,7 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_self_events_moved}"
 # - WATCH_STALE ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_BEGIN ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_FAILED ... reason=IN_MOVE_SELF
+# - WATCH_STALE_EVENT_DROPPED ... name=file-after-move.txt
 #
 # Forbidden events:
 # - DIR_RELOCATED
@@ -36,12 +37,15 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_self_events_moved}"
 # - DIR_RENAMED
 # - FILE_DELETED path=*/file-before-move.txt
 # - DIR_DELETED path=*/dir-before-move
+# - FILE_CREATED path=*/file-after-move.txt
 # - core seq=
 #
 # Meaning:
 # Moving the watched root away gives Alfred no destination path. Alfred may
 # mark the watch stale and attempt resync, but it must not invent relocation,
-# move, rename, or child delete semantics.
+# move, rename, or child delete semantics. If the kernel later reports child
+# events on the stale wd, Alfred logs that it dropped them instead of forwarding
+# raw/core events with the old untrusted path.
 
 source ../core/test_lib.sh
 trap 'rm -rf "$MOVE_TARGET"; cleanup' EXIT
@@ -113,6 +117,13 @@ sleep 1
 mv "$TEST_ROOT" "$MOVE_TARGET"
 sleep 1
 
+# The inotify watch can keep observing the moved directory object. This create
+# happens at the real new path, but Alfred only knows the old wd -> path mapping,
+# which is already STALE. The backend should log a diagnostic drop instead of
+# forwarding a raw/core event with the old path.
+touch "$MOVE_TARGET/file-after-move.txt"
+sleep 1
+
 # Moving the watched root emits IN_MOVE_SELF. Unlike child IN_MOVED_FROM/TO,
 # this self-event does not include the destination path.
 if ! grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_self_events name=" \
@@ -129,10 +140,13 @@ fi
 assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_contains "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/alfred_backend_test_self_events mask=.*IN_CREATE .* name=file-after-move.txt"
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_order "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
+             "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/alfred_backend_test_self_events mask=.*IN_CREATE .* name=file-after-move.txt"
 
 # IN_MOVE_SELF has no new path, so Alfred must not synthesize semantic
 # relocation/move/rename events for the watched root.
@@ -156,6 +170,18 @@ fi
 # state, not a semantic delete of every child.
 if grep -Eq "DIR_DELETED path=.*/dir-before-move" "$LOG_FILE"; then
     echo "FAIL: root move unexpectedly produced child dir delete"
+    echo "----- events.log -----"
+    cat "$LOG_FILE" || true
+    echo "----- raw.log -----"
+    cat ./raw.log || true
+    exit 1
+fi
+
+# The kernel may report this child create on the stale wd, but Alfred cannot
+# reconstruct the new path. Reporting FILE_CREATED with the old path would be a
+# false semantic event.
+if grep -Eq "FILE_CREATED path=.*/file-after-move.txt" "$LOG_FILE"; then
+    echo "FAIL: stale moved root unexpectedly produced child file create"
     echo "----- events.log -----"
     cat "$LOG_FILE" || true
     echo "----- raw.log -----"
