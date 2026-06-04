@@ -2807,13 +2807,44 @@ Questa scelta evita di buttare via il lavoro fatto su identita' e stati, ma lo
 ridimensiona: il resync locale e' una guardia conservativa e un acceleratore per
 casi piccoli, non la soluzione primaria per ritrovare alberi spostati.
 
+#### Recovery sincrona testabile
+
+Il micro-step successivo e' implementato con
+`backend_lost_scope_recover_next()`. La funzione consuma una entry dalla
+`lost_scope_queue`, scansiona una sola root passata dal chiamante e cerca una
+directory con la stessa identita' `(st_dev, st_ino)` salvata nella entry.
+
+Questo passo e' volutamente read-only rispetto alla watcher table:
+
+- non aggiorna il path del watch principale
+- non aggiorna prefissi dei figli
+- non installa nuovi watch
+- non emette raw Alfred o eventi core
+
+Il suo contratto e' solo:
+
+```text
+entry in queue + root monitorata
+    -> WATCH_LOST_SCAN_BEGIN
+    -> WATCH_LOST_FOUND / WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
+```
+
+Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
+
+- una directory rinominata viene ritrovata sotto la root tramite identita'
+- una directory cancellata non viene trovata e non produce eventi semantici
+
+Questo e' il punto minimo che ci serve prima di progettare l'aggiornamento dei
+path e dei prefissi. Prima Alfred deve sapere ritrovare un oggetto. Solo dopo
+puo' decidere se e come ricollegare watch e subtree.
+
 Restano i passi successivi:
 
-1. aggiungere una recovery sincrona richiamabile dai test
-2. cercare identita' dentro una root monitorata
-3. aggiornare path del watch principale e prefissi dei figli
-4. eseguire scan strict e reinstall all-or-stale
-5. solo dopo aggiungere worker thread, debounce e backoff
+1. aggiornare path del watch principale quando `WATCH_LOST_FOUND` individua la
+   nuova posizione
+2. aggiornare i prefissi dei figli watched sotto la directory ritrovata
+3. eseguire scan strict e reinstall all-or-stale
+4. solo dopo aggiungere worker thread, debounce e backoff
 
 #### Log di lost-scope recovery
 
@@ -2823,11 +2854,11 @@ fissare la direzione del contratto diagnostico:
 | Log | Stato | Significato |
 | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | implementato | il watch e' stato inserito nella coda di recovery ampia |
-| `WATCH_LOST_SCAN_BEGIN roots=K pending=N` | futuro | parte una scansione batch degli scope monitorati |
-| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q` | futuro | trovata una directory con la stessa identita' del watch perso |
+| `WATCH_LOST_SCAN_BEGIN root=R pending=N` | implementato | parte una scansione sincrona su una root monitorata |
+| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | implementato | trovata una directory con la stessa identita' del watch perso |
 | `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | futuro | aggiornati i path del subtree watched |
-| `WATCH_LOST_NOT_FOUND wd=N path=P retry=N` | futuro | identita' non trovata negli scope consentiti |
-| `WATCH_LOST_RECOVERY_FAILED wd=N path=P error=E` | futuro | recovery ampia fallita; il watch resta `STALE` |
+| `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
+| `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
 | `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | futuro | recovery ampia completata e subtree tornata affidabile |
 
 #### Decisione per Alfred

@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_lost_scope_recovery.c`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: implementata e
+  documentata la prima recovery sincrona read-only della `lost_scope_queue`.
+  Il backend puo' consumare una entry, scansionare una root monitorata e
+  cercare la stessa identita' `(st_dev, st_ino)`, loggando
+  `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_NOT_FOUND` o
+  `WATCH_LOST_RECOVERY_FAILED` senza aggiornare ancora path, prefissi o watch.
 - `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: ampliata la
   spiegazione didattica dei fallimenti `WATCH_RESYNC_FAILED`. La
   documentazione ora distingue errori che accodano lost-scope recovery

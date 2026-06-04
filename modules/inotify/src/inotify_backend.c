@@ -105,6 +105,20 @@ typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
 } backend_resync_scan_class_t;
 
+typedef enum backend_lost_scope_recovery_result {
+    BACKEND_LOST_SCOPE_RECOVERY_EMPTY,
+    BACKEND_LOST_SCOPE_RECOVERY_FOUND,
+    BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND,
+    BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED
+} backend_lost_scope_recovery_result_t;
+
+typedef struct backend_lost_scope_scan_context {
+    const inotify_lost_scope_entry_t *entry;
+    char *found_path;
+    size_t found_path_size;
+    int found;
+} backend_lost_scope_scan_context_t;
+
 /*
  * backend_resync_probe_result - internal outcomes of stale-watch recovery
  *
@@ -314,6 +328,15 @@ static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_pop(
 static int backend_lost_scope_queue_expand(
     inotify_lost_scope_queue_t *queue
 );
+
+static BACKEND_MAYBE_UNUSED backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
+                                const char *root,
+                                char *found_path,
+                                size_t found_path_size);
+
+static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
+                                                void *userdata);
 
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
@@ -559,6 +582,139 @@ static int backend_lost_scope_queue_expand(
     queue->head = 0;
 
     return 0;
+}
+
+/*
+ * backend_lost_scope_recover_next - synchronously search one queued identity
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ *
+ * This helper is intentionally synchronous and limited. It consumes one queued
+ * lost scope, scans one caller-provided root, and reports whether a directory
+ * with the saved (st_dev, st_ino) identity was found. It does not update the
+ * watcher table, does not rewrite child prefixes, and does not install watches.
+ * Those mutations require separate all-or-stale policy and will be added only
+ * after the identity search contract is stable.
+ *
+ * Return: recovery result describing empty queue, found, not found, or scan
+ * failure.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
+                                const char *root,
+                                char *found_path,
+                                size_t found_path_size)
+{
+    if (ctx == NULL || root == NULL || found_path == NULL ||
+        found_path_size == 0) {
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+    }
+
+    inotify_lost_scope_entry_t entry;
+
+    if (backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                     &entry) != 0) {
+        return BACKEND_LOST_SCOPE_RECOVERY_EMPTY;
+    }
+
+    found_path[0] = '\0';
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
+                 root,
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+
+    backend_lost_scope_scan_context_t scan_context;
+
+    memset(&scan_context, 0, sizeof(scan_context));
+    scan_context.entry = &entry;
+    scan_context.found_path = found_path;
+    scan_context.found_path_size = found_path_size;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_dirs = 1;
+    opts.include_files = 0;
+    opts.include_symlinks = 0;
+    opts.include_other = 0;
+    opts.follow_symlinks = 0;
+    opts.strict_child_errors = 1;
+    opts.emit_root = 1;
+
+    error_t rc =
+        fs_scan_tree(root,
+                     &opts,
+                     backend_lost_scope_scan_for_identity,
+                     &scan_context);
+
+    if (rc != ERR_OK) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=scan-failed",
+                     entry.wd,
+                     entry.old_path,
+                     entry.reason);
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+    }
+
+    if (scan_context.found) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
+                     entry.wd,
+                     entry.old_path,
+                     found_path,
+                     entry.reason);
+        return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
+                 entry.wd,
+                 entry.old_path,
+                 entry.reason,
+                 entry.retry_count);
+    return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
+}
+
+/*
+ * backend_lost_scope_scan_for_identity - scanner callback for one lost scope
+ * @entry: filesystem entry reported by fs_scan_tree()
+ * @userdata: backend_lost_scope_scan_context_t
+ *
+ * The delayed recovery search compares filesystem identity, not names. A path
+ * can be renamed or reused; the saved (st_dev, st_ino) pair is the evidence
+ * that lets Alfred recognize the same directory at a new path. The callback
+ * stops the scan on the first matching directory.
+ *
+ * Return: nonzero to stop after a match, zero to keep scanning.
+ */
+static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
+                                                void *userdata)
+{
+    backend_lost_scope_scan_context_t *scan_context = userdata;
+
+    if (entry == NULL || entry->st == NULL || scan_context == NULL ||
+        scan_context->entry == NULL) {
+        return 0;
+    }
+
+    if (entry->type != FS_SCAN_DIR)
+        return 0;
+
+    if (entry->st->st_dev != scan_context->entry->device_id ||
+        entry->st->st_ino != scan_context->entry->inode_id) {
+        return 0;
+    }
+
+    snprintf(scan_context->found_path,
+             scan_context->found_path_size,
+             "%s",
+             entry->path);
+    scan_context->found = 1;
+
+    return 1;
 }
 
 /* ============================================================================

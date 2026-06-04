@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` and added
+  `tests/backend/test_lost_scope_recovery.c` after introducing synchronous
+  lost-scope identity search. Comments document why the helper consumes one
+  queued entry, why it scans exactly one caller-provided root, and why this
+  micro-step reports FOUND/NOT_FOUND without updating watcher paths or
+  reinstalling watches yet.
 - refreshed `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_self_events_root_watch.sh`,
   `tests/backend/test_self_move_identity_match.sh`, and
