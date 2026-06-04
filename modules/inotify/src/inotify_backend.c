@@ -38,6 +38,12 @@
 #define EVENT_BUFFER_SIZE 65536
 #endif
 
+#if defined(__GNUC__)
+#define BACKEND_MAYBE_UNUSED __attribute__((unused))
+#else
+#define BACKEND_MAYBE_UNUSED
+#endif
+
 /* ============================================================================
  * Local Types
  * ========================================================================== */
@@ -259,6 +265,37 @@ static const char *backend_resync_probe_result_name(
     backend_resync_probe_result_t result
 );
 
+static int backend_lost_scope_queue_init(inotify_lost_scope_queue_t *queue,
+                                         size_t capacity);
+
+static void backend_lost_scope_queue_destroy(
+    inotify_lost_scope_queue_t *queue
+);
+
+static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_queue_count(
+    const inotify_lost_scope_queue_t *queue
+);
+
+static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_enqueue(
+    inotify_lost_scope_queue_t *queue,
+    int wd,
+    const char *old_path,
+    dev_t device_id,
+    ino_t inode_id,
+    const char *reason,
+    uint64_t first_seen_ns,
+    uint64_t retry_after_ns
+);
+
+static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_pop(
+    inotify_lost_scope_queue_t *queue,
+    inotify_lost_scope_entry_t *out
+);
+
+static int backend_lost_scope_queue_expand(
+    inotify_lost_scope_queue_t *queue
+);
+
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
                                        const char *path,
@@ -287,6 +324,223 @@ static const backend_resync_watch_ops_t BACKEND_RESYNC_WATCH_MANAGER_OPS = {
     .add = backend_resync_watch_manager_add,
     .remove = backend_resync_watch_manager_remove
 };
+
+/* ============================================================================
+ * Lost Scope Queue
+ * ========================================================================== */
+
+/*
+ * backend_lost_scope_queue_init - initialize delayed recovery storage
+ * @queue: queue object owned by inotify_backend_t
+ * @capacity: initial slot count, or 0 for the default
+ *
+ * The lost-scope queue stores stale watched scopes that cannot be repaired by
+ * the immediate old-path identity probe. This first implementation is only a
+ * single-threaded FIFO data structure; later code can add debounce, backoff,
+ * worker-thread ownership, and monitored-root scanning on top of the same
+ * recorded evidence.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_init(inotify_lost_scope_queue_t *queue,
+                                         size_t capacity)
+{
+    if (queue == NULL)
+        return -1;
+
+    memset(queue, 0, sizeof(*queue));
+
+    if (capacity == 0)
+        capacity = 8;
+
+    queue->items =
+        calloc(capacity, sizeof(inotify_lost_scope_entry_t));
+
+    if (queue->items == NULL)
+        return -1;
+
+    queue->capacity = capacity;
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_destroy - release delayed recovery storage
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * Entries store fixed-size path/reason copies, so cleanup only frees the
+ * backing array and resets counters. Resetting makes repeated test setup and
+ * partial backend initialization failure paths deterministic.
+ */
+static void backend_lost_scope_queue_destroy(inotify_lost_scope_queue_t *queue)
+{
+    if (queue == NULL)
+        return;
+
+    free(queue->items);
+
+    queue->items = NULL;
+    queue->count = 0;
+    queue->capacity = 0;
+    queue->head = 0;
+}
+
+/*
+ * backend_lost_scope_queue_count - read the number of pending recoveries
+ * @queue: queue to inspect
+ *
+ * Return: pending entry count, or 0 for a NULL queue.
+ */
+static size_t backend_lost_scope_queue_count(
+    const inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL)
+        return 0;
+
+    return queue->count;
+}
+
+/*
+ * backend_lost_scope_queue_enqueue - store one stale scope for later recovery
+ * @queue: queue object owned by inotify_backend_t
+ * @wd: inotify watch descriptor that became stale
+ * @old_path: last path associated with @wd before trust was lost
+ * @device_id: st_dev captured when the watch was installed
+ * @inode_id: st_ino captured when the watch was installed
+ * @reason: backend/kernel reason for the lost scope
+ * @first_seen_ns: monotonic time when the scope was queued
+ * @retry_after_ns: earliest monotonic time for the next recovery attempt
+ *
+ * The function copies @old_path and @reason into the queue entry. Callers may
+ * pass stack or watcher-table pointers without extending their lifetime. The
+ * queue grows as needed because a burst of stale scopes should not be silently
+ * dropped before policy has a chance to batch and process them.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_enqueue(
+    inotify_lost_scope_queue_t *queue,
+    int wd,
+    const char *old_path,
+    dev_t device_id,
+    ino_t inode_id,
+    const char *reason,
+    uint64_t first_seen_ns,
+    uint64_t retry_after_ns
+)
+{
+    if (queue == NULL || old_path == NULL || reason == NULL)
+        return -1;
+
+    if (wd < 0)
+        return -1;
+
+    if (queue->count == queue->capacity) {
+        if (backend_lost_scope_queue_expand(queue) != 0)
+            return -1;
+    }
+
+    size_t tail = (queue->head + queue->count) % queue->capacity;
+    inotify_lost_scope_entry_t *entry = &queue->items[tail];
+
+    memset(entry, 0, sizeof(*entry));
+
+    entry->wd = wd;
+    entry->device_id = device_id;
+    entry->inode_id = inode_id;
+    entry->first_seen_ns = first_seen_ns;
+    entry->retry_after_ns = retry_after_ns;
+    entry->retry_count = 0;
+
+    snprintf(entry->old_path,
+             sizeof(entry->old_path),
+             "%s",
+             old_path);
+    snprintf(entry->reason,
+             sizeof(entry->reason),
+             "%s",
+             reason);
+
+    queue->count++;
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_pop - remove the oldest queued recovery request
+ * @queue: queue object owned by inotify_backend_t
+ * @out: destination for a copy of the popped entry
+ *
+ * The pop operation copies the entry out instead of returning an internal
+ * pointer. That keeps future worker/scanner code from holding references into
+ * a circular buffer that may later grow or be reused.
+ *
+ * Return: 0 on success, -1 for invalid input or an empty queue.
+ */
+static int backend_lost_scope_queue_pop(inotify_lost_scope_queue_t *queue,
+                                        inotify_lost_scope_entry_t *out)
+{
+    if (queue == NULL || out == NULL)
+        return -1;
+
+    if (queue->count == 0)
+        return -1;
+
+    *out = queue->items[queue->head];
+    memset(&queue->items[queue->head],
+           0,
+           sizeof(queue->items[queue->head]));
+
+    queue->head = (queue->head + 1) % queue->capacity;
+    queue->count--;
+
+    if (queue->count == 0)
+        queue->head = 0;
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_expand - double FIFO storage without reordering
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * The queue uses a circular buffer so repeated pop/enqueue operations are
+ * cheap. Growing a wrapped buffer must linearize entries in FIFO order;
+ * otherwise a delayed resync worker would process scopes in a different order
+ * from the one in which path trust was lost.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_expand(
+    inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL || queue->capacity == 0)
+        return -1;
+
+    size_t new_capacity = queue->capacity * 2;
+
+    if (new_capacity < queue->capacity)
+        return -1;
+
+    inotify_lost_scope_entry_t *tmp =
+        calloc(new_capacity, sizeof(inotify_lost_scope_entry_t));
+
+    if (tmp == NULL)
+        return -1;
+
+    for (size_t i = 0; i < queue->count; i++) {
+        size_t old_index = (queue->head + i) % queue->capacity;
+        tmp[i] = queue->items[old_index];
+    }
+
+    free(queue->items);
+
+    queue->items = tmp;
+    queue->capacity = new_capacity;
+    queue->head = 0;
+
+    return 0;
+}
 
 /* ============================================================================
  * Lifecycle
@@ -337,6 +591,14 @@ static int backend_init(inotify_backend_context_t *ctx)
     logger_info(ctx->logger,
                 "watcher table initialized");
 
+    if (backend_lost_scope_queue_init(&ctx->runtime->lost_scopes, 0) != 0) {
+        logger_error(ctx->logger,
+                     "lost scope queue initialization failed");
+
+        watcher_destroy(&ctx->runtime->watchers);
+        return ERR_ALLOC;
+    }
+
     ctx->runtime->fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
@@ -346,6 +608,7 @@ static int backend_init(inotify_backend_context_t *ctx)
                      errno,
                      strerror(errno));
 
+        backend_lost_scope_queue_destroy(&ctx->runtime->lost_scopes);
         watcher_destroy(&ctx->runtime->watchers);
         return ERR_INOTIFY;
     }
@@ -431,6 +694,7 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
         ctx->runtime->fd = -1;
     }
 
+    backend_lost_scope_queue_destroy(&ctx->runtime->lost_scopes);
     watcher_destroy(&ctx->runtime->watchers);
 }
 

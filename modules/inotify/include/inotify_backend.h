@@ -17,10 +17,64 @@
 #include "logger.h"
 #include "watcher.h"
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/types.h>
+
+#define INOTIFY_LOST_SCOPE_REASON_SIZE 64
+
+/*
+ * inotify_lost_scope_entry_t - delayed recovery request for one stale scope
+ * @wd: inotify watch descriptor that lost path reliability
+ * @device_id: filesystem device id captured when the watch was installed
+ * @inode_id: inode id captured when the watch was installed
+ * @first_seen_ns: monotonic time when the scope was first queued
+ * @retry_after_ns: monotonic time before which recovery should not run again
+ * @retry_count: number of failed or delayed recovery attempts already made
+ * @old_path: last path Alfred associated with @wd before it became stale
+ * @reason: backend/kernel reason that moved the scope into recovery
+ *
+ * This is backend recovery state, not an Alfred raw event and not a semantic
+ * core event. The entry preserves enough evidence for a future delayed scan to
+ * search monitored roots for the same filesystem object without trusting the
+ * stale textual path.
+ */
+typedef struct inotify_lost_scope_entry {
+    int wd;
+    dev_t device_id;
+    ino_t inode_id;
+    uint64_t first_seen_ns;
+    uint64_t retry_after_ns;
+    unsigned retry_count;
+    char old_path[PATH_MAX];
+    char reason[INOTIFY_LOST_SCOPE_REASON_SIZE];
+} inotify_lost_scope_entry_t;
+
+/*
+ * inotify_lost_scope_queue_t - FIFO queue of scopes awaiting wide recovery
+ * @items: circular buffer storing queued recovery entries
+ * @count: number of entries currently stored
+ * @capacity: allocated number of slots in @items
+ * @head: index of the next entry to pop
+ *
+ * The queue lives in the inotify backend because it describes backend trust and
+ * recovery, not core semantics. The first implementation is deliberately
+ * single-threaded and testable; a later worker thread can consume the same
+ * queue after debounce/backoff policy is agreed.
+ */
+typedef struct inotify_lost_scope_queue {
+    inotify_lost_scope_entry_t *items;
+    size_t count;
+    size_t capacity;
+    size_t head;
+} inotify_lost_scope_queue_t;
+
 /*
  * inotify_backend_t - runtime state owned by the inotify backend
  * @fd: nonblocking inotify descriptor, or -1 when closed
  * @watchers: mapping from inotify watch descriptors to watched paths
+ * @lost_scopes: stale scopes waiting for delayed identity-based recovery
  *
  * The application owns the containing app_t object, but these fields are
  * managed only through the inotify backend API. Keeping them grouped makes the
@@ -30,6 +84,7 @@
 typedef struct inotify_backend {
     int fd;
     watcher_table_t watchers;
+    inotify_lost_scope_queue_t lost_scopes;
 } inotify_backend_t;
 
 /*

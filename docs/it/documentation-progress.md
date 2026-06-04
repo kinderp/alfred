@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.h`, `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
+  `21-roadmap-scanner-resync.md`: implementato e documentato il primo
+  micro-step della `lost_scope_queue`. Il backend ora possiede una queue FIFO
+  interna per scope stale da recuperare in futuro; il test C verifica lifecycle,
+  ordine FIFO, crescita del buffer circolare, copie di path/reason e input
+  invalidi. La queue non e' ancora collegata al runtime `IN_MOVE_SELF`.
 - `21-roadmap-scanner-resync.md`: documentata la scelta architetturale
   `lost_scope_queue` per recuperare directory rinominate o spostate quando
   `IN_MOVE_SELF` lascia un watch `STALE`. La nuova fase spiega coda, delay,

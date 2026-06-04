@@ -2728,15 +2728,25 @@ thread backend/applicazione
 ```
 
 Per arrivarci senza introdurre subito concorrenza difficile, l'implementazione
-dovrebbe essere graduale:
+e' graduale.
 
-1. definire strutture dati e API della queue, senza thread
-2. enqueue quando `IN_MOVE_SELF` fallisce il probe locale
-3. aggiungere una funzione di recovery sincrona chiamabile dai test
-4. cercare identita' dentro una root monitorata
-5. aggiornare path del watch principale e prefissi dei figli
-6. eseguire scan strict e reinstall all-or-stale
-7. solo dopo aggiungere worker thread, debounce e backoff
+Il primo micro-step e' gia' implementato: `inotify_backend_t` possiede
+`inotify_lost_scope_queue_t lost_scopes`, inizializzata e distrutta insieme al
+backend. Le primitive statiche `backend_lost_scope_queue_init()`,
+`backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`,
+`backend_lost_scope_queue_count()` e `backend_lost_scope_queue_destroy()`
+gestiscono una FIFO interna, con crescita del buffer circolare e copie stabili
+di path/reason. Il test `tests/backend/test_lost_scope_queue.c` fissa questo
+contratto senza leggere eventi kernel e senza produrre log runtime.
+
+Restano i passi successivi:
+
+1. enqueue quando `IN_MOVE_SELF` fallisce il probe locale
+2. aggiungere una funzione di recovery sincrona chiamabile dai test
+3. cercare identita' dentro una root monitorata
+4. aggiornare path del watch principale e prefissi dei figli
+5. eseguire scan strict e reinstall all-or-stale
+6. solo dopo aggiungere worker thread, debounce e backoff
 
 #### Log futuri proposti
 
@@ -2809,8 +2819,8 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. implementare la base di `lost_scope_queue` senza thread: strutture dati,
-   enqueue e test C della queue
+1. collegare l'enqueue della `lost_scope_queue` al ramo `IN_MOVE_SELF` che non
+   riesce a tornare `VALID` con il probe locale
 2. aggiungere una recovery sincrona richiamabile dai test per cercare una
    identita' dentro una root monitorata
 3. solo dopo valutare worker thread, debounce, retry e backoff

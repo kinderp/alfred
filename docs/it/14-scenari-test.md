@@ -294,6 +294,7 @@ Scenari diagnostici riesaminati:
 | self move identity match | `tests/backend/test_self_move_identity_match.sh` | `IN_MOVE_SELF`, path osservato ripristinato con la stessa identita', `WATCH_RESYNC_SCAN_DONE ... dirs=3 watched=1 missing=2`, `WATCH_RESYNC_SCAN_CLASS ... result=needs-reinstall`, due `WATCH_RESYNC_REINSTALLED`, due `FILE_CREATED` nelle directory riparate | verifica il ramo positivo del probe: se la root osservata viene spostata e rimessa nello stesso path prima del resync, `(st_dev, st_ino)` coincidono, Alfred misura la copertura, reinstalla tutti i watch mancanti nello scope affidabile e dimostra che i nuovi watch vedono file creati in entrambe le directory riparate |
 | self move identity mismatch | `tests/backend/test_self_move_identity_mismatch.sh` | `IN_MOVE_SELF`, path osservato ricreato, `WATCH_RESYNC_FAILED ... error=identity-mismatch`, nessun `WATCH_RESYNC_SCAN_DONE` | dimostra perche' il path da solo non basta: se la root osservata viene spostata e una nuova directory nasce nello stesso path, Alfred confronta `(st_dev, st_ino)`, non scansiona il path riusato e lascia il watch `STALE` |
 | resync reinstall policy | `tests/backend/test_resync_reinstall_policy.sh` + `tests/backend/test_resync_reinstall_policy.c` | helper statico `backend_resync_reinstall_missing_watches()` con fake add/remove e log `WATCH_RESYNC_ROLLBACK` | verifica senza race filesystem la policy all-or-stale: se un missing watch fallisce dopo una reinstallazione riuscita, Alfred logga il rollback, rimuove i watch installati in quel tentativo e ritorna `ERR_INOTIFY` |
+| lost scope queue | `tests/backend/test_lost_scope_queue.sh` + `tests/backend/test_lost_scope_queue.c` | helper statici `backend_lost_scope_queue_*()` senza log runtime | verifica la struttura dati che prepara la recovery posticipata: lifecycle, ordine FIFO, crescita del buffer circolare, copia stabile di path/reason e rifiuto di input invalidi |
 | recursive fast synthetic raw | `tests/core/test_recursive_create_nested_dir.sh` | effetto semantico finale dei raw sintetici | per ora basta il test core: il formato raw diagnostico non e' un contratto stabile da fissare end-to-end |
 
 Gli scenari diagnostici sui watch sono gia' in `tests/backend/`.
@@ -349,6 +350,9 @@ La regola pratica e':
   `tests/core/`
 - se il test parla di `WATCH_ADDED`, `WATCH_REMOVED`, watch descriptor o raw
   diagnostici, va in `tests/backend/`
+- se il test parla di strutture dati interne del backend inotify, come
+  `inotify_lost_scope_queue_t`, ma non produce eventi core, va in
+  `tests/backend/` come test C mirato
 - se il test parla di scanner, opzioni di attraversamento, symlink o errori
   parziali di scan, va in `tests/scanner/`
 - se il test parla direttamente di `watcher_table_t`, stati `VALID/STALE` o

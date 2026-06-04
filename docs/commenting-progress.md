@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/backend/test_lost_scope_queue.c` after adding the first lost-scope
+  recovery queue. Comments now explain why the queue is backend recovery state,
+  why entries copy stale path/reason text, how FIFO growth preserves recovery
+  order, and why the focused C test has no raw or event log output yet.
 - refreshed `app/include/fs_scanner.h`, `app/src/fs_scanner.c`,
   `modules/inotify/src/inotify_backend.c`, and
   `tests/scanner/test_fs_scanner_dirs.c` after fixing the PR #7 scanner review
