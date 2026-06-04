@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md`: documentata la scelta architetturale
+  `lost_scope_queue` per recuperare directory rinominate o spostate quando
+  `IN_MOVE_SELF` lascia un watch `STALE`. La nuova fase spiega coda, delay,
+  batch, scope di ricerca, differenza tra parent monitorato e self-event,
+  aggiornamento dei prefissi dei figli, worker thread futuro, passi
+  incrementali e log diagnostici futuri proposti.
 - `inotify_backend.c`, `test_self_events_root_watch.sh`,
   `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
   `14-scenari-test.md`: fissata la policy per eventi kernel ricevuti su un
