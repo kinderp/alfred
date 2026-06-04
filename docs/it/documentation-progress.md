@@ -42,6 +42,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: ampliata la
+  spiegazione didattica dei fallimenti `WATCH_RESYNC_FAILED`. La
+  documentazione ora distingue errori che accodano lost-scope recovery
+  (`path-unreachable`, `not-directory`, `identity-mismatch`) da errori di
+  bookkeeping, `missing-watch`, `not-stale`, `missing-identity` e
+  `reinstall-failed`. Registrata anche la scelta prestazionale: probe locale
+  leggero, recovery ampia ritardata/batchata come strada principale e futura
+  configurabilita' della reinstallazione immediata profonda.
 - `inotify_backend.c`, `test_self_events_root_watch.sh`,
   `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,

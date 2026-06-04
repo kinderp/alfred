@@ -252,18 +252,65 @@ diventato `STALE`.
 
 ### Errori di `WATCH_RESYNC_FAILED`
 
-| `error=` | Significato |
-| --- | --- |
-| `missing-watch` | il `wd` non esiste piu' nella watcher table |
-| `not-stale` | la recovery e' stata chiamata su un watch non stale |
-| `set-resyncing-failed` | non e' stato possibile entrare nello stato `RESYNCING` |
-| `path-unreachable` | il vecchio path non e' raggiungibile con `stat(2)` |
-| `not-directory` | il vecchio path esiste ma non e' una directory |
-| `set-stale-failed` | Alfred non e' riuscito a lasciare il watch in `STALE` |
-| `set-valid-failed` | la recovery e' riuscita ma il ritorno a `VALID` e' fallito |
-| `missing-identity` | il watch non ha identita' filesystem salvata |
-| `identity-mismatch` | il path esiste ma `(st_dev, st_ino)` e' diverso |
-| `reinstall-failed` | almeno un missing watch non e' stato reinstallato |
+| `error=` | Significato | Quando accade | Enqueue lost scope? |
+| --- | --- | --- | --- |
+| `path-unreachable` | il vecchio path non e' raggiungibile con `stat(2)` | la directory osservata e' stata spostata o rimossa dal path che Alfred conosceva | si', se il watch conserva identita' |
+| `not-directory` | il vecchio path esiste ma non e' una directory | il path e' stato riusato da un file o da un altro tipo di oggetto non directory | si', se il watch conserva identita' |
+| `identity-mismatch` | il path esiste ma `(st_dev, st_ino)` e' diverso | il vecchio nome e' stato riusato da una nuova directory diversa da quella osservata | si', se il watch conserva identita' |
+| `missing-watch` | il `wd` non esiste piu' nella watcher table | il kernel/backend ha gia' rimosso il watch o la recovery arriva troppo tardi | no |
+| `not-stale` | la recovery e' stata chiamata su un watch non stale | errore di flusso interno: non si dovrebbe recuperare un watch ancora affidabile | no |
+| `set-resyncing-failed` | non e' stato possibile entrare nello stato `RESYNCING` | errore di bookkeeping della watcher table | no |
+| `set-stale-failed` | Alfred non e' riuscito a lasciare il watch in `STALE` | errore di bookkeeping della watcher table dopo un fallimento | no |
+| `set-valid-failed` | la recovery e' riuscita ma il ritorno a `VALID` e' fallito | errore di bookkeeping della watcher table dopo controlli positivi | no |
+| `missing-identity` | il watch non ha identita' filesystem salvata | Alfred non ha `(st_dev, st_ino)` da usare come prova | no |
+| `reinstall-failed` | almeno un missing watch non e' stato reinstallato | il path principale e' affidabile, ma la copertura watch della subtree non e' completa | no |
+
+La colonna "Enqueue lost scope?" distingue due famiglie di fallimento.
+
+La prima famiglia e' "path locale non affidabile, identita' salvata ancora
+utile". Qui rientrano `path-unreachable`, `not-directory` e
+`identity-mismatch`. In questi casi il probe locale non puo' tornare `VALID`,
+ma Alfred ha ancora una prova forte dell'oggetto originale: la coppia
+`(st_dev, st_ino)` salvata quando il watch era affidabile. Accodare lo scope
+serve a dire: "non fidarti del vecchio path, ma prova piu' tardi a cercare
+questa identita' dentro le root monitorate".
+
+La seconda famiglia e' tecnica o non cercabile. `missing-watch`, `not-stale`,
+`set-resyncing-failed`, `set-stale-failed` e `set-valid-failed` indicano
+problemi di stato interno o di ordine delle chiamate. `missing-identity` dice
+che manca proprio la prova con cui cercare l'oggetto. `reinstall-failed` e'
+diverso: il path principale era stato gia' provato affidabile, ma Alfred non e'
+riuscito a reinstallare tutti i watch figli; non e' quindi un caso di directory
+persa da cercare tramite identita'.
+
+Esempi pratici:
+
+```bash
+# path-unreachable: il path vecchio non esiste piu'
+mv src source
+
+# identity-mismatch: il path vecchio esiste, ma e' un altro inode
+mv src source
+mkdir src
+
+# not-directory: il path vecchio e' stato riusato da un file
+mv src source
+touch src
+```
+
+In tutti e tre gli esempi Alfred non deve generare eventi semantici inventati.
+Il comportamento corretto e':
+
+```text
+WATCH_STALE
+WATCH_RESYNC_BEGIN
+WATCH_RESYNC_FAILED ... error=<caso>
+WATCH_LOST_QUEUED ... error=<caso>
+```
+
+`WATCH_LOST_QUEUED` non significa che Alfred abbia gia' ritrovato la directory.
+Significa solo che ha salvato un lavoro di recovery ampia da eseguire piu'
+tardi, possibilmente in batch.
 
 ## Raw Alfred
 

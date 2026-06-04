@@ -2752,6 +2752,61 @@ Non vengono invece accodati errori di bookkeeping, `missing-watch`,
 evidenza utile per cercare un oggetto perso, oppure il problema non e' un path
 perduto ma una copertura watch incompleta su uno scope gia' provato affidabile.
 
+#### Scelta prestazionale: locale leggero, scan ritardato come strada principale
+
+Il resync locale immediato non deve diventare il centro del prodotto. Il caso
+positivo oggi testato, cioe' "sposto una directory e la rimetto subito nello
+stesso path prima che Alfred consumi `IN_MOVE_SELF`", e' utile per dimostrare
+che identita', scanner e reinstallazione funzionano, ma non e' il caso reale piu'
+importante. Nella pratica e' piu' probabile che una directory venga rinominata,
+spostata altrove o riorganizzata dentro una root monitorata.
+
+La linea scelta e':
+
+1. tenere il probe locale immediato piccolo ed economico
+2. non aggiungere altra complessita' pesante dentro `inotify_backend_poll()`
+3. usare `WATCH_LOST_QUEUED` come ponte verso recovery ampia posticipata
+4. rendere configurabile la recovery immediata profonda se diventa costosa
+5. progettare lo scan ritardato/batchato come meccanismo principale di
+   recupero per directory perse o rinominate
+
+Il probe locale economico ha ancora senso perche' usa operazioni limitate:
+controlla il vecchio path con `stat(2)`, confronta `(st_dev, st_ino)` e, solo
+nel ramo positivo, misura la copertura della subtree. Questo evita falsi path e
+permette di recuperare alcuni casi senza aspettare il worker futuro.
+
+Pero' Alfred ha un obiettivo prestazionale: il polling inotify deve restare
+reattivo. Se una recovery richiede scansioni grandi, retry, backoff o ricerca in
+piu' root, quella recovery deve uscire dal path caldo degli eventi. La direzione
+finale deve quindi essere:
+
+```text
+IN_MOVE_SELF / path non affidabile
+    -> WATCH_STALE
+    -> probe locale minimo
+    -> WATCH_LOST_QUEUED
+    -> scan ritardato e batchato fuori dal polling
+```
+
+In futuro potremo avere una configurazione simile:
+
+```text
+resync_local_probe = on
+resync_immediate_subtree_reinstall = off/on
+lost_scope_scan_delay_ms = 500
+lost_scope_scan_batch = on
+```
+
+I nomi non sono ancora API. Il punto architetturale e' separare:
+
+- protezione immediata del core da path falsi
+- tentativo locale economico
+- recovery ampia potenzialmente costosa
+
+Questa scelta evita di buttare via il lavoro fatto su identita' e stati, ma lo
+ridimensiona: il resync locale e' una guardia conservativa e un acceleratore per
+casi piccoli, non la soluzione primaria per ritrovare alberi spostati.
+
 Restano i passi successivi:
 
 1. aggiungere una recovery sincrona richiamabile dai test
