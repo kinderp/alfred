@@ -27,6 +27,12 @@ runtime architecture.
 Latest refresh:
 
 - refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after adding strict coverage
+  scanning to lost-scope recovery. Comments now explain the shared read-only
+  subtree scan helper, the difference between local resync reinstallation and
+  lost-scope measurement, and the expected WATCH_LOST_COVERAGE_* diagnostics,
+  including per-path missing watch diagnostics.
+- refreshed `modules/inotify/src/inotify_backend.c` and
   `tests/backend/test_lost_scope_recovery.c` after wiring
   watcher_update_path_prefix() into lost-scope recovery. Comments now explain
   why the runtime rewrites the recovered root and child prefixes in one

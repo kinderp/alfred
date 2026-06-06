@@ -44,6 +44,13 @@ Stati usati:
 
 - `inotify_backend.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: aggiunto lo scan strict di copertura dopo
+  `WATCH_LOST_PREFIX_UPDATED`. La lost-scope recovery ora logga
+  `WATCH_LOST_COVERAGE_DONE`, `WATCH_LOST_COVERAGE_MISSING` e
+  `WATCH_LOST_COVERAGE_CLASS`, misura directory gia' watched e missing, ma non
+  reinstalla ancora watch e non torna a `VALID`.
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
   `22-contratto-log.md`: collegato `watcher_update_path_prefix()` al runtime
   lost-scope. Dopo `WATCH_LOST_FOUND`, Alfred riscrive in modo validato il
   prefisso del watch principale e dei figli gia' noti, logga

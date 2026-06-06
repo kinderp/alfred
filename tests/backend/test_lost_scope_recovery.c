@@ -11,6 +11,9 @@
  * - WATCH_LOST_FOUND ... old_path=<root>/original new_path=<root>/renamed
  * - WATCH_LOST_PREFIX_UPDATED ... old_prefix=<root>/original
  *   new_prefix=<root>/renamed children=1
+ * - WATCH_LOST_COVERAGE_DONE ... dirs=3 watched=2 missing=1
+ * - WATCH_LOST_COVERAGE_MISSING ... missing_path=<root>/renamed/unwatched
+ * - WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
  *
  * Forbidden events:
@@ -23,7 +26,8 @@
  * queued stale scope and search one monitored root for the saved filesystem
  * identity. A renamed directory is found by st_dev/st_ino even though its old
  * textual path is stale. The helper updates watcher-table paths for the found
- * root and already-known children after a match; it must not reinstall watches,
+ * root and already-known children after a match, then scans the recovered
+ * subtree to measure missing watch coverage. It must not reinstall watches,
  * mark the subtree VALID, or emit semantic filesystem events. A deleted
  * directory is not found.
  */
@@ -112,8 +116,9 @@ static void assert_event_log_contains(logger_t *logger, const char *needle)
  *
  * The stale entry records the old path, but the scan must find the directory at
  * its new path by comparing the saved st_dev/st_ino pair. Once found, the
- * helper updates only the main watch path and keeps the state STALE so later
- * prefix and coverage checks still have to run.
+ * helper updates the watched root and already-known child paths, then performs
+ * a strict coverage scan. The deliberately unwatched child proves the scan can
+ * detect missing watch coverage without installing a replacement yet.
  */
 static void test_renamed_directory_is_found_by_identity(
     inotify_backend_context_t *ctx,
@@ -122,6 +127,7 @@ static void test_renamed_directory_is_found_by_identity(
 {
     char original[PATH_MAX];
     char original_child[PATH_MAX];
+    char original_unwatched[PATH_MAX];
     char renamed[PATH_MAX];
     char renamed_child[PATH_MAX];
     char found[PATH_MAX];
@@ -130,11 +136,16 @@ static void test_renamed_directory_is_found_by_identity(
 
     join_path(original, sizeof(original), root, "original");
     join_path(original_child, sizeof(original_child), original, "child");
+    join_path(original_unwatched,
+              sizeof(original_unwatched),
+              original,
+              "unwatched");
     join_path(renamed, sizeof(renamed), root, "renamed");
     join_path(renamed_child, sizeof(renamed_child), renamed, "child");
 
     assert(mkdir(original, 0700) == 0);
     assert(mkdir(original_child, 0700) == 0);
+    assert(mkdir(original_unwatched, 0700) == 0);
     assert(stat(original, &st) == 0);
     assert(stat(original_child, &child_st) == 0);
     assert(watcher_store_identity(&ctx->runtime->watchers,
@@ -184,6 +195,13 @@ static void test_renamed_directory_is_found_by_identity(
     assert_event_log_contains(ctx->logger, "WATCH_LOST_FOUND");
     assert_event_log_contains(ctx->logger, "WATCH_LOST_PREFIX_UPDATED");
     assert_event_log_contains(ctx->logger, "children=1");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_COVERAGE_DONE");
+    assert_event_log_contains(ctx->logger, "dirs=3 watched=2 missing=1");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_COVERAGE_MISSING");
+    assert_event_log_contains(ctx->logger, "missing_path=");
+    assert_event_log_contains(ctx->logger, "/renamed/unwatched");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_COVERAGE_CLASS");
+    assert_event_log_contains(ctx->logger, "result=needs-reinstall");
     assert_event_log_contains(ctx->logger, "old_path=");
     assert_event_log_contains(ctx->logger, "new_path=");
 }

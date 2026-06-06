@@ -2830,6 +2830,9 @@ entry in queue + root monitorata
     -> WATCH_LOST_SCAN_BEGIN
     -> WATCH_LOST_FOUND identifica la nuova posizione
     -> WATCH_LOST_PREFIX_UPDATED aggiorna i path watcher-table gia' noti
+    -> WATCH_LOST_COVERAGE_DONE misura la copertura watch della subtree
+    -> WATCH_LOST_COVERAGE_MISSING elenca ogni path non watched
+    -> WATCH_LOST_COVERAGE_CLASS classifica la copertura
        oppure WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
 ```
 
@@ -2837,12 +2840,14 @@ Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
 
 - una directory rinominata viene ritrovata sotto la root tramite identita' e il
   path del watch principale e del figlio gia' noto vengono aggiornati restando
-  `STALE`
+  `STALE`; un secondo figlio non watched viene visto dallo scan di copertura
+  come `missing=1`
 - una directory cancellata non viene trovata e non produce eventi semantici
 
 Questo e' ancora un punto intermedio. Alfred sa ritrovare un oggetto e
 riallineare i path gia' registrati nella watcher table; non sa ancora garantire
-che ogni directory presente nella subtree abbia un watch installato.
+che ogni directory presente nella subtree abbia un watch installato. Lo scan
+strict di copertura ora misura esattamente questo debito, ma non lo ripara.
 
 #### Aggiornamento path del watch principale
 
@@ -2881,7 +2886,7 @@ valida tutti i path prima di mutare la tabella.
 
 Restano i passi successivi:
 
-1. eseguire scan strict e reinstall all-or-stale
+1. collegare la reinstallazione all-or-stale dei watch mancanti
 2. solo dopo aggiungere worker thread, debounce e backoff
 
 #### Aggiornamento prefissi dei figli
@@ -2936,6 +2941,35 @@ watcher_update_path_prefix(old_path, found_path, &updated_count)
 per rendere visibile quanti watch figli sono stati riallineati oltre al root
 watch della recovery.
 
+#### Scan strict di copertura lost-scope
+
+Dopo l'aggiornamento dei prefissi, `backend_lost_scope_recover_next()` esegue
+anche uno scan strict della subtree ritrovata. Lo scan usa la stessa logica
+read-only del resync locale:
+
+- attraversa solo directory
+- non segue symlink
+- fallisce se una directory figlia non e' attraversabile in modo affidabile
+- usa `watcher_has_path()` per capire se una directory e' gia' coperta
+- copia i missing path nel contesto di scan
+
+La differenza rispetto al resync locale e' la policy successiva. Nel resync
+locale il backend chiama gia' `backend_resync_reinstall_missing_watches()` e
+prova a reinstallare i watch mancanti. Nella lost-scope recovery, invece, questo
+micro-step si ferma alla misurazione:
+
+```text
+WATCH_LOST_COVERAGE_DONE ... dirs=D watched=W missing=M
+WATCH_LOST_COVERAGE_MISSING ... missing_path=/path/da/reinstallare
+WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
+```
+
+Questa scelta mantiene il passo verificabile. Ora sappiamo se la subtree
+ritrovata e' gia' coperta o se richiede reinstallazione, ma non dichiariamo
+ancora `VALID`. Il ritorno a `VALID` sara' ammesso solo quando il prossimo
+micro-step applichera' la stessa policy all-or-stale: tutti i watch mancanti
+reinstallati con successo oppure rollback e subtree ancora `STALE`.
+
 #### Log di lost-scope recovery
 
 `WATCH_LOST_QUEUED` e' implementato. Gli altri log restano futuri e servono a
@@ -2947,6 +2981,9 @@ fissare la direzione del contratto diagnostico:
 | `WATCH_LOST_SCAN_BEGIN root=R pending=N` | implementato | parte una scansione sincrona su una root monitorata |
 | `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | implementato | trovata una directory con la stessa identita' del watch perso |
 | `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | implementato | aggiornati i path gia' noti della subtree watched; `C` conta i figli oltre al watch principale |
+| `WATCH_LOST_COVERAGE_DONE wd=N path=Q reason=R dirs=D watched=W missing=M` | implementato | misurata la copertura watch della subtree ritrovata |
+| `WATCH_LOST_COVERAGE_MISSING wd=N path=Q reason=R missing_path=M` | implementato | elencato un path reale della subtree senza watch |
+| `WATCH_LOST_COVERAGE_CLASS wd=N path=Q reason=R result=X` | implementato | classificati i contatori di copertura |
 | `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
 | `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
 | `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | futuro | recovery ampia completata e subtree tornata affidabile |

@@ -300,6 +300,13 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 const char *path,
                                                 const char *reason);
 
+static error_t backend_resync_scan_subtree_dirs(
+    inotify_backend_context_t *ctx,
+    const char *path,
+    int emit_root,
+    backend_resync_scan_context_t *scan_context
+);
+
 static error_t backend_resync_reinstall_missing_watches(
     inotify_backend_context_t *ctx,
     int wd,
@@ -744,6 +751,54 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
                      entry.old_path,
                      found_path,
                      updated_count - 1);
+
+        backend_resync_scan_context_t coverage_context;
+
+        error_t coverage_rc =
+            backend_resync_scan_subtree_dirs(ctx,
+                                             found_path,
+                                             1,
+                                             &coverage_context);
+
+        if (coverage_rc != ERR_OK) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=coverage-scan-failed",
+                         entry.wd,
+                         found_path,
+                         entry.reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
+                     entry.wd,
+                     found_path,
+                     entry.reason,
+                     coverage_context.directories_seen,
+                     coverage_context.directories_watched,
+                     coverage_context.directories_missing_watch);
+
+        for (size_t i = 0; i < coverage_context.missing_paths_count; i++) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s missing_path=%s",
+                         entry.wd,
+                         found_path,
+                         entry.reason,
+                         coverage_context.missing_paths[i]);
+        }
+
+        backend_resync_scan_class_t coverage_class =
+            backend_classify_resync_scan(&coverage_context);
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s result=%s",
+                     entry.wd,
+                     found_path,
+                     entry.reason,
+                     backend_resync_scan_class_name(coverage_class));
+
+        backend_resync_scan_context_destroy(&coverage_context);
         return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
     }
 
@@ -1591,6 +1646,60 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
 }
 
 /*
+ * backend_resync_scan_subtree_dirs - count directory watch coverage
+ * @ctx: narrowed backend context used by recovery code
+ * @path: trusted root path to scan
+ * @emit_root: nonzero to include @path itself in scan counters
+ * @scan_context: output scan state with counters and owned missing paths
+ *
+ * This helper performs the read-only half of subtree recovery. It scans only
+ * directories, asks the watcher table whether each path is already covered,
+ * and copies missing paths into @scan_context. It does not install watches and
+ * does not log: callers decide whether the scan belongs to local resync
+ * diagnostics or delayed lost-scope diagnostics.
+ *
+ * Return: ERR_OK on complete scan and collection, otherwise error_t.
+ */
+static error_t backend_resync_scan_subtree_dirs(
+    inotify_backend_context_t *ctx,
+    const char *path,
+    int emit_root,
+    backend_resync_scan_context_t *scan_context
+)
+{
+    if (ctx == NULL || path == NULL || scan_context == NULL)
+        return ERR_INVALID_ARG;
+
+    memset(scan_context, 0, sizeof(*scan_context));
+    scan_context->ctx = ctx;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_dirs = 1;
+    opts.include_files = 0;
+    opts.include_symlinks = 0;
+    opts.include_other = 0;
+    opts.follow_symlinks = 0;
+    opts.strict_child_errors = 1;
+    opts.emit_root = emit_root ? 1 : 0;
+
+    error_t rc =
+        fs_scan_tree(path,
+                     &opts,
+                     backend_count_resync_scanned_dir,
+                     scan_context);
+
+    if (rc != ERR_OK)
+        return rc;
+
+    if (scan_context->missing_paths_failed)
+        return ERR_ALLOC;
+
+    return ERR_OK;
+}
+
+/*
  * backend_resync_watch_subtree_dirs - scan subtree and reinstall missing watches
  * @ctx: narrowed backend context used by the poll path
  * @wd: stale watch descriptor that would own the recovery scope
@@ -1617,27 +1726,13 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
     if (ctx == NULL || path == NULL || reason == NULL)
         return ERR_INVALID_ARG;
 
-    fs_scan_options_t opts;
-
-    fs_scan_options_defaults(&opts);
-    opts.include_dirs = 1;
-    opts.include_files = 0;
-    opts.include_symlinks = 0;
-    opts.include_other = 0;
-    opts.follow_symlinks = 0;
-    opts.strict_child_errors = 1;
-    opts.emit_root = 0;
-
     backend_resync_scan_context_t scan_context;
 
-    memset(&scan_context, 0, sizeof(scan_context));
-    scan_context.ctx = ctx;
-
     error_t rc =
-        fs_scan_tree(path,
-                     &opts,
-                     backend_count_resync_scanned_dir,
-                     &scan_context);
+        backend_resync_scan_subtree_dirs(ctx,
+                                         path,
+                                         0,
+                                         &scan_context);
 
     if (rc != ERR_OK) {
         logger_error(ctx->logger,
@@ -1648,17 +1743,6 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                      rc);
         backend_resync_scan_context_destroy(&scan_context);
         return rc;
-    }
-
-    if (scan_context.missing_paths_failed) {
-        logger_error(ctx->logger,
-                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
-                     wd,
-                     path,
-                     reason,
-                     ERR_ALLOC);
-        backend_resync_scan_context_destroy(&scan_context);
-        return ERR_ALLOC;
     }
 
     logger_event(ctx->logger,
