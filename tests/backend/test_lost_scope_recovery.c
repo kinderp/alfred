@@ -20,6 +20,8 @@
  * - WATCH_LOST_ROLLBACK ... removed_wd=101
  * - WATCH_LOST_RECOVERY_FAILED ... error=reinstall-failed
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
+ * - WATCH_LOST_RETRY_SCHEDULED ... result=not-found retry=1 delay_ms=100
+ * - WATCH_LOST_RECOVERY_GAVE_UP ... result=not-found retries=8
  *
  * Forbidden events:
  * - FILE_*
@@ -35,7 +37,9 @@
  * the one missing path, after which the recovered subtree can return VALID
  * without emitting semantic filesystem events. A second scenario forces a
  * reinstall failure after one fake watch was installed and verifies rollback.
- * A deleted directory is not found.
+ * A deleted directory is not found. The due-entry processor then proves that a
+ * temporary miss is requeued with bounded backoff, while a retry-budget
+ * exhaustion is logged and not scheduled again.
  */
 
 #include <assert.h>
@@ -569,6 +573,96 @@ static void test_process_due_skips_future_head(inotify_backend_context_t *ctx,
 }
 
 /*
+ * test_process_due_requeues_not_found - temporary miss gets bounded backoff
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root that does not contain the queued identity
+ *
+ * A successful scan that does not find the saved identity is not proof that the
+ * object is permanently gone. The due processor should consume the mature entry
+ * once, log WATCH_LOST_NOT_FOUND, append a retry record to the queue tail, and
+ * delay the next attempt instead of spinning immediately.
+ */
+static void test_process_due_requeues_not_found(inotify_backend_context_t *ctx,
+                                                const char *root)
+{
+    inotify_lost_scope_entry_t entry;
+    uint64_t now_ns = 10000;
+
+    reset_event_log(ctx->logger);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            28,
+                                            "/tmp/retry",
+                                            999999,
+                                            888888,
+                                            "IN_MOVE_SELF",
+                                            1000,
+                                            now_ns) == 0);
+
+    assert(backend_lost_scope_process_due_with_ops(ctx,
+                                                   root,
+                                                   now_ns,
+                                                   4,
+                                                   &FAKE_LOST_SCOPE_WATCH_OPS) == 1);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 1);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_NOT_FOUND");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RETRY_SCHEDULED");
+    assert_event_log_contains(ctx->logger, "result=not-found retry=1");
+    assert_event_log_contains(ctx->logger, "delay_ms=100");
+
+    assert(backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                        &entry) == 0);
+    assert(entry.wd == 28);
+    assert(entry.retry_count == 1);
+    assert(entry.retry_after_ns == now_ns + 100 * 1000000ULL);
+    assert(strcmp(entry.old_path, "/tmp/retry") == 0);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+}
+
+/*
+ * test_process_due_gives_up_after_retry_budget - bounded retry exhaustion
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root that does not contain the queued identity
+ *
+ * The retry policy must never create an infinite diagnostic loop. An entry that
+ * has already consumed the retry budget is attempted once more, logged as
+ * WATCH_LOST_RECOVERY_GAVE_UP, and deliberately not requeued.
+ */
+static void test_process_due_gives_up_after_retry_budget(
+    inotify_backend_context_t *ctx,
+    const char *root
+)
+{
+    inotify_lost_scope_entry_t entry;
+
+    reset_event_log(ctx->logger);
+    memset(&entry, 0, sizeof(entry));
+
+    entry.wd = 29;
+    entry.device_id = 999999;
+    entry.inode_id = 777777;
+    entry.first_seen_ns = 1000;
+    entry.retry_after_ns = 10000;
+    entry.retry_count = BACKEND_LOST_SCOPE_MAX_ATTEMPTS - 1;
+    snprintf(entry.old_path, sizeof(entry.old_path), "%s", "/tmp/give-up");
+    snprintf(entry.reason, sizeof(entry.reason), "%s", "IN_MOVE_SELF");
+
+    assert(backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
+                                                  &entry) == 0);
+
+    assert(backend_lost_scope_process_due_with_ops(ctx,
+                                                   root,
+                                                   10000,
+                                                   4,
+                                                   &FAKE_LOST_SCOPE_WATCH_OPS) == 1);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_NOT_FOUND");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_GAVE_UP");
+    assert_event_log_contains(ctx->logger, "result=not-found retries=8");
+    assert_event_log_not_contains(ctx->logger, "WATCH_LOST_RETRY_SCHEDULED");
+}
+
+/*
  * test_empty_queue_is_noop - no recovery work is available
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root path
@@ -609,6 +703,8 @@ int main(int argc, char **argv)
     test_reinstall_failure_rolls_back_partial_lost_scope(&ctx, root);
     test_deleted_directory_is_not_found(&ctx, root);
     test_process_due_skips_future_head(&ctx, root);
+    test_process_due_requeues_not_found(&ctx, root);
+    test_process_due_gives_up_after_retry_budget(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);

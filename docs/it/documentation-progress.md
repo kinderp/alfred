@@ -1327,3 +1327,12 @@ Stati usati:
 - `00-regole-operative.md`: aggiunta memoria operativa della sessione con
   regole per commit, documentazione, verifiche, stato semantico corrente e
   commit chiave recenti.
+- `21-roadmap-scanner-resync.md`: documentata la prima policy retry/backoff
+  per `lost_scope_queue`, inclusi `WATCH_LOST_RETRY_SCHEDULED`,
+  `WATCH_LOST_RECOVERY_GAVE_UP`, limite interno di tentativi, motivazione del
+  reinserimento in coda e roadmap di ripresa dopo lo stop.
+- `22-contratto-log.md`: aggiunta la reference dei nuovi log diagnostici
+  lost-scope per retry schedulato e give-up, chiarendo che non sono eventi
+  raw/core e non provano cancellazioni o move semantici.
+- `14-scenari-test.md`: aggiornato lo scenario backend lost-scope recovery con
+  i casi di requeue su `NOT_FOUND`, backoff e budget di tentativi esaurito.

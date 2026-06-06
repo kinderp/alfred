@@ -105,6 +105,9 @@ typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
 } backend_resync_scan_class_t;
 
+#define BACKEND_LOST_SCOPE_MAX_ATTEMPTS 8U
+#define BACKEND_LOST_SCOPE_NS_PER_MS 1000000ULL
+
 /*
  * backend_lost_scope_recovery_result - outcome of one queued identity search
  *
@@ -386,6 +389,11 @@ static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_enqueue(
     uint64_t retry_after_ns
 );
 
+static int backend_lost_scope_queue_enqueue_entry(
+    inotify_lost_scope_queue_t *queue,
+    const inotify_lost_scope_entry_t *source
+);
+
 static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_pop(
     inotify_lost_scope_queue_t *queue,
     inotify_lost_scope_entry_t *out
@@ -420,6 +428,20 @@ static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_process_due_with_ops(
     uint64_t now_ns,
     size_t batch_size,
     const backend_resync_watch_ops_t *watch_ops
+);
+
+static uint64_t backend_lost_scope_retry_delay_ns(unsigned failed_attempts);
+
+static int backend_lost_scope_schedule_retry(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *attempted,
+    const char *retry_path,
+    backend_lost_scope_recovery_result_t result,
+    uint64_t now_ns
+);
+
+static const char *backend_lost_scope_recovery_result_name(
+    backend_lost_scope_recovery_result_t result
 );
 
 static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
@@ -558,10 +580,61 @@ static int backend_lost_scope_queue_enqueue(
     uint64_t retry_after_ns
 )
 {
+    inotify_lost_scope_entry_t entry;
+
     if (queue == NULL || old_path == NULL || reason == NULL)
         return -1;
 
     if (wd < 0)
+        return -1;
+
+    memset(&entry, 0, sizeof(entry));
+
+    entry.wd = wd;
+    entry.device_id = device_id;
+    entry.inode_id = inode_id;
+    entry.first_seen_ns = first_seen_ns;
+    entry.retry_after_ns = retry_after_ns;
+    entry.retry_count = 0;
+
+    snprintf(entry.old_path,
+             sizeof(entry.old_path),
+             "%s",
+             old_path);
+    snprintf(entry.reason,
+             sizeof(entry.reason),
+             "%s",
+             reason);
+
+    return backend_lost_scope_queue_enqueue_entry(queue, &entry);
+}
+
+/*
+ * backend_lost_scope_queue_enqueue_entry - append an existing recovery entry
+ * @queue: FIFO queue that stores delayed recovery work
+ * @source: already-built entry to copy into the queue tail
+ *
+ * The normal enqueue helper creates the first recovery record with
+ * retry_count=0. Retry scheduling needs a lower-level primitive because it must
+ * preserve first_seen_ns, saved identity, and incremented retry_count while
+ * only changing retry_after_ns and, when useful, the best known stale path.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_enqueue_entry(
+    inotify_lost_scope_queue_t *queue,
+    const inotify_lost_scope_entry_t *source
+)
+{
+    size_t tail;
+
+    if (queue == NULL || source == NULL)
+        return -1;
+
+    if (source->wd < 0 || source->device_id == 0 || source->inode_id == 0)
+        return -1;
+
+    if (source->old_path[0] == '\0' || source->reason[0] == '\0')
         return -1;
 
     if (queue->count == queue->capacity) {
@@ -569,28 +642,10 @@ static int backend_lost_scope_queue_enqueue(
             return -1;
     }
 
-    size_t tail = (queue->head + queue->count) % queue->capacity;
-    inotify_lost_scope_entry_t *entry = &queue->items[tail];
-
-    memset(entry, 0, sizeof(*entry));
-
-    entry->wd = wd;
-    entry->device_id = device_id;
-    entry->inode_id = inode_id;
-    entry->first_seen_ns = first_seen_ns;
-    entry->retry_after_ns = retry_after_ns;
-    entry->retry_count = 0;
-
-    snprintf(entry->old_path,
-             sizeof(entry->old_path),
-             "%s",
-             old_path);
-    snprintf(entry->reason,
-             sizeof(entry->reason),
-             "%s",
-             reason);
-
+    tail = (queue->head + queue->count) % queue->capacity;
+    queue->items[tail] = *source;
     queue->count++;
+
     return 0;
 }
 
@@ -961,9 +1016,9 @@ backend_lost_scope_recover_next_with_ops(
  *
  * The function intentionally stops at the first non-due head entry instead of
  * searching later slots. That preserves FIFO ordering and makes future backoff
- * behavior easier to reason about. Retry/requeue policy after NOT_FOUND or
- * technical failure is still a later step; this helper only answers "which
- * queued entries are due to be attempted now?".
+ * behavior easier to reason about. A failed attempt is appended again with a
+ * later retry_after_ns, so one delayed scope does not permanently block other
+ * due entries that were already waiting behind it.
  *
  * Return: number of entries attempted.
  */
@@ -992,6 +1047,7 @@ static size_t backend_lost_scope_process_due_with_ops(
         if (entry->retry_after_ns > now_ns)
             break;
 
+        inotify_lost_scope_entry_t attempted = *entry;
         char found_path[PATH_MAX];
         backend_lost_scope_recovery_result_t result =
             backend_lost_scope_recover_next_with_ops(ctx,
@@ -1003,10 +1059,174 @@ static size_t backend_lost_scope_process_due_with_ops(
         if (result == BACKEND_LOST_SCOPE_RECOVERY_EMPTY)
             break;
 
+        if (result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND ||
+            result == BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED) {
+            const char *retry_path = attempted.old_path;
+
+            /*
+             * Some technical failures happen after the identity was found and
+             * watcher-table prefixes were already rewritten. In that case the
+             * next retry must use the best current path, not the original stale
+             * path, otherwise the retry would try to rewrite an old prefix that
+             * no longer exists in the watcher table.
+             */
+            if (found_path[0] != '\0')
+                retry_path = found_path;
+
+            backend_lost_scope_schedule_retry(ctx,
+                                              &attempted,
+                                              retry_path,
+                                              result,
+                                              now_ns);
+        }
+
         processed++;
     }
 
     return processed;
+}
+
+/*
+ * backend_lost_scope_retry_delay_ns - choose the next retry delay
+ * @failed_attempts: number of failed attempts including the one just completed
+ *
+ * The first version uses a small fixed backoff table. It avoids a tight loop
+ * when a scope is still outside the scanned root and keeps later retries slow
+ * enough for the event loop to prioritize fresh kernel events. The values are
+ * deliberately internal constants until the recovery contract is stable enough
+ * to expose them through configuration.
+ *
+ * Return: delay in nanoseconds before the next attempt may run.
+ */
+static uint64_t backend_lost_scope_retry_delay_ns(unsigned failed_attempts)
+{
+    static const uint64_t delays_ms[] = {
+        100,
+        250,
+        500,
+        1000,
+        2000
+    };
+    size_t index;
+
+    if (failed_attempts == 0)
+        failed_attempts = 1;
+
+    index = failed_attempts - 1;
+
+    if (index >= sizeof(delays_ms) / sizeof(delays_ms[0]))
+        index = (sizeof(delays_ms) / sizeof(delays_ms[0])) - 1;
+
+    return delays_ms[index] * BACKEND_LOST_SCOPE_NS_PER_MS;
+}
+
+/*
+ * backend_lost_scope_schedule_retry - requeue or abandon a failed recovery
+ * @ctx: backend context that owns the queue and logger
+ * @attempted: entry consumed by the failed attempt
+ * @retry_path: best path to preserve for the next attempt
+ * @result: failure class returned by the recovery attempt
+ * @now_ns: current monotonic time used as the new scheduling base
+ *
+ * NOT_FOUND and technical failures are not treated as immediate permanent
+ * loss. The watched object may reappear under a scanned root, or a transient
+ * scan/watch error may clear on a later pass. This helper increments the retry
+ * counter, computes a conservative backoff, and appends the entry to the queue
+ * tail. When the bounded attempt budget is exhausted, it emits a diagnostic and
+ * leaves the watcher stale instead of looping forever.
+ *
+ * Return: 0 when the entry is requeued, -1 when it is abandoned or cannot be
+ * requeued.
+ */
+static int backend_lost_scope_schedule_retry(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *attempted,
+    const char *retry_path,
+    backend_lost_scope_recovery_result_t result,
+    uint64_t now_ns
+)
+{
+    inotify_lost_scope_entry_t retry_entry;
+    unsigned failed_attempts;
+    uint64_t delay_ns;
+
+    if (ctx == NULL || ctx->runtime == NULL || attempted == NULL ||
+        retry_path == NULL || retry_path[0] == '\0') {
+        return -1;
+    }
+
+    failed_attempts = attempted->retry_count + 1;
+
+    if (failed_attempts >= BACKEND_LOST_SCOPE_MAX_ATTEMPTS) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s result=%s retries=%u",
+                     attempted->wd,
+                     retry_path,
+                     attempted->reason,
+                     backend_lost_scope_recovery_result_name(result),
+                     failed_attempts);
+        return -1;
+    }
+
+    retry_entry = *attempted;
+    retry_entry.retry_count = failed_attempts;
+    delay_ns = backend_lost_scope_retry_delay_ns(failed_attempts);
+    retry_entry.retry_after_ns = now_ns + delay_ns;
+
+    snprintf(retry_entry.old_path,
+             sizeof(retry_entry.old_path),
+             "%s",
+             retry_path);
+
+    if (backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
+                                               &retry_entry) != 0) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=requeue-failed",
+                     attempted->wd,
+                     retry_path,
+                     attempted->reason);
+        return -1;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s result=%s retry=%u delay_ms=%llu pending=%zu",
+                 retry_entry.wd,
+                 retry_entry.old_path,
+                 retry_entry.reason,
+                 backend_lost_scope_recovery_result_name(result),
+                 retry_entry.retry_count,
+                 (unsigned long long)(delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS),
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_recovery_result_name - stringify recovery result
+ * @result: internal recovery outcome
+ *
+ * Retry diagnostics need a stable text value that explains why the entry is
+ * being scheduled again or abandoned. These names are backend diagnostics, not
+ * Alfred raw/core event names.
+ *
+ * Return: static string for @result.
+ */
+static const char *backend_lost_scope_recovery_result_name(
+    backend_lost_scope_recovery_result_t result
+)
+{
+    switch (result) {
+    case BACKEND_LOST_SCOPE_RECOVERY_EMPTY:
+        return "empty";
+    case BACKEND_LOST_SCOPE_RECOVERY_FOUND:
+        return "found";
+    case BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND:
+        return "not-found";
+    case BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED:
+        return "scan-failed";
+    default:
+        return "unknown";
+    }
 }
 
 /*

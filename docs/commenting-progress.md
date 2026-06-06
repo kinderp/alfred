@@ -349,3 +349,16 @@ Removed legacy files that were documented during the migration:
 - `modules/inotify/include/move_cache.h`
 - `modules/inotify/src/events.c`
 - `modules/inotify/src/move_cache.c`
+
+## Lost-Scope Retry Policy
+
+Completed in this pass:
+
+- expanded `modules/inotify/src/inotify_backend.c` comments around the
+  due-entry processor, retry scheduling helper, retry delay helper, recovery
+  result stringifier, and queue re-enqueue primitive
+- updated `tests/backend/test_lost_scope_recovery.c` with expected log contract
+  lines for `WATCH_LOST_RETRY_SCHEDULED` and
+  `WATCH_LOST_RECOVERY_GAVE_UP`
+- added scenario comments explaining why a `NOT_FOUND` result is retried with
+  backoff and why retry-budget exhaustion is diagnostic rather than semantic

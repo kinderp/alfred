@@ -2892,7 +2892,7 @@ valida tutti i path prima di mutare la tabella.
 
 Restano i passi successivi:
 
-1. decidere e implementare retry/backoff su `NOT_FOUND` e fallimenti tecnici
+1. collegare il processore due-entry al loop reale del backend
 2. solo dopo aggiungere worker thread e configurazione pubblica
 
 #### Processore sincrono delle entry mature
@@ -2915,10 +2915,15 @@ Il contratto e':
 - processa al massimo `batch_size` entry mature
 - si ferma al primo elemento non maturo invece di saltarlo
 
-Questa ultima regola e' importante: saltare una entry non matura per cercarne
-una successiva romperebbe l'ordine FIFO e renderebbe difficile ragionare su
-retry, fairness e diagnostica. Il primo processore quindi e' conservativo:
-preserva l'ordine in cui Alfred ha perso fiducia nei path.
+Questa ultima regola e' importante quando la coda non cambia. Con il backoff,
+pero', una entry fallita viene rimessa in fondo alla coda con un
+`retry_after_ns` futuro. Questo evita che una directory ancora non ritrovabile
+blocchi per sempre gli scope successivi. Il comportamento quindi e':
+
+- finche' si guarda una coda immutata, non si salta mai la testa FIFO
+- quando una entry fallisce, la si consuma e la si reinserisce in coda
+- il reinserimento in fondo permette ad altre entry gia' mature di avanzare
+- il nuovo `retry_after_ns` impedisce loop stretti sulla stessa directory
 
 Esempio:
 
@@ -2935,11 +2940,51 @@ si ferma su B
 non salta B per processare C
 ```
 
-In questa fase `retry_count`, retry massimo e backoff non sono ancora applicati
-dal processore. Le entry mature vengono tentate con la recovery sincrona; il
-reinserimento dopo `WATCH_LOST_NOT_FOUND` o `WATCH_LOST_RECOVERY_FAILED` sara'
-il passo successivo. Questo evita di introdurre insieme scheduling, backoff,
-requeue e worker thread.
+Il processore applica ora una prima policy di retry/backoff interna. Se una
+entry matura termina con:
+
+- `BACKEND_LOST_SCOPE_RECOVERY_FOUND`, la entry e' consumata definitivamente
+- `BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND`, la entry viene rischedulata
+- `BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED`, la entry viene rischedulata
+- `BACKEND_LOST_SCOPE_RECOVERY_EMPTY`, il processore si ferma
+
+`NOT_FOUND` non e' trattato come cancellazione definitiva. Significa solo che
+la scansione della root scelta non ha trovato l'identita' in quel momento. La
+directory potrebbe essere fuori dalla root, potrebbe essere stata rimossa, o
+potrebbe tornare visibile dopo un'altra operazione del filesystem. Per questo
+Alfred non elimina subito la memoria dello scope perso.
+
+Anche alcuni fallimenti tecnici vengono rischedulati. Questo include errori di
+scan, fallimenti di copertura o fallimenti di reinstallazione dei watch. La
+scelta e' conservativa: finche' Alfred non puo' provare che la subtree e'
+affidabile, resta `STALE`; finche' esiste una possibilita' ragionevole di
+recupero, Alfred tiene memoria della recovery da ritentare.
+
+La prima tabella di backoff e' volutamente piccola e non configurabile:
+
+```text
+fallimento 1 -> retry dopo 100 ms
+fallimento 2 -> retry dopo 250 ms
+fallimento 3 -> retry dopo 500 ms
+fallimento 4 -> retry dopo 1000 ms
+fallimento 5+ -> retry dopo 2000 ms
+```
+
+Il limite iniziale e' `BACKEND_LOST_SCOPE_MAX_ATTEMPTS = 8`. Il contatore conta
+anche il tentativo appena fallito. Quando il limite viene raggiunto, Alfred
+logga `WATCH_LOST_RECOVERY_GAVE_UP` e non rimette la entry in coda. Il watch
+resta comunque non affidabile: il give-up non produce eventi raw/core e non
+significa che l'utente abbia cancellato o spostato qualcosa con semantica
+definitiva.
+
+Un dettaglio importante riguarda i fallimenti tecnici dopo un match. La recovery
+puo' trovare l'identita', riscrivere i prefissi della watcher table e poi
+fallire durante lo scan strict, la reinstallazione dei missing watch o il
+ritorno a `VALID`. In quel caso il prossimo retry non deve usare il vecchio
+`old_path`, perche' la watcher table puo' gia' contenere il nuovo prefisso. Il
+processore preserva quindi il miglior path conosciuto: se `found_path` e' stato
+riempito, la entry rischedulata usa quel path come nuovo riferimento
+diagnostico.
 
 #### Aggiornamento prefissi dei figli
 
@@ -3028,8 +3073,8 @@ fallire sul secondo missing watch e provare rollback e stato non `VALID`.
 
 #### Log di lost-scope recovery
 
-`WATCH_LOST_QUEUED` e' implementato. Gli altri log restano futuri e servono a
-fissare la direzione del contratto diagnostico:
+I log diagnostici implementati fissano il contratto osservabile della recovery
+lost-scope:
 
 | Log | Stato | Significato |
 | --- | --- | --- |
@@ -3044,8 +3089,45 @@ fissare la direzione del contratto diagnostico:
 | `WATCH_LOST_REINSTALL_FAILED wd=N path=Q reason=R missing_path=M` | implementato | fallita l'installazione di un missing watch; la recovery non puo' tornare `VALID` |
 | `WATCH_LOST_ROLLBACK wd=N path=Q reason=R removed_wd=M` | implementato | rimosso un watch installato nello stesso tentativo fallito |
 | `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
+| `WATCH_LOST_RETRY_SCHEDULED wd=N path=P reason=R result=X retry=N delay_ms=D pending=K` | implementato | la recovery non e' riuscita ma Alfred conserva lo scope e lo ritentera' dopo backoff |
+| `WATCH_LOST_RECOVERY_GAVE_UP wd=N path=P reason=R result=X retries=N` | implementato | il budget di tentativi e' esaurito; Alfred non rischedula questa entry |
 | `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
 | `WATCH_LOST_RECOVERY_END wd=N path=Q reason=R result=valid watches=W` | implementato | recovery ampia completata e subtree tornata affidabile |
+
+`WATCH_LOST_RETRY_SCHEDULED` non significa che il recovery worker esista gia'.
+Oggi il processore e' ancora sincrono e richiamabile dai test. Il log dice solo
+che la policy di scheduling ha rimesso la entry in coda con un tempo minimo per
+il prossimo tentativo.
+
+`WATCH_LOST_RECOVERY_GAVE_UP` non e' una cancellazione semantica. Significa che
+Alfred ha smesso di spendere lavoro su quella entry specifica dopo il budget
+corrente. In futuro questa scelta potra' essere collegata a una rescan piu'
+ampia, a metriche, a configurazione utente o a una policy di sicurezza piu'
+aggressiva.
+
+#### Roadmap di ripresa lost-scope
+
+Alla ripresa del lavoro, partire da questi punti senza rileggere tutta la chat:
+
+1. Collegare `backend_lost_scope_process_due_with_ops()` al punto runtime piu'
+   adatto del loop backend, mantenendo `batch_size` piccolo e misurabile.
+2. Decidere come calcolare `now_ns` nel runtime reale. La funzione
+   `backend_now_ns()` esiste gia', ma va usata nel punto corretto per non
+   duplicare clock e logica temporale.
+3. Definire se il primo collegamento deve essere solo sincrono nel poll oppure
+   se serve subito una chiamata periodica separata. La preferenza corrente e':
+   prima sincrono, poi worker thread solo se i test mostrano blocchi o latenza.
+4. Aggiungere test runtime/backend che provino l'integrazione del processore con
+   una queue gia' popolata, non solo test unitari chiamati direttamente.
+5. Documentare il comportamento prestazionale: massimo lavoro per poll,
+   costo dello scan, rischio di molte directory lost-scope, e motivazione del
+   backoff.
+6. Valutare configurazione futura, ma non esporla ancora: `max_attempts`,
+   tabella backoff, `batch_size`, eventuale abilita/disabilita lost-scope
+   recovery.
+7. Solo dopo il collegamento sincrono stabile, discutere worker thread,
+   debounce, lock della queue, shutdown pulito e interazione con futuri plugin
+   backend.
 
 #### Decisione per Alfred
 
