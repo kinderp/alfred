@@ -2937,12 +2937,14 @@ backend_lost_scope_process_due_with_ops(ctx, root, now_ns, batch_size, ops)
 
 La funzione non crea thread, non dorme e non gira in loop infinito. Serve a
 separare la policy "quali entry posso tentare adesso?" dalla concorrenza futura.
+Il parametro `root` resta un fallback di transizione; il percorso normale usa la
+`scan_root` copiata nella entry quando lo scope e' stato accodato.
 Il contratto e':
 
 - guarda solo la testa FIFO della `lost_scope_queue`
 - se la queue e' vuota, non fa nulla
 - se `retry_after_ns > now_ns`, non consuma la entry e si ferma
-- se la entry e' matura, chiama la recovery sincrona gia' testata
+- se la entry e' matura, chiama la recovery sincrona su `entry.scan_root`
 - processa al massimo `batch_size` entry mature
 - si ferma al primo elemento non maturo invece di saltarlo
 
@@ -3228,8 +3230,8 @@ Lo stato corrente del branch e':
 
 I prossimi passi, in ordine, sono:
 
-1. estendere il processore per cercare prima `scan_root` e poi, se la policy lo
-   consente, le altre root configurate
+1. estendere il processore per provare, se la policy lo consente, le altre root
+   configurate quando `scan_root` non trova l'identita'
 2. solo dopo collegare il processore al loop runtime con `backend_now_ns()` e
    `batch_size` piccolo
 3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a

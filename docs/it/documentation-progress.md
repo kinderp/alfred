@@ -1348,3 +1348,8 @@ Stati usati:
   piu' specifica che contiene il path stale.
 - `14-scenari-test.md`: esteso lo scenario lost-scope queue con deduplica root,
   match con boundary `/` e scelta della root annidata piu' specifica.
+- `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: documentato che il processore due-entry lost-scope usa
+  la `scan_root` salvata nella entry come root normale di scansione; il
+  parametro `root` resta fallback di transizione e il fallback sulle altre root
+  configurate e' il prossimo passo.

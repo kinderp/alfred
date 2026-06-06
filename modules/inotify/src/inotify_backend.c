@@ -1026,7 +1026,7 @@ backend_lost_scope_recover_next_with_ops(
 /*
  * backend_lost_scope_process_due_with_ops - process mature queued recoveries
  * @ctx: backend context that owns the lost-scope queue and logger
- * @root: monitored root inside which due entries may be searched
+ * @root: legacy fallback root for entries that do not carry scan_root
  * @now_ns: current monotonic time used for retry_after_ns comparisons
  * @batch_size: maximum number of due entries to process in this call
  * @watch_ops: watch installation/removal operations for runtime or tests
@@ -1042,6 +1042,11 @@ backend_lost_scope_recover_next_with_ops(
  * behavior easier to reason about. A failed attempt is appended again with a
  * later retry_after_ns, so one delayed scope does not permanently block other
  * due entries that were already waiting behind it.
+ *
+ * Each lost-scope entry carries its own scan_root. That field is the bounded
+ * root chosen when the backend queued the stale scope, so the processor uses it
+ * instead of guessing from the caller. @root remains a defensive fallback for
+ * older tests or transitional call paths that might build entries manually.
  *
  * Return: number of entries attempted.
  */
@@ -1071,10 +1076,15 @@ static size_t backend_lost_scope_process_due_with_ops(
             break;
 
         inotify_lost_scope_entry_t attempted = *entry;
+        const char *scan_root = attempted.scan_root;
+
+        if (scan_root[0] == '\0')
+            scan_root = root;
+
         char found_path[PATH_MAX];
         backend_lost_scope_recovery_result_t result =
             backend_lost_scope_recover_next_with_ops(ctx,
-                                                     root,
+                                                     scan_root,
                                                      found_path,
                                                      sizeof(found_path),
                                                      watch_ops);

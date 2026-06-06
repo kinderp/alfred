@@ -380,3 +380,11 @@ Completed in the configured-root pass:
   prefix matching, and most-specific-root selection helpers
 - updated `tests/backend/test_lost_scope_queue.c` comments to explain why
   configured roots are tested together with lost-scope queue primitives
+
+Completed in the scan-root processor pass:
+
+- expanded the `backend_lost_scope_process_due_with_ops()` comment to explain
+  why due recovery uses each entry's stored `scan_root`
+- added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
+  for the case where the caller root is intentionally wrong but `scan_root`
+  still drives a successful recovery

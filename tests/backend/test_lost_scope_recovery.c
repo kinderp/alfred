@@ -22,6 +22,7 @@
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
  * - WATCH_LOST_RETRY_SCHEDULED ... result=not-found retry=1 delay_ms=100
  * - WATCH_LOST_RECOVERY_GAVE_UP ... result=not-found retries=8
+ * - WATCH_LOST_SCAN_BEGIN root=<root>
  *
  * Forbidden events:
  * - FILE_*
@@ -39,7 +40,8 @@
  * reinstall failure after one fake watch was installed and verifies rollback.
  * A deleted directory is not found. The due-entry processor then proves that a
  * temporary miss is requeued with bounded backoff, while a retry-budget
- * exhaustion is logged and not scheduled again.
+ * exhaustion is logged and not scheduled again. The processor also proves it
+ * scans the root stored in the queued entry, not an unrelated caller root.
  */
 
 #include <assert.h>
@@ -669,6 +671,71 @@ static void test_process_due_gives_up_after_retry_budget(
 }
 
 /*
+ * test_process_due_uses_entry_scan_root - queued root drives recovery scan
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root that contains the moved identity
+ *
+ * Runtime lost-scope entries carry scan_root so the due processor does not need
+ * to infer the bounded search scope later. The caller root below is
+ * deliberately wrong: if the processor still used that argument, the identity
+ * search would fail before finding the renamed directory under @root.
+ */
+static void test_process_due_uses_entry_scan_root(inotify_backend_context_t *ctx,
+                                                  const char *root)
+{
+    char original[PATH_MAX];
+    char renamed[PATH_MAX];
+    char wrong_root[PATH_MAX];
+    struct stat st;
+
+    reset_event_log(ctx->logger);
+
+    join_path(original, sizeof(original), root, "scan-root-original");
+    join_path(renamed, sizeof(renamed), root, "scan-root-renamed");
+    join_path(wrong_root, sizeof(wrong_root), root, "scan-root-wrong");
+
+    assert(mkdir(original, 0700) == 0);
+    assert(stat(original, &st) == 0);
+
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  30,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             30,
+                             WATCHER_STATE_STALE) == 0);
+    assert(rename(original, renamed) == 0);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            30,
+                                            original,
+                                            st.st_dev,
+                                            st.st_ino,
+                                            root,
+                                            "IN_MOVE_SELF",
+                                            4000,
+                                            4000) == 0);
+
+    fake_watch_state_reset(0);
+
+    assert(backend_lost_scope_process_due_with_ops(ctx,
+                                                   wrong_root,
+                                                   4000,
+                                                   4,
+                                                   &FAKE_LOST_SCOPE_WATCH_OPS) == 1);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 30),
+                  renamed) == 0);
+    assert(watcher_get_state(&ctx->runtime->watchers, 30) ==
+           WATCHER_STATE_VALID);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
+    assert_event_log_contains(ctx->logger, root);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+    assert_event_log_not_contains(ctx->logger, wrong_root);
+}
+
+/*
  * test_empty_queue_is_noop - no recovery work is available
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root path
@@ -711,6 +778,7 @@ int main(int argc, char **argv)
     test_process_due_skips_future_head(&ctx, root);
     test_process_due_requeues_not_found(&ctx, root);
     test_process_due_gives_up_after_retry_budget(&ctx, root);
+    test_process_due_uses_entry_scan_root(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);
