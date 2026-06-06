@@ -107,6 +107,35 @@ static const char *watcher_state_name(watcher_state_t state)
     }
 }
 
+/*
+ * watcher_path_matches_prefix - check path equality or subtree membership
+ * @path: active watcher path to inspect
+ * @prefix: old root/prefix being replaced
+ *
+ * Prefix replacement must not treat "/tmp/src-old" as a child of "/tmp/src".
+ * A match is therefore either exact equality or a slash boundary immediately
+ * after the prefix.
+ *
+ * Return: nonzero when @path should be rewritten for @prefix.
+ */
+static int watcher_path_matches_prefix(const char *path, const char *prefix)
+{
+    size_t prefix_len;
+
+    if (path == NULL || prefix == NULL)
+        return 0;
+
+    prefix_len = strlen(prefix);
+
+    if (prefix_len == 0)
+        return 0;
+
+    if (strncmp(path, prefix, prefix_len) != 0)
+        return 0;
+
+    return path[prefix_len] == '\0' || path[prefix_len] == '/';
+}
+
 /* ============================================================================
  * PUBLIC API
  * ========================================================================== */
@@ -283,6 +312,90 @@ int watcher_update_path(watcher_table_t *wt, int wd, const char *path)
              sizeof(slot->path),
              "%s",
              path);
+
+    return 0;
+}
+
+/*
+ * watcher_update_path_prefix - replace a path prefix in active watches
+ * @wt: table to update
+ * @old_prefix: old path prefix that may appear in active watcher paths
+ * @new_prefix: new path prefix that should replace @old_prefix
+ * @updated_count: optional output for the number of rewritten paths
+ *
+ * Lost-scope recovery can find the moved root of a watched subtree before it
+ * has repaired the child watch paths below that root. This helper performs
+ * only the in-memory path rewrite: watch descriptors, active flags,
+ * reliability states, and captured filesystem identities are preserved.
+ *
+ * The function uses a two-pass algorithm. The first pass validates every
+ * candidate rewrite, including PATH_MAX fit, before the second pass mutates
+ * any slot. This prevents a partially rewritten subtree if one child path
+ * would overflow fixed storage.
+ *
+ * Return: 0 on success, -1 on invalid input or path overflow.
+ */
+int watcher_update_path_prefix(watcher_table_t *wt,
+                               const char *old_prefix,
+                               const char *new_prefix,
+                               size_t *updated_count)
+{
+    size_t old_len;
+    size_t new_len;
+    size_t count;
+
+    if (wt == NULL || old_prefix == NULL || new_prefix == NULL)
+        return -1;
+
+    old_len = strlen(old_prefix);
+    new_len = strlen(new_prefix);
+
+    if (old_len == 0 || new_len == 0)
+        return -1;
+
+    count = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot = &wt->items[i];
+        const char *suffix;
+        size_t suffix_len;
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, old_prefix))
+            continue;
+
+        suffix = slot->path + old_len;
+        suffix_len = strlen(suffix);
+
+        if (new_len + suffix_len >= sizeof(slot->path))
+            return -1;
+
+        count++;
+    }
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        watcher_entry_t *slot = &wt->items[i];
+        const char *suffix;
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, old_prefix))
+            continue;
+
+        suffix = slot->path + old_len;
+
+        snprintf(slot->path,
+                 sizeof(slot->path),
+                 "%s%s",
+                 new_prefix,
+                 suffix);
+    }
+
+    if (updated_count != NULL)
+        *updated_count = count;
 
     return 0;
 }

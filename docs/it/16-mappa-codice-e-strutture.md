@@ -577,7 +577,7 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
-| `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
+| `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_update_path_prefix()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
 | `lost_scopes` | coda FIFO degli scope stale che richiederanno una recovery ampia posticipata | `backend_lost_scope_queue_init()`, `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, futuro worker/resync scanner |
 
 `lost_scopes` non contiene eventi Alfred. Contiene debito tecnico del backend:
@@ -699,7 +699,7 @@ Campi:
 | `has_identity` | dice se `device_id` e `inode_id` sono stati catturati | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, `watcher_dump()`, probe resync |
 | `device_id` | valore `st_dev` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
 | `inode_id` | valore `st_ino` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
-| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
+| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_update_path_prefix()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
 
 `device_id` e `inode_id` formano la prova di identita' Unix/Linux classica:
 `st_dev` identifica il filesystem/device e `st_ino` identifica l'inode dentro
@@ -802,6 +802,31 @@ Aggiorna solo il testo del path dello slot esistente. Questa distinzione e'
 importante: dopo `WATCH_LOST_FOUND`, Alfred puo' sapere il nuovo path del watch
 principale, ma deve ancora aggiornare i prefissi dei figli, fare scan strict e
 verificare la copertura prima di dichiarare la subtree di nuovo affidabile.
+
+`watcher_update_path_prefix()` e' il building block immediatamente successivo:
+riscrive il prefisso testuale di tutti gli slot attivi che corrispondono
+esattamente al vecchio path o che stanno sotto quel path come discendenti.
+Questo serve quando una directory osservata viene ritrovata con la stessa
+identita' filesystem in un'altra posizione: il watch principale puo' passare da
+`/tmp/old` a `/tmp/new`, ma i watch figli possono contenere ancora path come
+`/tmp/old/a` e `/tmp/old/a/b`.
+
+La funzione non usa un semplice "inizia con" perche' sarebbe sbagliato. Il path
+`/tmp/oldish` inizia con gli stessi caratteri di `/tmp/old`, ma non e' figlio
+di `/tmp/old`. Per questo il match e' valido solo in due casi:
+
+```text
+path == old_prefix
+path == old_prefix + "/" + resto
+```
+
+L'aggiornamento e' fatto in due passaggi. Prima Alfred calcola tutti i path che
+dovrebbero cambiare e verifica che i nuovi path entrino in `PATH_MAX`. Solo se
+tutto e' valido modifica davvero la tabella. Questa scelta evita un errore
+pericoloso: aggiornare meta' subtree e poi scoprire che un figlio non entra nel
+buffer. Anche questa funzione preserva `wd`, `active`, `state`,
+`has_identity`, `device_id` e `inode_id`; ripara stringhe di path, non decide
+ancora che la subtree sia tornata semanticamente affidabile.
 
 La scelta architetturale e' mettere questo stato nella watcher table invece che
 in una tabella separata. Il motivo e' pratico: quando arriva un evento inotify,

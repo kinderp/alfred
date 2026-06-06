@@ -2875,9 +2875,53 @@ implementato dentro `backend_lost_scope_recover_next()`.
 
 Restano i passi successivi:
 
-1. aggiornare i prefissi dei figli watched sotto la directory ritrovata
+1. collegare l'aggiornamento dei prefissi dei figli watched alla recovery
 2. eseguire scan strict e reinstall all-or-stale
 3. solo dopo aggiungere worker thread, debounce e backoff
+
+#### Aggiornamento prefissi dei figli
+
+Il building block per aggiornare i prefissi dei figli e' ora
+`watcher_update_path_prefix()`. La funzione vive nella watcher table e non
+conosce inotify, scanner o log. Il suo contratto e':
+
+```text
+watcher_update_path_prefix(old_prefix, new_prefix)
+    visita gli slot attivi della watcher table
+    aggiorna old_prefix -> new_prefix
+    aggiorna anche old_prefix/... -> new_prefix/...
+    non tocca path simili ma esterni, per esempio old_prefix-suffix
+    preserva stato e identita' dei watch
+    valida tutti i path prima di mutare la tabella
+```
+
+Esempio:
+
+```text
+old_prefix = /tmp/root
+new_prefix = /tmp/root_moved
+
+/tmp/root              -> /tmp/root_moved
+/tmp/root/a            -> /tmp/root_moved/a
+/tmp/root/a/b          -> /tmp/root_moved/a/b
+/tmp/root-backup       -> invariato
+```
+
+La regola su `/` e' essenziale. Senza il controllo del separatore, una
+sostituzione testuale pura potrebbe trattare `/tmp/root-backup` come figlio di
+`/tmp/root`, corrompendo il path di un watch esterno alla subtree recuperata.
+
+La funzione usa due passaggi: prima verifica che tutti i nuovi path stiano in
+`PATH_MAX`, poi modifica gli slot. Questo evita uno stato intermedio in cui
+alcuni figli sono gia' stati aggiornati e altri no. Anche dopo questa
+operazione i watch possono restare `STALE` o `RESYNCING`: riscrivere i path non
+significa ancora che Alfred abbia completato scan strict, reinstallazione dei
+watch mancanti e ritorno a `VALID`.
+
+Il collegamento runtime e' volutamente rimandato al prossimo micro-step:
+`backend_lost_scope_recover_next()` deve salvare il vecchio path prima di
+aggiornare il watch principale, poi chiamare `watcher_update_path_prefix()` con
+quel vecchio path e il nuovo path trovato dallo scanner.
 
 #### Log di lost-scope recovery
 
@@ -2889,7 +2933,7 @@ fissare la direzione del contratto diagnostico:
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | implementato | il watch e' stato inserito nella coda di recovery ampia |
 | `WATCH_LOST_SCAN_BEGIN root=R pending=N` | implementato | parte una scansione sincrona su una root monitorata |
 | `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | implementato | trovata una directory con la stessa identita' del watch perso |
-| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | futuro | aggiornati i path del subtree watched |
+| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | futuro | aggiornati i path del subtree watched; helper dati implementato, log runtime non ancora collegato |
 | `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
 | `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
 | `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | futuro | recovery ampia completata e subtree tornata affidabile |

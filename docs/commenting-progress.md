@@ -26,6 +26,13 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding
+  watcher_update_path_prefix(). Comments now explain why subtree path repair
+  must preserve state and identity, why prefix matching requires a slash
+  boundary, and why the function validates all candidate rewrites before
+  mutating the watcher table.
 - refreshed `modules/inotify/src/inotify_backend.c` and
   `tests/backend/test_lost_scope_recovery.c` after documenting
   backend_lost_scope_recovery_result_t and backend_lost_scope_scan_context_t.

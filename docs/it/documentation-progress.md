@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `watcher.h`, `watcher.c`, `test_watcher_state.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto e documentato
+  `watcher_update_path_prefix()`. L'helper riscrive in modo atomico i path di
+  una subtree watched dopo una recovery lost-scope, preserva stato e identita',
+  protegge i path simili ma esterni tramite controllo del separatore `/` e non
+  e' ancora collegato al runtime backend.
 - `inotify_backend.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
   `22-contratto-log.md`: commentati in dettaglio

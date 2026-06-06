@@ -160,6 +160,88 @@ static void test_update_path_preserves_state_and_identity(void)
 }
 
 /*
+ * test_update_path_prefix_preserves_subtree_state - rewrite subtree paths
+ *
+ * Lost-scope recovery can find that a watched directory moved from /tmp/old to
+ * /tmp/new while child watches still store paths below /tmp/old. The prefix
+ * helper rewrites exact-prefix and slash-separated descendants only. It must
+ * preserve every watch state and identity because this operation repairs text,
+ * not kernel watch ownership or semantic validity.
+ */
+static void test_update_path_prefix_preserves_subtree_state(void)
+{
+    watcher_table_t table;
+    size_t updated = 0;
+    dev_t device_id = 0;
+    ino_t inode_id = 0;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store_identity(&table,
+                                  1,
+                                  "/tmp/old",
+                                  (dev_t)10,
+                                  (ino_t)100) == 0);
+    assert(watcher_store_identity(&table,
+                                  2,
+                                  "/tmp/old/lib",
+                                  (dev_t)20,
+                                  (ino_t)200) == 0);
+    assert(watcher_store_identity(&table,
+                                  3,
+                                  "/tmp/old/lib/internal",
+                                  (dev_t)30,
+                                  (ino_t)300) == 0);
+    assert(watcher_store_identity(&table,
+                                  4,
+                                  "/tmp/oldish",
+                                  (dev_t)40,
+                                  (ino_t)400) == 0);
+
+    assert(watcher_set_state(&table, 1, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 2, WATCHER_STATE_RESYNCING) == 0);
+    assert(watcher_set_state(&table, 3, WATCHER_STATE_STALE) == 0);
+
+    assert(watcher_update_path_prefix(&table,
+                                      "/tmp/old",
+                                      "/tmp/new",
+                                      &updated) == 0);
+    assert(updated == 3);
+
+    assert(strcmp(watcher_get_path(&table, 1), "/tmp/new") == 0);
+    assert(strcmp(watcher_get_path(&table, 2), "/tmp/new/lib") == 0);
+    assert(strcmp(watcher_get_path(&table, 3), "/tmp/new/lib/internal") == 0);
+
+    /*
+     * /tmp/oldish starts with the same bytes as /tmp/old, but it is not inside
+     * the /tmp/old subtree. The slash-boundary rule protects this watch from
+     * accidental rewriting.
+     */
+    assert(strcmp(watcher_get_path(&table, 4), "/tmp/oldish") == 0);
+
+    assert(watcher_get_state(&table, 1) == WATCHER_STATE_STALE);
+    assert(watcher_get_state(&table, 2) == WATCHER_STATE_RESYNCING);
+    assert(watcher_get_state(&table, 3) == WATCHER_STATE_STALE);
+
+    assert(watcher_get_identity(&table, 2, &device_id, &inode_id) == 0);
+    assert(device_id == (dev_t)20);
+    assert(inode_id == (ino_t)200);
+
+    updated = 99;
+    assert(watcher_update_path_prefix(&table,
+                                      "/tmp/missing",
+                                      "/tmp/other",
+                                      &updated) == 0);
+    assert(updated == 0);
+
+    assert(watcher_update_path_prefix(&table, NULL, "/tmp/x", &updated) == -1);
+    assert(watcher_update_path_prefix(&table, "/tmp/x", NULL, &updated) == -1);
+    assert(watcher_update_path_prefix(NULL, "/tmp/x", "/tmp/y", &updated) == -1);
+
+    watcher_destroy(&table);
+}
+
+/*
  * test_state_can_be_marked_stale_and_restored - exercise active-state changes
  *
  * The important distinction is that STALE and RESYNCING are still active
@@ -455,6 +537,7 @@ int main(void)
     test_store_starts_valid();
     test_store_identity_records_device_and_inode();
     test_update_path_preserves_state_and_identity();
+    test_update_path_prefix_preserves_subtree_state();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();
