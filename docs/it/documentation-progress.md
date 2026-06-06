@@ -1342,3 +1342,9 @@ Stati usati:
   corrente e il prossimo passo sulle root configurate.
 - `14-scenari-test.md`: aggiornato lo scenario lost-scope queue per includere
   la copia stabile di `scan_root` insieme a path e reason.
+- `21-roadmap-scanner-resync.md` e `16-mappa-codice-e-strutture.md`:
+  aggiornato lo stato delle root configurate: ora `inotify_backend_t` possiede
+  la lista delle startup root riuscite e `scan_root` viene popolato con la root
+  piu' specifica che contiene il path stale.
+- `14-scenari-test.md`: esteso lo scenario lost-scope queue con deduplica root,
+  match con boundary `/` e scelta della root annidata piu' specifica.

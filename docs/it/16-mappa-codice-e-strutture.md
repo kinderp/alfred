@@ -579,6 +579,9 @@ Campi:
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
 | `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_update_path_prefix()`, `watcher_set_state_prefix()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
 | `lost_scopes` | coda FIFO degli scope stale che richiederanno una recovery ampia posticipata | `backend_lost_scope_queue_init()`, `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, futuro worker/resync scanner |
+| `configured_roots` | array dinamico delle root startup installate con successo | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_root_for_path()`, futura policy multi-root |
+| `configured_roots_count` | numero di root registrate | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_root_for_path()` |
+| `configured_roots_capacity` | numero di slot allocati in `configured_roots` | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_roots_add()` |
 
 `lost_scopes` non contiene eventi Alfred. Contiene debito tecnico del backend:
 "ho perso fiducia nel path di questo `wd`, ma ho ancora identita' filesystem
@@ -643,7 +646,7 @@ Campi:
 | `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()`, retry lost-scope | processore due-entry e policy backoff |
 | `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()`, incrementato dal retry lost-scope | policy backoff e limite tentativi |
 | `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e futuro aggiornamento prefissi |
-| `scan_root` | root delimitata in cui cercare prima di eventuali fallback piu' ampi | `backend_lost_scope_queue_enqueue()` | recovery lost-scope multi-root futura |
+| `scan_root` | root delimitata in cui cercare prima di eventuali fallback piu' ampi | `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()` | recovery lost-scope e futura policy multi-root |
 | `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e policy futura |
 
 `old_path`, `scan_root` e `reason` sono copiati nella entry. Questa scelta evita
@@ -654,10 +657,10 @@ entry dovra' essere autonoma.
 `scan_root` nasce per non confondere il path stale con il perimetro di ricerca.
 Il path vecchio puo' non esistere piu' o puo' essere stato riusato da un altro
 oggetto; la root invece descrive dove Alfred e' autorizzato a cercare la stessa
-identita'. Nel runtime corrente la root configurata non e' ancora salvata nel
-backend, quindi il campo e' popolato temporaneamente con il path locale noto. Il
-passo successivo dovra' sostituire questo fallback con la vera root di
-appartenenza.
+identita'. Il runtime registra le root startup riuscite in `configured_roots` e
+sceglie la root piu' specifica che contiene `old_path`. Se nessuna root
+corrisponde, resta un fallback al path locale per non perdere la diagnostica,
+ma il caso normale non dipende piu' da `app.c` o da `argv`.
 
 ### `watcher_table_t`
 

@@ -273,6 +273,18 @@ static int backend_init(inotify_backend_context_t *ctx);
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path);
 
+static int backend_configured_roots_add(inotify_backend_t *runtime,
+                                        const char *path);
+
+static void backend_configured_roots_destroy(inotify_backend_t *runtime);
+
+static const char *backend_configured_root_for_path(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
+static int backend_path_matches_prefix(const char *path, const char *prefix);
+
 static void backend_shutdown(inotify_backend_context_t *ctx);
 
 static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
@@ -1400,7 +1412,165 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
             return ERR_INOTIFY;
     }
 
+    if (backend_configured_roots_add(ctx->runtime, path) != 0) {
+        logger_error(ctx->logger,
+                     "configured root registration failed path=%s",
+                     path);
+        return ERR_ALLOC;
+    }
+
     return ERR_OK;
+}
+
+/*
+ * backend_configured_roots_add - remember one successfully watched root
+ * @runtime: backend runtime that owns the root list
+ * @path: startup path that was accepted by watch installation
+ *
+ * Lost-scope recovery needs a bounded search scope that is independent from the
+ * stale path. The application passes startup paths during initialization, but
+ * app.c should not be queried later from backend recovery code. This helper
+ * copies each successfully installed startup root into backend-owned storage so
+ * delayed recovery can find the root that originally contained a stale watch.
+ *
+ * Duplicate paths are ignored. Paths are stored as supplied by startup; a later
+ * normalization pass can tighten this if Alfred starts canonicalizing startup
+ * paths before watch installation.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_configured_roots_add(inotify_backend_t *runtime,
+                                        const char *path)
+{
+    size_t path_len;
+
+    if (runtime == NULL || path == NULL)
+        return -1;
+
+    path_len = strlen(path);
+
+    if (path_len == 0 || path_len >= PATH_MAX)
+        return -1;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) == 0)
+            return 0;
+    }
+
+    if (runtime->configured_roots_count == runtime->configured_roots_capacity) {
+        size_t new_capacity = runtime->configured_roots_capacity;
+
+        if (new_capacity == 0)
+            new_capacity = 4;
+        else
+            new_capacity *= 2;
+
+        char (*tmp)[PATH_MAX] =
+            realloc(runtime->configured_roots, new_capacity * PATH_MAX);
+
+        if (tmp == NULL)
+            return -1;
+
+        runtime->configured_roots = tmp;
+        runtime->configured_roots_capacity = new_capacity;
+    }
+
+    snprintf(runtime->configured_roots[runtime->configured_roots_count],
+             PATH_MAX,
+             "%s",
+             path);
+    runtime->configured_roots_count++;
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_destroy - release backend-owned root storage
+ * @runtime: backend runtime that owns the root list
+ *
+ * The roots are stored in one dynamic array of fixed PATH_MAX slots, so cleanup
+ * is a single free plus counter reset. The function is safe for partially
+ * initialized backends and repeated shutdown paths.
+ */
+static void backend_configured_roots_destroy(inotify_backend_t *runtime)
+{
+    if (runtime == NULL)
+        return;
+
+    free(runtime->configured_roots);
+    runtime->configured_roots = NULL;
+    runtime->configured_roots_count = 0;
+    runtime->configured_roots_capacity = 0;
+}
+
+/*
+ * backend_path_matches_prefix - check path prefix with directory boundaries
+ * @path: path to classify
+ * @prefix: candidate root/prefix
+ *
+ * A textual prefix is not enough: "/tmp/root-old" must not be treated as a
+ * child of "/tmp/root". Matching accepts exact equality, children separated by
+ * '/', and the filesystem root "/" as a prefix of every absolute path.
+ *
+ * Return: nonzero when @path belongs to @prefix.
+ */
+static int backend_path_matches_prefix(const char *path, const char *prefix)
+{
+    size_t prefix_len;
+
+    if (path == NULL || prefix == NULL)
+        return 0;
+
+    prefix_len = strlen(prefix);
+
+    if (prefix_len == 0)
+        return 0;
+
+    if (strcmp(prefix, "/") == 0)
+        return path[0] == '/';
+
+    if (strncmp(path, prefix, prefix_len) != 0)
+        return 0;
+
+    return path[prefix_len] == '\0' || path[prefix_len] == '/';
+}
+
+/*
+ * backend_configured_root_for_path - find the most specific configured root
+ * @runtime: backend runtime containing registered startup roots
+ * @path: stale or current path to classify
+ *
+ * Multiple configured roots can be nested, for example "/home/user" and
+ * "/home/user/project". Lost-scope recovery should start from the narrowest
+ * matching root to reduce scan cost and avoid searching unrelated directories.
+ *
+ * Return: borrowed pointer to the best matching root, or NULL if none matches.
+ */
+static const char *backend_configured_root_for_path(
+    const inotify_backend_t *runtime,
+    const char *path
+)
+{
+    const char *best = NULL;
+    size_t best_len = 0;
+
+    if (runtime == NULL || path == NULL)
+        return NULL;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        const char *root = runtime->configured_roots[i];
+        size_t root_len = strlen(root);
+
+        if (!backend_path_matches_prefix(path, root))
+            continue;
+
+        if (root_len > best_len) {
+            best = root;
+            best_len = root_len;
+        }
+    }
+
+    return best;
 }
 
 /*
@@ -1432,6 +1602,7 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
     }
 
     backend_lost_scope_queue_destroy(&ctx->runtime->lost_scopes);
+    backend_configured_roots_destroy(ctx->runtime);
     watcher_destroy(&ctx->runtime->watchers);
 }
 
@@ -2022,11 +2193,10 @@ static int backend_resync_probe_result_needs_lost_scope(
  * does not emit raw/core events. WATCH_LOST_QUEUED is diagnostic evidence that
  * Alfred has recovery work queued, not proof that the directory was found.
  *
- * The current runtime does not yet store configured watch roots inside
- * inotify_backend_t. Until that state exists, scan_root is initialized with the
- * stale local path. The next integration step will replace this temporary
- * fallback with the configured root that originally contained @path, then add
- * the configured-roots fallback policy.
+ * The backend now stores configured watch roots. The first search scope is the
+ * most specific registered root that contains @path. If no root matches, the
+ * helper keeps the old local-path fallback so diagnostic recovery state is
+ * still self-contained instead of dropping the entry.
  */
 static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                        int wd,
@@ -2053,13 +2223,18 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
     }
 
     uint64_t now_ns = backend_now_ns();
+    const char *scan_root =
+        backend_configured_root_for_path(ctx->runtime, path);
+
+    if (scan_root == NULL)
+        scan_root = path;
 
     if (backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
                                          wd,
                                          path,
                                          device_id,
                                          inode_id,
-                                         path,
+                                         scan_root,
                                          reason,
                                          now_ns,
                                          now_ns) != 0) {

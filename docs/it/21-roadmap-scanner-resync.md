@@ -2555,12 +2555,12 @@ puo' essere stato riusato da un altro oggetto. La recovery non deve fidarsi di
 `old_path` come root di ricerca; deve usarlo come informazione diagnostica e
 cercare l'identita' dentro una root monitorata e autorizzata.
 
-Nel codice corrente il campo `scan_root` e' stato aggiunto alla struttura dati
-ed e' copiato nella queue. La valorizzazione runtime e' ancora transitoria: il
-backend non conserva ancora la lista delle root configurate dentro
-`inotify_backend_t`, quindi l'enqueue usa il path locale noto come fallback
-provvisorio. Il passo successivo sara' salvare nel backend le root configurate
-e popolare `scan_root` con la vera root di appartenenza.
+Nel codice corrente il backend conserva le root configurate dentro
+`inotify_backend_t`. Ogni startup watch riuscito registra la propria root in una
+lista backend-owned. Quando Alfred accoda una lost-scope entry, sceglie la root
+registrata piu' specifica che contiene `old_path` e la copia in `scan_root`.
+Se nessuna root corrisponde, resta un fallback conservativo al path locale, ma
+il caso normale non dipende piu' da `argv` o da `app.c`.
 
 #### Perche' posticipare la scansione
 
@@ -2770,9 +2770,10 @@ contratto senza leggere eventi kernel e senza produrre log runtime.
 Il secondo micro-step collega l'enqueue al runtime: quando `IN_MOVE_SELF` porta
 a `WATCH_RESYNC_FAILED` con `error=path-unreachable`, `error=not-directory` o
 `error=identity-mismatch`, il backend conserva nella queue `wd`, vecchio path,
-`scan_root`, identita' `(st_dev, st_ino)`, motivo e timestamp monotono. Per ora
-`scan_root` e' uguale al path locale perche' il backend non possiede ancora la
-lista delle root configurate. Il log `WATCH_LOST_QUEUED ... pending=K` dice
+`scan_root`, identita' `(st_dev, st_ino)`, motivo e timestamp monotono.
+`scan_root` viene scelto dalla lista di root configurate registrate nel backend.
+Se piu' root sono annidate, Alfred usa quella piu' specifica per ridurre il
+costo della futura scansione. Il log `WATCH_LOST_QUEUED ... pending=K` dice
 solo che Alfred ha registrato lavoro di recovery ampia; non significa che la
 directory sia stata ritrovata. Non vengono prodotti raw Alfred o eventi
 semantici del core.
@@ -3222,21 +3223,18 @@ Lo stato corrente del branch e':
 - recovery sincrona per identita' disponibile
 - aggiornamento prefissi e reinstallazione missing watch disponibili
 - retry/backoff sincrono disponibile
-- `scan_root` presente nella entry ma ancora popolato con fallback locale
+- `scan_root` presente nella entry e popolato dalla root configurata piu'
+  specifica quando disponibile
 
 I prossimi passi, in ordine, sono:
 
-1. aggiungere allo stato backend la lista delle root configurate o un riferimento
-   stabile equivalente
-2. calcolare la root di appartenenza quando si accoda una lost-scope entry
-3. popolare `scan_root` con quella root invece che con il path locale stale
-4. estendere il processore per cercare prima `scan_root` e poi, se la policy lo
+1. estendere il processore per cercare prima `scan_root` e poi, se la policy lo
    consente, le altre root configurate
-5. solo dopo collegare il processore al loop runtime con `backend_now_ns()` e
+2. solo dopo collegare il processore al loop runtime con `backend_now_ns()` e
    `batch_size` piccolo
-6. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
    quando il percorso sincrono multi-root e' stabile
 
 Questo ordine evita di attaccare al runtime un processore che non conosce ancora
-il perimetro corretto di ricerca. Prima rendiamo esplicite le root, poi
-decidiamo quanta ricerca fare per ogni retry.
+il perimetro corretto di ricerca. Le root sono ora esplicite; il prossimo punto
+e' decidere quanta ricerca fare per ogni retry.

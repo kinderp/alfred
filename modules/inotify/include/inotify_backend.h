@@ -80,16 +80,24 @@ typedef struct inotify_lost_scope_queue {
  * @fd: nonblocking inotify descriptor, or -1 when closed
  * @watchers: mapping from inotify watch descriptors to watched paths
  * @lost_scopes: stale scopes waiting for delayed identity-based recovery
+ * @configured_roots: startup roots successfully registered with the backend
+ * @configured_roots_count: number of stored startup roots
+ * @configured_roots_capacity: allocated number of root slots
  *
  * The application owns the containing app_t object, but these fields are
  * managed only through the inotify backend API. Keeping them grouped makes the
  * remaining app.c dependency explicit and prepares a future split where the
- * backend can own an independent context.
+ * backend can own an independent context. Configured roots are backend state
+ * because lost-scope recovery must know the bounded search scopes without
+ * reaching back into app.c or argv.
  */
 typedef struct inotify_backend {
     int fd;
     watcher_table_t watchers;
     inotify_lost_scope_queue_t lost_scopes;
+    char (*configured_roots)[PATH_MAX];
+    size_t configured_roots_count;
+    size_t configured_roots_capacity;
 } inotify_backend_t;
 
 /*

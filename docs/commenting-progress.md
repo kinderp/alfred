@@ -368,5 +368,15 @@ Completed in the scan-root pass:
 - expanded `modules/inotify/include/inotify_backend.h` comments for
   `inotify_lost_scope_entry_t::scan_root`
 - expanded `modules/inotify/src/inotify_backend.c` comments around the
-  temporary runtime fallback that initializes `scan_root` from the stale local
-  path until configured roots are owned by the backend
+  original temporary runtime fallback used before configured roots were owned by
+  the backend
+
+Completed in the configured-root pass:
+
+- expanded `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_backend_t::configured_roots`,
+  `configured_roots_count`, and `configured_roots_capacity`
+- added detailed comments for backend configured-root registration, cleanup,
+  prefix matching, and most-specific-root selection helpers
+- updated `tests/backend/test_lost_scope_queue.c` comments to explain why
+  configured roots are tested together with lost-scope queue primitives

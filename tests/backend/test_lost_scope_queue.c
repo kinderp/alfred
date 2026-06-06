@@ -368,6 +368,52 @@ static void test_invalid_inputs_are_rejected(void)
     backend_lost_scope_queue_destroy(&queue);
 }
 
+/*
+ * test_configured_roots_select_bounded_scan_scope - roots guide lost recovery
+ *
+ * Lost-scope recovery must not guess the scan root from the stale path after
+ * the fact. The backend records startup roots and later selects the narrowest
+ * root that contains the stale path. This test also proves slash-boundary
+ * matching: "/tmp/root-old" is not inside "/tmp/root".
+ */
+static void test_configured_roots_select_bounded_scan_scope(void)
+{
+    inotify_backend_t runtime;
+    const char *root;
+
+    memset(&runtime, 0, sizeof(runtime));
+
+    assert(backend_configured_root_for_path(&runtime,
+                                            "/tmp/root/a") == NULL);
+
+    assert(backend_configured_roots_add(&runtime, "/tmp") == 0);
+    assert(backend_configured_roots_add(&runtime, "/tmp/root") == 0);
+    assert(backend_configured_roots_add(&runtime, "/tmp/root/project") == 0);
+    assert(backend_configured_roots_add(&runtime, "/tmp/root") == 0);
+    assert(runtime.configured_roots_count == 3);
+
+    root = backend_configured_root_for_path(&runtime,
+                                            "/tmp/root/project/src");
+    assert(root != NULL);
+    assert(strcmp(root, "/tmp/root/project") == 0);
+
+    root = backend_configured_root_for_path(&runtime,
+                                            "/tmp/root/other");
+    assert(root != NULL);
+    assert(strcmp(root, "/tmp/root") == 0);
+
+    assert(!backend_path_matches_prefix("/tmp/root-old", "/tmp/root"));
+
+    assert(backend_configured_roots_add(&runtime, "") == -1);
+    assert(backend_configured_roots_add(NULL, "/tmp/root") == -1);
+    assert(backend_configured_roots_add(&runtime, NULL) == -1);
+
+    backend_configured_roots_destroy(&runtime);
+    assert(runtime.configured_roots == NULL);
+    assert(runtime.configured_roots_count == 0);
+    assert(runtime.configured_roots_capacity == 0);
+}
+
 int main(void)
 {
     test_init_destroy_count();
@@ -375,6 +421,7 @@ int main(void)
     test_enqueue_copies_borrowed_strings();
     test_peek_inspects_head_without_consuming();
     test_invalid_inputs_are_rejected();
+    test_configured_roots_select_bounded_scan_scope();
 
     return 0;
 }
