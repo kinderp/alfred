@@ -14,12 +14,13 @@
  * - WATCH_LOST_COVERAGE_DONE ... dirs=3 watched=2 missing=1
  * - WATCH_LOST_COVERAGE_MISSING ... missing_path=<root>/renamed/unwatched
  * - WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
+ * - WATCH_LOST_REINSTALLED ... installed_path=<root>/renamed/unwatched
+ * - WATCH_LOST_RECOVERY_END ... result=valid watches=3
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
  *
  * Forbidden events:
  * - FILE_*
  * - DIR_*
- * - WATCH_LOST_RECOVERY_END
  *
  * Meaning:
  * The test verifies the first delayed recovery building block: consume one
@@ -27,9 +28,10 @@
  * identity. A renamed directory is found by st_dev/st_ino even though its old
  * textual path is stale. The helper updates watcher-table paths for the found
  * root and already-known children after a match, then scans the recovered
- * subtree to measure missing watch coverage. It must not reinstall watches,
- * mark the subtree VALID, or emit semantic filesystem events. A deleted
- * directory is not found.
+ * subtree to measure missing watch coverage. Fake watch operations reinstall
+ * the one missing path, after which the recovered subtree can return VALID
+ * without emitting semantic filesystem events. A deleted directory is not
+ * found.
  */
 
 #include <assert.h>
@@ -40,6 +42,85 @@
 #include <unistd.h>
 
 #include "../../modules/inotify/src/inotify_backend.c"
+
+typedef struct fake_lost_scope_watch_ops_state {
+    int add_calls;
+    int remove_calls;
+    int fail_on_add_call;
+    int removed_wds[8];
+    const char *added_paths[8];
+} fake_lost_scope_watch_ops_state_t;
+
+static fake_lost_scope_watch_ops_state_t fake_watch_state;
+
+static void fake_watch_state_reset(int fail_on_add_call)
+{
+    memset(&fake_watch_state, 0, sizeof(fake_watch_state));
+    fake_watch_state.fail_on_add_call = fail_on_add_call;
+}
+
+/*
+ * fake_lost_scope_watch_add - deterministic lost-scope reinstall operation
+ * @ctx: backend context whose watcher table receives a fake installed watch
+ * @path: missing path that recovery wants to watch
+ *
+ * The real runtime calls watch_manager_add(). This test uses a fake operation
+ * so the lost-scope all-or-stale path can be tested without opening an inotify
+ * descriptor or depending on kernel watch descriptor allocation.
+ *
+ * Return: predictable fake wd on success, -1 on the configured failure call.
+ */
+static int fake_lost_scope_watch_add(inotify_backend_context_t *ctx,
+                                     const char *path)
+{
+    int new_wd;
+
+    assert(ctx != NULL);
+    assert(ctx->runtime != NULL);
+    assert(path != NULL);
+    assert(fake_watch_state.add_calls < 8);
+
+    fake_watch_state.add_calls++;
+    fake_watch_state.added_paths[fake_watch_state.add_calls - 1] = path;
+
+    if (fake_watch_state.add_calls == fake_watch_state.fail_on_add_call)
+        return -1;
+
+    new_wd = 100 + fake_watch_state.add_calls;
+
+    assert(watcher_store(&ctx->runtime->watchers, new_wd, path) == 0);
+
+    return new_wd;
+}
+
+/*
+ * fake_lost_scope_watch_remove - deterministic rollback operation
+ * @ctx: backend context whose watcher table loses the fake watch
+ * @wd: fake watch descriptor installed earlier in this recovery attempt
+ *
+ * Rollback should remove only watches installed by the current attempt. The
+ * fake remove records those descriptors and mirrors watcher table cleanup.
+ *
+ * Return: 0 to model successful rollback.
+ */
+static int fake_lost_scope_watch_remove(inotify_backend_context_t *ctx, int wd)
+{
+    assert(ctx != NULL);
+    assert(ctx->runtime != NULL);
+    assert(fake_watch_state.remove_calls < 8);
+
+    fake_watch_state.removed_wds[fake_watch_state.remove_calls] = wd;
+    fake_watch_state.remove_calls++;
+
+    watcher_remove(&ctx->runtime->watchers, wd);
+
+    return 0;
+}
+
+static const backend_resync_watch_ops_t FAKE_LOST_SCOPE_WATCH_OPS = {
+    .add = fake_lost_scope_watch_add,
+    .remove = fake_lost_scope_watch_remove
+};
 
 /*
  * make_backend_context - build minimal backend state for lost-scope helpers
@@ -130,6 +211,7 @@ static void test_renamed_directory_is_found_by_identity(
     char original_unwatched[PATH_MAX];
     char renamed[PATH_MAX];
     char renamed_child[PATH_MAX];
+    char renamed_unwatched[PATH_MAX];
     char found[PATH_MAX];
     struct stat st;
     struct stat child_st;
@@ -142,6 +224,10 @@ static void test_renamed_directory_is_found_by_identity(
               "unwatched");
     join_path(renamed, sizeof(renamed), root, "renamed");
     join_path(renamed_child, sizeof(renamed_child), renamed, "child");
+    join_path(renamed_unwatched,
+              sizeof(renamed_unwatched),
+              renamed,
+              "unwatched");
 
     assert(mkdir(original, 0700) == 0);
     assert(mkdir(original_child, 0700) == 0);
@@ -175,20 +261,29 @@ static void test_renamed_directory_is_found_by_identity(
                                             1000,
                                             1000) == 0);
 
-    assert(backend_lost_scope_recover_next(ctx,
-                                           root,
-                                           found,
-                                           sizeof(found)) ==
+    fake_watch_state_reset(0);
+
+    assert(backend_lost_scope_recover_next_with_ops(ctx,
+                                                    root,
+                                                    found,
+                                                    sizeof(found),
+                                                    &FAKE_LOST_SCOPE_WATCH_OPS) ==
            BACKEND_LOST_SCOPE_RECOVERY_FOUND);
     assert(strcmp(found, renamed) == 0);
     assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 7),
                   renamed) == 0);
     assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 9),
                   renamed_child) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 101),
+                  renamed_unwatched) == 0);
     assert(watcher_get_state(&ctx->runtime->watchers, 7) ==
-           WATCHER_STATE_STALE);
+           WATCHER_STATE_VALID);
     assert(watcher_get_state(&ctx->runtime->watchers, 9) ==
-           WATCHER_STATE_STALE);
+           WATCHER_STATE_VALID);
+    assert(watcher_get_state(&ctx->runtime->watchers, 101) ==
+           WATCHER_STATE_VALID);
+    assert(fake_watch_state.add_calls == 1);
+    assert(fake_watch_state.remove_calls == 0);
     assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
 
     assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
@@ -202,6 +297,11 @@ static void test_renamed_directory_is_found_by_identity(
     assert_event_log_contains(ctx->logger, "/renamed/unwatched");
     assert_event_log_contains(ctx->logger, "WATCH_LOST_COVERAGE_CLASS");
     assert_event_log_contains(ctx->logger, "result=needs-reinstall");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_REINSTALLED");
+    assert_event_log_contains(ctx->logger, "installed_path=");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+    assert_event_log_contains(ctx->logger, "result=valid");
+    assert_event_log_contains(ctx->logger, "watches=3");
     assert_event_log_contains(ctx->logger, "old_path=");
     assert_event_log_contains(ctx->logger, "new_path=");
 }

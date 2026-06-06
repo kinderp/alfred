@@ -2815,13 +2815,13 @@ Il micro-step successivo e' implementato con
 directory con la stessa identita' `(st_dev, st_ino)` salvata nella entry.
 
 Questo passo era inizialmente read-only; ora, quando trova l'identita',
-aggiorna i path gia' presenti nella watcher table per il watch principale e
-per i figli gia' noti sotto lo stesso vecchio prefisso. Resta invece
-conservativo sulla copertura della subtree:
+aggiorna i path gia' presenti nella watcher table, misura la copertura,
+reinstalla i watch mancanti e porta la subtree a `VALID` solo se ogni fase
+riesce. Resta invece conservativo sulla semantica:
 
-- non installa nuovi watch
-- non riporta il watch a `VALID`
 - non emette raw Alfred o eventi core
+- non inventa create/delete/move semantici
+- non considera valida una subtree se la reinstallazione fallisce
 
 Il suo contratto e' solo:
 
@@ -2833,21 +2833,23 @@ entry in queue + root monitorata
     -> WATCH_LOST_COVERAGE_DONE misura la copertura watch della subtree
     -> WATCH_LOST_COVERAGE_MISSING elenca ogni path non watched
     -> WATCH_LOST_COVERAGE_CLASS classifica la copertura
+    -> WATCH_LOST_REINSTALLED per ogni missing watch riparato
+    -> WATCH_LOST_RECOVERY_END result=valid se tutto riesce
        oppure WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
 ```
 
 Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
 
 - una directory rinominata viene ritrovata sotto la root tramite identita' e il
-  path del watch principale e del figlio gia' noto vengono aggiornati restando
-  `STALE`; un secondo figlio non watched viene visto dallo scan di copertura
-  come `missing=1`
+  path del watch principale e del figlio gia' noto vengono aggiornati; un
+  secondo figlio non watched viene visto dallo scan di copertura come
+  `missing=1`, reinstallato e poi l'intera subtree torna `VALID`
 - una directory cancellata non viene trovata e non produce eventi semantici
 
-Questo e' ancora un punto intermedio. Alfred sa ritrovare un oggetto e
-riallineare i path gia' registrati nella watcher table; non sa ancora garantire
-che ogni directory presente nella subtree abbia un watch installato. Lo scan
-strict di copertura ora misura esattamente questo debito, ma non lo ripara.
+Questo completa il primo percorso sincrono testabile della lost-scope recovery:
+Alfred sa ritrovare un oggetto, riallineare i path gia' registrati nella
+watcher table, misurare la copertura, reinstallare i watch mancanti e tornare a
+`VALID` solo se ogni passo riesce.
 
 #### Aggiornamento path del watch principale
 
@@ -2886,7 +2888,7 @@ valida tutti i path prima di mutare la tabella.
 
 Restano i passi successivi:
 
-1. collegare la reinstallazione all-or-stale dei watch mancanti
+1. aggiungere failure test specifici per rollback lost-scope
 2. solo dopo aggiungere worker thread, debounce e backoff
 
 #### Aggiornamento prefissi dei figli
@@ -2953,22 +2955,26 @@ read-only del resync locale:
 - usa `watcher_has_path()` per capire se una directory e' gia' coperta
 - copia i missing path nel contesto di scan
 
-La differenza rispetto al resync locale e' la policy successiva. Nel resync
-locale il backend chiama gia' `backend_resync_reinstall_missing_watches()` e
-prova a reinstallare i watch mancanti. Nella lost-scope recovery, invece, questo
-micro-step si ferma alla misurazione:
+La differenza rispetto al resync locale e' il prefisso diagnostico e il punto di
+ingresso. Nel resync locale Alfred sta recuperando il vecchio path; nella
+lost-scope recovery Alfred ha gia' ritrovato la directory altrove tramite
+identita'. Dopo lo scan, anche il ramo lost-scope applica la policy
+all-or-stale:
 
 ```text
 WATCH_LOST_COVERAGE_DONE ... dirs=D watched=W missing=M
 WATCH_LOST_COVERAGE_MISSING ... missing_path=/path/da/reinstallare
 WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
+WATCH_LOST_REINSTALLED ... installed_path=/path/da/reinstallare
+WATCH_LOST_RECOVERY_END ... result=valid watches=N
 ```
 
-Questa scelta mantiene il passo verificabile. Ora sappiamo se la subtree
-ritrovata e' gia' coperta o se richiede reinstallazione, ma non dichiariamo
-ancora `VALID`. Il ritorno a `VALID` sara' ammesso solo quando il prossimo
-micro-step applichera' la stessa policy all-or-stale: tutti i watch mancanti
-reinstallati con successo oppure rollback e subtree ancora `STALE`.
+All-or-stale significa: se tutti i missing watch vengono reinstallati, Alfred
+porta a `VALID` tutti i watch sotto il prefisso recuperato. Se un'installazione
+fallisce, Alfred rimuove i watch installati durante quel tentativo e lascia la
+subtree non affidabile. Il test positivo usa operazioni watch fake per rendere
+deterministico il caso `missing=1`; il failure test dedicato al rollback
+lost-scope resta da aggiungere.
 
 #### Log di lost-scope recovery
 
@@ -2984,9 +2990,12 @@ fissare la direzione del contratto diagnostico:
 | `WATCH_LOST_COVERAGE_DONE wd=N path=Q reason=R dirs=D watched=W missing=M` | implementato | misurata la copertura watch della subtree ritrovata |
 | `WATCH_LOST_COVERAGE_MISSING wd=N path=Q reason=R missing_path=M` | implementato | elencato un path reale della subtree senza watch |
 | `WATCH_LOST_COVERAGE_CLASS wd=N path=Q reason=R result=X` | implementato | classificati i contatori di copertura |
+| `WATCH_LOST_REINSTALLED wd=N path=Q reason=R installed_path=M` | implementato | reinstallato un watch mancante nella subtree ritrovata |
+| `WATCH_LOST_REINSTALL_FAILED wd=N path=Q reason=R missing_path=M` | implementato | fallita l'installazione di un missing watch; la recovery non puo' tornare `VALID` |
+| `WATCH_LOST_ROLLBACK wd=N path=Q reason=R removed_wd=M` | implementato | rimosso un watch installato nello stesso tentativo fallito |
 | `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
 | `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
-| `WATCH_LOST_RECOVERY_END wd=N path=Q result=valid` | futuro | recovery ampia completata e subtree tornata affidabile |
+| `WATCH_LOST_RECOVERY_END wd=N path=Q reason=R result=valid watches=W` | implementato | recovery ampia completata e subtree tornata affidabile |
 
 #### Decisione per Alfred
 

@@ -42,6 +42,15 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `watcher.h`, `watcher.c`, `inotify_backend.c`,
+  `test_watcher_state.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: collegata la
+  reinstallazione all-or-stale positiva alla lost-scope recovery. Alfred ora
+  reinstalla i missing watch, marca `VALID` la subtree recuperata con
+  `watcher_set_state_prefix()` e logga `WATCH_LOST_REINSTALLED` /
+  `WATCH_LOST_RECOVERY_END`; resta da aggiungere un failure test specifico per
+  `WATCH_LOST_REINSTALL_FAILED` e `WATCH_LOST_ROLLBACK`.
 - `inotify_backend.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
   `22-contratto-log.md`: aggiunto lo scan strict di copertura dopo

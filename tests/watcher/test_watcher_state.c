@@ -242,6 +242,66 @@ static void test_update_path_prefix_preserves_subtree_state(void)
 }
 
 /*
+ * test_set_state_prefix_updates_only_subtree - mark recovered subtree reliable
+ *
+ * After lost-scope recovery has found the moved root, repaired prefixes, and
+ * restored missing watches, the backend needs one table operation that marks
+ * the recovered subtree VALID. The helper must use the same slash-boundary
+ * rule as prefix path updates so similarly named paths outside the subtree stay
+ * untouched.
+ */
+static void test_set_state_prefix_updates_only_subtree(void)
+{
+    watcher_table_t table;
+    size_t updated = 0;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store(&table, 1, "/tmp/new") == 0);
+    assert(watcher_store(&table, 2, "/tmp/new/child") == 0);
+    assert(watcher_store(&table, 3, "/tmp/new/child/grandchild") == 0);
+    assert(watcher_store(&table, 4, "/tmp/newish") == 0);
+
+    assert(watcher_set_state(&table, 1, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 2, WATCHER_STATE_STALE) == 0);
+    assert(watcher_set_state(&table, 3, WATCHER_STATE_RESYNCING) == 0);
+    assert(watcher_set_state(&table, 4, WATCHER_STATE_STALE) == 0);
+
+    assert(watcher_set_state_prefix(&table,
+                                    "/tmp/new",
+                                    WATCHER_STATE_VALID,
+                                    &updated) == 0);
+    assert(updated == 3);
+
+    assert(watcher_get_state(&table, 1) == WATCHER_STATE_VALID);
+    assert(watcher_get_state(&table, 2) == WATCHER_STATE_VALID);
+    assert(watcher_get_state(&table, 3) == WATCHER_STATE_VALID);
+    assert(watcher_get_state(&table, 4) == WATCHER_STATE_STALE);
+
+    updated = 99;
+    assert(watcher_set_state_prefix(&table,
+                                    "/tmp/missing",
+                                    WATCHER_STATE_VALID,
+                                    &updated) == 0);
+    assert(updated == 0);
+
+    assert(watcher_set_state_prefix(&table,
+                                    "/tmp/new",
+                                    WATCHER_STATE_REMOVED,
+                                    &updated) == -1);
+    assert(watcher_set_state_prefix(&table,
+                                    NULL,
+                                    WATCHER_STATE_VALID,
+                                    &updated) == -1);
+    assert(watcher_set_state_prefix(NULL,
+                                    "/tmp/new",
+                                    WATCHER_STATE_VALID,
+                                    &updated) == -1);
+
+    watcher_destroy(&table);
+}
+
+/*
  * test_state_can_be_marked_stale_and_restored - exercise active-state changes
  *
  * The important distinction is that STALE and RESYNCING are still active
@@ -538,6 +598,7 @@ int main(void)
     test_store_identity_records_device_and_inode();
     test_update_path_preserves_state_and_identity();
     test_update_path_prefix_preserves_subtree_state();
+    test_set_state_prefix_updates_only_subtree();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();

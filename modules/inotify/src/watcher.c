@@ -401,6 +401,55 @@ int watcher_update_path_prefix(watcher_table_t *wt,
 }
 
 /*
+ * watcher_set_state_prefix - update state for active watches under a prefix
+ * @wt: table to update
+ * @prefix: exact path or subtree root whose watches should change state
+ * @state: new reliability state for matching active watches
+ * @updated_count: optional output for the number of updated watches
+ *
+ * A successful subtree recovery needs to move the recovered root and any
+ * already-known child watches back to VALID together. Matching uses the same
+ * slash-boundary rule as watcher_update_path_prefix(), so "/tmp/root-old" is
+ * not treated as a child of "/tmp/root".
+ *
+ * Return: 0 on success, -1 on invalid input or invalid state.
+ */
+int watcher_set_state_prefix(watcher_table_t *wt,
+                             const char *prefix,
+                             watcher_state_t state,
+                             size_t *updated_count)
+{
+    size_t count = 0;
+
+    if (wt == NULL || prefix == NULL)
+        return -1;
+
+    if (strlen(prefix) == 0)
+        return -1;
+
+    if (!watcher_state_is_valid(state) || state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        watcher_entry_t *slot = &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, prefix))
+            continue;
+
+        slot->state = state;
+        count++;
+    }
+
+    if (updated_count != NULL)
+        *updated_count = count;
+
+    return 0;
+}
+
+/*
  * watcher_remove - clear one wd -> path mapping
  * @wt: table to update
  * @wd: inotify watch descriptor to clear

@@ -26,6 +26,15 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/watcher/test_watcher_state.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after wiring positive
+  all-or-stale lost-scope reinstall. Comments now explain subtree state repair,
+  fake watch operations for deterministic tests, and why the runtime returns to
+  VALID only after identity search, prefix repair, strict coverage scan, and
+  complete watch reinstallation.
 - refreshed `modules/inotify/src/inotify_backend.c` and
   `tests/backend/test_lost_scope_recovery.c` after adding strict coverage
   scanning to lost-scope recovery. Comments now explain the shared read-only

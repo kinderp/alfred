@@ -108,11 +108,19 @@ typedef enum backend_resync_scan_class {
 /*
  * backend_lost_scope_recovery_result - outcome of one queued identity search
  *
- * These values describe only the delayed lost-scope search step. They are not
- * semantic events and they do not say that the watcher table is fully repaired.
- * FOUND means "the same filesystem object was located"; later steps still need
- * to update watcher paths, child prefixes, and watch coverage before returning
- * a subtree to VALID.
+ * These values describe backend recovery control flow for one queued
+ * lost-scope entry. They are not Alfred raw events and they are not semantic
+ * core events. They exist so the delayed recovery worker/test code can
+ * distinguish "nothing to do", "recovered", "not found in this scan scope",
+ * and "technical failure".
+ *
+ * The successful path is intentionally stricter than "identity was found".
+ * BACKEND_LOST_SCOPE_RECOVERY_FOUND is returned only after the backend has
+ * found the saved filesystem identity, rewritten stale watcher-table prefixes,
+ * scanned recovered subtree coverage, reinstalled every missing watch, and
+ * marked the recovered subtree VALID. Any failure after identity discovery
+ * still returns BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED so callers keep the
+ * subtree conservative.
  */
 typedef enum backend_lost_scope_recovery_result {
     /*
@@ -122,9 +130,9 @@ typedef enum backend_lost_scope_recovery_result {
     BACKEND_LOST_SCOPE_RECOVERY_EMPTY,
 
     /*
-     * A directory with the queued (st_dev, st_ino) identity was found under the
-     * scanned root. The caller may use the discovered path as candidate input
-     * for later watcher-table repair.
+     * A queued scope was fully recovered. The matching identity was found under
+     * the scanned root, watcher-table prefixes were rewritten, missing watches
+     * were reinstalled, and the subtree was marked VALID.
      */
     BACKEND_LOST_SCOPE_RECOVERY_FOUND,
 
@@ -135,8 +143,9 @@ typedef enum backend_lost_scope_recovery_result {
     BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND,
 
     /*
-     * The scanner could not complete reliably. Recovery must stay conservative
-     * because a partial scan cannot prove that the lost identity is absent.
+     * The scanner or a later repair step could not complete reliably. Recovery
+     * must stay conservative because partial search, prefix repair, coverage
+     * scan, watch reinstall, or state repair cannot prove the subtree is safe.
      */
     BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED
 } backend_lost_scope_recovery_result_t;
@@ -316,6 +325,15 @@ static error_t backend_resync_reinstall_missing_watches(
     const backend_resync_watch_ops_t *ops
 );
 
+static error_t backend_lost_scope_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
+);
+
 static int backend_resync_watch_manager_add(inotify_backend_context_t *ctx,
                                             const char *path);
 
@@ -382,6 +400,15 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
                                 const char *root,
                                 char *found_path,
                                 size_t found_path_size);
+
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
 
 static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
                                                 void *userdata);
@@ -643,9 +670,9 @@ static int backend_lost_scope_queue_expand(
  * lost scope, scans one caller-provided root, and reports whether a directory
  * with the saved (st_dev, st_ino) identity was found. If the identity is found,
  * it repairs watcher-table paths for the recovered root and its already-known
- * children by replacing the stale old prefix with the discovered path. It still
- * does not install watches or move the subtree back to VALID; those mutations
- * require separate all-or-stale policy.
+ * children by replacing the stale old prefix with the discovered path. It then
+ * measures coverage, reinstalls all missing watches with all-or-stale rollback,
+ * and returns the recovered subtree to VALID only after every step succeeds.
  *
  * Return: recovery result describing empty queue, found, not found, or scan
  * failure.
@@ -656,8 +683,41 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
                                 char *found_path,
                                 size_t found_path_size)
 {
+    return backend_lost_scope_recover_next_with_ops(
+        ctx,
+        root,
+        found_path,
+        found_path_size,
+        &BACKEND_RESYNC_WATCH_MANAGER_OPS
+    );
+}
+
+/*
+ * backend_lost_scope_recover_next_with_ops - recover one lost scope with ops
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * The public-in-this-file wrapper uses the real watch manager operations. Unit
+ * tests can pass fake operations to exercise the all-or-stale branch without
+ * depending on kernel inotify descriptors or filesystem races.
+ *
+ * Return: recovery result describing empty queue, found, not found, or scan
+ * failure.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
     if (ctx == NULL || root == NULL || found_path == NULL ||
-        found_path_size == 0) {
+        found_path_size == 0 || watch_ops == NULL) {
         return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
 
@@ -797,6 +857,47 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
                      found_path,
                      entry.reason,
                      backend_resync_scan_class_name(coverage_class));
+
+        error_t reinstall_rc =
+            backend_lost_scope_reinstall_missing_watches(ctx,
+                                                         entry.wd,
+                                                         found_path,
+                                                         entry.reason,
+                                                         &coverage_context,
+                                                         watch_ops);
+
+        if (reinstall_rc != ERR_OK) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=reinstall-failed",
+                         entry.wd,
+                         found_path,
+                         entry.reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        size_t valid_count = 0;
+
+        if (watcher_set_state_prefix(&ctx->runtime->watchers,
+                                     found_path,
+                                     WATCHER_STATE_VALID,
+                                     &valid_count) != 0 ||
+            valid_count == 0) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=set-valid-failed",
+                         entry.wd,
+                         found_path,
+                         entry.reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s result=valid watches=%zu",
+                     entry.wd,
+                     found_path,
+                     entry.reason,
+                     valid_count);
 
         backend_resync_scan_context_destroy(&coverage_context);
         return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
@@ -1934,6 +2035,122 @@ static error_t backend_resync_reinstall_missing_watches(
 
         logger_event(ctx->logger,
                      "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     missing_path);
+    }
+
+    free(installed_wds);
+    return ERR_OK;
+}
+
+/*
+ * backend_lost_scope_reinstall_missing_watches - repair lost-scope coverage
+ * @ctx: narrowed backend context used by recovery code
+ * @wd: recovered root watch descriptor
+ * @path: recovered root path used for diagnostic logs
+ * @reason: kernel/backend reason that triggered recovery
+ * @scan_context: completed coverage scan with owned missing path copies
+ * @ops: watch installation/removal operations used by runtime or tests
+ *
+ * Lost-scope recovery reaches this helper only after three earlier proofs:
+ *
+ * - the queued (st_dev, st_ino) identity was found under a monitored root;
+ * - the watcher table prefixes were rewritten from the stale path to @path;
+ * - a strict directory-only coverage scan completed and collected every
+ *   directory that exists under @path but is not currently watched.
+ *
+ * The remaining gap is kernel watch coverage. A recovered subtree cannot
+ * become VALID while even one real directory lacks an inotify watch, because
+ * events below that directory could be missed immediately after recovery.
+ * Therefore this helper implements an all-or-stale policy:
+ *
+ * - every missing path must be installed successfully through ops->add();
+ * - every successful install is logged as WATCH_LOST_REINSTALLED;
+ * - if a later install fails, WATCH_LOST_REINSTALL_FAILED identifies the path;
+ * - every watch installed earlier in the same attempt is removed through
+ *   ops->remove() and logged as WATCH_LOST_ROLLBACK;
+ * - the caller receives an error and must keep the subtree non-VALID.
+ *
+ * Runtime passes wrappers around watch_manager_add()/watch_manager_remove().
+ * Tests pass fake operations so success and rollback branches can be exercised
+ * without relying on kernel-assigned watch descriptors or filesystem races.
+ *
+ * Return: ERR_OK on complete coverage, otherwise error_t.
+ */
+static error_t backend_lost_scope_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
+)
+{
+    if (ctx == NULL || path == NULL || reason == NULL ||
+        scan_context == NULL || ops == NULL || ops->add == NULL ||
+        ops->remove == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    /*
+     * A coverage scan with no missing paths is already complete. The caller can
+     * continue toward WATCH_LOST_RECOVERY_END without touching the kernel.
+     */
+    if (scan_context->missing_paths_count == 0)
+        return ERR_OK;
+
+    /*
+     * Rollback must remove only watches installed by this recovery attempt. It
+     * must not remove pre-existing watches that were already part of the
+     * recovered subtree before this helper started.
+     */
+    int *installed_wds =
+        calloc(scan_context->missing_paths_count, sizeof(int));
+
+    if (installed_wds == NULL)
+        return ERR_ALLOC;
+
+    size_t installed_count = 0;
+
+    for (size_t i = 0; i < scan_context->missing_paths_count; i++) {
+        const char *missing_path = scan_context->missing_paths[i];
+        int new_wd = ops->add(ctx, missing_path);
+
+        if (new_wd < 0) {
+            /*
+             * One missing watch failed to install, so the subtree is known to
+             * be only partially covered. Roll back all watches installed in
+             * this attempt and let the caller keep the recovered subtree stale.
+             */
+            logger_event(ctx->logger,
+                         "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                         wd,
+                         path,
+                         reason,
+                         missing_path);
+
+            for (size_t j = 0; j < installed_count; j++) {
+                logger_event(ctx->logger,
+                             "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
+                             wd,
+                             path,
+                             reason,
+                             installed_wds[j]);
+
+                (void)ops->remove(ctx, installed_wds[j]);
+            }
+
+            free(installed_wds);
+            return ERR_INOTIFY;
+        }
+
+        installed_wds[installed_count] = new_wd;
+        installed_count++;
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
                      wd,
                      path,
                      reason,

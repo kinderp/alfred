@@ -99,6 +99,10 @@ int watcher_update_path_prefix(watcher_table_t *wt,
                                const char *old_prefix,
                                const char *new_prefix,
                                size_t *updated_count);
+int watcher_set_state_prefix(watcher_table_t *wt,
+                             const char *prefix,
+                             watcher_state_t state,
+                             size_t *updated_count);
 void watcher_remove(watcher_table_t *wt, int wd);
 
 const char* watcher_get_path(const watcher_table_t *wt, int wd);
