@@ -634,10 +634,11 @@ static int backend_lost_scope_queue_expand(
  *
  * This helper is intentionally synchronous and limited. It consumes one queued
  * lost scope, scans one caller-provided root, and reports whether a directory
- * with the saved (st_dev, st_ino) identity was found. It does not update the
- * watcher table, does not rewrite child prefixes, and does not install watches.
- * Those mutations require separate all-or-stale policy and will be added only
- * after the identity search contract is stable.
+ * with the saved (st_dev, st_ino) identity was found. If the identity is found,
+ * it repairs watcher-table paths for the recovered root and its already-known
+ * children by replacing the stale old prefix with the discovered path. It still
+ * does not install watches or move the subtree back to VALID; those mutations
+ * require separate all-or-stale policy.
  *
  * Return: recovery result describing empty queue, found, not found, or scan
  * failure.
@@ -701,11 +702,30 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
     }
 
     if (scan_context.found) {
-        if (watcher_update_path(&ctx->runtime->watchers,
-                                entry.wd,
-                                found_path) != 0) {
+        size_t updated_count = 0;
+
+        if (!watcher_exists(&ctx->runtime->watchers, entry.wd)) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
+                         entry.wd,
+                         entry.old_path,
+                         entry.reason);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        /*
+         * Rewrite the recovered root and any child watches in one validated
+         * watcher-table operation. Calling watcher_update_path() first would
+         * repair the root before knowing whether children can be repaired,
+         * which could leave mixed old/new prefixes after an overflow failure.
+         */
+        if (watcher_update_path_prefix(&ctx->runtime->watchers,
+                                       entry.old_path,
+                                       found_path,
+                                       &updated_count) != 0 ||
+            updated_count == 0) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-prefix-failed",
                          entry.wd,
                          entry.old_path,
                          entry.reason);
@@ -718,6 +738,12 @@ backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
                      entry.old_path,
                      found_path,
                      entry.reason);
+        logger_event(ctx->logger,
+                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s new_prefix=%s children=%zu",
+                     entry.wd,
+                     entry.old_path,
+                     found_path,
+                     updated_count - 1);
         return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
     }
 

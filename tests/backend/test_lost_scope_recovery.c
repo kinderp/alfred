@@ -9,6 +9,8 @@
  * events log stream:
  * - WATCH_LOST_SCAN_BEGIN ... pending=0
  * - WATCH_LOST_FOUND ... old_path=<root>/original new_path=<root>/renamed
+ * - WATCH_LOST_PREFIX_UPDATED ... old_prefix=<root>/original
+ *   new_prefix=<root>/renamed children=1
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
  *
  * Forbidden events:
@@ -20,9 +22,10 @@
  * The test verifies the first delayed recovery building block: consume one
  * queued stale scope and search one monitored root for the saved filesystem
  * identity. A renamed directory is found by st_dev/st_ino even though its old
- * textual path is stale. The helper updates only the main watcher-table path
- * after a match; it must not reinstall watches, mark the subtree VALID, or emit
- * semantic filesystem events. A deleted directory is not found.
+ * textual path is stale. The helper updates watcher-table paths for the found
+ * root and already-known children after a match; it must not reinstall watches,
+ * mark the subtree VALID, or emit semantic filesystem events. A deleted
+ * directory is not found.
  */
 
 #include <assert.h>
@@ -118,15 +121,22 @@ static void test_renamed_directory_is_found_by_identity(
 )
 {
     char original[PATH_MAX];
+    char original_child[PATH_MAX];
     char renamed[PATH_MAX];
+    char renamed_child[PATH_MAX];
     char found[PATH_MAX];
     struct stat st;
+    struct stat child_st;
 
     join_path(original, sizeof(original), root, "original");
+    join_path(original_child, sizeof(original_child), original, "child");
     join_path(renamed, sizeof(renamed), root, "renamed");
+    join_path(renamed_child, sizeof(renamed_child), renamed, "child");
 
     assert(mkdir(original, 0700) == 0);
+    assert(mkdir(original_child, 0700) == 0);
     assert(stat(original, &st) == 0);
+    assert(stat(original_child, &child_st) == 0);
     assert(watcher_store_identity(&ctx->runtime->watchers,
                                   7,
                                   original,
@@ -134,6 +144,14 @@ static void test_renamed_directory_is_found_by_identity(
                                   st.st_ino) == 0);
     assert(watcher_set_state(&ctx->runtime->watchers,
                              7,
+                             WATCHER_STATE_STALE) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  9,
+                                  original_child,
+                                  child_st.st_dev,
+                                  child_st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             9,
                              WATCHER_STATE_STALE) == 0);
     assert(rename(original, renamed) == 0);
 
@@ -154,12 +172,18 @@ static void test_renamed_directory_is_found_by_identity(
     assert(strcmp(found, renamed) == 0);
     assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 7),
                   renamed) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 9),
+                  renamed_child) == 0);
     assert(watcher_get_state(&ctx->runtime->watchers, 7) ==
+           WATCHER_STATE_STALE);
+    assert(watcher_get_state(&ctx->runtime->watchers, 9) ==
            WATCHER_STATE_STALE);
     assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
 
     assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
     assert_event_log_contains(ctx->logger, "WATCH_LOST_FOUND");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_PREFIX_UPDATED");
+    assert_event_log_contains(ctx->logger, "children=1");
     assert_event_log_contains(ctx->logger, "old_path=");
     assert_event_log_contains(ctx->logger, "new_path=");
 }

@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after wiring
+  watcher_update_path_prefix() into lost-scope recovery. Comments now explain
+  why the runtime rewrites the recovered root and child prefixes in one
+  validated table operation, why WATCH_LOST_PREFIX_UPDATED reports child count,
+  and why the subtree still does not become VALID.
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`, and
   `tests/watcher/test_watcher_state.c` after adding

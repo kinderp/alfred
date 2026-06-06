@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: collegato `watcher_update_path_prefix()` al runtime
+  lost-scope. Dopo `WATCH_LOST_FOUND`, Alfred riscrive in modo validato il
+  prefisso del watch principale e dei figli gia' noti, logga
+  `WATCH_LOST_PREFIX_UPDATED` e mantiene comunque la subtree non `VALID` finche'
+  non avremo scan strict e reinstallazione all-or-stale.
 - `watcher.h`, `watcher.c`, `test_watcher_state.c`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
   `21-roadmap-scanner-resync.md`: aggiunto e documentato
