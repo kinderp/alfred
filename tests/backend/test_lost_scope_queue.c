@@ -42,6 +42,7 @@
  * @entry: popped queue entry to inspect
  * @wd: expected watch descriptor
  * @old_path: expected copied stale path
+ * @scan_root: expected bounded search root
  * @device_id: expected saved st_dev value
  * @inode_id: expected saved st_ino value
  * @reason: expected copied backend reason
@@ -54,6 +55,7 @@
 static void assert_scope_entry(const inotify_lost_scope_entry_t *entry,
                                int wd,
                                const char *old_path,
+                               const char *scan_root,
                                dev_t device_id,
                                ino_t inode_id,
                                const char *reason,
@@ -62,6 +64,7 @@ static void assert_scope_entry(const inotify_lost_scope_entry_t *entry,
 {
     assert(entry != NULL);
     assert(old_path != NULL);
+    assert(scan_root != NULL);
     assert(reason != NULL);
 
     assert(entry->wd == wd);
@@ -71,6 +74,7 @@ static void assert_scope_entry(const inotify_lost_scope_entry_t *entry,
     assert(entry->retry_after_ns == retry_after_ns);
     assert(entry->retry_count == 0);
     assert(strcmp(entry->old_path, old_path) == 0);
+    assert(strcmp(entry->scan_root, scan_root) == 0);
     assert(strcmp(entry->reason, reason) == 0);
 }
 
@@ -118,6 +122,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
                                             "/tmp/root/a",
                                             100,
                                             200,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             1000,
                                             1500) == 0);
@@ -126,6 +131,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
                                             "/tmp/root/b",
                                             101,
                                             201,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             2000,
                                             2500) == 0);
@@ -134,6 +140,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
     assert_scope_entry(&entry,
                        10,
                        "/tmp/root/a",
+                       "/tmp/root",
                        100,
                        200,
                        "IN_MOVE_SELF",
@@ -145,6 +152,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
                                             "/tmp/root/c",
                                             102,
                                             202,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             3000,
                                             3500) == 0);
@@ -153,6 +161,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
                                             "/tmp/root/d",
                                             103,
                                             203,
+                                            "/tmp/root",
                                             "IN_DELETE_SELF",
                                             4000,
                                             4500) == 0);
@@ -164,6 +173,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
     assert_scope_entry(&entry,
                        11,
                        "/tmp/root/b",
+                       "/tmp/root",
                        101,
                        201,
                        "IN_MOVE_SELF",
@@ -174,6 +184,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
     assert_scope_entry(&entry,
                        12,
                        "/tmp/root/c",
+                       "/tmp/root",
                        102,
                        202,
                        "IN_MOVE_SELF",
@@ -184,6 +195,7 @@ static void test_fifo_order_survives_wrap_and_growth(void)
     assert_scope_entry(&entry,
                        13,
                        "/tmp/root/d",
+                       "/tmp/root",
                        103,
                        203,
                        "IN_DELETE_SELF",
@@ -209,6 +221,7 @@ static void test_enqueue_copies_borrowed_strings(void)
     inotify_lost_scope_queue_t queue;
     inotify_lost_scope_entry_t entry;
     char path[] = "/tmp/root/original";
+    char scan_root[PATH_MAX] = "/tmp/root";
     char reason[] = "IN_MOVE_SELF";
 
     assert(backend_lost_scope_queue_init(&queue, 1) == 0);
@@ -217,17 +230,20 @@ static void test_enqueue_copies_borrowed_strings(void)
                                             path,
                                             300,
                                             400,
+                                            scan_root,
                                             reason,
                                             5000,
                                             6000) == 0);
 
     strcpy(path, "/tmp/root/changed");
+    strcpy(scan_root, "/tmp/changed");
     strcpy(reason, "CHANGED");
 
     assert(backend_lost_scope_queue_pop(&queue, &entry) == 0);
     assert_scope_entry(&entry,
                        21,
                        "/tmp/root/original",
+                       "/tmp/root",
                        300,
                        400,
                        "IN_MOVE_SELF",
@@ -258,6 +274,7 @@ static void test_peek_inspects_head_without_consuming(void)
                                             "/tmp/root/head",
                                             700,
                                             800,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             9000,
                                             9500) == 0);
@@ -272,6 +289,7 @@ static void test_peek_inspects_head_without_consuming(void)
     assert_scope_entry(&entry,
                        31,
                        "/tmp/root/head",
+                       "/tmp/root",
                        700,
                        800,
                        "IN_MOVE_SELF",
@@ -301,6 +319,7 @@ static void test_invalid_inputs_are_rejected(void)
                                             "/tmp/root",
                                             1,
                                             1,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             0,
                                             0) == -1);
@@ -309,6 +328,7 @@ static void test_invalid_inputs_are_rejected(void)
                                             "/tmp/root",
                                             1,
                                             1,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             0,
                                             0) == -1);
@@ -317,6 +337,7 @@ static void test_invalid_inputs_are_rejected(void)
                                             NULL,
                                             1,
                                             1,
+                                            "/tmp/root",
                                             "IN_MOVE_SELF",
                                             0,
                                             0) == -1);
@@ -325,6 +346,16 @@ static void test_invalid_inputs_are_rejected(void)
                                             "/tmp/root",
                                             1,
                                             1,
+                                            NULL,
+                                            "IN_MOVE_SELF",
+                                            0,
+                                            0) == -1);
+    assert(backend_lost_scope_queue_enqueue(&queue,
+                                            1,
+                                            "/tmp/root",
+                                            1,
+                                            1,
+                                            "/tmp/root",
                                             NULL,
                                             0,
                                             0) == -1);

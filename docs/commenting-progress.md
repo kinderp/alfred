@@ -362,3 +362,11 @@ Completed in this pass:
   `WATCH_LOST_RECOVERY_GAVE_UP`
 - added scenario comments explaining why a `NOT_FOUND` result is retried with
   backoff and why retry-budget exhaustion is diagnostic rather than semantic
+
+Completed in the scan-root pass:
+
+- expanded `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_lost_scope_entry_t::scan_root`
+- expanded `modules/inotify/src/inotify_backend.c` comments around the
+  temporary runtime fallback that initializes `scan_root` from the stale local
+  path until configured roots are owned by the backend

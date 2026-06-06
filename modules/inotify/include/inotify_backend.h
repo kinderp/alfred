@@ -33,12 +33,16 @@
  * @retry_after_ns: monotonic time before which recovery should not run again
  * @retry_count: number of failed or delayed recovery attempts already made
  * @old_path: last path Alfred associated with @wd before it became stale
+ * @scan_root: bounded root that should be searched before wider fallbacks
  * @reason: backend/kernel reason that moved the scope into recovery
  *
  * This is backend recovery state, not an Alfred raw event and not a semantic
  * core event. The entry preserves enough evidence for a future delayed scan to
  * search monitored roots for the same filesystem object without trusting the
- * stale textual path.
+ * stale textual path. @scan_root records the best bounded search scope known at
+ * enqueue time. The current runtime still uses the stale local path as this
+ * value; a later step will replace it with the configured watch root and then
+ * add the configured-roots fallback policy.
  */
 typedef struct inotify_lost_scope_entry {
     int wd;
@@ -48,6 +52,7 @@ typedef struct inotify_lost_scope_entry {
     uint64_t retry_after_ns;
     unsigned retry_count;
     char old_path[PATH_MAX];
+    char scan_root[PATH_MAX];
     char reason[INOTIFY_LOST_SCOPE_REASON_SIZE];
 } inotify_lost_scope_entry_t;
 

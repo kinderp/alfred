@@ -1336,3 +1336,9 @@ Stati usati:
   raw/core e non provano cancellazioni o move semantici.
 - `14-scenari-test.md`: aggiornato lo scenario backend lost-scope recovery con
   i casi di requeue su `NOT_FOUND`, backoff e budget di tentativi esaurito.
+- `21-roadmap-scanner-resync.md` e `16-mappa-codice-e-strutture.md`:
+  documentato il nuovo campo `scan_root` nelle entry lost-scope, spiegando la
+  distinzione tra path stale e perimetro di ricerca, il fallback runtime
+  corrente e il prossimo passo sulle root configurate.
+- `14-scenari-test.md`: aggiornato lo scenario lost-scope queue per includere
+  la copia stabile di `scan_root` insieme a path e reason.

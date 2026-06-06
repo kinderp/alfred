@@ -627,6 +627,7 @@ typedef struct inotify_lost_scope_entry {
     uint64_t retry_after_ns;
     unsigned retry_count;
     char old_path[PATH_MAX];
+    char scan_root[PATH_MAX];
     char reason[INOTIFY_LOST_SCOPE_REASON_SIZE];
 } inotify_lost_scope_entry_t;
 ```
@@ -639,15 +640,24 @@ Campi:
 | `device_id` | `st_dev` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro match per identita' |
 | `inode_id` | `st_ino` salvato quando il watch era affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro match per identita' |
 | `first_seen_ns` | timestamp monotono del primo enqueue | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro debounce e diagnostica |
-| `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()` | futuro scheduler/backoff |
-| `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()` | futuro retry/backoff |
+| `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()`, retry lost-scope | processore due-entry e policy backoff |
+| `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()`, incrementato dal retry lost-scope | policy backoff e limite tentativi |
 | `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e futuro aggiornamento prefissi |
+| `scan_root` | root delimitata in cui cercare prima di eventuali fallback piu' ampi | `backend_lost_scope_queue_enqueue()` | recovery lost-scope multi-root futura |
 | `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e policy futura |
 
-`old_path` e `reason` sono copiati nella entry. Questa scelta evita che la
-recovery posticipata dipenda da puntatori presi dalla watcher table o da stringhe
-temporanee sullo stack. Quando il worker futuro consumera' la queue, la entry
-dovra' essere autonoma.
+`old_path`, `scan_root` e `reason` sono copiati nella entry. Questa scelta evita
+che la recovery posticipata dipenda da puntatori presi dalla watcher table o da
+stringhe temporanee sullo stack. Quando il worker futuro consumera' la queue, la
+entry dovra' essere autonoma.
+
+`scan_root` nasce per non confondere il path stale con il perimetro di ricerca.
+Il path vecchio puo' non esistere piu' o puo' essere stato riusato da un altro
+oggetto; la root invece descrive dove Alfred e' autorizzato a cercare la stessa
+identita'. Nel runtime corrente la root configurata non e' ancora salvata nel
+backend, quindi il campo e' popolato temporaneamente con il path locale noto. Il
+passo successivo dovra' sostituire questo fallback con la vera root di
+appartenenza.
 
 ### `watcher_table_t`
 

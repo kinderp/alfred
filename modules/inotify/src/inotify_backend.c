@@ -384,6 +384,7 @@ static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_enqueue(
     const char *old_path,
     dev_t device_id,
     ino_t inode_id,
+    const char *scan_root,
     const char *reason,
     uint64_t first_seen_ns,
     uint64_t retry_after_ns
@@ -558,6 +559,7 @@ static size_t backend_lost_scope_queue_count(
  * @old_path: last path associated with @wd before trust was lost
  * @device_id: st_dev captured when the watch was installed
  * @inode_id: st_ino captured when the watch was installed
+ * @scan_root: bounded root to search before wider fallback policies
  * @reason: backend/kernel reason for the lost scope
  * @first_seen_ns: monotonic time when the scope was queued
  * @retry_after_ns: earliest monotonic time for the next recovery attempt
@@ -575,6 +577,7 @@ static int backend_lost_scope_queue_enqueue(
     const char *old_path,
     dev_t device_id,
     ino_t inode_id,
+    const char *scan_root,
     const char *reason,
     uint64_t first_seen_ns,
     uint64_t retry_after_ns
@@ -582,8 +585,10 @@ static int backend_lost_scope_queue_enqueue(
 {
     inotify_lost_scope_entry_t entry;
 
-    if (queue == NULL || old_path == NULL || reason == NULL)
+    if (queue == NULL || old_path == NULL || scan_root == NULL ||
+        reason == NULL) {
         return -1;
+    }
 
     if (wd < 0)
         return -1;
@@ -601,6 +606,10 @@ static int backend_lost_scope_queue_enqueue(
              sizeof(entry.old_path),
              "%s",
              old_path);
+    snprintf(entry.scan_root,
+             sizeof(entry.scan_root),
+             "%s",
+             scan_root);
     snprintf(entry.reason,
              sizeof(entry.reason),
              "%s",
@@ -634,8 +643,10 @@ static int backend_lost_scope_queue_enqueue_entry(
     if (source->wd < 0 || source->device_id == 0 || source->inode_id == 0)
         return -1;
 
-    if (source->old_path[0] == '\0' || source->reason[0] == '\0')
+    if (source->old_path[0] == '\0' || source->scan_root[0] == '\0' ||
+        source->reason[0] == '\0') {
         return -1;
+    }
 
     if (queue->count == queue->capacity) {
         if (backend_lost_scope_queue_expand(queue) != 0)
@@ -2010,6 +2021,12 @@ static int backend_resync_probe_result_needs_lost_scope(
  * watcher table and stores it with the stale path, but it does not scan yet and
  * does not emit raw/core events. WATCH_LOST_QUEUED is diagnostic evidence that
  * Alfred has recovery work queued, not proof that the directory was found.
+ *
+ * The current runtime does not yet store configured watch roots inside
+ * inotify_backend_t. Until that state exists, scan_root is initialized with the
+ * stale local path. The next integration step will replace this temporary
+ * fallback with the configured root that originally contained @path, then add
+ * the configured-roots fallback policy.
  */
 static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                        int wd,
@@ -2042,6 +2059,7 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                          path,
                                          device_id,
                                          inode_id,
+                                         path,
                                          reason,
                                          now_ns,
                                          now_ns) != 0) {

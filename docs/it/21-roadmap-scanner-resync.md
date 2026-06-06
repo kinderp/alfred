@@ -2514,6 +2514,7 @@ Esempio di record logico:
 typedef struct lost_scope_entry {
     int wd;
     char old_path[PATH_MAX];
+    char scan_root[PATH_MAX];
     dev_t device_id;
     ino_t inode_id;
     const char *reason;
@@ -2538,6 +2539,28 @@ e il probe locale non puo' tornare `VALID`, Alfred aggiunge una entry alla
 Ho ancora un'identita' filesystem da cercare, ma non posso fidarmi del vecchio
 path. Provero' piu' tardi a ritrovare questo oggetto dentro gli scope monitorati.
 ```
+
+`scan_root` e' il campo che separa il path diventato sospetto dal perimetro di
+ricerca. Idealmente contiene la root configurata che conteneva `old_path` al
+momento dell'enqueue. Esempio:
+
+```text
+root configurata = /home/user/project
+old_path         = /home/user/project/src/module
+scan_root        = /home/user/project
+```
+
+Questa distinzione e' importante perche' `old_path` puo' non esistere piu' o
+puo' essere stato riusato da un altro oggetto. La recovery non deve fidarsi di
+`old_path` come root di ricerca; deve usarlo come informazione diagnostica e
+cercare l'identita' dentro una root monitorata e autorizzata.
+
+Nel codice corrente il campo `scan_root` e' stato aggiunto alla struttura dati
+ed e' copiato nella queue. La valorizzazione runtime e' ancora transitoria: il
+backend non conserva ancora la lista delle root configurate dentro
+`inotify_backend_t`, quindi l'enqueue usa il path locale noto come fallback
+provvisorio. Il passo successivo sara' salvare nel backend le root configurate
+e popolare `scan_root` con la vera root di appartenenza.
 
 #### Perche' posticipare la scansione
 
@@ -2575,15 +2598,20 @@ Riferimenti utili:
 - <https://docs.syncthing.net/users/syncing.html>
 - <https://man7.org/linux/man-pages/man7/inotify.7.html>
 
-Per Alfred, il default iniziale potrebbe essere:
+Per Alfred, la prima policy implementata nel branch usa:
 
 ```text
-lost_scope_delay_ms = 500 oppure 1000
-lost_scope_retry_max = piccolo, per esempio 3
-lost_scope_backoff = crescente, per esempio 1s, 5s, 30s
+retry 1 = 100 ms
+retry 2 = 250 ms
+retry 3 = 500 ms
+retry 4 = 1000 ms
+retry 5+ = 2000 ms
+max_attempts = 8
 ```
 
-Questi numeri non sono ancora contratto. Servono a guidare i primi test.
+Questi numeri sono ancora costanti interne, non opzioni pubbliche di
+configurazione. Servono a impedire loop stretti mentre il collegamento runtime
+viene stabilizzato.
 
 #### Scope della ricerca
 
@@ -2742,10 +2770,12 @@ contratto senza leggere eventi kernel e senza produrre log runtime.
 Il secondo micro-step collega l'enqueue al runtime: quando `IN_MOVE_SELF` porta
 a `WATCH_RESYNC_FAILED` con `error=path-unreachable`, `error=not-directory` o
 `error=identity-mismatch`, il backend conserva nella queue `wd`, vecchio path,
-identita' `(st_dev, st_ino)`, motivo e timestamp monotono. Il log
-`WATCH_LOST_QUEUED ... pending=K` dice solo che Alfred ha registrato lavoro di
-recovery ampia; non significa che la directory sia stata ritrovata. Non vengono
-prodotti raw Alfred o eventi semantici del core.
+`scan_root`, identita' `(st_dev, st_ino)`, motivo e timestamp monotono. Per ora
+`scan_root` e' uguale al path locale perche' il backend non possiede ancora la
+lista delle root configurate. Il log `WATCH_LOST_QUEUED ... pending=K` dice
+solo che Alfred ha registrato lavoro di recovery ampia; non significa che la
+directory sia stata ritrovata. Non vengono prodotti raw Alfred o eventi
+semantici del core.
 
 Non vengono invece accodati errori di bookkeeping, `missing-watch`,
 `not-stale`, `missing-identity` o `reinstall-failed`: in quei casi manca
@@ -3185,18 +3215,28 @@ Non conviene ottimizzare prima di avere:
 
 ## Prossimi passi consigliati
 
-1. aggiungere una recovery sincrona richiamabile dai test per cercare una
-   identita' dentro una root monitorata
-2. solo dopo valutare worker thread, debounce, retry e backoff
-3. rimandare output CLI e JSON a un passo successivo
+Lo stato corrente del branch e':
 
-Questo approccio evita di mescolare subito tre problemi:
+- scanner robusto gia' disponibile
+- queue lost-scope disponibile
+- recovery sincrona per identita' disponibile
+- aggiornamento prefissi e reinstallazione missing watch disponibili
+- retry/backoff sincrono disponibile
+- `scan_root` presente nella entry ma ancora popolato con fallback locale
 
-- implementare uno scanner robusto
-- riparare path persi da `IN_MOVE_SELF`
-- aggiungere una feature utente di indicizzazione
+I prossimi passi, in ordine, sono:
 
-Prima completiamo la recovery backend delle directory perse dentro scope
-monitorati. Poi decidiamo come estendere lo stesso modello a `IN_DELETE_SELF`,
-`IN_UNMOUNT`, `IN_Q_OVERFLOW` e agli eventi che richiedono recovery ancora piu'
-ampia.
+1. aggiungere allo stato backend la lista delle root configurate o un riferimento
+   stabile equivalente
+2. calcolare la root di appartenenza quando si accoda una lost-scope entry
+3. popolare `scan_root` con quella root invece che con il path locale stale
+4. estendere il processore per cercare prima `scan_root` e poi, se la policy lo
+   consente, le altre root configurate
+5. solo dopo collegare il processore al loop runtime con `backend_now_ns()` e
+   `batch_size` piccolo
+6. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+   quando il percorso sincrono multi-root e' stabile
+
+Questo ordine evita di attaccare al runtime un processore che non conosce ancora
+il perimetro corretto di ricerca. Prima rendiamo esplicite le root, poi
+decidiamo quanta ricerca fare per ogni retry.

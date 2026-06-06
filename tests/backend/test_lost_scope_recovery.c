@@ -314,6 +314,7 @@ static void test_renamed_directory_is_found_by_identity(
                                             original,
                                             st.st_dev,
                                             st.st_ino,
+                                            root,
                                             "IN_MOVE_SELF",
                                             1000,
                                             1000) == 0);
@@ -438,6 +439,7 @@ static void test_reinstall_failure_rolls_back_partial_lost_scope(
                                             original,
                                             st.st_dev,
                                             st.st_ino,
+                                            root,
                                             "IN_MOVE_SELF",
                                             3000,
                                             3000) == 0);
@@ -514,6 +516,7 @@ static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
                                             gone,
                                             st.st_dev,
                                             st.st_ino,
+                                            root,
                                             "IN_MOVE_SELF",
                                             2000,
                                             2000) == 0);
@@ -554,6 +557,7 @@ static void test_process_due_skips_future_head(inotify_backend_context_t *ctx,
                                             "/tmp/future",
                                             1,
                                             2,
+                                            root,
                                             "IN_MOVE_SELF",
                                             1000,
                                             5000) == 0);
@@ -595,6 +599,7 @@ static void test_process_due_requeues_not_found(inotify_backend_context_t *ctx,
                                             "/tmp/retry",
                                             999999,
                                             888888,
+                                            root,
                                             "IN_MOVE_SELF",
                                             1000,
                                             now_ns) == 0);
@@ -645,6 +650,7 @@ static void test_process_due_gives_up_after_retry_budget(
     entry.retry_after_ns = 10000;
     entry.retry_count = BACKEND_LOST_SCOPE_MAX_ATTEMPTS - 1;
     snprintf(entry.old_path, sizeof(entry.old_path), "%s", "/tmp/give-up");
+    snprintf(entry.scan_root, sizeof(entry.scan_root), "%s", root);
     snprintf(entry.reason, sizeof(entry.reason), "%s", "IN_MOVE_SELF");
 
     assert(backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
