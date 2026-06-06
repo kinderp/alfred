@@ -837,7 +837,11 @@ L'aggiornamento e' fatto in due passaggi. Prima Alfred calcola tutti i path che
 dovrebbero cambiare e verifica che i nuovi path entrino in `PATH_MAX`. Solo se
 tutto e' valido modifica davvero la tabella. Questa scelta evita un errore
 pericoloso: aggiornare meta' subtree e poi scoprire che un figlio non entra nel
-buffer. Anche questa funzione preserva `wd`, `active`, `state`,
+buffer. Durante la scrittura del nuovo path, il suffisso viene copiato in un
+buffer temporaneo prima di chiamare `snprintf()`: il suffisso originale punta
+dentro `slot->path`, quindi leggere e scrivere lo stesso buffer nella stessa
+formattazione sarebbe comportamento indefinito e puo' produrre path corrotti.
+Anche questa funzione preserva `wd`, `active`, `state`,
 `has_identity`, `device_id` e `inode_id`; ripara stringhe di path, non decide
 ancora che la subtree sia tornata semanticamente affidabile.
 

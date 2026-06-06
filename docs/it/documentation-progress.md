@@ -1353,3 +1353,11 @@ Stati usati:
   la `scan_root` salvata nella entry come root normale di scansione; il
   parametro `root` resta fallback di transizione e il fallback sulle altre root
   configurate e' il prossimo passo.
+- `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: documentato il fallback sincrono sulle altre root
+  configurate dopo `NOT_FOUND` su `scan_root`, chiarendo che il retry/backoff si
+  consuma solo dopo aver esaurito le root previste o dopo un errore tecnico.
+- `16-mappa-codice-e-strutture.md` e `14-scenari-test.md`: documentato il fix
+  in `watcher_update_path_prefix()` che copia il suffisso prima di riscrivere
+  `slot->path`, evitando sorgente/destinazione sovrapposte e path corrotti
+  durante la recovery lost-scope.

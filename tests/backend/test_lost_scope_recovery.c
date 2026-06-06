@@ -23,6 +23,7 @@
  * - WATCH_LOST_RETRY_SCHEDULED ... result=not-found retry=1 delay_ms=100
  * - WATCH_LOST_RECOVERY_GAVE_UP ... result=not-found retries=8
  * - WATCH_LOST_SCAN_BEGIN root=<root>
+ * - WATCH_LOST_SCAN_BEGIN root=<root>/fallback-root
  *
  * Forbidden events:
  * - FILE_*
@@ -41,7 +42,9 @@
  * A deleted directory is not found. The due-entry processor then proves that a
  * temporary miss is requeued with bounded backoff, while a retry-budget
  * exhaustion is logged and not scheduled again. The processor also proves it
- * scans the root stored in the queued entry, not an unrelated caller root.
+ * scans the root stored in the queued entry, not an unrelated caller root. A
+ * final scenario proves a clean NOT_FOUND on scan_root tries another configured
+ * root before spending retry budget.
  */
 
 #include <assert.h>
@@ -736,6 +739,83 @@ static void test_process_due_uses_entry_scan_root(inotify_backend_context_t *ctx
 }
 
 /*
+ * test_process_due_falls_back_to_configured_roots - second root can recover
+ * @ctx: backend context with initialized queue and logger
+ * @root: test root containing two configured recovery roots
+ *
+ * When scan_root does not contain the saved identity, the due processor should
+ * try the other configured roots before scheduling a retry. This models a
+ * directory moved from one monitored tree to another monitored tree.
+ */
+static void test_process_due_falls_back_to_configured_roots(
+    inotify_backend_context_t *ctx,
+    const char *root
+)
+{
+    char primary_root[PATH_MAX];
+    char fallback_root[PATH_MAX];
+    char original[PATH_MAX];
+    char moved[PATH_MAX];
+    struct stat st;
+
+    reset_event_log(ctx->logger);
+    backend_configured_roots_destroy(ctx->runtime);
+
+    join_path(primary_root, sizeof(primary_root), root, "primary-root");
+    join_path(fallback_root, sizeof(fallback_root), root, "fallback-root");
+    join_path(original, sizeof(original), primary_root, "lost");
+    join_path(moved, sizeof(moved), fallback_root, "lost");
+
+    assert(mkdir(primary_root, 0700) == 0);
+    assert(mkdir(fallback_root, 0700) == 0);
+    assert(mkdir(original, 0700) == 0);
+    assert(stat(original, &st) == 0);
+
+    assert(backend_configured_roots_add(ctx->runtime, primary_root) == 0);
+    assert(backend_configured_roots_add(ctx->runtime, fallback_root) == 0);
+
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  31,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             31,
+                             WATCHER_STATE_STALE) == 0);
+    assert(rename(original, moved) == 0);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            31,
+                                            original,
+                                            st.st_dev,
+                                            st.st_ino,
+                                            primary_root,
+                                            "IN_MOVE_SELF",
+                                            5000,
+                                            5000) == 0);
+
+    fake_watch_state_reset(0);
+
+    assert(backend_lost_scope_process_due_with_ops(ctx,
+                                                   primary_root,
+                                                   5000,
+                                                   4,
+                                                   &FAKE_LOST_SCOPE_WATCH_OPS) == 1);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 31),
+                  moved) == 0);
+    assert(watcher_get_state(&ctx->runtime->watchers, 31) ==
+           WATCHER_STATE_VALID);
+    assert_event_log_contains(ctx->logger, primary_root);
+    assert_event_log_contains(ctx->logger, fallback_root);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_NOT_FOUND");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+    assert_event_log_not_contains(ctx->logger, "WATCH_LOST_RETRY_SCHEDULED");
+
+    backend_configured_roots_destroy(ctx->runtime);
+}
+
+/*
  * test_empty_queue_is_noop - no recovery work is available
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root path
@@ -779,6 +859,7 @@ int main(int argc, char **argv)
     test_process_due_requeues_not_found(&ctx, root);
     test_process_due_gives_up_after_retry_budget(&ctx, root);
     test_process_due_uses_entry_scan_root(&ctx, root);
+    test_process_due_falls_back_to_configured_roots(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);

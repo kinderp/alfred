@@ -388,3 +388,13 @@ Completed in the scan-root processor pass:
 - added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
   for the case where the caller root is intentionally wrong but `scan_root`
   still drives a successful recovery
+
+Completed in the configured-root fallback pass:
+
+- expanded `backend_lost_scope_process_due_with_ops()` comments to explain the
+  NOT_FOUND-only fallback across configured roots
+- added a dedicated backend recovery test comment for a directory moved from one
+  configured root to another configured root
+- expanded `modules/inotify/src/watcher.c` comments in
+  `watcher_update_path_prefix()` to explain why the suffix must be copied before
+  rewriting `slot->path`

@@ -435,6 +435,16 @@ backend_lost_scope_recover_next_with_ops(
     const backend_resync_watch_ops_t *watch_ops
 );
 
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_entry_with_ops(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *entry,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
 static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_process_due_with_ops(
     inotify_backend_context_t *ctx,
     const char *root,
@@ -827,16 +837,56 @@ backend_lost_scope_recover_next_with_ops(
     const backend_resync_watch_ops_t *watch_ops
 )
 {
-    if (ctx == NULL || root == NULL || found_path == NULL ||
-        found_path_size == 0 || watch_ops == NULL) {
+    inotify_lost_scope_entry_t entry;
+
+    if (ctx == NULL || ctx->runtime == NULL || root == NULL ||
+        found_path == NULL || found_path_size == 0 || watch_ops == NULL) {
         return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
-
-    inotify_lost_scope_entry_t entry;
 
     if (backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
                                      &entry) != 0) {
         return BACKEND_LOST_SCOPE_RECOVERY_EMPTY;
+    }
+
+    return backend_lost_scope_recover_entry_with_ops(ctx,
+                                                     &entry,
+                                                     root,
+                                                     found_path,
+                                                     found_path_size,
+                                                     watch_ops);
+}
+
+/*
+ * backend_lost_scope_recover_entry_with_ops - try one root for one lost entry
+ * @ctx: backend context that owns watcher state and logger
+ * @entry: queued recovery entry already removed from the FIFO
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * This helper does not pop from the queue. That lets the due processor try the
+ * entry's primary scan_root first and, when the result is a clean NOT_FOUND,
+ * try other configured roots before deciding whether the entry should be
+ * requeued. Technical failures stay conservative and stop the attempt.
+ *
+ * Return: recovery result for this root.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_entry_with_ops(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *entry,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    if (ctx == NULL || ctx->runtime == NULL || entry == NULL ||
+        root == NULL || found_path == NULL || found_path_size == 0 ||
+        watch_ops == NULL) {
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
 
     found_path[0] = '\0';
@@ -849,7 +899,7 @@ backend_lost_scope_recover_next_with_ops(
     backend_lost_scope_scan_context_t scan_context;
 
     memset(&scan_context, 0, sizeof(scan_context));
-    scan_context.entry = &entry;
+    scan_context.entry = entry;
     scan_context.found_path = found_path;
     scan_context.found_path_size = found_path_size;
 
@@ -873,21 +923,21 @@ backend_lost_scope_recover_next_with_ops(
     if (rc != ERR_OK) {
         logger_event(ctx->logger,
                      "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=scan-failed",
-                     entry.wd,
-                     entry.old_path,
-                     entry.reason);
+                     entry->wd,
+                     entry->old_path,
+                     entry->reason);
         return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
 
     if (scan_context.found) {
         size_t updated_count = 0;
 
-        if (!watcher_exists(&ctx->runtime->watchers, entry.wd)) {
+        if (!watcher_exists(&ctx->runtime->watchers, entry->wd)) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
-                         entry.wd,
-                         entry.old_path,
-                         entry.reason);
+                         entry->wd,
+                         entry->old_path,
+                         entry->reason);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
@@ -898,28 +948,28 @@ backend_lost_scope_recover_next_with_ops(
          * which could leave mixed old/new prefixes after an overflow failure.
          */
         if (watcher_update_path_prefix(&ctx->runtime->watchers,
-                                       entry.old_path,
+                                       entry->old_path,
                                        found_path,
                                        &updated_count) != 0 ||
             updated_count == 0) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-prefix-failed",
-                         entry.wd,
-                         entry.old_path,
-                         entry.reason);
+                         entry->wd,
+                         entry->old_path,
+                         entry->reason);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
         logger_event(ctx->logger,
                      "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
-                     entry.wd,
-                     entry.old_path,
+                     entry->wd,
+                     entry->old_path,
                      found_path,
-                     entry.reason);
+                     entry->reason);
         logger_event(ctx->logger,
                      "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s new_prefix=%s children=%zu",
-                     entry.wd,
-                     entry.old_path,
+                     entry->wd,
+                     entry->old_path,
                      found_path,
                      updated_count - 1);
 
@@ -934,18 +984,18 @@ backend_lost_scope_recover_next_with_ops(
         if (coverage_rc != ERR_OK) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=coverage-scan-failed",
-                         entry.wd,
+                         entry->wd,
                          found_path,
-                         entry.reason);
+                         entry->reason);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
         logger_event(ctx->logger,
                      "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
-                     entry.wd,
+                     entry->wd,
                      found_path,
-                     entry.reason,
+                     entry->reason,
                      coverage_context.directories_seen,
                      coverage_context.directories_watched,
                      coverage_context.directories_missing_watch);
@@ -953,9 +1003,9 @@ backend_lost_scope_recover_next_with_ops(
         for (size_t i = 0; i < coverage_context.missing_paths_count; i++) {
             logger_event(ctx->logger,
                          "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                         entry.wd,
+                         entry->wd,
                          found_path,
-                         entry.reason,
+                         entry->reason,
                          coverage_context.missing_paths[i]);
         }
 
@@ -964,25 +1014,25 @@ backend_lost_scope_recover_next_with_ops(
 
         logger_event(ctx->logger,
                      "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s result=%s",
-                     entry.wd,
+                     entry->wd,
                      found_path,
-                     entry.reason,
+                     entry->reason,
                      backend_resync_scan_class_name(coverage_class));
 
         error_t reinstall_rc =
             backend_lost_scope_reinstall_missing_watches(ctx,
-                                                         entry.wd,
+                                                         entry->wd,
                                                          found_path,
-                                                         entry.reason,
+                                                         entry->reason,
                                                          &coverage_context,
                                                          watch_ops);
 
         if (reinstall_rc != ERR_OK) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=reinstall-failed",
-                         entry.wd,
+                         entry->wd,
                          found_path,
-                         entry.reason);
+                         entry->reason);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
@@ -996,18 +1046,18 @@ backend_lost_scope_recover_next_with_ops(
             valid_count == 0) {
             logger_event(ctx->logger,
                          "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=set-valid-failed",
-                         entry.wd,
+                         entry->wd,
                          found_path,
-                         entry.reason);
+                         entry->reason);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
         logger_event(ctx->logger,
                      "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s result=valid watches=%zu",
-                     entry.wd,
+                     entry->wd,
                      found_path,
-                     entry.reason,
+                     entry->reason,
                      valid_count);
 
         backend_resync_scan_context_destroy(&coverage_context);
@@ -1016,10 +1066,10 @@ backend_lost_scope_recover_next_with_ops(
 
     logger_event(ctx->logger,
                  "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
-                 entry.wd,
-                 entry.old_path,
-                 entry.reason,
-                 entry.retry_count);
+                 entry->wd,
+                 entry->old_path,
+                 entry->reason,
+                 entry->retry_count);
     return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
 }
 
@@ -1047,6 +1097,9 @@ backend_lost_scope_recover_next_with_ops(
  * root chosen when the backend queued the stale scope, so the processor uses it
  * instead of guessing from the caller. @root remains a defensive fallback for
  * older tests or transitional call paths that might build entries manually.
+ * A clean NOT_FOUND on scan_root triggers a search across the other configured
+ * roots before retry/backoff is charged. Technical failures do not fall through
+ * to other roots because a failed scan is not reliable absence evidence.
  *
  * Return: number of entries attempted.
  */
@@ -1075,7 +1128,13 @@ static size_t backend_lost_scope_process_due_with_ops(
         if (entry->retry_after_ns > now_ns)
             break;
 
-        inotify_lost_scope_entry_t attempted = *entry;
+        inotify_lost_scope_entry_t attempted;
+
+        if (backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                         &attempted) != 0) {
+            break;
+        }
+
         const char *scan_root = attempted.scan_root;
 
         if (scan_root[0] == '\0')
@@ -1083,14 +1142,39 @@ static size_t backend_lost_scope_process_due_with_ops(
 
         char found_path[PATH_MAX];
         backend_lost_scope_recovery_result_t result =
-            backend_lost_scope_recover_next_with_ops(ctx,
-                                                     scan_root,
-                                                     found_path,
-                                                     sizeof(found_path),
-                                                     watch_ops);
+            backend_lost_scope_recover_entry_with_ops(ctx,
+                                                      &attempted,
+                                                      scan_root,
+                                                      found_path,
+                                                      sizeof(found_path),
+                                                      watch_ops);
 
-        if (result == BACKEND_LOST_SCOPE_RECOVERY_EMPTY)
-            break;
+        /*
+         * A clean NOT_FOUND only says the identity was not inside the primary
+         * scan_root. If the backend has other configured roots, try them before
+         * spending retry budget. Technical failures stop immediately because a
+         * failed scan is not reliable evidence that the identity is absent.
+         */
+        if (result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND) {
+            for (size_t i = 0;
+                 i < ctx->runtime->configured_roots_count &&
+                 result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
+                 i++) {
+
+                const char *candidate = ctx->runtime->configured_roots[i];
+
+                if (strcmp(candidate, scan_root) == 0)
+                    continue;
+
+                result =
+                    backend_lost_scope_recover_entry_with_ops(ctx,
+                                                              &attempted,
+                                                              candidate,
+                                                              found_path,
+                                                              sizeof(found_path),
+                                                              watch_ops);
+            }
+        }
 
         if (result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND ||
             result == BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED) {

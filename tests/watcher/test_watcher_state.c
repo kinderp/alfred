@@ -234,6 +234,19 @@ static void test_update_path_prefix_preserves_subtree_state(void)
                                       &updated) == 0);
     assert(updated == 0);
 
+    assert(watcher_store_identity(&table,
+                                  5,
+                                  "/tmp/exact/lost",
+                                  (dev_t)50,
+                                  (ino_t)500) == 0);
+    assert(watcher_update_path_prefix(&table,
+                                      "/tmp/exact/lost",
+                                      "/tmp/recovered/lost",
+                                      &updated) == 0);
+    assert(updated == 1);
+    assert(strcmp(watcher_get_path(&table, 5),
+                  "/tmp/recovered/lost") == 0);
+
     assert(watcher_update_path_prefix(&table, NULL, "/tmp/x", &updated) == -1);
     assert(watcher_update_path_prefix(&table, "/tmp/x", NULL, &updated) == -1);
     assert(watcher_update_path_prefix(NULL, "/tmp/x", "/tmp/y", &updated) == -1);

@@ -2945,6 +2945,7 @@ Il contratto e':
 - se la queue e' vuota, non fa nulla
 - se `retry_after_ns > now_ns`, non consuma la entry e si ferma
 - se la entry e' matura, chiama la recovery sincrona su `entry.scan_root`
+- se `scan_root` termina con `NOT_FOUND`, prova le altre root configurate
 - processa al massimo `batch_size` entry mature
 - si ferma al primo elemento non maturo invece di saltarlo
 
@@ -2982,10 +2983,27 @@ entry matura termina con:
 - `BACKEND_LOST_SCOPE_RECOVERY_EMPTY`, il processore si ferma
 
 `NOT_FOUND` non e' trattato come cancellazione definitiva. Significa solo che
-la scansione della root scelta non ha trovato l'identita' in quel momento. La
-directory potrebbe essere fuori dalla root, potrebbe essere stata rimossa, o
-potrebbe tornare visibile dopo un'altra operazione del filesystem. Per questo
-Alfred non elimina subito la memoria dello scope perso.
+la scansione delle root previste dalla policy non ha trovato l'identita' in
+quel momento. La directory potrebbe essere fuori dalle root configurate,
+potrebbe essere stata rimossa, o potrebbe tornare visibile dopo un'altra
+operazione del filesystem. Per questo Alfred non elimina subito la memoria dello
+scope perso.
+
+La policy corrente e':
+
+```text
+1. prova entry.scan_root
+2. se il risultato e' NOT_FOUND, prova le altre root configurate
+3. se una root trova l'identita', completa la recovery
+4. se tutte le root previste danno NOT_FOUND, schedula retry/backoff
+5. se una root fallisce tecnicamente, non prova le altre e schedula retry/backoff
+```
+
+Il punto 5 e' intenzionale. Un errore tecnico di scan non e' una prova di
+assenza: puo' indicare permessi, root non leggibile, errore I/O o stato
+transitorio. Saltare a un'altra root dopo un errore tecnico rischierebbe di
+produrre una diagnosi rassicurante mentre una parte del perimetro monitorato non
+e' stata letta in modo affidabile.
 
 Anche alcuni fallimenti tecnici vengono rischedulati. Questo include errori di
 scan, fallimenti di copertura o fallimenti di reinstallazione dei watch. La
@@ -3230,11 +3248,9 @@ Lo stato corrente del branch e':
 
 I prossimi passi, in ordine, sono:
 
-1. estendere il processore per provare, se la policy lo consente, le altre root
-   configurate quando `scan_root` non trova l'identita'
-2. solo dopo collegare il processore al loop runtime con `backend_now_ns()` e
+1. collegare il processore al loop runtime con `backend_now_ns()` e
    `batch_size` piccolo
-3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+2. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
    quando il percorso sincrono multi-root e' stabile
 
 Questo ordine evita di attaccare al runtime un processore che non conosce ancora

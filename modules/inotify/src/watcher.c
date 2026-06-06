@@ -377,7 +377,7 @@ int watcher_update_path_prefix(watcher_table_t *wt,
 
     for (size_t i = 0; i < wt->capacity; i++) {
         watcher_entry_t *slot = &wt->items[i];
-        const char *suffix;
+        char suffix[PATH_MAX];
 
         if (!slot->active)
             continue;
@@ -385,7 +385,15 @@ int watcher_update_path_prefix(watcher_table_t *wt,
         if (!watcher_path_matches_prefix(slot->path, old_prefix))
             continue;
 
-        suffix = slot->path + old_len;
+        /*
+         * Copy the suffix before writing slot->path. The source suffix points
+         * inside slot->path, and reading it while snprintf() writes the same
+         * buffer would be overlapping source/destination undefined behavior.
+         */
+        snprintf(suffix,
+                 sizeof(suffix),
+                 "%s",
+                 slot->path + old_len);
 
         snprintf(slot->path,
                  sizeof(slot->path),
