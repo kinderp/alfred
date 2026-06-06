@@ -2844,6 +2844,10 @@ Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
   path del watch principale e del figlio gia' noto vengono aggiornati; un
   secondo figlio non watched viene visto dallo scan di copertura come
   `missing=1`, reinstallato e poi l'intera subtree torna `VALID`
+- una seconda directory rinominata forza il fallimento sul secondo missing
+  watch: Alfred logga `WATCH_LOST_REINSTALL_FAILED`, rimuove il watch installato
+  nello stesso tentativo con `WATCH_LOST_ROLLBACK` e lascia la subtree non
+  `VALID`
 - una directory cancellata non viene trovata e non produce eventi semantici
 
 Questo completa il primo percorso sincrono testabile della lost-scope recovery:
@@ -2888,8 +2892,8 @@ valida tutti i path prima di mutare la tabella.
 
 Restano i passi successivi:
 
-1. aggiungere failure test specifici per rollback lost-scope
-2. solo dopo aggiungere worker thread, debounce e backoff
+1. aggiungere worker thread, debounce e backoff
+2. decidere configurazione e limiti operativi della recovery posticipata
 
 #### Aggiornamento prefissi dei figli
 
@@ -2973,8 +2977,8 @@ All-or-stale significa: se tutti i missing watch vengono reinstallati, Alfred
 porta a `VALID` tutti i watch sotto il prefisso recuperato. Se un'installazione
 fallisce, Alfred rimuove i watch installati durante quel tentativo e lascia la
 subtree non affidabile. Il test positivo usa operazioni watch fake per rendere
-deterministico il caso `missing=1`; il failure test dedicato al rollback
-lost-scope resta da aggiungere.
+deterministico il caso `missing=1`; il test failure usa le stesse fake ops per
+fallire sul secondo missing watch e provare rollback e stato non `VALID`.
 
 #### Log di lost-scope recovery
 

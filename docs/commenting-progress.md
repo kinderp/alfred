@@ -26,6 +26,10 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `tests/backend/test_lost_scope_recovery.c` after adding the
+  lost-scope reinstall failure scenario. The test comments now document the
+  expected rollback diagnostics and why the scenario must keep the recovered
+  subtree non-VALID when one missing watch cannot be installed.
 - refreshed `modules/inotify/include/watcher.h`,
   `modules/inotify/src/watcher.c`,
   `modules/inotify/src/inotify_backend.c`,

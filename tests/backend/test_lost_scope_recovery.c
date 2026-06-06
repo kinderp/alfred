@@ -16,6 +16,9 @@
  * - WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
  * - WATCH_LOST_REINSTALLED ... installed_path=<root>/renamed/unwatched
  * - WATCH_LOST_RECOVERY_END ... result=valid watches=3
+ * - WATCH_LOST_REINSTALL_FAILED ... missing_path=<root>/rollback-renamed/...
+ * - WATCH_LOST_ROLLBACK ... removed_wd=101
+ * - WATCH_LOST_RECOVERY_FAILED ... error=reinstall-failed
  * - WATCH_LOST_NOT_FOUND ... path=<root>/gone retry=0
  *
  * Forbidden events:
@@ -30,8 +33,9 @@
  * root and already-known children after a match, then scans the recovered
  * subtree to measure missing watch coverage. Fake watch operations reinstall
  * the one missing path, after which the recovered subtree can return VALID
- * without emitting semantic filesystem events. A deleted directory is not
- * found.
+ * without emitting semantic filesystem events. A second scenario forces a
+ * reinstall failure after one fake watch was installed and verifies rollback.
+ * A deleted directory is not found.
  */
 
 #include <assert.h>
@@ -191,6 +195,53 @@ static void assert_event_log_contains(logger_t *logger, const char *needle)
 }
 
 /*
+ * assert_event_log_not_contains - verify one diagnostic fragment is absent
+ * @logger: logger whose event stream is a temporary file
+ * @needle: fragment that must not appear in the event stream
+ */
+static void assert_event_log_not_contains(logger_t *logger, const char *needle)
+{
+    char buffer[8192];
+    size_t bytes_read;
+
+    assert(logger != NULL);
+    assert(logger->event != NULL);
+    assert(needle != NULL);
+
+    fflush(logger->event);
+    rewind(logger->event);
+
+    bytes_read = fread(buffer, 1, sizeof(buffer) - 1, logger->event);
+    assert(bytes_read < sizeof(buffer));
+
+    buffer[bytes_read] = '\0';
+
+    assert(strstr(buffer, needle) == NULL);
+}
+
+/*
+ * reset_event_log - isolate one scenario's expected diagnostics
+ * @logger: logger whose event stream is a temporary file
+ *
+ * The test process reuses one temporary logger stream for several scenarios.
+ * Truncating it before each scenario lets the assertions describe only the
+ * current scenario and makes forbidden-log checks meaningful.
+ */
+static void reset_event_log(logger_t *logger)
+{
+    int fd;
+
+    assert(logger != NULL);
+    assert(logger->event != NULL);
+
+    fflush(logger->event);
+    fd = fileno(logger->event);
+    assert(fd >= 0);
+    assert(ftruncate(fd, 0) == 0);
+    rewind(logger->event);
+}
+
+/*
  * test_renamed_directory_is_found_by_identity - positive delayed search
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root used as bounded scan scope
@@ -215,6 +266,8 @@ static void test_renamed_directory_is_found_by_identity(
     char found[PATH_MAX];
     struct stat st;
     struct stat child_st;
+
+    reset_event_log(ctx->logger);
 
     join_path(original, sizeof(original), root, "original");
     join_path(original_child, sizeof(original_child), original, "child");
@@ -307,6 +360,120 @@ static void test_renamed_directory_is_found_by_identity(
 }
 
 /*
+ * test_reinstall_failure_rolls_back_partial_lost_scope - all-or-stale failure
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root used as bounded scan scope
+ *
+ * The recovered subtree contains two missing child directories. Fake watch
+ * operations install the first missing path and fail on the second one. Alfred
+ * must roll back the first fake watch, keep the recovered subtree non-VALID,
+ * and log the failed reinstall plus rollback diagnostics.
+ */
+static void test_reinstall_failure_rolls_back_partial_lost_scope(
+    inotify_backend_context_t *ctx,
+    const char *root
+)
+{
+    char original[PATH_MAX];
+    char original_child[PATH_MAX];
+    char original_missing_one[PATH_MAX];
+    char original_missing_two[PATH_MAX];
+    char renamed[PATH_MAX];
+    char renamed_child[PATH_MAX];
+    char renamed_missing_one[PATH_MAX];
+    char found[PATH_MAX];
+    struct stat st;
+    struct stat child_st;
+
+    reset_event_log(ctx->logger);
+
+    join_path(original, sizeof(original), root, "rollback-original");
+    join_path(original_child, sizeof(original_child), original, "child");
+    join_path(original_missing_one,
+              sizeof(original_missing_one),
+              original,
+              "missing-one");
+    join_path(original_missing_two,
+              sizeof(original_missing_two),
+              original,
+              "missing-two");
+    join_path(renamed, sizeof(renamed), root, "rollback-renamed");
+    join_path(renamed_child, sizeof(renamed_child), renamed, "child");
+    join_path(renamed_missing_one,
+              sizeof(renamed_missing_one),
+              renamed,
+              "missing-one");
+
+    assert(mkdir(original, 0700) == 0);
+    assert(mkdir(original_child, 0700) == 0);
+    assert(mkdir(original_missing_one, 0700) == 0);
+    assert(mkdir(original_missing_two, 0700) == 0);
+    assert(stat(original, &st) == 0);
+    assert(stat(original_child, &child_st) == 0);
+
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  17,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             17,
+                             WATCHER_STATE_STALE) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  19,
+                                  original_child,
+                                  child_st.st_dev,
+                                  child_st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             19,
+                             WATCHER_STATE_STALE) == 0);
+    assert(rename(original, renamed) == 0);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            17,
+                                            original,
+                                            st.st_dev,
+                                            st.st_ino,
+                                            "IN_MOVE_SELF",
+                                            3000,
+                                            3000) == 0);
+
+    fake_watch_state_reset(2);
+
+    assert(backend_lost_scope_recover_next_with_ops(ctx,
+                                                    root,
+                                                    found,
+                                                    sizeof(found),
+                                                    &FAKE_LOST_SCOPE_WATCH_OPS) ==
+           BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED);
+    assert(strcmp(found, renamed) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 17),
+                  renamed) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 19),
+                  renamed_child) == 0);
+    assert(watcher_get_path(&ctx->runtime->watchers, 101) == NULL);
+    assert(watcher_get_state(&ctx->runtime->watchers, 17) ==
+           WATCHER_STATE_STALE);
+    assert(watcher_get_state(&ctx->runtime->watchers, 19) ==
+           WATCHER_STATE_STALE);
+    assert(fake_watch_state.add_calls == 2);
+    assert(fake_watch_state.remove_calls == 1);
+    assert(fake_watch_state.removed_wds[0] == 101);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_COVERAGE_DONE");
+    assert_event_log_contains(ctx->logger, "dirs=4 watched=2 missing=2");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_REINSTALLED");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_REINSTALL_FAILED");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_ROLLBACK");
+    assert_event_log_contains(ctx->logger, "removed_wd=101");
+    assert_event_log_contains(ctx->logger, renamed_missing_one);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_FAILED");
+    assert_event_log_contains(ctx->logger, "error=reinstall-failed");
+    assert_event_log_not_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+}
+
+/*
  * test_deleted_directory_is_not_found - negative delayed search
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root used as bounded scan scope
@@ -321,6 +488,8 @@ static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
     char gone[PATH_MAX];
     char found[PATH_MAX];
     struct stat st;
+
+    reset_event_log(ctx->logger);
 
     join_path(gone, sizeof(gone), root, "gone");
 
@@ -398,6 +567,7 @@ int main(int argc, char **argv)
         make_backend_context(&runtime, &logger);
 
     test_renamed_directory_is_found_by_identity(&ctx, root);
+    test_reinstall_failure_rolls_back_partial_lost_scope(&ctx, root);
     test_deleted_directory_is_not_found(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 

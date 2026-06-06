@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `test_lost_scope_recovery.c`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il failure test per la policy
+  all-or-stale lost-scope. Lo scenario forza il secondo fake watch add a
+  fallire, verifica `WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`,
+  `WATCH_LOST_RECOVERY_FAILED ... error=reinstall-failed`, rimozione del fake
+  watch installato e subtree non `VALID`.
 - `watcher.h`, `watcher.c`, `inotify_backend.c`,
   `test_watcher_state.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
