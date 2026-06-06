@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `test_lost_scope_recovery.c`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il primo processore sincrono delle
+  entry mature della `lost_scope_queue`. Il processore usa `retry_after_ns`,
+  rispetta `batch_size`, non consuma la testa FIFO se non e' ancora matura e
+  non implementa ancora requeue/backoff dopo `NOT_FOUND` o fallimento tecnico.
 - `test_lost_scope_recovery.c`, `14-scenari-test.md` e
   `21-roadmap-scanner-resync.md`: aggiunto il failure test per la policy
   all-or-stale lost-scope. Lo scenario forza il secondo fake watch add a

@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_lost_scope_queue.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after adding the first
+  synchronous due-entry processor. Comments now explain queue peeking,
+  retry_after_ns maturity checks, FIFO stop-on-not-due behavior, and why
+  retry/backoff requeue is intentionally left for the next step.
 - refreshed `tests/backend/test_lost_scope_recovery.c` after adding the
   lost-scope reinstall failure scenario. The test comments now document the
   expected rollback diagnostics and why the scenario must keep the recovered

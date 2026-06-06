@@ -2892,8 +2892,54 @@ valida tutti i path prima di mutare la tabella.
 
 Restano i passi successivi:
 
-1. aggiungere worker thread, debounce e backoff
-2. decidere configurazione e limiti operativi della recovery posticipata
+1. decidere e implementare retry/backoff su `NOT_FOUND` e fallimenti tecnici
+2. solo dopo aggiungere worker thread e configurazione pubblica
+
+#### Processore sincrono delle entry mature
+
+Prima del worker thread vero e proprio, Alfred introduce un processore sincrono
+testabile:
+
+```text
+backend_lost_scope_process_due_with_ops(ctx, root, now_ns, batch_size, ops)
+```
+
+La funzione non crea thread, non dorme e non gira in loop infinito. Serve a
+separare la policy "quali entry posso tentare adesso?" dalla concorrenza futura.
+Il contratto e':
+
+- guarda solo la testa FIFO della `lost_scope_queue`
+- se la queue e' vuota, non fa nulla
+- se `retry_after_ns > now_ns`, non consuma la entry e si ferma
+- se la entry e' matura, chiama la recovery sincrona gia' testata
+- processa al massimo `batch_size` entry mature
+- si ferma al primo elemento non maturo invece di saltarlo
+
+Questa ultima regola e' importante: saltare una entry non matura per cercarne
+una successiva romperebbe l'ordine FIFO e renderebbe difficile ragionare su
+retry, fairness e diagnostica. Il primo processore quindi e' conservativo:
+preserva l'ordine in cui Alfred ha perso fiducia nei path.
+
+Esempio:
+
+```text
+queue:
+  A retry_after=1000
+  B retry_after=3000
+  C retry_after=1200
+
+now=1500, batch_size=8
+
+processa A
+si ferma su B
+non salta B per processare C
+```
+
+In questa fase `retry_count`, retry massimo e backoff non sono ancora applicati
+dal processore. Le entry mature vengono tentate con la recovery sincrona; il
+reinserimento dopo `WATCH_LOST_NOT_FOUND` o `WATCH_LOST_RECOVERY_FAILED` sara'
+il passo successivo. Questo evita di introdurre insieme scheduling, backoff,
+requeue e worker thread.
 
 #### Aggiornamento prefissi dei figli
 

@@ -391,6 +391,10 @@ static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_pop(
     inotify_lost_scope_entry_t *out
 );
 
+static const inotify_lost_scope_entry_t *backend_lost_scope_queue_peek(
+    const inotify_lost_scope_queue_t *queue
+);
+
 static int backend_lost_scope_queue_expand(
     inotify_lost_scope_queue_t *queue
 );
@@ -407,6 +411,14 @@ backend_lost_scope_recover_next_with_ops(
     const char *root,
     char *found_path,
     size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_process_due_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    uint64_t now_ns,
+    size_t batch_size,
     const backend_resync_watch_ops_t *watch_ops
 );
 
@@ -614,6 +626,27 @@ static int backend_lost_scope_queue_pop(inotify_lost_scope_queue_t *queue,
         queue->head = 0;
 
     return 0;
+}
+
+/*
+ * backend_lost_scope_queue_peek - inspect the oldest queued recovery request
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * The due-entry processor must check retry_after_ns before deciding whether
+ * the head entry can be consumed. Returning a const pointer keeps this helper
+ * read-only: callers can inspect scheduling metadata but cannot mutate FIFO
+ * state or hold ownership of the entry.
+ *
+ * Return: pointer to the oldest queued entry, or NULL when the queue is empty.
+ */
+static const inotify_lost_scope_entry_t *backend_lost_scope_queue_peek(
+    const inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL || queue->count == 0)
+        return NULL;
+
+    return &queue->items[queue->head];
 }
 
 /*
@@ -910,6 +943,70 @@ backend_lost_scope_recover_next_with_ops(
                  entry.reason,
                  entry.retry_count);
     return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
+}
+
+/*
+ * backend_lost_scope_process_due_with_ops - process mature queued recoveries
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: monitored root inside which due entries may be searched
+ * @now_ns: current monotonic time used for retry_after_ns comparisons
+ * @batch_size: maximum number of due entries to process in this call
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * This is the single-threaded bridge toward the future worker. It does not
+ * sleep, does not spawn a thread, and does not scan unbounded work. It only
+ * consumes FIFO head entries whose retry_after_ns is mature at @now_ns and
+ * stops when the queue is empty, @batch_size is reached, or the next head entry
+ * is still delayed.
+ *
+ * The function intentionally stops at the first non-due head entry instead of
+ * searching later slots. That preserves FIFO ordering and makes future backoff
+ * behavior easier to reason about. Retry/requeue policy after NOT_FOUND or
+ * technical failure is still a later step; this helper only answers "which
+ * queued entries are due to be attempted now?".
+ *
+ * Return: number of entries attempted.
+ */
+static size_t backend_lost_scope_process_due_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    uint64_t now_ns,
+    size_t batch_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    size_t processed = 0;
+
+    if (ctx == NULL || ctx->runtime == NULL || root == NULL ||
+        watch_ops == NULL || batch_size == 0) {
+        return 0;
+    }
+
+    while (processed < batch_size) {
+        const inotify_lost_scope_entry_t *entry =
+            backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes);
+
+        if (entry == NULL)
+            break;
+
+        if (entry->retry_after_ns > now_ns)
+            break;
+
+        char found_path[PATH_MAX];
+        backend_lost_scope_recovery_result_t result =
+            backend_lost_scope_recover_next_with_ops(ctx,
+                                                     root,
+                                                     found_path,
+                                                     sizeof(found_path),
+                                                     watch_ops);
+
+        if (result == BACKEND_LOST_SCOPE_RECOVERY_EMPTY)
+            break;
+
+        processed++;
+    }
+
+    return processed;
 }
 
 /*

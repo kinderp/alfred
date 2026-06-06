@@ -530,6 +530,45 @@ static void test_deleted_directory_is_not_found(inotify_backend_context_t *ctx,
 }
 
 /*
+ * test_process_due_skips_future_head - delayed work is not consumed early
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root path borrowed by the due processor
+ *
+ * The first synchronous due processor must be safe before any worker thread
+ * exists. If the FIFO head has retry_after_ns in the future, the processor
+ * should stop immediately, leave the entry queued, and avoid recovery logs.
+ */
+static void test_process_due_skips_future_head(inotify_backend_context_t *ctx,
+                                               const char *root)
+{
+    inotify_lost_scope_entry_t entry;
+
+    reset_event_log(ctx->logger);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            27,
+                                            "/tmp/future",
+                                            1,
+                                            2,
+                                            "IN_MOVE_SELF",
+                                            1000,
+                                            5000) == 0);
+
+    assert(backend_lost_scope_process_due_with_ops(ctx,
+                                                   root,
+                                                   4999,
+                                                   4,
+                                                   &FAKE_LOST_SCOPE_WATCH_OPS) == 0);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 1);
+    assert_event_log_not_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
+
+    assert(backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                        &entry) == 0);
+    assert(entry.wd == 27);
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+}
+
+/*
  * test_empty_queue_is_noop - no recovery work is available
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root path
@@ -569,6 +608,7 @@ int main(int argc, char **argv)
     test_renamed_directory_is_found_by_identity(&ctx, root);
     test_reinstall_failure_rolls_back_partial_lost_scope(&ctx, root);
     test_deleted_directory_is_not_found(&ctx, root);
+    test_process_due_skips_future_head(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);

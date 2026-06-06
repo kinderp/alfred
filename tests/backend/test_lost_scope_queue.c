@@ -238,6 +238,51 @@ static void test_enqueue_copies_borrowed_strings(void)
 }
 
 /*
+ * test_peek_inspects_head_without_consuming - scheduling can check maturity
+ *
+ * The due-entry processor needs retry_after_ns from the oldest queued record
+ * before deciding whether it may pop the entry. Peeking must not advance FIFO
+ * state, otherwise a delayed entry could be lost without a recovery attempt.
+ */
+static void test_peek_inspects_head_without_consuming(void)
+{
+    inotify_lost_scope_queue_t queue;
+    inotify_lost_scope_entry_t entry;
+    const inotify_lost_scope_entry_t *head;
+
+    assert(backend_lost_scope_queue_init(&queue, 1) == 0);
+    assert(backend_lost_scope_queue_peek(&queue) == NULL);
+
+    assert(backend_lost_scope_queue_enqueue(&queue,
+                                            31,
+                                            "/tmp/root/head",
+                                            700,
+                                            800,
+                                            "IN_MOVE_SELF",
+                                            9000,
+                                            9500) == 0);
+
+    head = backend_lost_scope_queue_peek(&queue);
+    assert(head != NULL);
+    assert(head->wd == 31);
+    assert(head->retry_after_ns == 9500);
+    assert(backend_lost_scope_queue_count(&queue) == 1);
+
+    assert(backend_lost_scope_queue_pop(&queue, &entry) == 0);
+    assert_scope_entry(&entry,
+                       31,
+                       "/tmp/root/head",
+                       700,
+                       800,
+                       "IN_MOVE_SELF",
+                       9000,
+                       9500);
+    assert(backend_lost_scope_queue_count(&queue) == 0);
+
+    backend_lost_scope_queue_destroy(&queue);
+}
+
+/*
  * test_invalid_inputs_are_rejected - malformed recovery records are ignored
  *
  * A lost-scope record without a queue, path, reason, or valid wd would not be
@@ -297,6 +342,7 @@ int main(void)
     test_init_destroy_count();
     test_fifo_order_survives_wrap_and_growth();
     test_enqueue_copies_borrowed_strings();
+    test_peek_inspects_head_without_consuming();
     test_invalid_inputs_are_rejected();
 
     return 0;
