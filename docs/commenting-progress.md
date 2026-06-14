@@ -409,3 +409,13 @@ Completed in the runtime poll integration pass:
   and why the poll batch is deliberately one entry
 - added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
   for the idle poll path that processes a mature lost-scope entry on `EAGAIN`
+
+Completed in the runtime lost-scope scenario pass:
+
+- added a full expected-log contract to
+  `tests/backend/test_lost_scope_runtime_recovery.sh`
+- commented each assertion group to explain the runtime chain from
+  `IN_MOVE_SELF` to `WATCH_LOST_QUEUED`, multi-root identity search,
+  `WATCH_LOST_RECOVERY_END`, and the final proof `FILE_CREATED`
+- updated the Italian scenario map and resync roadmap so the new test is tied
+  to the backend recovery design, not treated as an isolated shell script

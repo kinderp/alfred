@@ -1367,3 +1367,9 @@ Stati usati:
   processa ora un batch sincrono minimo sul ramo idle e dopo un buffer di eventi
   consumato, usando `backend_now_ns()` e `batch_size=1`; worker thread,
   debounce e configurazione pubblica restano esplicitamente rimandati.
+- `tests/backend/test_lost_scope_runtime_recovery.sh`,
+  `14-scenari-test.md` e `21-roadmap-scanner-resync.md`: aggiunto e documentato
+  lo scenario runtime in cui una directory watched viene spostata da una root
+  configurata a un'altra. Il test fissa la catena `IN_MOVE_SELF` ->
+  `WATCH_LOST_QUEUED` -> scan root A -> fallback root B ->
+  `WATCH_LOST_RECOVERY_END` -> `FILE_CREATED` nel path recuperato.

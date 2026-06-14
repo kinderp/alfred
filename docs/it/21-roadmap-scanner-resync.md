@@ -2883,8 +2883,50 @@ Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
 
 Questo completa il primo percorso sincrono testabile della lost-scope recovery:
 Alfred sa ritrovare un oggetto, riallineare i path gia' registrati nella
-watcher table, misurare la copertura, reinstallare i watch mancanti e tornare a
-`VALID` solo se ogni passo riesce.
+watcher table, reinstallare i watch mancanti e tornare `VALID` solo quando la
+subtree e' nuovamente coperta.
+
+Il test `tests/backend/test_lost_scope_runtime_recovery.sh` copre invece il
+percorso runtime piu' vicino all'end-to-end:
+
+```text
+root A e root B configurate
+mkdir rootA/lost
+    -> watch installato su rootA/lost
+mv rootA/lost rootB/lost
+    -> IN_MOVE_SELF sul wd di rootA/lost
+    -> WATCH_STALE
+    -> WATCH_RESYNC_FAILED error=path-unreachable
+    -> WATCH_LOST_QUEUED
+poll runtime
+    -> WATCH_LOST_SCAN_BEGIN root=rootA
+    -> WATCH_LOST_NOT_FOUND
+    -> WATCH_LOST_SCAN_BEGIN root=rootB
+    -> WATCH_LOST_FOUND old_path=rootA/lost new_path=rootB/lost
+    -> WATCH_LOST_RECOVERY_END result=valid
+touch rootB/lost/proof.txt
+    -> FILE_CREATED nel path recuperato
+```
+
+Questo test e' diverso dai test C perche' parte dal binario reale, dal kernel
+inotify reale e da due root passate in riga di comando. Il suo obiettivo non e'
+misurare tutte le combinazioni interne della queue, ma fissare la catena:
+
+```text
+kernel IN_MOVE_SELF
+-> stale
+-> enqueue lost_scope_queue
+-> process_due dal poll
+-> scan root configurate
+-> update path
+-> watch ancora operativo
+```
+
+La `lost_scope_queue` e' il punto chiave del disegno: non e' una coda di eventi
+utente, ma una coda di lavoro backend. Serve a separare il momento in cui Alfred
+scopre che il path non e' affidabile dal momento in cui paga il costo di cercare
+la stessa identita' nelle root monitorate. In questo modo il poll puo' restare
+reattivo e consumare al massimo un tentativo per giro.
 
 #### Aggiornamento path del watch principale
 
@@ -3278,16 +3320,16 @@ Lo stato corrente del branch e':
   specifica quando disponibile
 - processore lost-scope collegato al poll runtime con `backend_now_ns()` e
   `batch_size=1`
+- scenario runtime reale per `IN_MOVE_SELF` con directory spostata tra due root
+  configurate e recovery delayed completata
 
 I prossimi passi, in ordine, sono:
 
-1. aggiungere uno scenario piu' vicino all'end-to-end per `IN_MOVE_SELF` reale
-   con recovery delayed
-2. misurare e documentare il costo di scan su alberi piu' grandi
-3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+1. misurare e documentare il costo di scan su alberi piu' grandi
+2. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
    quando il percorso sincrono multi-root e' stabile sotto test
 
 Questo ordine evita di aggiungere concorrenza prima di sapere se il percorso
 sincrono bounded e' sufficiente. Le root sono esplicite e il poll spende un solo
-tentativo per giro; il prossimo punto e' verificare il comportamento con eventi
-kernel reali e con alberi piu' grandi.
+tentativo per giro; il prossimo punto e' misurare il comportamento con alberi
+piu' grandi.
