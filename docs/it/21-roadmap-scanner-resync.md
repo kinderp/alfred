@@ -2990,6 +2990,37 @@ Il contratto e':
 - processa al massimo `batch_size` entry mature
 - si ferma al primo elemento non maturo invece di saltarlo
 
+`batch_size` non conta eventi inotify raw e non conta directory visitate dallo
+scanner. Conta quante entry mature della `lost_scope_queue` Alfred prova a
+recuperare in una singola chiamata al processore.
+
+Una entry della `lost_scope_queue` rappresenta uno scope perso, cioe' un watch
+che ha perso affidabilita' del path. Nella pratica spesso corrisponde a un wd
+diventato `STALE` dopo `IN_MOVE_SELF` o dopo un fallimento locale come
+`path-unreachable` o `identity-mismatch`. Una sola entry puo' comunque causare
+uno scan ampio: se lo scope perso e' una directory con 10000 sottodirectory, il
+processore sta sempre consumando una sola entry, ma quella entry puo' visitare
+molti path.
+
+Esempio:
+
+```text
+lost_scope_queue:
+  entry A -> wd=10, old_path=/root/one, retry_after=1000
+  entry B -> wd=22, old_path=/root/two, retry_after=1000
+  entry C -> wd=31, old_path=/root/three, retry_after=5000
+
+now=2000, batch_size=1
+
+processa al massimo A
+lascia B e C in coda per giri successivi del poll
+```
+
+Con `batch_size=1`, Alfred sceglie quindi latenza prevedibile del poll invece di
+svuotare aggressivamente tutta la coda in un solo giro. Questa scelta e'
+particolarmente importante finche' la recovery e' sincrona: durante lo scan la
+stessa thread che legge inotify sta spendendo tempo nel filesystem.
+
 Questa ultima regola e' importante quando la coda non cambia. Con il backoff,
 pero', una entry fallita viene rimessa in fondo alla coda con un
 `retry_after_ns` futuro. Questo evita che una directory ancora non ritrovabile
@@ -3421,6 +3452,33 @@ Perche' fake watch operations:
 Questo strumento non e' ancora una suite performance completa. Serve per
 confrontare modifiche sullo stesso ambiente. I numeri non vanno usati come
 soglie assolute in CI.
+
+#### Decisione provvisoria su worker, debounce e configurazione
+
+Decisione corrente:
+
+- mantenere la recovery lost-scope sincrona dentro il poll
+- mantenere `batch_size=1` come costante interna
+- non esporre ancora configurazione pubblica per `batch_size`, backoff o
+  abilita/disabilita recovery
+- non introdurre ancora un worker thread dedicato
+
+Motivazione:
+
+- il percorso sincrono e' corretto e coperto da test unitari, diagnostici e
+  scenario runtime
+- `batch_size=1` limita il lavoro massimo pagato da un singolo giro di poll
+- i benchmark manuali mostrano rumore sufficiente da sconsigliare decisioni
+  definitive sui valori di configurazione
+- un worker thread richiederebbe lock sulla queue, shutdown coordinato,
+  gestione delle race tra watch table e scanner, e test piu' complessi
+- esporre una configurazione pubblica ora cristallizzerebbe valori che non
+  abbiamo ancora misurato con una suite performance stabile
+
+Questo non significa che il worker thread sia escluso. Significa solo che va
+discusso dopo avere benchmark ripetibili e, idealmente, un benchmark end-to-end
+con processo `alfred`, watch reali, logging reale e workload piu' vicino alla
+produzione.
 
 Roadmap performance futura:
 

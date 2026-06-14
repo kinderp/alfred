@@ -1383,3 +1383,8 @@ Stati usati:
   lost-scope su 100, 1000, 5000 e 10000 directory, spiegando perche' i valori
   singoli sono rumorosi, come leggere `fake_adds` e `queue_after`, e perche' i
   run paralleli sullo stesso binario possono fallire con `Text file busy`.
+- `21-roadmap-scanner-resync.md`: chiarito che `batch_size` conta entry mature
+  della `lost_scope_queue`, non eventi raw o directory visitate. Documentata la
+  decisione provvisoria di mantenere recovery sincrona, `batch_size=1` interno
+  e nessuna configurazione pubblica o worker thread finche' non esistono
+  benchmark ripetibili e un profilo end-to-end piu' realistico.
