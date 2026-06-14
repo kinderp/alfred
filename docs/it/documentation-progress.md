@@ -54,6 +54,14 @@ Stati usati:
   fallire, verifica `WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`,
   `WATCH_LOST_RECOVERY_FAILED ... error=reinstall-failed`, rimozione del fake
   watch installato e subtree non `VALID`.
+- `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `test_lost_scope_recovery.c`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md` e `21-roadmap-scanner-resync.md`: corretti
+  due casi emersi dalla review della PR lost-scope. La queue conserva
+  `st_dev/st_ino` come dati opachi e non rifiuta piu' valori numerici zero; il
+  wrapper runtime della recovery usa la `scan_root` della entry anche quando la
+  lista `configured_roots` e' vuota, mentre le root configurate restano il
+  meccanismo per il fallback multi-root.
 - `watcher.h`, `watcher.c`, `inotify_backend.c`,
   `test_watcher_state.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
@@ -61,8 +69,9 @@ Stati usati:
   reinstallazione all-or-stale positiva alla lost-scope recovery. Alfred ora
   reinstalla i missing watch, marca `VALID` la subtree recuperata con
   `watcher_set_state_prefix()` e logga `WATCH_LOST_REINSTALLED` /
-  `WATCH_LOST_RECOVERY_END`; resta da aggiungere un failure test specifico per
-  `WATCH_LOST_REINSTALL_FAILED` e `WATCH_LOST_ROLLBACK`.
+  `WATCH_LOST_RECOVERY_END`. Il failure test specifico per
+  `WATCH_LOST_REINSTALL_FAILED` e `WATCH_LOST_ROLLBACK` e' stato aggiunto in un
+  micro-step successivo.
 - `inotify_backend.c`, `test_lost_scope_recovery.c`,
   `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
   `22-contratto-log.md`: aggiunto lo scan strict di copertura dopo

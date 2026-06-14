@@ -28,6 +28,12 @@ Latest refresh:
 
 - refreshed `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_lost_scope_queue.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after the PR review fixes for
+  lost-scope recovery. Comments now explain that queued filesystem identities are
+  opaque data, and that runtime recovery can use an entry's scan_root for the
+  first bounded scan even when configured roots are unavailable for fallback.
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_lost_scope_queue.c`, and
   `tests/backend/test_lost_scope_recovery.c` after adding the first
   synchronous due-entry processor. Comments now explain queue peeking,
   retry_after_ns maturity checks, FIFO stop-on-not-due behavior, and why

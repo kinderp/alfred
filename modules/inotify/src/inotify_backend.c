@@ -673,7 +673,7 @@ static int backend_lost_scope_queue_enqueue_entry(
     if (queue == NULL || source == NULL)
         return -1;
 
-    if (source->wd < 0 || source->device_id == 0 || source->inode_id == 0)
+    if (source->wd < 0)
         return -1;
 
     if (source->old_path[0] == '\0' || source->scan_root[0] == '\0' ||
@@ -1243,11 +1243,13 @@ static size_t backend_lost_scope_process_due_runtime(
  * @ctx: backend context used by the inotify poll path
  * @watch_ops: watch operations used when recovery reinstalls missing watches
  *
- * Older transitional tests may still build queue entries without scan_root.
- * The runtime fallback root is therefore the first configured root, not an
- * arbitrary filesystem path. If the backend has no configured root, the helper
- * leaves the queue untouched because scanning an unbounded or empty path would
- * make the recovery contract harder to reason about.
+ * Runtime entries normally carry scan_root, so a mature entry can always drive
+ * its first bounded scan from its own data. The configured root list is still
+ * useful as a defensive fallback for older manually-built entries and, more
+ * importantly, for cross-root recovery after a clean NOT_FOUND on scan_root. If
+ * no configured root exists and the head entry has no scan_root either, the
+ * helper leaves the queue untouched because scanning an unbounded or empty path
+ * would make the recovery contract harder to reason about.
  *
  * Return: number of mature entries attempted.
  */
@@ -1257,19 +1259,25 @@ backend_lost_scope_process_due_runtime_with_ops(
     const backend_resync_watch_ops_t *watch_ops
 )
 {
+    const inotify_lost_scope_entry_t *entry;
     const char *fallback_root;
     uint64_t now_ns;
 
     if (ctx == NULL || ctx->runtime == NULL || watch_ops == NULL)
         return 0;
 
-    if (backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes) == NULL)
+    entry = backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes);
+
+    if (entry == NULL)
         return 0;
 
-    if (ctx->runtime->configured_roots_count == 0)
+    if (ctx->runtime->configured_roots_count > 0)
+        fallback_root = ctx->runtime->configured_roots[0];
+    else if (entry->scan_root[0] != '\0')
+        fallback_root = entry->scan_root;
+    else
         return 0;
 
-    fallback_root = ctx->runtime->configured_roots[0];
     now_ns = backend_now_ns();
 
     return backend_lost_scope_process_due_with_ops(

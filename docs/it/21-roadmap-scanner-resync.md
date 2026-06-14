@@ -2987,6 +2987,8 @@ Il contratto e':
 - se `retry_after_ns > now_ns`, non consuma la entry e si ferma
 - se la entry e' matura, chiama la recovery sincrona su `entry.scan_root`
 - se `scan_root` termina con `NOT_FOUND`, prova le altre root configurate
+- se non ci sono root configurate ma la entry ha `scan_root`, tenta comunque la
+  recovery primaria su quella root
 - processa al massimo `batch_size` entry mature
 - si ferma al primo elemento non maturo invece di saltarlo
 
@@ -3106,10 +3108,20 @@ flusso normale degli eventi. Per ora non esponiamo questo valore nel file di
 configurazione perche' non abbiamo ancora abbastanza misure sul costo reale
 degli scan in alberi grandi.
 
-Se il backend non ha root configurate, il wrapper runtime non processa la coda.
-Questo evita di trasformare vecchie entry incomplete in scan non delimitati. Nel
-percorso normale le entry hanno gia' `scan_root`, e le root configurate sono
-registrate durante lo startup.
+Il wrapper runtime distingue due casi:
+
+- se la entry in testa ha `scan_root`, quella root e' sufficiente per il primo
+  tentativo di recovery
+- se la entry non ha `scan_root` e il backend non ha root configurate, il wrapper
+  non processa la coda
+
+Questa distinzione evita due errori opposti. Da un lato, una entry completa non
+deve restare bloccata solo perche' la lista `configured_roots` non e' disponibile
+in un percorso di test, in uno stato transitorio o in una futura worker
+inizializzata parzialmente. Dall'altro lato, una entry incompleta non deve
+trasformarsi in uno scan non delimitato. Le root configurate restano necessarie
+per il fallback multi-root: se `entry.scan_root` non contiene l'identita', Alfred
+puo' provare le altre root monitorate prima di consumare retry budget.
 
 Anche alcuni fallimenti tecnici vengono rischedulati. Questo include errori di
 scan, fallimenti di copertura o fallimenti di reinstallazione dei watch. La

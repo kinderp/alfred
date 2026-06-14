@@ -27,8 +27,11 @@
  * The test stores multiple stale scopes, verifies FIFO order across circular
  * buffer growth, verifies that path/reason strings are copied into queue
  * storage, and verifies invalid enqueue/pop inputs fail without changing the
- * queue. Runtime enqueue and WATCH_LOST_* diagnostics are intentionally left
- * for a later micro-step.
+ * queue. It also verifies that the queue treats st_dev/st_ino as opaque data:
+ * the runtime decides whether identity exists before enqueueing, so numeric
+ * zero values must not be rejected by the storage primitive itself. Runtime
+ * enqueue and WATCH_LOST_* diagnostics are intentionally left for a later
+ * micro-step.
  */
 
 #include <assert.h>
@@ -254,6 +257,47 @@ static void test_enqueue_copies_borrowed_strings(void)
 }
 
 /*
+ * test_zero_identity_values_are_preserved - identity fields are opaque data
+ *
+ * The queue is not responsible for deciding whether a watcher has captured
+ * identity evidence. Runtime enqueue checks watcher_get_identity() before it
+ * builds a lost-scope entry. Once an entry exists, st_dev/st_ino should be
+ * copied as opaque filesystem identifiers instead of treating numeric zero as a
+ * malformed value.
+ */
+static void test_zero_identity_values_are_preserved(void)
+{
+    inotify_lost_scope_queue_t queue;
+    inotify_lost_scope_entry_t entry;
+
+    assert(backend_lost_scope_queue_init(&queue, 1) == 0);
+    assert(backend_lost_scope_queue_enqueue(&queue,
+                                            41,
+                                            "/tmp/root/zero",
+                                            0,
+                                            0,
+                                            "/tmp/root",
+                                            "IN_MOVE_SELF",
+                                            7000,
+                                            7500) == 0);
+    assert(backend_lost_scope_queue_count(&queue) == 1);
+
+    assert(backend_lost_scope_queue_pop(&queue, &entry) == 0);
+    assert_scope_entry(&entry,
+                       41,
+                       "/tmp/root/zero",
+                       "/tmp/root",
+                       0,
+                       0,
+                       "IN_MOVE_SELF",
+                       7000,
+                       7500);
+    assert(backend_lost_scope_queue_count(&queue) == 0);
+
+    backend_lost_scope_queue_destroy(&queue);
+}
+
+/*
  * test_peek_inspects_head_without_consuming - scheduling can check maturity
  *
  * The due-entry processor needs retry_after_ns from the oldest queued record
@@ -419,6 +463,7 @@ int main(void)
     test_init_destroy_count();
     test_fifo_order_survives_wrap_and_growth();
     test_enqueue_copies_borrowed_strings();
+    test_zero_identity_values_are_preserved();
     test_peek_inspects_head_without_consuming();
     test_invalid_inputs_are_rejected();
     test_configured_roots_select_bounded_scan_scope();
