@@ -1379,3 +1379,7 @@ Stati usati:
   `make perf-lost-scope` per misurare il costo della recovery lost-scope su
   alberi sintetici. La doc chiarisce che non e' un gate CI e introduce la
   roadmap per una futura suite performance stabile con baseline e percentili.
+- `21-roadmap-scanner-resync.md`: aggiunte prime misure locali del benchmark
+  lost-scope su 100, 1000, 5000 e 10000 directory, spiegando perche' i valori
+  singoli sono rumorosi, come leggere `fake_adds` e `queue_after`, e perche' i
+  run paralleli sullo stesso binario possono fallire con `Text file busy`.

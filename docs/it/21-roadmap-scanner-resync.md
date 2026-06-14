@@ -3370,6 +3370,45 @@ Questa riga direbbe che la recovery non e' riuscita, ha provato a reinstallare
 300 watch finti, li ha rimossi in rollback e ha lasciato una entry in coda.
 Sarebbe un caso da analizzare nei log o in un benchmark piu' dettagliato.
 
+#### Prime misure locali
+
+Prime misure raccolte manualmente nello stesso ambiente di sviluppo:
+
+```text
+run A
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+100,found,260589,100,0,0
+1000,found,311397,1000,0,0
+5000,found,352013,5000,0,0
+10000,found,382027,10000,0,0
+
+run B
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+100,found,366252,100,0,0
+1000,found,202396,1000,0,0
+5000,found,313502,5000,0,0
+10000,found,965972,10000,0,0
+```
+
+Queste righe dicono tre cose:
+
+- il percorso misurato completa la recovery (`result=found`) e svuota la coda
+  (`queue_after=0`) anche con 10000 directory sintetiche
+- `fake_adds` cresce come `dirs`, perche' ogni directory figlia non aveva un
+  watch gia' registrato e quindi sarebbe stata reinstallata
+- i tempi non sono monotoni e cambiano tra run: cache filesystem, allocazioni,
+  scheduler e stato della macchina influenzano molto una singola misura
+
+Quindi il benchmark e' gia' utile per confronti grossolani, ma non basta per
+decidere worker thread, debounce o configurazione pubblica. Per prendere quelle
+decisioni servono ripetizioni automatiche, warmup e percentili.
+
+Nota operativa: non lanciare lo stesso benchmark in parallelo usando la stessa
+build directory. Il wrapper compila sempre lo stesso binario in
+`build/tests/perf/`; due linker concorrenti possono produrre errori come
+`Text file busy`. Per confronti manuali usare run sequenziali oppure root
+temporanee diverse con `BENCH_ROOT=...`.
+
 Perche' fake watch operations:
 
 - vogliamo misurare scanner, ricerca identita', aggiornamento path e policy di
