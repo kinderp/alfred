@@ -1698,6 +1698,79 @@ importanti:
 - `IN_IGNORED` su un watch gia' stale viene loggato come
   `WATCH_STALE_EVENT_DROPPED` prima del cleanup `WATCH_REMOVED`
 
+#### Decisione rimandata: semantica core da `IN_DELETE_SELF`
+
+La scelta corrente e' conservativa: `IN_DELETE_SELF` resta diagnostica backend.
+Questa scelta non dice che il path osservato non sia stato cancellato; dice solo
+che Alfred non trasforma ancora quel fatto in un evento raw/core ufficiale.
+
+Opzione A, implementata ora:
+
+```text
+IN_DELETE_SELF
+    -> WATCH_STALE reason=IN_DELETE_SELF
+IN_IGNORED
+    -> WATCH_REMOVED
+core
+    -> nessun nuovo evento da IN_DELETE_SELF
+```
+
+Opzione B, possibile in futuro:
+
+```text
+IN_DELETE_SELF su directory watched
+    -> ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR path=<path osservato>
+core
+    -> DIR_DELETED path=<path osservato>
+```
+
+Il problema dell'opzione B e' la deduplica. Gli esempi da tenere davanti sono:
+
+```bash
+# Caso 1: solo la root osservata viene cancellata.
+alfred /tmp/root
+rm -rf /tmp/root
+```
+
+Qui non esiste un parent watched che possa produrre `IN_DELETE name=root`, quindi
+la semantica da `IN_DELETE_SELF` sarebbe utile.
+
+```bash
+# Caso 2: parent watched e child watched ricorsivamente.
+alfred /tmp/root
+mkdir /tmp/root/child
+rm -rf /tmp/root/child
+```
+
+Qui il parent puo' gia' produrre `DIR_DELETED path=/tmp/root/child`; se anche il
+child `IN_DELETE_SELF` diventasse `DIR_DELETED`, il core vedrebbe un duplicato.
+
+```bash
+# Caso 3: parent e child passati entrambi come root esplicite.
+alfred /tmp/root /tmp/root/child
+rm -rf /tmp/root/child
+```
+
+Questo rende il problema ancora piu' evidente: ci sono due sottoscrizioni
+legittime che possono descrivere la stessa cancellazione da prospettive diverse.
+
+Per promuovere `IN_DELETE_SELF` a semantica servira' una regola generale di
+dedup. Le opzioni da valutare sono:
+
+- dedup nel core su tipo evento, path normalizzato, flag directory e finestra
+  temporale breve
+- dedup nel backend inotify, che pero' rischia di legare la semantica core a una
+  particolarita' di inotify
+- rinviare finche' il protocollo/log avra' sequence number, timestamp o event id
+  abbastanza forti da spiegare e testare la correlazione
+
+Per ora scegliamo il rinvio. Questo mantiene semplice il contratto:
+
+```text
+parent IN_DELETE name=child -> evento semantico delete
+child IN_DELETE_SELF        -> diagnostica watch
+```
+
 Il prossimo passo prudente e':
 
 1. iniziare a progettare la policy di resync vera e propria per gli stati

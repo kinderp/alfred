@@ -49,6 +49,11 @@ Stati usati:
   `IN_DELETE | IN_ISDIR name=child` produce un solo `DIR_DELETED`, mentre il
   child `IN_DELETE_SELF` produce solo diagnostica `WATCH_STALE` e cleanup
   `WATCH_REMOVED`, senza lost-scope recovery.
+- `20-matrice-eventi-inotify.md` e `21-roadmap-scanner-resync.md`: documentate
+  le opzioni A/B per una futura semantica core da `IN_DELETE_SELF`. La scelta
+  corrente resta conservativa: niente `ALFRED_RAW_DELETE` dal self-event finche'
+  non esiste una deduplica generale capace di evitare doppi `DIR_DELETED` tra
+  parent event e self-event.
 - `inotify_backend.c`, `test_lost_scope_queue.c`,
   `test_lost_scope_recovery.c`, `14-scenari-test.md` e
   `21-roadmap-scanner-resync.md`: aggiunto il primo processore sincrono delle

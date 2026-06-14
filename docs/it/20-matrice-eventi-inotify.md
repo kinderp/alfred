@@ -339,6 +339,87 @@ il nuovo path. Senza destinazione Alfred non puo' produrre correttamente
   semantica core immediata
 - `IN_IGNORED`: manutenzione backend della tabella watch, non evento core
 
+### Opzioni future per `IN_DELETE_SELF`
+
+Per ora Alfred applica l'opzione A.
+
+Opzione A, conservativa:
+
+- `IN_DELETE_SELF` resta solo diagnostica backend
+- il backend produce `WATCH_STALE ... reason=IN_DELETE_SELF`
+- `IN_IGNORED` produce cleanup `WATCH_REMOVED`
+- il core non riceve `ALFRED_RAW_DELETE` dal self-event
+- il delete semantico nasce solo da un evento child reale, per esempio
+  `IN_DELETE | IN_ISDIR name=child` visto dal parent
+
+Questa opzione evita duplicati senza introdurre una deduplica fragile. Esempio:
+
+```bash
+alfred /tmp/root
+mkdir /tmp/root/child
+rm -rf /tmp/root/child
+```
+
+Il parent `/tmp/root` puo' produrre `DIR_DELETED path=/tmp/root/child`. Il watch
+aggiunto su `/tmp/root/child` puo' produrre `IN_DELETE_SELF`, ma questo resta
+diagnostica watch e non produce un secondo `DIR_DELETED`.
+
+Opzione B, futura:
+
+- `IN_DELETE_SELF` puo' diventare `ALFRED_RAW_DELETE`
+- se il watch osservava una directory, il raw dovrebbe avere anche
+  `ALFRED_RAW_ISDIR`
+- il core potrebbe produrre `DIR_DELETED` per il path osservato direttamente
+- serve una deduplica esplicita quando esiste anche un parent event per lo stesso
+  path
+
+Questa opzione sarebbe utile quando Alfred osserva solo il path cancellato e non
+ha un parent watched che possa produrre il child delete:
+
+```bash
+alfred /tmp/root
+rm -rf /tmp/root
+```
+
+In questo caso il fatto piu' diretto e' `IN_DELETE_SELF` sul root watch. Oggi lo
+trattiamo come diagnostica; in futuro potremmo voler produrre `DIR_DELETED
+path=/tmp/root`, ma solo dopo aver definito una deduplica robusta.
+
+Tre casi da tenere distinti:
+
+```text
+1. Solo root osservata
+   alfred /tmp/root
+   rm -rf /tmp/root
+   -> oggi: WATCH_STALE + WATCH_REMOVED, nessun DIR_DELETED sintetico dal self
+   -> futuro possibile: DIR_DELETED da IN_DELETE_SELF
+
+2. Parent osservato, child creato e watched ricorsivamente
+   alfred /tmp/root
+   mkdir /tmp/root/child
+   rm -rf /tmp/root/child
+   -> oggi: DIR_DELETED dal parent, WATCH_STALE/WATCH_REMOVED dal child
+   -> futuro: evitare doppio DIR_DELETED
+
+3. Parent e child passati come root esplicite
+   alfred /tmp/root /tmp/root/child
+   rm -rf /tmp/root/child
+   -> possibile doppia sorgente ancora piu' evidente
+   -> serve dedup prima di promuovere IN_DELETE_SELF a semantica
+```
+
+Il criterio di dedup non e' ancora scelto. Le possibilita' sono:
+
+- dedup nel core su `(event_type, path, is_dir)` dentro una piccola finestra
+  temporale
+- dedup nel backend inotify usando wd/path e conoscenza del parent event
+- nessuna semantica da `IN_DELETE_SELF` finche' non avremo un event id,
+  timestamp o sequence number abbastanza stabile da spiegare e testare
+
+La scelta corrente resta l'ultima: niente semantica core da `IN_DELETE_SELF`
+finche' la deduplica non sara' progettata come regola generale, non come patch
+specifica per un singolo evento.
+
 Se dopo `IN_MOVE_SELF` il vecchio path torna raggiungibile, Alfred non deve
 fidarsi del solo nome. Il path puo' essere stato riusato da una directory nuova.
 Per questo il probe corrente confronta `(st_dev, st_ino)` con l'identita'
@@ -386,9 +467,8 @@ I test backend fissano per ora il comportamento osservativo:
    bit riconosciuti in output.
 2. Decidere la semantica di `ALFRED_RAW_ATTRIB`: nessun evento, evento unico
    `METADATA_CHANGED`, oppure distinzione file/directory.
-3. Decidere se `IN_DELETE_SELF`, oggi solo diagnostica `WATCH_STALE`, deve
-   produrre in futuro un evento semantico quando il path osservato direttamente
-   viene cancellato.
+3. Riprendere `IN_DELETE_SELF` semantico solo quando esistera' una deduplica
+   generale per evitare doppi `DIR_DELETED` tra parent event e self-event.
 4. Progettare il resync successivo a `IN_MOVE_SELF`: oggi il watch diventa
    `STALE`, ma non esiste ancora una procedura che lo riporti a `VALID`.
 5. Rimandare `IN_UNMOUNT` e overflow completo alla progettazione della recovery
