@@ -29,6 +29,7 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_self_events_moved}"
 # - WATCH_STALE ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_BEGIN ... reason=IN_MOVE_SELF
 # - WATCH_RESYNC_FAILED ... reason=IN_MOVE_SELF
+# - WATCH_LOST_QUEUED ... reason=IN_MOVE_SELF error=path-unreachable
 # - WATCH_STALE_EVENT_DROPPED ... name=file-after-move.txt
 #
 # Forbidden events:
@@ -136,16 +137,20 @@ if ! grep -Eq "IN_MOVE_SELF .*path=.*/alfred_backend_test_self_events name=" \
 fi
 
 # The root path is gone, so Alfred can start resync but cannot prove identity or
-# scan a trusted root. The watch remains stale and recovery fails explicitly.
+# scan a trusted root. The immediate local recovery fails explicitly and then
+# Alfred records delayed wide recovery work in the lost-scope queue.
 assert_contains "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_contains "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
-assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
+assert_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable"
+assert_contains "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable pending=1"
 assert_contains "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/alfred_backend_test_self_events mask=.*IN_CREATE .* name=file-after-move.txt"
 assert_order "WATCH_STALE wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
              "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
 assert_order "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
-             "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF"
-assert_order "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF" \
+             "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable"
+assert_order "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable" \
+             "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable pending=1"
+assert_order "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_self_events reason=IN_MOVE_SELF error=path-unreachable pending=1" \
              "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/alfred_backend_test_self_events mask=.*IN_CREATE .* name=file-after-move.txt"
 
 # IN_MOVE_SELF has no new path, so Alfred must not synthesize semantic

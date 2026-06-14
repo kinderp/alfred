@@ -42,6 +42,109 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `test_lost_scope_recovery.c`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il primo processore sincrono delle
+  entry mature della `lost_scope_queue`. Il processore usa `retry_after_ns`,
+  rispetta `batch_size`, non consuma la testa FIFO se non e' ancora matura e
+  non implementa ancora requeue/backoff dopo `NOT_FOUND` o fallimento tecnico.
+- `test_lost_scope_recovery.c`, `14-scenari-test.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto il failure test per la policy
+  all-or-stale lost-scope. Lo scenario forza il secondo fake watch add a
+  fallire, verifica `WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`,
+  `WATCH_LOST_RECOVERY_FAILED ... error=reinstall-failed`, rimozione del fake
+  watch installato e subtree non `VALID`.
+- `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `test_lost_scope_recovery.c`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md` e `21-roadmap-scanner-resync.md`: corretti
+  due casi emersi dalla review della PR lost-scope. La queue conserva
+  `st_dev/st_ino` come dati opachi e non rifiuta piu' valori numerici zero; il
+  wrapper runtime della recovery usa la `scan_root` della entry anche quando la
+  lista `configured_roots` e' vuota, mentre le root configurate restano il
+  meccanismo per il fallback multi-root.
+- `watcher.h`, `watcher.c`, `inotify_backend.c`,
+  `test_watcher_state.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: collegata la
+  reinstallazione all-or-stale positiva alla lost-scope recovery. Alfred ora
+  reinstalla i missing watch, marca `VALID` la subtree recuperata con
+  `watcher_set_state_prefix()` e logga `WATCH_LOST_REINSTALLED` /
+  `WATCH_LOST_RECOVERY_END`. Il failure test specifico per
+  `WATCH_LOST_REINSTALL_FAILED` e `WATCH_LOST_ROLLBACK` e' stato aggiunto in un
+  micro-step successivo.
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: aggiunto lo scan strict di copertura dopo
+  `WATCH_LOST_PREFIX_UPDATED`. La lost-scope recovery ora logga
+  `WATCH_LOST_COVERAGE_DONE`, `WATCH_LOST_COVERAGE_MISSING` e
+  `WATCH_LOST_COVERAGE_CLASS`, misura directory gia' watched e missing, ma non
+  reinstalla ancora watch e non torna a `VALID`.
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: collegato `watcher_update_path_prefix()` al runtime
+  lost-scope. Dopo `WATCH_LOST_FOUND`, Alfred riscrive in modo validato il
+  prefisso del watch principale e dei figli gia' noti, logga
+  `WATCH_LOST_PREFIX_UPDATED` e mantiene comunque la subtree non `VALID` finche'
+  non avremo scan strict e reinstallazione all-or-stale.
+- `watcher.h`, `watcher.c`, `test_watcher_state.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
+  `21-roadmap-scanner-resync.md`: aggiunto e documentato
+  `watcher_update_path_prefix()`. L'helper riscrive in modo atomico i path di
+  una subtree watched dopo una recovery lost-scope, preserva stato e identita',
+  protegge i path simili ma esterni tramite controllo del separatore `/` e non
+  e' ancora collegato al runtime backend.
+- `inotify_backend.c`, `test_lost_scope_recovery.c`,
+  `14-scenari-test.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: commentati in dettaglio
+  `backend_lost_scope_recovery_result_t` e
+  `backend_lost_scope_scan_context_t`; collegato `WATCH_LOST_FOUND`
+  all'aggiornamento del path del watch principale tramite
+  `watcher_update_path()`. La recovery resta conservativa: path principale
+  aggiornato, stato ancora `STALE`, prefissi figli e reinstallazione watch
+  rimandati ai passi successivi.
+- `watcher.h`, `watcher.c`, `test_watcher_state.c`,
+  `16-mappa-codice-e-strutture.md`, `21-roadmap-scanner-resync.md` e
+  `14-scenari-test.md`: aggiunto e documentato `watcher_update_path()`, helper
+  che aggiorna solo il path testuale di un watch attivo preservando stato e
+  identita'. Serve come building block per collegare in seguito
+  `WATCH_LOST_FOUND` al path del watch principale senza dichiarare subito la
+  subtree `VALID`.
+- `inotify_backend.c`, `test_lost_scope_recovery.c`, `14-scenari-test.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: implementata e
+  documentata la prima recovery sincrona read-only della `lost_scope_queue`.
+  Il backend puo' consumare una entry, scansionare una root monitorata e
+  cercare la stessa identita' `(st_dev, st_ino)`, loggando
+  `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_NOT_FOUND` o
+  `WATCH_LOST_RECOVERY_FAILED` senza aggiornare ancora path, prefissi o watch.
+- `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: ampliata la
+  spiegazione didattica dei fallimenti `WATCH_RESYNC_FAILED`. La
+  documentazione ora distingue errori che accodano lost-scope recovery
+  (`path-unreachable`, `not-directory`, `identity-mismatch`) da errori di
+  bookkeeping, `missing-watch`, `not-stale`, `missing-identity` e
+  `reinstall-failed`. Registrata anche la scelta prestazionale: probe locale
+  leggero, recovery ampia ritardata/batchata come strada principale e futura
+  configurabilita' della reinstallazione immediata profonda.
+- `inotify_backend.c`, `test_self_events_root_watch.sh`,
+  `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md`,
+  `21-roadmap-scanner-resync.md` e `22-contratto-log.md`: collegato l'enqueue
+  della `lost_scope_queue` ai fallimenti locali `IN_MOVE_SELF` che conservano
+  identita' utile (`path-unreachable`, `not-directory`,
+  `identity-mismatch`). Il nuovo log reale `WATCH_LOST_QUEUED` documenta che
+  Alfred ha accodato recovery ampia posticipata senza emettere raw/core event.
+- `inotify_backend.h`, `inotify_backend.c`, `test_lost_scope_queue.c`,
+  `14-scenari-test.md`, `16-mappa-codice-e-strutture.md` e
+  `21-roadmap-scanner-resync.md`: implementato e documentato il primo
+  micro-step della `lost_scope_queue`. Il backend ora possiede una queue FIFO
+  interna per scope stale da recuperare in futuro; il test C verifica lifecycle,
+  ordine FIFO, crescita del buffer circolare, copie di path/reason e input
+  invalidi. La queue non e' ancora collegata al runtime `IN_MOVE_SELF`.
+- `21-roadmap-scanner-resync.md`: documentata la scelta architetturale
+  `lost_scope_queue` per recuperare directory rinominate o spostate quando
+  `IN_MOVE_SELF` lascia un watch `STALE`. La nuova fase spiega coda, delay,
+  batch, scope di ricerca, differenza tra parent monitorato e self-event,
+  aggiornamento dei prefissi dei figli, worker thread futuro, passi
+  incrementali e log diagnostici futuri proposti.
 - `inotify_backend.c`, `test_self_events_root_watch.sh`,
   `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
   `14-scenari-test.md`: fissata la policy per eventi kernel ricevuti su un
@@ -1233,3 +1336,64 @@ Stati usati:
 - `00-regole-operative.md`: aggiunta memoria operativa della sessione con
   regole per commit, documentazione, verifiche, stato semantico corrente e
   commit chiave recenti.
+- `21-roadmap-scanner-resync.md`: documentata la prima policy retry/backoff
+  per `lost_scope_queue`, inclusi `WATCH_LOST_RETRY_SCHEDULED`,
+  `WATCH_LOST_RECOVERY_GAVE_UP`, limite interno di tentativi, motivazione del
+  reinserimento in coda e roadmap di ripresa dopo lo stop.
+- `22-contratto-log.md`: aggiunta la reference dei nuovi log diagnostici
+  lost-scope per retry schedulato e give-up, chiarendo che non sono eventi
+  raw/core e non provano cancellazioni o move semantici.
+- `14-scenari-test.md`: aggiornato lo scenario backend lost-scope recovery con
+  i casi di requeue su `NOT_FOUND`, backoff e budget di tentativi esaurito.
+- `21-roadmap-scanner-resync.md` e `16-mappa-codice-e-strutture.md`:
+  documentato il nuovo campo `scan_root` nelle entry lost-scope, spiegando la
+  distinzione tra path stale e perimetro di ricerca, il fallback runtime
+  corrente e il prossimo passo sulle root configurate.
+- `14-scenari-test.md`: aggiornato lo scenario lost-scope queue per includere
+  la copia stabile di `scan_root` insieme a path e reason.
+- `21-roadmap-scanner-resync.md` e `16-mappa-codice-e-strutture.md`:
+  aggiornato lo stato delle root configurate: ora `inotify_backend_t` possiede
+  la lista delle startup root riuscite e `scan_root` viene popolato con la root
+  piu' specifica che contiene il path stale.
+- `14-scenari-test.md`: esteso lo scenario lost-scope queue con deduplica root,
+  match con boundary `/` e scelta della root annidata piu' specifica.
+- `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: documentato che il processore due-entry lost-scope usa
+  la `scan_root` salvata nella entry come root normale di scansione; il
+  parametro `root` resta fallback di transizione e il fallback sulle altre root
+  configurate e' il prossimo passo.
+- `21-roadmap-scanner-resync.md`, `22-contratto-log.md` e
+  `14-scenari-test.md`: documentato il fallback sincrono sulle altre root
+  configurate dopo `NOT_FOUND` su `scan_root`, chiarendo che il retry/backoff si
+  consuma solo dopo aver esaurito le root previste o dopo un errore tecnico.
+- `16-mappa-codice-e-strutture.md` e `14-scenari-test.md`: documentato il fix
+  in `watcher_update_path_prefix()` che copia il suffisso prima di riscrivere
+  `slot->path`, evitando sorgente/destinazione sovrapposte e path corrotti
+  durante la recovery lost-scope.
+- `05-modulo-inotify.md`, `21-roadmap-scanner-resync.md`,
+  `14-scenari-test.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  collegamento del processore lost-scope al poll runtime. `backend_poll()`
+  processa ora un batch sincrono minimo sul ramo idle e dopo un buffer di eventi
+  consumato, usando `backend_now_ns()` e `batch_size=1`; worker thread,
+  debounce e configurazione pubblica restano esplicitamente rimandati.
+- `tests/backend/test_lost_scope_runtime_recovery.sh`,
+  `14-scenari-test.md` e `21-roadmap-scanner-resync.md`: aggiunto e documentato
+  lo scenario runtime in cui una directory watched viene spostata da una root
+  configurata a un'altra. Il test fissa la catena `IN_MOVE_SELF` ->
+  `WATCH_LOST_QUEUED` -> scan root A -> fallback root B ->
+  `WATCH_LOST_RECOVERY_END` -> `FILE_CREATED` nel path recuperato.
+- `Makefile`, `tests/perf/bench_lost_scope_recovery.c`,
+  `tests/perf/run_lost_scope_recovery.sh`, `10-debugging-test-e-strumenti.md`
+  e `21-roadmap-scanner-resync.md`: aggiunto il primo benchmark manuale
+  `make perf-lost-scope` per misurare il costo della recovery lost-scope su
+  alberi sintetici. La doc chiarisce che non e' un gate CI e introduce la
+  roadmap per una futura suite performance stabile con baseline e percentili.
+- `21-roadmap-scanner-resync.md`: aggiunte prime misure locali del benchmark
+  lost-scope su 100, 1000, 5000 e 10000 directory, spiegando perche' i valori
+  singoli sono rumorosi, come leggere `fake_adds` e `queue_after`, e perche' i
+  run paralleli sullo stesso binario possono fallire con `Text file busy`.
+- `21-roadmap-scanner-resync.md`: chiarito che `batch_size` conta entry mature
+  della `lost_scope_queue`, non eventi raw o directory visitate. Documentata la
+  decisione provvisoria di mantenere recovery sincrona, `batch_size=1` interno
+  e nessuna configurazione pubblica o worker thread finche' non esistono
+  benchmark ripetibili e un profilo end-to-end piu' realistico.

@@ -1442,7 +1442,62 @@ Il primo test controlla che:
 Questo serve alla futura gestione `IN_MOVE_SELF`: prima fissiamo il contratto
 della struttura dati, poi colleghiamo gli eventi critici alla policy di resync.
 
-### 7. Nessun `test-legacy-shadow`
+### 7. `make perf-lost-scope`
+
+Il comando:
+
+```bash
+make perf-lost-scope
+```
+
+compila ed esegue un benchmark manuale della recovery lost-scope. Non e' un
+test di correttezza e non deve essere usato come gate di CI. Serve a misurare,
+sulla stessa macchina, quanto costa cercare una directory persa dentro alberi di
+dimensioni diverse.
+
+Di default esegue:
+
+```text
+10 directory
+100 directory
+1000 directory
+```
+
+L'output e' CSV:
+
+```text
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+10,found,123,10,0,0
+```
+
+Significato delle colonne:
+
+- `dirs`: numero di directory create dentro la subtree spostata, esclusa la root
+  della subtree
+- `result`: risultato della recovery backend
+- `elapsed_us`: tempo monotonic misurato intorno alla funzione di recovery
+- `fake_adds`: numero di watch mancanti che la recovery avrebbe reinstallato
+- `fake_removes`: rollback di watch finti rimossi
+- `queue_after`: entry rimaste nella coda dopo il tentativo
+
+E' possibile passare dimensioni diverse:
+
+```bash
+cd tests/perf
+bash run_lost_scope_recovery.sh 100 1000 5000
+```
+
+Il benchmark usa fake watch operations per non misurare i limiti o la latenza
+di `inotify_add_watch()`. Questo lo rende utile per confrontare cambiamenti
+nello scanner, nella ricerca per identita', nell'aggiornamento dei path e nella
+policy di recovery. Non misura ancora il costo completo del runtime reale.
+
+In futuro Alfred avra' bisogno di una suite performance piu' solida, con
+baseline versionate, ripetizioni, warmup, percentili e ambiente documentato. Per
+ora questo comando e' solo un primo strumento operativo per non discutere le
+prestazioni al buio.
+
+### 8. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali

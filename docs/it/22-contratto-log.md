@@ -247,22 +247,84 @@ diventato `STALE`.
 | `WATCH_RESYNC_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante il resync | la riparazione completa non e' riuscita | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
 | `WATCH_RESYNC_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato; indica cleanup interno del tentativo di resync |
 | `WATCH_RESYNC_FAILED wd=N path=P reason=R error=E` | recovery interrotta o non affidabile | il watch resta `STALE`; `E` spiega il ramo fallito | non e' evento utente; e' diagnostica backend |
+| `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |
+| `WATCH_LOST_SCAN_BEGIN root=R pending=K` | una recovery sincrona consuma una entry lost-scope e scansiona la `scan_root` salvata nella entry | Alfred sta cercando una identita' persa dentro `R`; `K` e' il numero di entry rimaste in coda | non significa che la directory sara' trovata; non installa watch |
+| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | lo scan trova una directory con la stessa identita' salvata | Alfred ha ritrovato l'oggetto a `Q`; il path trovato diventa il nuovo prefisso candidato | non significa ancora che watch mancanti o stato `VALID` siano stati aggiornati |
+| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | dopo `WATCH_LOST_FOUND`, la watcher table riscrive il vecchio prefisso con quello nuovo | Alfred ha riallineato il path del watch principale e di `C` watch figli gia' noti | non significa che la copertura della subtree sia completa; non installa watch mancanti e non torna a `VALID` |
+| `WATCH_LOST_COVERAGE_DONE wd=N path=P reason=R dirs=D watched=W missing=M` | dopo l'aggiornamento prefissi, Alfred scansiona in modo strict la subtree ritrovata | `D` directory viste, `W` gia' presenti nella watcher table, `M` directory senza watch | non installa ancora watch; misura la copertura per la futura policy all-or-stale |
+| `WATCH_LOST_COVERAGE_MISSING wd=N path=P reason=R missing_path=Q` | per ogni directory vista dallo scan lost-scope ma non coperta da watch | `Q` e' una directory reale nella subtree ritrovata che dovra' ricevere un watch in una futura reinstallazione | non e' `DIR_CREATED`; non installa ancora il watch |
+| `WATCH_LOST_COVERAGE_CLASS wd=N path=P reason=R result=X` | dopo `WATCH_LOST_COVERAGE_DONE` | classificazione leggibile dei contatori: `scan-empty`, `scan-covered`, `needs-reinstall` | non cambia stato a `VALID` e non reinstalla watch |
+| `WATCH_LOST_REINSTALLED wd=N path=P reason=R installed_path=Q` | dopo `watch_manager_add()` riuscito per un missing path nella lost-scope recovery | Alfred ha reinstallato un watch su `Q` durante la recovery ampia | non e' evento semantico; e' riparazione della copertura backend |
+| `WATCH_LOST_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante la lost-scope recovery | la recovery ampia non puo' completare la copertura | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
+| `WATCH_LOST_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione lost-scope, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato |
+| `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=K` | lo scan non trova la stessa identita' nella root analizzata | Alfred non ha recuperato lo scope in quella root; il processore puo' ancora provare altre root configurate prima del retry | non significa che l'oggetto non esista altrove; potrebbe essere fuori dalla root scansionata |
+| `WATCH_LOST_RETRY_SCHEDULED wd=N path=P reason=R result=X retry=K delay_ms=D pending=C` | una recovery lost-scope non riesce ma il budget non e' esaurito | Alfred ha rimesso la entry nella coda con un backoff dopo aver esaurito le root previste o dopo un errore tecnico; `K` e' il numero di fallimenti registrati, `D` il ritardo minimo e `C` la queue size dopo il reinserimento | non significa che esista un worker thread; oggi e' scheduling interno del processore sincrono |
+| `WATCH_LOST_RECOVERY_GAVE_UP wd=N path=P reason=R result=X retries=K` | una recovery lost-scope fallisce quando il budget massimo e' stato raggiunto | Alfred smette di rischedulare quella entry e lascia il watch non affidabile | non e' un evento raw/core e non prova che la directory sia stata cancellata |
+| `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=scan-failed` | lo scanner fallisce durante la recovery ampia | la passata non e' affidabile e non produce recupero | non e' evento utente; indica fallimento tecnico della scansione |
+| `WATCH_LOST_RECOVERY_END wd=N path=P reason=R result=valid watches=W` | identita', prefissi, scan strict e reinstallazione sono riusciti | la subtree recuperata torna affidabile e `W` watch sotto il prefisso sono stati marcati `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 | `WATCH_RESYNC_END wd=N path=P reason=R result=valid` | recovery riuscita | tutti i controlli necessari sono passati e il watch torna `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 
 ### Errori di `WATCH_RESYNC_FAILED`
 
-| `error=` | Significato |
-| --- | --- |
-| `missing-watch` | il `wd` non esiste piu' nella watcher table |
-| `not-stale` | la recovery e' stata chiamata su un watch non stale |
-| `set-resyncing-failed` | non e' stato possibile entrare nello stato `RESYNCING` |
-| `path-unreachable` | il vecchio path non e' raggiungibile con `stat(2)` |
-| `not-directory` | il vecchio path esiste ma non e' una directory |
-| `set-stale-failed` | Alfred non e' riuscito a lasciare il watch in `STALE` |
-| `set-valid-failed` | la recovery e' riuscita ma il ritorno a `VALID` e' fallito |
-| `missing-identity` | il watch non ha identita' filesystem salvata |
-| `identity-mismatch` | il path esiste ma `(st_dev, st_ino)` e' diverso |
-| `reinstall-failed` | almeno un missing watch non e' stato reinstallato |
+| `error=` | Significato | Quando accade | Enqueue lost scope? |
+| --- | --- | --- | --- |
+| `path-unreachable` | il vecchio path non e' raggiungibile con `stat(2)` | la directory osservata e' stata spostata o rimossa dal path che Alfred conosceva | si', se il watch conserva identita' |
+| `not-directory` | il vecchio path esiste ma non e' una directory | il path e' stato riusato da un file o da un altro tipo di oggetto non directory | si', se il watch conserva identita' |
+| `identity-mismatch` | il path esiste ma `(st_dev, st_ino)` e' diverso | il vecchio nome e' stato riusato da una nuova directory diversa da quella osservata | si', se il watch conserva identita' |
+| `missing-watch` | il `wd` non esiste piu' nella watcher table | il kernel/backend ha gia' rimosso il watch o la recovery arriva troppo tardi | no |
+| `not-stale` | la recovery e' stata chiamata su un watch non stale | errore di flusso interno: non si dovrebbe recuperare un watch ancora affidabile | no |
+| `set-resyncing-failed` | non e' stato possibile entrare nello stato `RESYNCING` | errore di bookkeeping della watcher table | no |
+| `set-stale-failed` | Alfred non e' riuscito a lasciare il watch in `STALE` | errore di bookkeeping della watcher table dopo un fallimento | no |
+| `set-valid-failed` | la recovery e' riuscita ma il ritorno a `VALID` e' fallito | errore di bookkeeping della watcher table dopo controlli positivi | no |
+| `missing-identity` | il watch non ha identita' filesystem salvata | Alfred non ha `(st_dev, st_ino)` da usare come prova | no |
+| `reinstall-failed` | almeno un missing watch non e' stato reinstallato | il path principale e' affidabile, ma la copertura watch della subtree non e' completa | no |
+
+La colonna "Enqueue lost scope?" distingue due famiglie di fallimento.
+
+La prima famiglia e' "path locale non affidabile, identita' salvata ancora
+utile". Qui rientrano `path-unreachable`, `not-directory` e
+`identity-mismatch`. In questi casi il probe locale non puo' tornare `VALID`,
+ma Alfred ha ancora una prova forte dell'oggetto originale: la coppia
+`(st_dev, st_ino)` salvata quando il watch era affidabile. Accodare lo scope
+serve a dire: "non fidarti del vecchio path, ma prova piu' tardi a cercare
+questa identita' dentro le root monitorate".
+
+La seconda famiglia e' tecnica o non cercabile. `missing-watch`, `not-stale`,
+`set-resyncing-failed`, `set-stale-failed` e `set-valid-failed` indicano
+problemi di stato interno o di ordine delle chiamate. `missing-identity` dice
+che manca proprio la prova con cui cercare l'oggetto. `reinstall-failed` e'
+diverso: il path principale era stato gia' provato affidabile, ma Alfred non e'
+riuscito a reinstallare tutti i watch figli; non e' quindi un caso di directory
+persa da cercare tramite identita'.
+
+Esempi pratici:
+
+```bash
+# path-unreachable: il path vecchio non esiste piu'
+mv src source
+
+# identity-mismatch: il path vecchio esiste, ma e' un altro inode
+mv src source
+mkdir src
+
+# not-directory: il path vecchio e' stato riusato da un file
+mv src source
+touch src
+```
+
+In tutti e tre gli esempi Alfred non deve generare eventi semantici inventati.
+Il comportamento corretto e':
+
+```text
+WATCH_STALE
+WATCH_RESYNC_BEGIN
+WATCH_RESYNC_FAILED ... error=<caso>
+WATCH_LOST_QUEUED ... error=<caso>
+```
+
+`WATCH_LOST_QUEUED` non significa che Alfred abbia gia' ritrovato la directory.
+Significa solo che ha salvato un lavoro di recovery ampia da eseguire piu'
+tardi, possibilmente in batch.
 
 ## Raw Alfred
 

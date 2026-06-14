@@ -2487,7 +2487,838 @@ Il watch resta `STALE` quando Alfred non ha abbastanza informazioni:
 In questi casi Alfred deve preferire diagnostica esplicita a eventi utente
 potenzialmente falsi.
 
-### Fase 7 - CLI di indicizzazione
+### Fase 7 - Lost scope queue e recovery posticipata
+
+Stato: scelta architetturale approvata, da implementare in un branch dedicato.
+
+Il ramo locale di `IN_MOVE_SELF` protegge Alfred da path falsi: quando il
+vecchio path non e' piu' affidabile, il watch resta `STALE` e gli eventi
+successivi su quel `wd` vengono solo diagnosticati. Questa scelta e' corretta
+per non mentire al core, ma non puo' essere lo stato finale di Alfred: perdere
+un'intera directory osservata e tutte le sue sottodirectory solo per un rename
+o uno spostamento sarebbe inaccettabile per un runtime di sicurezza.
+
+Serve quindi una seconda recovery, piu' ampia e posticipata, che non cerca da
+`/` ma cerca dentro gli scope che Alfred e' autorizzato a monitorare.
+
+#### Cosa significa `lost_scope_queue`
+
+`lost_scope_queue` e' il nome concettuale di una coda backend che contiene gli
+scope di cui Alfred ha perso fiducia. Non e' una coda di eventi semantici e non
+deve essere letta dal core come "file creato", "directory rinominata" o
+"relocation". E' una coda tecnica di recovery.
+
+Esempio di record logico:
+
+```c
+typedef struct lost_scope_entry {
+    int wd;
+    char old_path[PATH_MAX];
+    char scan_root[PATH_MAX];
+    dev_t device_id;
+    ino_t inode_id;
+    const char *reason;
+    uint64_t first_seen_ns;
+    uint64_t retry_after_ns;
+    unsigned retry_count;
+} lost_scope_entry_t;
+```
+
+Se arriva `IN_MOVE_SELF` su:
+
+```text
+wd=7
+old_path=/home/user/project/src
+identity=(st_dev=8, st_ino=12345)
+```
+
+e il probe locale non puo' tornare `VALID`, Alfred aggiunge una entry alla
+`lost_scope_queue`. Il significato e':
+
+```text
+Ho ancora un'identita' filesystem da cercare, ma non posso fidarmi del vecchio
+path. Provero' piu' tardi a ritrovare questo oggetto dentro gli scope monitorati.
+```
+
+`scan_root` e' il campo che separa il path diventato sospetto dal perimetro di
+ricerca. Idealmente contiene la root configurata che conteneva `old_path` al
+momento dell'enqueue. Esempio:
+
+```text
+root configurata = /home/user/project
+old_path         = /home/user/project/src/module
+scan_root        = /home/user/project
+```
+
+Questa distinzione e' importante perche' `old_path` puo' non esistere piu' o
+puo' essere stato riusato da un altro oggetto. La recovery non deve fidarsi di
+`old_path` come root di ricerca; deve usarlo come informazione diagnostica e
+cercare l'identita' dentro una root monitorata e autorizzata.
+
+Nel codice corrente il backend conserva le root configurate dentro
+`inotify_backend_t`. Ogni startup watch riuscito registra la propria root in una
+lista backend-owned. Quando Alfred accoda una lost-scope entry, sceglie la root
+registrata piu' specifica che contiene `old_path` e la copia in `scan_root`.
+Se nessuna root corrisponde, resta un fallback conservativo al path locale, ma
+il caso normale non dipende piu' da `argv` o da `app.c`.
+
+#### Perche' posticipare la scansione
+
+La scansione non deve partire immediatamente per ogni singolo evento stale.
+Molte operazioni reali sono sequenze rapide:
+
+```bash
+mv watched watched.tmp
+mv watched.tmp watched
+```
+
+oppure:
+
+```bash
+mv app app.previous
+mv app.new app
+```
+
+Se Alfred scansiona dopo il primo rename, fotografa uno stato intermedio. Un
+piccolo ritardo permette al filesystem di "stabilizzarsi" e consente di
+raggruppare piu' watch persi in una sola scansione. Questo e' lo stesso
+principio usato da sistemi professionali:
+
+- Watchman parla di recrawl quando ha perso sincronizzazione e deve riallinearsi
+  con una scansione ricorsiva della root.
+- Watchman aspetta anche che una root si stabilizzi prima di notificare.
+- Syncthing combina filesystem watcher e full scan periodici.
+- Syncthing ritarda/batcha gli eventi watcher prima di lanciare una scansione
+  tramite `fsWatcherDelayS`.
+
+Riferimenti utili:
+
+- <https://facebook.github.io/watchman/docs/troubleshooting>
+- <https://facebook.github.io/watchman/>
+- <https://docs.syncthing.net/users/syncing.html>
+- <https://man7.org/linux/man-pages/man7/inotify.7.html>
+
+Per Alfred, la prima policy implementata nel branch usa:
+
+```text
+retry 1 = 100 ms
+retry 2 = 250 ms
+retry 3 = 500 ms
+retry 4 = 1000 ms
+retry 5+ = 2000 ms
+max_attempts = 8
+```
+
+Questi numeri sono ancora costanti interne, non opzioni pubbliche di
+configurazione. Servono a impedire loop stretti mentre il collegamento runtime
+viene stabilizzato.
+
+#### Scope della ricerca
+
+La recovery posticipata non deve cercare da `/`. Deve cercare solo dentro root
+esplicitamente configurate o gia' monitorate da Alfred. Questo mantiene il
+comportamento entro il perimetro scelto dall'utente e riduce costo, rumore e
+rischio di path falsi.
+
+Esempio:
+
+```text
+root monitorate:
+- /home/user/project
+- /srv/workspace
+
+lost scope:
+- wd=7
+- old_path=/home/user/project/src
+- identity=(8, 12345)
+```
+
+La recovery puo' scansionare `/home/user/project` e, se configurato,
+`/srv/workspace`. Non deve attraversare `/etc`, `/var`, `/home/other` o l'intero
+filesystem.
+
+Se trova una directory con la stessa identita':
+
+```text
+/home/user/project/renamed-src -> (8, 12345)
+```
+
+puo' aggiornare il path del watch principale e riparare la subtree.
+
+Se non la trova:
+
+```text
+wd=7 resta STALE
+WATCH_LOST_NOT_FOUND ...
+```
+
+#### Cosa accade se il parent e' monitorato
+
+Se la directory osservata viene rinominata dentro un parent che Alfred monitora,
+il caso migliore non e' `lost_scope_queue`. Il parent puo' generare:
+
+```text
+IN_MOVED_FROM old_name cookie=X
+IN_MOVED_TO   new_name cookie=X
+```
+
+Con la coppia `IN_MOVED_FROM` / `IN_MOVED_TO`, il backend/core conosce il nuovo
+nome. In quel caso la recovery ideale e':
+
+```text
+1. ricostruire old_path e new_path dal parent affidabile
+2. aggiornare il path del watch della directory rinominata
+3. aggiornare il prefisso dei path di tutte le sottodirectory watched
+4. lasciare o riportare i watch a VALID se identita' e copertura sono coerenti
+```
+
+Questa e' una recovery guidata da evento, piu' precisa e meno costosa della
+scansione posticipata.
+
+`lost_scope_queue` serve quando questa informazione non basta o non esiste:
+
+- il parent non era monitorato
+- la coppia move non e' arrivata
+- la coda ha perso eventi
+- il move attraversa scope diversi
+- il watch diretto riceve solo `IN_MOVE_SELF`
+
+#### Cosa accade alle sottodirectory gia' monitorate
+
+Se Alfred osserva ricorsivamente una directory, anche le sottodirectory hanno
+watch propri. Quando una directory alta viene rinominata, i watch kernel delle
+sottodirectory possono continuare a esistere sugli stessi oggetti, ma i path
+testuali salvati da Alfred diventano sbagliati per tutto il sottoalbero.
+
+Esempio:
+
+```text
+wd=7  -> /project/src
+wd=8  -> /project/src/lib
+wd=9  -> /project/src/lib/internal
+
+mv /project/src /project/source
+```
+
+Dopo il rename, i path reali sono:
+
+```text
+/project/source
+/project/source/lib
+/project/source/lib/internal
+```
+
+ma Alfred ha ancora i vecchi path. Quindi non basta riparare il watch
+principale. La recovery deve aggiornare tutto il prefisso:
+
+```text
+/project/src              -> /project/source
+/project/src/lib          -> /project/source/lib
+/project/src/lib/internal -> /project/source/lib/internal
+```
+
+Se la recovery trova la directory principale tramite identita', puo' aggiornare
+il prefisso dei figli che hanno identita' coerente. Poi deve eseguire uno scan
+strict della subtree per:
+
+- confermare quali directory esistono davvero
+- reinstallare eventuali watch mancanti
+- rimuovere o marcare `STALE` eventuali watch figli non piu' verificabili
+
+La regola resta all-or-stale: non si torna `VALID` se la copertura del subtree
+non e' completa.
+
+#### Thread, batch o scansione sincrona
+
+Per il runtime finale, la recovery ampia non dovrebbe girare dentro
+`inotify_backend_poll()`. Lo scan puo' essere costoso; bloccare il polling
+aumenta il rischio di perdere altri eventi e rende piu' probabile un overflow.
+
+Modello preferito:
+
+```text
+thread inotify
+    legge eventi kernel
+    marca wd STALE
+    enqueue lost_scope_entry
+    continua a leggere la coda inotify
+
+thread/worker resync
+    aspetta lost_scope_delay_ms
+    raggruppa entry compatibili
+    scansiona root monitorate
+    produce un piano di recovery
+
+thread backend/applicazione
+    applica mutazioni alla watcher table
+    installa/rimuove watch
+    logga esito
+```
+
+Per arrivarci senza introdurre subito concorrenza difficile, l'implementazione
+e' graduale.
+
+Il primo micro-step e' gia' implementato: `inotify_backend_t` possiede
+`inotify_lost_scope_queue_t lost_scopes`, inizializzata e distrutta insieme al
+backend. Le primitive statiche `backend_lost_scope_queue_init()`,
+`backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`,
+`backend_lost_scope_queue_count()` e `backend_lost_scope_queue_destroy()`
+gestiscono una FIFO interna, con crescita del buffer circolare e copie stabili
+di path/reason. Il test `tests/backend/test_lost_scope_queue.c` fissa questo
+contratto senza leggere eventi kernel e senza produrre log runtime.
+
+Il secondo micro-step collega l'enqueue al runtime: quando `IN_MOVE_SELF` porta
+a `WATCH_RESYNC_FAILED` con `error=path-unreachable`, `error=not-directory` o
+`error=identity-mismatch`, il backend conserva nella queue `wd`, vecchio path,
+`scan_root`, identita' `(st_dev, st_ino)`, motivo e timestamp monotono.
+`scan_root` viene scelto dalla lista di root configurate registrate nel backend.
+Se piu' root sono annidate, Alfred usa quella piu' specifica per ridurre il
+costo della futura scansione. Il log `WATCH_LOST_QUEUED ... pending=K` dice
+solo che Alfred ha registrato lavoro di recovery ampia; non significa che la
+directory sia stata ritrovata. Non vengono prodotti raw Alfred o eventi
+semantici del core.
+
+Non vengono invece accodati errori di bookkeeping, `missing-watch`,
+`not-stale`, `missing-identity` o `reinstall-failed`: in quei casi manca
+evidenza utile per cercare un oggetto perso, oppure il problema non e' un path
+perduto ma una copertura watch incompleta su uno scope gia' provato affidabile.
+
+#### Scelta prestazionale: locale leggero, scan ritardato come strada principale
+
+Il resync locale immediato non deve diventare il centro del prodotto. Il caso
+positivo oggi testato, cioe' "sposto una directory e la rimetto subito nello
+stesso path prima che Alfred consumi `IN_MOVE_SELF`", e' utile per dimostrare
+che identita', scanner e reinstallazione funzionano, ma non e' il caso reale piu'
+importante. Nella pratica e' piu' probabile che una directory venga rinominata,
+spostata altrove o riorganizzata dentro una root monitorata.
+
+La linea scelta e':
+
+1. tenere il probe locale immediato piccolo ed economico
+2. non aggiungere altra complessita' pesante dentro `inotify_backend_poll()`
+3. usare `WATCH_LOST_QUEUED` come ponte verso recovery ampia posticipata
+4. rendere configurabile la recovery immediata profonda se diventa costosa
+5. progettare lo scan ritardato/batchato come meccanismo principale di
+   recupero per directory perse o rinominate
+
+Il probe locale economico ha ancora senso perche' usa operazioni limitate:
+controlla il vecchio path con `stat(2)`, confronta `(st_dev, st_ino)` e, solo
+nel ramo positivo, misura la copertura della subtree. Questo evita falsi path e
+permette di recuperare alcuni casi senza aspettare il worker futuro.
+
+Pero' Alfred ha un obiettivo prestazionale: il polling inotify deve restare
+reattivo. Se una recovery richiede scansioni grandi, retry, backoff o ricerca in
+piu' root, quella recovery deve uscire dal path caldo degli eventi. La direzione
+finale deve quindi essere:
+
+```text
+IN_MOVE_SELF / path non affidabile
+    -> WATCH_STALE
+    -> probe locale minimo
+    -> WATCH_LOST_QUEUED
+    -> scan ritardato e batchato fuori dal polling
+```
+
+In futuro potremo avere una configurazione simile:
+
+```text
+resync_local_probe = on
+resync_immediate_subtree_reinstall = off/on
+lost_scope_scan_delay_ms = 500
+lost_scope_scan_batch = on
+```
+
+I nomi non sono ancora API. Il punto architetturale e' separare:
+
+- protezione immediata del core da path falsi
+- tentativo locale economico
+- recovery ampia potenzialmente costosa
+
+Questa scelta evita di buttare via il lavoro fatto su identita' e stati, ma lo
+ridimensiona: il resync locale e' una guardia conservativa e un acceleratore per
+casi piccoli, non la soluzione primaria per ritrovare alberi spostati.
+
+#### Recovery sincrona testabile
+
+Il micro-step successivo e' implementato con
+`backend_lost_scope_recover_next()`. La funzione consuma una entry dalla
+`lost_scope_queue`, scansiona una sola root passata dal chiamante e cerca una
+directory con la stessa identita' `(st_dev, st_ino)` salvata nella entry.
+
+Questo passo era inizialmente read-only; ora, quando trova l'identita',
+aggiorna i path gia' presenti nella watcher table, misura la copertura,
+reinstalla i watch mancanti e porta la subtree a `VALID` solo se ogni fase
+riesce. Resta invece conservativo sulla semantica:
+
+- non emette raw Alfred o eventi core
+- non inventa create/delete/move semantici
+- non considera valida una subtree se la reinstallazione fallisce
+
+Il suo contratto e' solo:
+
+```text
+entry in queue + root monitorata
+    -> WATCH_LOST_SCAN_BEGIN
+    -> WATCH_LOST_FOUND identifica la nuova posizione
+    -> WATCH_LOST_PREFIX_UPDATED aggiorna i path watcher-table gia' noti
+    -> WATCH_LOST_COVERAGE_DONE misura la copertura watch della subtree
+    -> WATCH_LOST_COVERAGE_MISSING elenca ogni path non watched
+    -> WATCH_LOST_COVERAGE_CLASS classifica la copertura
+    -> WATCH_LOST_REINSTALLED per ogni missing watch riparato
+    -> WATCH_LOST_RECOVERY_END result=valid se tutto riesce
+       oppure WATCH_LOST_NOT_FOUND / WATCH_LOST_RECOVERY_FAILED
+```
+
+Il test `tests/backend/test_lost_scope_recovery.c` dimostra due casi:
+
+- una directory rinominata viene ritrovata sotto la root tramite identita' e il
+  path del watch principale e del figlio gia' noto vengono aggiornati; un
+  secondo figlio non watched viene visto dallo scan di copertura come
+  `missing=1`, reinstallato e poi l'intera subtree torna `VALID`
+- una seconda directory rinominata forza il fallimento sul secondo missing
+  watch: Alfred logga `WATCH_LOST_REINSTALL_FAILED`, rimuove il watch installato
+  nello stesso tentativo con `WATCH_LOST_ROLLBACK` e lascia la subtree non
+  `VALID`
+- una directory cancellata non viene trovata e non produce eventi semantici
+
+Questo completa il primo percorso sincrono testabile della lost-scope recovery:
+Alfred sa ritrovare un oggetto, riallineare i path gia' registrati nella
+watcher table, reinstallare i watch mancanti e tornare `VALID` solo quando la
+subtree e' nuovamente coperta.
+
+Il test `tests/backend/test_lost_scope_runtime_recovery.sh` copre invece il
+percorso runtime piu' vicino all'end-to-end:
+
+```text
+root A e root B configurate
+mkdir rootA/lost
+    -> watch installato su rootA/lost
+mv rootA/lost rootB/lost
+    -> IN_MOVE_SELF sul wd di rootA/lost
+    -> WATCH_STALE
+    -> WATCH_RESYNC_FAILED error=path-unreachable
+    -> WATCH_LOST_QUEUED
+poll runtime
+    -> WATCH_LOST_SCAN_BEGIN root=rootA
+    -> WATCH_LOST_NOT_FOUND
+    -> WATCH_LOST_SCAN_BEGIN root=rootB
+    -> WATCH_LOST_FOUND old_path=rootA/lost new_path=rootB/lost
+    -> WATCH_LOST_RECOVERY_END result=valid
+touch rootB/lost/proof.txt
+    -> FILE_CREATED nel path recuperato
+```
+
+Questo test e' diverso dai test C perche' parte dal binario reale, dal kernel
+inotify reale e da due root passate in riga di comando. Il suo obiettivo non e'
+misurare tutte le combinazioni interne della queue, ma fissare la catena:
+
+```text
+kernel IN_MOVE_SELF
+-> stale
+-> enqueue lost_scope_queue
+-> process_due dal poll
+-> scan root configurate
+-> update path
+-> watch ancora operativo
+```
+
+La `lost_scope_queue` e' il punto chiave del disegno: non e' una coda di eventi
+utente, ma una coda di lavoro backend. Serve a separare il momento in cui Alfred
+scopre che il path non e' affidabile dal momento in cui paga il costo di cercare
+la stessa identita' nelle root monitorate. In questo modo il poll puo' restare
+reattivo e consumare al massimo un tentativo per giro.
+
+#### Aggiornamento path del watch principale
+
+Il building block successivo e' `watcher_update_path()`. La funzione vive nella
+watcher table e aggiorna solo il path testuale di un `wd` attivo. Preserva:
+
+- `wd`
+- `active`
+- `state`
+- `has_identity`
+- `device_id`
+- `inode_id`
+
+Questa scelta evita di riusare `watcher_store_identity()` per la recovery:
+quella funzione registra un watch come se fosse appena installato e imposta lo
+stato a `VALID`. Dopo `WATCH_LOST_FOUND`, invece, Alfred non puo' ancora tornare
+automaticamente `VALID`: ha ritrovato il watch principale, ma deve ancora
+aggiornare i prefissi dei figli e verificare la copertura della subtree.
+
+Quindi il micro-step e' volutamente preparatorio:
+
+```text
+watcher_update_path(wd, new_path)
+    aggiorna solo items[wd].path
+    conserva identita' e stato corrente
+    non installa watch
+    non produce log
+```
+
+`watcher_update_path()` resta documentato e testato come helper puntuale, ma il
+runtime lost-scope usa ora `watcher_update_path_prefix()`: aggiornare prima il
+watch principale e poi i figli sarebbe meno sicuro. Se l'aggiornamento dei
+figli fallisse dopo l'aggiornamento del principale, la watcher table avrebbe
+una miscela di vecchi e nuovi prefissi. La sostituzione per prefisso invece
+valida tutti i path prima di mutare la tabella.
+
+Il processore due-entry e' ora collegato al loop reale del backend. Resta da
+osservare il comportamento sotto carico prima di aggiungere worker thread e
+configurazione pubblica.
+
+#### Processore sincrono delle entry mature
+
+Prima del worker thread vero e proprio, Alfred introduce un processore sincrono
+testabile:
+
+```text
+backend_lost_scope_process_due_with_ops(ctx, root, now_ns, batch_size, ops)
+```
+
+La funzione non crea thread, non dorme e non gira in loop infinito. Serve a
+separare la policy "quali entry posso tentare adesso?" dalla concorrenza futura.
+Il parametro `root` resta un fallback di transizione; il percorso normale usa la
+`scan_root` copiata nella entry quando lo scope e' stato accodato.
+Il contratto e':
+
+- guarda solo la testa FIFO della `lost_scope_queue`
+- se la queue e' vuota, non fa nulla
+- se `retry_after_ns > now_ns`, non consuma la entry e si ferma
+- se la entry e' matura, chiama la recovery sincrona su `entry.scan_root`
+- se `scan_root` termina con `NOT_FOUND`, prova le altre root configurate
+- se non ci sono root configurate ma la entry ha `scan_root`, tenta comunque la
+  recovery primaria su quella root
+- processa al massimo `batch_size` entry mature
+- si ferma al primo elemento non maturo invece di saltarlo
+
+`batch_size` non conta eventi inotify raw e non conta directory visitate dallo
+scanner. Conta quante entry mature della `lost_scope_queue` Alfred prova a
+recuperare in una singola chiamata al processore.
+
+Una entry della `lost_scope_queue` rappresenta uno scope perso, cioe' un watch
+che ha perso affidabilita' del path. Nella pratica spesso corrisponde a un wd
+diventato `STALE` dopo `IN_MOVE_SELF` o dopo un fallimento locale come
+`path-unreachable` o `identity-mismatch`. Una sola entry puo' comunque causare
+uno scan ampio: se lo scope perso e' una directory con 10000 sottodirectory, il
+processore sta sempre consumando una sola entry, ma quella entry puo' visitare
+molti path.
+
+Esempio:
+
+```text
+lost_scope_queue:
+  entry A -> wd=10, old_path=/root/one, retry_after=1000
+  entry B -> wd=22, old_path=/root/two, retry_after=1000
+  entry C -> wd=31, old_path=/root/three, retry_after=5000
+
+now=2000, batch_size=1
+
+processa al massimo A
+lascia B e C in coda per giri successivi del poll
+```
+
+Con `batch_size=1`, Alfred sceglie quindi latenza prevedibile del poll invece di
+svuotare aggressivamente tutta la coda in un solo giro. Questa scelta e'
+particolarmente importante finche' la recovery e' sincrona: durante lo scan la
+stessa thread che legge inotify sta spendendo tempo nel filesystem.
+
+Questa ultima regola e' importante quando la coda non cambia. Con il backoff,
+pero', una entry fallita viene rimessa in fondo alla coda con un
+`retry_after_ns` futuro. Questo evita che una directory ancora non ritrovabile
+blocchi per sempre gli scope successivi. Il comportamento quindi e':
+
+- finche' si guarda una coda immutata, non si salta mai la testa FIFO
+- quando una entry fallisce, la si consuma e la si reinserisce in coda
+- il reinserimento in fondo permette ad altre entry gia' mature di avanzare
+- il nuovo `retry_after_ns` impedisce loop stretti sulla stessa directory
+
+Esempio:
+
+```text
+queue:
+  A retry_after=1000
+  B retry_after=3000
+  C retry_after=1200
+
+now=1500, batch_size=8
+
+processa A
+si ferma su B
+non salta B per processare C
+```
+
+Il processore applica ora una prima policy di retry/backoff interna. Se una
+entry matura termina con:
+
+- `BACKEND_LOST_SCOPE_RECOVERY_FOUND`, la entry e' consumata definitivamente
+- `BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND`, la entry viene rischedulata
+- `BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED`, la entry viene rischedulata
+- `BACKEND_LOST_SCOPE_RECOVERY_EMPTY`, il processore si ferma
+
+`NOT_FOUND` non e' trattato come cancellazione definitiva. Significa solo che
+la scansione delle root previste dalla policy non ha trovato l'identita' in
+quel momento. La directory potrebbe essere fuori dalle root configurate,
+potrebbe essere stata rimossa, o potrebbe tornare visibile dopo un'altra
+operazione del filesystem. Per questo Alfred non elimina subito la memoria dello
+scope perso.
+
+La policy corrente e':
+
+```text
+1. prova entry.scan_root
+2. se il risultato e' NOT_FOUND, prova le altre root configurate
+3. se una root trova l'identita', completa la recovery
+4. se tutte le root previste danno NOT_FOUND, schedula retry/backoff
+5. se una root fallisce tecnicamente, non prova le altre e schedula retry/backoff
+```
+
+Il punto 5 e' intenzionale. Un errore tecnico di scan non e' una prova di
+assenza: puo' indicare permessi, root non leggibile, errore I/O o stato
+transitorio. Saltare a un'altra root dopo un errore tecnico rischierebbe di
+produrre una diagnosi rassicurante mentre una parte del perimetro monitorato non
+e' stata letta in modo affidabile.
+
+#### Collegamento al poll runtime
+
+Il primo collegamento runtime usa:
+
+```text
+backend_lost_scope_process_due_runtime(ctx)
+  -> backend_now_ns()
+  -> backend_lost_scope_process_due_with_ops(
+         batch_size = 1,
+         ops = BACKEND_RESYNC_WATCH_MANAGER_OPS
+     )
+```
+
+La funzione e' chiamata da `backend_poll()` in due punti:
+
+- sul ramo idle, quando `read(2)` restituisce `EAGAIN` o `EWOULDBLOCK`
+- dopo la gestione di un buffer di eventi inotify letto con successo
+
+Il ramo idle e' importante perche' una directory persa potrebbe diventare
+ritrovabile anche quando il kernel non ha nuovi eventi pronti da consegnare. Il
+ramo post-buffer evita invece che una coda lost-scope matura resti ferma in un
+sistema che continua a produrre eventi.
+
+Il `batch_size` e' fissato internamente a `1`. Questa scelta e' conservativa:
+ogni giro di poll puo' pagare al massimo un tentativo di recovery, poi torna al
+flusso normale degli eventi. Per ora non esponiamo questo valore nel file di
+configurazione perche' non abbiamo ancora abbastanza misure sul costo reale
+degli scan in alberi grandi.
+
+Il wrapper runtime distingue due casi:
+
+- se la entry in testa ha `scan_root`, quella root e' sufficiente per il primo
+  tentativo di recovery
+- se la entry non ha `scan_root` e il backend non ha root configurate, il wrapper
+  non processa la coda
+
+Questa distinzione evita due errori opposti. Da un lato, una entry completa non
+deve restare bloccata solo perche' la lista `configured_roots` non e' disponibile
+in un percorso di test, in uno stato transitorio o in una futura worker
+inizializzata parzialmente. Dall'altro lato, una entry incompleta non deve
+trasformarsi in uno scan non delimitato. Le root configurate restano necessarie
+per il fallback multi-root: se `entry.scan_root` non contiene l'identita', Alfred
+puo' provare le altre root monitorate prima di consumare retry budget.
+
+Anche alcuni fallimenti tecnici vengono rischedulati. Questo include errori di
+scan, fallimenti di copertura o fallimenti di reinstallazione dei watch. La
+scelta e' conservativa: finche' Alfred non puo' provare che la subtree e'
+affidabile, resta `STALE`; finche' esiste una possibilita' ragionevole di
+recupero, Alfred tiene memoria della recovery da ritentare.
+
+La prima tabella di backoff e' volutamente piccola e non configurabile:
+
+```text
+fallimento 1 -> retry dopo 100 ms
+fallimento 2 -> retry dopo 250 ms
+fallimento 3 -> retry dopo 500 ms
+fallimento 4 -> retry dopo 1000 ms
+fallimento 5+ -> retry dopo 2000 ms
+```
+
+Il limite iniziale e' `BACKEND_LOST_SCOPE_MAX_ATTEMPTS = 8`. Il contatore conta
+anche il tentativo appena fallito. Quando il limite viene raggiunto, Alfred
+logga `WATCH_LOST_RECOVERY_GAVE_UP` e non rimette la entry in coda. Il watch
+resta comunque non affidabile: il give-up non produce eventi raw/core e non
+significa che l'utente abbia cancellato o spostato qualcosa con semantica
+definitiva.
+
+Un dettaglio importante riguarda i fallimenti tecnici dopo un match. La recovery
+puo' trovare l'identita', riscrivere i prefissi della watcher table e poi
+fallire durante lo scan strict, la reinstallazione dei missing watch o il
+ritorno a `VALID`. In quel caso il prossimo retry non deve usare il vecchio
+`old_path`, perche' la watcher table puo' gia' contenere il nuovo prefisso. Il
+processore preserva quindi il miglior path conosciuto: se `found_path` e' stato
+riempito, la entry rischedulata usa quel path come nuovo riferimento
+diagnostico.
+
+#### Aggiornamento prefissi dei figli
+
+Il building block per aggiornare i prefissi dei figli e' ora
+`watcher_update_path_prefix()`. La funzione vive nella watcher table e non
+conosce inotify, scanner o log. Il suo contratto e':
+
+```text
+watcher_update_path_prefix(old_prefix, new_prefix)
+    visita gli slot attivi della watcher table
+    aggiorna old_prefix -> new_prefix
+    aggiorna anche old_prefix/... -> new_prefix/...
+    non tocca path simili ma esterni, per esempio old_prefix-suffix
+    preserva stato e identita' dei watch
+    valida tutti i path prima di mutare la tabella
+```
+
+Esempio:
+
+```text
+old_prefix = /tmp/root
+new_prefix = /tmp/root_moved
+
+/tmp/root              -> /tmp/root_moved
+/tmp/root/a            -> /tmp/root_moved/a
+/tmp/root/a/b          -> /tmp/root_moved/a/b
+/tmp/root-backup       -> invariato
+```
+
+La regola su `/` e' essenziale. Senza il controllo del separatore, una
+sostituzione testuale pura potrebbe trattare `/tmp/root-backup` come figlio di
+`/tmp/root`, corrompendo il path di un watch esterno alla subtree recuperata.
+
+La funzione usa due passaggi: prima verifica che tutti i nuovi path stiano in
+`PATH_MAX`, poi modifica gli slot. Questo evita uno stato intermedio in cui
+alcuni figli sono gia' stati aggiornati e altri no. Anche dopo questa
+operazione i watch possono restare `STALE` o `RESYNCING`: riscrivere i path non
+significa ancora che Alfred abbia completato scan strict, reinstallazione dei
+watch mancanti e ritorno a `VALID`.
+
+Il collegamento runtime e' ora implementato dentro
+`backend_lost_scope_recover_next()`. Quando lo scanner trova la stessa
+identita', il backend chiama:
+
+```text
+watcher_update_path_prefix(old_path, found_path, &updated_count)
+```
+
+`updated_count` include il watch principale. Per il log diagnostico
+`WATCH_LOST_PREFIX_UPDATED`, Alfred espone invece `children=updated_count - 1`
+per rendere visibile quanti watch figli sono stati riallineati oltre al root
+watch della recovery.
+
+#### Scan strict di copertura lost-scope
+
+Dopo l'aggiornamento dei prefissi, `backend_lost_scope_recover_next()` esegue
+anche uno scan strict della subtree ritrovata. Lo scan usa la stessa logica
+read-only del resync locale:
+
+- attraversa solo directory
+- non segue symlink
+- fallisce se una directory figlia non e' attraversabile in modo affidabile
+- usa `watcher_has_path()` per capire se una directory e' gia' coperta
+- copia i missing path nel contesto di scan
+
+La differenza rispetto al resync locale e' il prefisso diagnostico e il punto di
+ingresso. Nel resync locale Alfred sta recuperando il vecchio path; nella
+lost-scope recovery Alfred ha gia' ritrovato la directory altrove tramite
+identita'. Dopo lo scan, anche il ramo lost-scope applica la policy
+all-or-stale:
+
+```text
+WATCH_LOST_COVERAGE_DONE ... dirs=D watched=W missing=M
+WATCH_LOST_COVERAGE_MISSING ... missing_path=/path/da/reinstallare
+WATCH_LOST_COVERAGE_CLASS ... result=needs-reinstall
+WATCH_LOST_REINSTALLED ... installed_path=/path/da/reinstallare
+WATCH_LOST_RECOVERY_END ... result=valid watches=N
+```
+
+All-or-stale significa: se tutti i missing watch vengono reinstallati, Alfred
+porta a `VALID` tutti i watch sotto il prefisso recuperato. Se un'installazione
+fallisce, Alfred rimuove i watch installati durante quel tentativo e lascia la
+subtree non affidabile. Il test positivo usa operazioni watch fake per rendere
+deterministico il caso `missing=1`; il test failure usa le stesse fake ops per
+fallire sul secondo missing watch e provare rollback e stato non `VALID`.
+
+#### Log di lost-scope recovery
+
+I log diagnostici implementati fissano il contratto osservabile della recovery
+lost-scope:
+
+| Log | Stato | Significato |
+| --- | --- | --- |
+| `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | implementato | il watch e' stato inserito nella coda di recovery ampia |
+| `WATCH_LOST_SCAN_BEGIN root=R pending=N` | implementato | parte una scansione sincrona su una root monitorata |
+| `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | implementato | trovata una directory con la stessa identita' del watch perso |
+| `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | implementato | aggiornati i path gia' noti della subtree watched; `C` conta i figli oltre al watch principale |
+| `WATCH_LOST_COVERAGE_DONE wd=N path=Q reason=R dirs=D watched=W missing=M` | implementato | misurata la copertura watch della subtree ritrovata |
+| `WATCH_LOST_COVERAGE_MISSING wd=N path=Q reason=R missing_path=M` | implementato | elencato un path reale della subtree senza watch |
+| `WATCH_LOST_COVERAGE_CLASS wd=N path=Q reason=R result=X` | implementato | classificati i contatori di copertura |
+| `WATCH_LOST_REINSTALLED wd=N path=Q reason=R installed_path=M` | implementato | reinstallato un watch mancante nella subtree ritrovata |
+| `WATCH_LOST_REINSTALL_FAILED wd=N path=Q reason=R missing_path=M` | implementato | fallita l'installazione di un missing watch; la recovery non puo' tornare `VALID` |
+| `WATCH_LOST_ROLLBACK wd=N path=Q reason=R removed_wd=M` | implementato | rimosso un watch installato nello stesso tentativo fallito |
+| `WATCH_LOST_NOT_FOUND wd=N path=P reason=R retry=N` | implementato | identita' non trovata nella root scansionata |
+| `WATCH_LOST_RETRY_SCHEDULED wd=N path=P reason=R result=X retry=N delay_ms=D pending=K` | implementato | la recovery non e' riuscita ma Alfred conserva lo scope e lo ritentera' dopo backoff |
+| `WATCH_LOST_RECOVERY_GAVE_UP wd=N path=P reason=R result=X retries=N` | implementato | il budget di tentativi e' esaurito; Alfred non rischedula questa entry |
+| `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=E` | implementato | recovery ampia fallita; il watch resta `STALE` |
+| `WATCH_LOST_RECOVERY_END wd=N path=Q reason=R result=valid watches=W` | implementato | recovery ampia completata e subtree tornata affidabile |
+
+`WATCH_LOST_RETRY_SCHEDULED` non significa che il recovery worker esista gia'.
+Oggi il processore e' ancora sincrono e richiamabile dai test. Il log dice solo
+che la policy di scheduling ha rimesso la entry in coda con un tempo minimo per
+il prossimo tentativo.
+
+`WATCH_LOST_RECOVERY_GAVE_UP` non e' una cancellazione semantica. Significa che
+Alfred ha smesso di spendere lavoro su quella entry specifica dopo il budget
+corrente. In futuro questa scelta potra' essere collegata a una rescan piu'
+ampia, a metriche, a configurazione utente o a una policy di sicurezza piu'
+aggressiva.
+
+#### Roadmap di ripresa lost-scope
+
+Alla ripresa del lavoro, partire da questi punti senza rileggere tutta la chat:
+
+1. Il collegamento sincrono al poll esiste gia': `backend_poll()` chiama
+   `backend_lost_scope_process_due_runtime()` sul ramo idle e dopo un buffer di
+   eventi consumato.
+2. Il runtime usa `backend_now_ns()` e `batch_size=1`.
+3. Il test C `tests/backend/test_lost_scope_recovery.c` copre l'integrazione
+   idle del poll con una queue gia' popolata.
+4. Aggiungere test end-to-end o functional che provino un `IN_MOVE_SELF` reale
+   seguito da recovery delayed.
+5. Documentare e misurare il comportamento prestazionale: massimo lavoro per poll,
+   costo dello scan, rischio di molte directory lost-scope, e motivazione del
+   backoff.
+6. Valutare configurazione futura, ma non esporla ancora: `max_attempts`,
+   tabella backoff, `batch_size`, eventuale abilita/disabilita lost-scope
+   recovery.
+7. Solo dopo il collegamento sincrono stabile, discutere worker thread,
+   debounce, lock della queue, shutdown pulito e interazione con futuri plugin
+   backend.
+
+#### Decisione per Alfred
+
+La decisione approvata e':
+
+```text
+stale immediato:
+    proteggere il core da path falsi
+
+lost_scope_queue:
+    non perdere definitivamente directory rinominate/spostate
+
+recovery posticipata:
+    aspettare un breve delay, batchare, cercare solo negli scope monitorati
+
+ritorno a VALID:
+    ammesso solo dopo identita' ritrovata, prefissi aggiornati, scan strict e
+    copertura watch completa
+```
+
+Questa fase diventa il prossimo filone di lavoro dopo la chiusura della PR sul
+resync locale.
+
+### Fase 8 - CLI di indicizzazione
 
 Stato: futura.
 
@@ -2502,7 +3333,7 @@ alfred --scan --json /path
 Questa fase non serve subito allo switch/resync. La teniamo in mente per non
 disegnare un'API che la renda difficile.
 
-### Fase 8 - Performance
+### Fase 9 - Performance
 
 Stato: futura, dopo test e policy.
 
@@ -2510,8 +3341,10 @@ Ottimizzazioni possibili:
 
 - usare `dirent.d_type` come fast path quando affidabile
 - chiamare `fstatat()` solo se servono metadati completi
-- aggiungere statistiche di scan
+- aggiungere statistiche di scan nel runtime
 - valutare batching o callback piu' specializzate
+- costruire una suite performance stabile con baseline e ripetizioni, non solo
+  benchmark manuali
 
 Non conviene ottimizzare prima di avere:
 
@@ -2519,19 +3352,188 @@ Non conviene ottimizzare prima di avere:
 - test su errori/symlink
 - primo uso reale nel backend
 
+### Fase 10 - Benchmark manuale lost-scope
+
+Stato: primo strumento operativo.
+
+Il target:
+
+```bash
+make perf-lost-scope
+```
+
+compila `tests/perf/bench_lost_scope_recovery.c` ed esegue una recovery
+lost-scope sintetica su alberi di dimensioni crescenti. Il benchmark crea una
+subtree, salva l'identita' della directory osservata, sposta la subtree sotto
+una seconda root configurata e misura il tempo della recovery sincrona.
+
+Output:
+
+```text
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+```
+
+Esempio:
+
+```text
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+1000,found,230435,1000,0,0
+```
+
+Come leggerlo:
+
+- `dirs=1000`: il benchmark ha creato 1000 directory figlie dentro la subtree
+  spostata. La root della subtree, per esempio `lost/`, non e' contata in
+  questo numero.
+- `result=found`: la recovery ha ritrovato la directory osservata tramite la
+  sua identita' filesystem `(st_dev, st_ino)`, ha aggiornato il path salvato
+  nella watcher table e ha completato il ritorno a `VALID`.
+- `elapsed_us=230435`: la funzione misurata ha impiegato circa 230435
+  microsecondi, cioe' circa 230 millisecondi. Il valore e' utile per confrontare
+  due versioni del codice sulla stessa macchina, non come soglia assoluta.
+- `fake_adds=1000`: durante lo scan di copertura Alfred ha trovato 1000
+  directory reali senza watch gia' presente e avrebbe provato a reinstallare un
+  watch per ciascuna. Nel benchmark l'installazione e' finta per non misurare
+  `inotify_add_watch()`.
+- `fake_removes=0`: non c'e' stato rollback. Un valore maggiore di zero
+  indicherebbe che una reinstallazione finta e' fallita dopo alcune
+  reinstallazioni riuscite, quindi Alfred ha rimosso i watch aggiunti nello
+  stesso tentativo.
+- `queue_after=0`: la entry lost-scope e' stata consumata e non e' stata
+  rischedulata. Se il valore fosse maggiore di zero, significherebbe che la
+  recovery non ha chiuso il lavoro e la coda conserva ancora entry pendenti.
+
+Un'altra riga possibile:
+
+```text
+1000,failed,500000,300,300,1
+```
+
+Questa riga direbbe che la recovery non e' riuscita, ha provato a reinstallare
+300 watch finti, li ha rimossi in rollback e ha lasciato una entry in coda.
+Sarebbe un caso da analizzare nei log o in un benchmark piu' dettagliato.
+
+#### Prime misure locali
+
+Prime misure raccolte manualmente nello stesso ambiente di sviluppo:
+
+```text
+run A
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+100,found,260589,100,0,0
+1000,found,311397,1000,0,0
+5000,found,352013,5000,0,0
+10000,found,382027,10000,0,0
+
+run B
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+100,found,366252,100,0,0
+1000,found,202396,1000,0,0
+5000,found,313502,5000,0,0
+10000,found,965972,10000,0,0
+```
+
+Queste righe dicono tre cose:
+
+- il percorso misurato completa la recovery (`result=found`) e svuota la coda
+  (`queue_after=0`) anche con 10000 directory sintetiche
+- `fake_adds` cresce come `dirs`, perche' ogni directory figlia non aveva un
+  watch gia' registrato e quindi sarebbe stata reinstallata
+- i tempi non sono monotoni e cambiano tra run: cache filesystem, allocazioni,
+  scheduler e stato della macchina influenzano molto una singola misura
+
+Quindi il benchmark e' gia' utile per confronti grossolani, ma non basta per
+decidere worker thread, debounce o configurazione pubblica. Per prendere quelle
+decisioni servono ripetizioni automatiche, warmup e percentili.
+
+Nota operativa: non lanciare lo stesso benchmark in parallelo usando la stessa
+build directory. Il wrapper compila sempre lo stesso binario in
+`build/tests/perf/`; due linker concorrenti possono produrre errori come
+`Text file busy`. Per confronti manuali usare run sequenziali oppure root
+temporanee diverse con `BENCH_ROOT=...`.
+
+Perche' fake watch operations:
+
+- vogliamo misurare scanner, ricerca identita', aggiornamento path e policy di
+  recovery
+- non vogliamo confondere questi numeri con limiti kernel, allocazione reale dei
+  watch descriptor o latenza di `inotify_add_watch()`
+- il benchmark deve restare ripetibile anche su macchine con limiti inotify
+  diversi
+
+Questo strumento non e' ancora una suite performance completa. Serve per
+confrontare modifiche sullo stesso ambiente. I numeri non vanno usati come
+soglie assolute in CI.
+
+#### Decisione provvisoria su worker, debounce e configurazione
+
+Decisione corrente:
+
+- mantenere la recovery lost-scope sincrona dentro il poll
+- mantenere `batch_size=1` come costante interna
+- non esporre ancora configurazione pubblica per `batch_size`, backoff o
+  abilita/disabilita recovery
+- non introdurre ancora un worker thread dedicato
+
+Motivazione:
+
+- il percorso sincrono e' corretto e coperto da test unitari, diagnostici e
+  scenario runtime
+- `batch_size=1` limita il lavoro massimo pagato da un singolo giro di poll
+- i benchmark manuali mostrano rumore sufficiente da sconsigliare decisioni
+  definitive sui valori di configurazione
+- un worker thread richiederebbe lock sulla queue, shutdown coordinato,
+  gestione delle race tra watch table e scanner, e test piu' complessi
+- esporre una configurazione pubblica ora cristallizzerebbe valori che non
+  abbiamo ancora misurato con una suite performance stabile
+
+Questo non significa che il worker thread sia escluso. Significa solo che va
+discusso dopo avere benchmark ripetibili e, idealmente, un benchmark end-to-end
+con processo `alfred`, watch reali, logging reale e workload piu' vicino alla
+produzione.
+
+Roadmap performance futura:
+
+1. aggiungere ripetizioni e warmup
+2. calcolare min/median/p95 invece di una singola misura
+3. salvare baseline versionate per macchina o profilo di test
+4. distinguere benchmark micro, come scanner/recovery, da benchmark end-to-end
+   del binario `alfred`
+5. misurare separatamente throughput eventi, latenza di consegna, costo di
+   recovery, costo di startup ricorsivo e costo di logging
+6. documentare ambiente: filesystem, kernel, CPU, governor, debug/release,
+   sanitizers attivi o disattivi
+7. decidere quali benchmark possono essere informativi in CI e quali restano
+   manuali
+
 ## Prossimi passi consigliati
 
-1. tornare a discutere `IN_DELETE_SELF`, `IN_UNMOUNT` e overflow,
-   cioe' gli eventi che non hanno ancora una root affidabile semplice come il
-   ramo positivo di `IN_MOVE_SELF`
-2. rimandare output CLI e JSON a un passo successivo
+Lo stato corrente del branch e':
 
-Questo approccio evita di mescolare subito tre problemi:
+- scanner robusto gia' disponibile
+- queue lost-scope disponibile
+- recovery sincrona per identita' disponibile
+- aggiornamento prefissi e reinstallazione missing watch disponibili
+- retry/backoff sincrono disponibile
+- `scan_root` presente nella entry e popolato dalla root configurata piu'
+  specifica quando disponibile
+- processore lost-scope collegato al poll runtime con `backend_now_ns()` e
+  `batch_size=1`
+- scenario runtime reale per `IN_MOVE_SELF` con directory spostata tra due root
+  configurate e recovery delayed completata
+- benchmark manuale `make perf-lost-scope` per iniziare a misurare il costo
+  della recovery su alberi sintetici
 
-- implementare uno scanner robusto
-- decidere la semantica di `IN_MOVE_SELF`
-- aggiungere una feature utente di indicizzazione
+I prossimi passi, in ordine, sono:
 
-Prima completiamo il resync backend su uno scope gia' affidabile. Poi decidiamo
-come estendere lo stesso modello agli eventi che non hanno ancora una root
-affidabile o che richiedono una recovery piu' ampia.
+1. raccogliere qualche misura locale con `make perf-lost-scope` e, se serve,
+   aumentare le dimensioni degli alberi
+2. progettare la suite performance stabile di Alfred: baseline, ripetizioni,
+   percentili, profili e benchmark end-to-end
+3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+   quando il percorso sincrono multi-root e' stabile sotto test
+
+Questo ordine evita di aggiungere concorrenza prima di sapere se il percorso
+sincrono bounded e' sufficiente. Le root sono esplicite e il poll spende un solo
+tentativo per giro; il prossimo punto e' usare misure ripetibili per scegliere
+se questa soluzione basta o se serve una pipeline di recovery piu' articolata.

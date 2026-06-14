@@ -228,6 +228,9 @@ test-scanner:
 test-watcher:
 	cd tests/watcher && bash run_all.sh
 
+perf-lost-scope:
+	cd tests/perf && bash run_lost_scope_recovery.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -308,6 +311,7 @@ banner:
 	test-scanner \
 	test-watcher \
 	test-backend-diagnostics \
+	perf-lost-scope \
 	valgrind \
 	gdb \
 	format \

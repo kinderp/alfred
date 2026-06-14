@@ -26,6 +26,81 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_lost_scope_queue.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after the PR review fixes for
+  lost-scope recovery. Comments now explain that queued filesystem identities are
+  opaque data, and that runtime recovery can use an entry's scan_root for the
+  first bounded scan even when configured roots are unavailable for fallback.
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_lost_scope_queue.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after adding the first
+  synchronous due-entry processor. Comments now explain queue peeking,
+  retry_after_ns maturity checks, FIFO stop-on-not-due behavior, and why
+  retry/backoff requeue is intentionally left for the next step.
+- refreshed `tests/backend/test_lost_scope_recovery.c` after adding the
+  lost-scope reinstall failure scenario. The test comments now document the
+  expected rollback diagnostics and why the scenario must keep the recovered
+  subtree non-VALID when one missing watch cannot be installed.
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/watcher/test_watcher_state.c`, and
+  `tests/backend/test_lost_scope_recovery.c` after wiring positive
+  all-or-stale lost-scope reinstall. Comments now explain subtree state repair,
+  fake watch operations for deterministic tests, and why the runtime returns to
+  VALID only after identity search, prefix repair, strict coverage scan, and
+  complete watch reinstallation.
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after adding strict coverage
+  scanning to lost-scope recovery. Comments now explain the shared read-only
+  subtree scan helper, the difference between local resync reinstallation and
+  lost-scope measurement, and the expected WATCH_LOST_COVERAGE_* diagnostics,
+  including per-path missing watch diagnostics.
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after wiring
+  watcher_update_path_prefix() into lost-scope recovery. Comments now explain
+  why the runtime rewrites the recovered root and child prefixes in one
+  validated table operation, why WATCH_LOST_PREFIX_UPDATED reports child count,
+  and why the subtree still does not become VALID.
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding
+  watcher_update_path_prefix(). Comments now explain why subtree path repair
+  must preserve state and identity, why prefix matching requires a slash
+  boundary, and why the function validates all candidate rewrites before
+  mutating the watcher table.
+- refreshed `modules/inotify/src/inotify_backend.c` and
+  `tests/backend/test_lost_scope_recovery.c` after documenting
+  backend_lost_scope_recovery_result_t and backend_lost_scope_scan_context_t.
+  Comments now explain each recovery outcome, every scan context field, and why
+  WATCH_LOST_FOUND updates only the main watch path while leaving subtree
+  validity for later steps.
+- refreshed `modules/inotify/include/watcher.h`,
+  `modules/inotify/src/watcher.c`, and
+  `tests/watcher/test_watcher_state.c` after adding watcher_update_path().
+  Comments now explain why lost-scope recovery needs a path-only update that
+  preserves state and identity instead of reusing watcher_store_identity().
+- refreshed `modules/inotify/src/inotify_backend.c` and added
+  `tests/backend/test_lost_scope_recovery.c` after introducing synchronous
+  lost-scope identity search. Comments document why the helper consumes one
+  queued entry, why it scans exactly one caller-provided root, and why this
+  micro-step reports FOUND/NOT_FOUND without updating watcher paths or
+  reinstalling watches yet.
+- refreshed `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_self_events_root_watch.sh`,
+  `tests/backend/test_self_move_identity_match.sh`, and
+  `tests/backend/test_self_move_identity_mismatch.sh` after wiring the
+  lost-scope queue to local IN_MOVE_SELF recovery failures. Comments now
+  explain which probe failures become delayed wide recovery, why successful
+  identity-match resync must not enqueue anything, and why WATCH_LOST_QUEUED is
+  diagnostic backend state rather than raw/core semantics.
+- refreshed `modules/inotify/include/inotify_backend.h`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/backend/test_lost_scope_queue.c` after adding the first lost-scope
+  recovery queue. Comments now explain why the queue is backend recovery state,
+  why entries copy stale path/reason text, how FIFO growth preserves recovery
+  order, and why the focused C test has no raw or event log output yet.
 - refreshed `app/include/fs_scanner.h`, `app/src/fs_scanner.c`,
   `modules/inotify/src/inotify_backend.c`, and
   `tests/scanner/test_fs_scanner_dirs.c` after fixing the PR #7 scanner review
@@ -280,3 +355,83 @@ Removed legacy files that were documented during the migration:
 - `modules/inotify/include/move_cache.h`
 - `modules/inotify/src/events.c`
 - `modules/inotify/src/move_cache.c`
+
+## Lost-Scope Retry Policy
+
+Completed in this pass:
+
+- expanded `modules/inotify/src/inotify_backend.c` comments around the
+  due-entry processor, retry scheduling helper, retry delay helper, recovery
+  result stringifier, and queue re-enqueue primitive
+- updated `tests/backend/test_lost_scope_recovery.c` with expected log contract
+  lines for `WATCH_LOST_RETRY_SCHEDULED` and
+  `WATCH_LOST_RECOVERY_GAVE_UP`
+- added scenario comments explaining why a `NOT_FOUND` result is retried with
+  backoff and why retry-budget exhaustion is diagnostic rather than semantic
+
+Completed in the scan-root pass:
+
+- expanded `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_lost_scope_entry_t::scan_root`
+- expanded `modules/inotify/src/inotify_backend.c` comments around the
+  original temporary runtime fallback used before configured roots were owned by
+  the backend
+
+Completed in the configured-root pass:
+
+- expanded `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_backend_t::configured_roots`,
+  `configured_roots_count`, and `configured_roots_capacity`
+- added detailed comments for backend configured-root registration, cleanup,
+  prefix matching, and most-specific-root selection helpers
+- updated `tests/backend/test_lost_scope_queue.c` comments to explain why
+  configured roots are tested together with lost-scope queue primitives
+
+Completed in the scan-root processor pass:
+
+- expanded the `backend_lost_scope_process_due_with_ops()` comment to explain
+  why due recovery uses each entry's stored `scan_root`
+- added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
+  for the case where the caller root is intentionally wrong but `scan_root`
+  still drives a successful recovery
+
+Completed in the configured-root fallback pass:
+
+- expanded `backend_lost_scope_process_due_with_ops()` comments to explain the
+  NOT_FOUND-only fallback across configured roots
+- added a dedicated backend recovery test comment for a directory moved from one
+  configured root to another configured root
+- expanded `modules/inotify/src/watcher.c` comments in
+  `watcher_update_path_prefix()` to explain why the suffix must be copied before
+  rewriting `slot->path`
+
+Completed in the runtime poll integration pass:
+
+- updated `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_lost_scope_entry_t::scan_root` and `inotify_backend_poll()` so they
+  describe the current configured-root fallback and synchronous poll batch
+- added comments around `backend_lost_scope_process_due_runtime()` and its
+  testable wrapper to explain why the first runtime integration is synchronous
+  and why the poll batch is deliberately one entry
+- added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
+  for the idle poll path that processes a mature lost-scope entry on `EAGAIN`
+
+Completed in the runtime lost-scope scenario pass:
+
+- added a full expected-log contract to
+  `tests/backend/test_lost_scope_runtime_recovery.sh`
+- commented each assertion group to explain the runtime chain from
+  `IN_MOVE_SELF` to `WATCH_LOST_QUEUED`, multi-root identity search,
+  `WATCH_LOST_RECOVERY_END`, and the final proof `FILE_CREATED`
+- updated the Italian scenario map and resync roadmap so the new test is tied
+  to the backend recovery design, not treated as an isolated shell script
+
+Completed in the first performance benchmark pass:
+
+- added `tests/perf/bench_lost_scope_recovery.c` with comments that explain the
+  manual benchmark contract, output columns, fake watch operations, and why the
+  benchmark must not be used as a correctness or CI threshold
+- added `tests/perf/run_lost_scope_recovery.sh` as the build/run wrapper for the
+  manual lost-scope recovery benchmark
+- updated Italian docs to describe `make perf-lost-scope` and the future
+  performance-suite requirements for Alfred

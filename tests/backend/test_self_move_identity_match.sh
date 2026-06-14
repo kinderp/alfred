@@ -23,6 +23,7 @@ MOVE_TARGET="${MOVE_TARGET:-/tmp/alfred_backend_test_identity_match_moved}"
 #
 # Forbidden events:
 # - WATCH_RESYNC_FAILED ... reason=IN_MOVE_SELF
+# - WATCH_LOST_QUEUED ... reason=IN_MOVE_SELF
 # - DIR_RELOCATED
 # - DIR_MOVED
 # - DIR_RENAMED
@@ -147,8 +148,13 @@ assert_order "WATCH_RESYNC_END wd=[0-9]+ path=.*/alfred_backend_test_identity_ma
              "FILE_CREATED path=.*/alfred_backend_test_identity_match/unwatched-two/proof.txt"
 
 # A successful identity-match resync must not report recovery failure and must
-# not invent semantic relocation/move/rename events for the watched root.
+# not enqueue delayed lost-scope recovery. The old path has already been proven
+# trustworthy and the missing child watches have been reinstalled.
 assert_not_contains "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
+assert_not_contains "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_backend_test_identity_match reason=IN_MOVE_SELF"
+
+# IN_MOVE_SELF has no destination path, so even a successful local recovery must
+# not invent semantic relocation/move/rename events for the watched root.
 assert_not_contains "DIR_RELOCATED path="
 assert_not_contains "DIR_MOVED path="
 assert_not_contains "DIR_RENAMED path="

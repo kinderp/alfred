@@ -107,6 +107,35 @@ static const char *watcher_state_name(watcher_state_t state)
     }
 }
 
+/*
+ * watcher_path_matches_prefix - check path equality or subtree membership
+ * @path: active watcher path to inspect
+ * @prefix: old root/prefix being replaced
+ *
+ * Prefix replacement must not treat "/tmp/src-old" as a child of "/tmp/src".
+ * A match is therefore either exact equality or a slash boundary immediately
+ * after the prefix.
+ *
+ * Return: nonzero when @path should be rewritten for @prefix.
+ */
+static int watcher_path_matches_prefix(const char *path, const char *prefix)
+{
+    size_t prefix_len;
+
+    if (path == NULL || prefix == NULL)
+        return 0;
+
+    prefix_len = strlen(prefix);
+
+    if (prefix_len == 0)
+        return 0;
+
+    if (strncmp(path, prefix, prefix_len) != 0)
+        return 0;
+
+    return path[prefix_len] == '\0' || path[prefix_len] == '/';
+}
+
 /* ============================================================================
  * PUBLIC API
  * ========================================================================== */
@@ -251,6 +280,179 @@ int watcher_store_identity(watcher_table_t *wt,
              sizeof(slot->path),
              "%s",
              path);
+
+    return 0;
+}
+
+/*
+ * watcher_update_path - replace the path of an active watch only
+ * @wt: table to update
+ * @wd: inotify watch descriptor whose path should be replaced
+ * @path: new trusted path to copy into the existing slot
+ *
+ * Lost-scope recovery may find that an already active kernel watch now lives at
+ * a different textual path. Updating that path is not the same as storing a new
+ * watch: the function preserves active state, reliability state, and captured
+ * filesystem identity. The caller must decide separately whether the watch can
+ * move to VALID after prefix updates, strict scan, and watch reinstallation.
+ *
+ * Return: 0 on success, -1 on invalid input or inactive watch descriptor.
+ */
+int watcher_update_path(watcher_table_t *wt, int wd, const char *path)
+{
+    if (wt == NULL || path == NULL)
+        return -1;
+
+    if (!watcher_exists(wt, wd))
+        return -1;
+
+    watcher_entry_t *slot = &wt->items[wd];
+
+    snprintf(slot->path,
+             sizeof(slot->path),
+             "%s",
+             path);
+
+    return 0;
+}
+
+/*
+ * watcher_update_path_prefix - replace a path prefix in active watches
+ * @wt: table to update
+ * @old_prefix: old path prefix that may appear in active watcher paths
+ * @new_prefix: new path prefix that should replace @old_prefix
+ * @updated_count: optional output for the number of rewritten paths
+ *
+ * Lost-scope recovery can find the moved root of a watched subtree before it
+ * has repaired the child watch paths below that root. This helper performs
+ * only the in-memory path rewrite: watch descriptors, active flags,
+ * reliability states, and captured filesystem identities are preserved.
+ *
+ * The function uses a two-pass algorithm. The first pass validates every
+ * candidate rewrite, including PATH_MAX fit, before the second pass mutates
+ * any slot. This prevents a partially rewritten subtree if one child path
+ * would overflow fixed storage.
+ *
+ * Return: 0 on success, -1 on invalid input or path overflow.
+ */
+int watcher_update_path_prefix(watcher_table_t *wt,
+                               const char *old_prefix,
+                               const char *new_prefix,
+                               size_t *updated_count)
+{
+    size_t old_len;
+    size_t new_len;
+    size_t count;
+
+    if (wt == NULL || old_prefix == NULL || new_prefix == NULL)
+        return -1;
+
+    old_len = strlen(old_prefix);
+    new_len = strlen(new_prefix);
+
+    if (old_len == 0 || new_len == 0)
+        return -1;
+
+    count = 0;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot = &wt->items[i];
+        const char *suffix;
+        size_t suffix_len;
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, old_prefix))
+            continue;
+
+        suffix = slot->path + old_len;
+        suffix_len = strlen(suffix);
+
+        if (new_len + suffix_len >= sizeof(slot->path))
+            return -1;
+
+        count++;
+    }
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        watcher_entry_t *slot = &wt->items[i];
+        char suffix[PATH_MAX];
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, old_prefix))
+            continue;
+
+        /*
+         * Copy the suffix before writing slot->path. The source suffix points
+         * inside slot->path, and reading it while snprintf() writes the same
+         * buffer would be overlapping source/destination undefined behavior.
+         */
+        snprintf(suffix,
+                 sizeof(suffix),
+                 "%s",
+                 slot->path + old_len);
+
+        snprintf(slot->path,
+                 sizeof(slot->path),
+                 "%s%s",
+                 new_prefix,
+                 suffix);
+    }
+
+    if (updated_count != NULL)
+        *updated_count = count;
+
+    return 0;
+}
+
+/*
+ * watcher_set_state_prefix - update state for active watches under a prefix
+ * @wt: table to update
+ * @prefix: exact path or subtree root whose watches should change state
+ * @state: new reliability state for matching active watches
+ * @updated_count: optional output for the number of updated watches
+ *
+ * A successful subtree recovery needs to move the recovered root and any
+ * already-known child watches back to VALID together. Matching uses the same
+ * slash-boundary rule as watcher_update_path_prefix(), so "/tmp/root-old" is
+ * not treated as a child of "/tmp/root".
+ *
+ * Return: 0 on success, -1 on invalid input or invalid state.
+ */
+int watcher_set_state_prefix(watcher_table_t *wt,
+                             const char *prefix,
+                             watcher_state_t state,
+                             size_t *updated_count)
+{
+    size_t count = 0;
+
+    if (wt == NULL || prefix == NULL)
+        return -1;
+
+    if (strlen(prefix) == 0)
+        return -1;
+
+    if (!watcher_state_is_valid(state) || state == WATCHER_STATE_REMOVED)
+        return -1;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        watcher_entry_t *slot = &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, prefix))
+            continue;
+
+        slot->state = state;
+        count++;
+    }
+
+    if (updated_count != NULL)
+        *updated_count = count;
 
     return 0;
 }

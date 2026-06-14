@@ -568,6 +568,7 @@ Definizione:
 typedef struct inotify_backend {
     int fd;
     watcher_table_t watchers;
+    inotify_lost_scope_queue_t lost_scopes;
 } inotify_backend_t;
 ```
 
@@ -576,7 +577,105 @@ Campi:
 | Campo | Significato | Scritto da | Letto da |
 | --- | --- | --- | --- |
 | `fd` | file descriptor inotify non bloccante | `inotify_backend_init()`, `inotify_backend_shutdown()` | `inotify_backend_poll()`, `watch_manager_add()`, `watch_manager_remove()` |
-| `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
+| `watchers` | tabella `wd -> path`, identita' filesystem e stato di affidabilita' del mapping | `watcher_init()`, `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_update_path_prefix()`, `watcher_set_state_prefix()`, `watcher_remove()`, `watcher_destroy()`, `watcher_set_state()` | `watcher_get_path()`, `watcher_get_identity()`, `watcher_exists()`, `watcher_get_state()`, `watcher_is_stale()` |
+| `lost_scopes` | coda FIFO degli scope stale che richiederanno una recovery ampia posticipata | `backend_lost_scope_queue_init()`, `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, futuro worker/resync scanner |
+| `configured_roots` | array dinamico delle root startup installate con successo | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_root_for_path()`, futura policy multi-root |
+| `configured_roots_count` | numero di root registrate | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_root_for_path()` |
+| `configured_roots_capacity` | numero di slot allocati in `configured_roots` | `backend_configured_roots_add()`, `backend_configured_roots_destroy()` | `backend_configured_roots_add()` |
+
+`lost_scopes` non contiene eventi Alfred. Contiene debito tecnico del backend:
+"ho perso fiducia nel path di questo `wd`, ma ho ancora identita' filesystem
+sufficiente per cercarlo piu' tardi negli scope monitorati". Per questo la coda
+sta dentro `inotify_backend_t` e non nel core. Il core deve ricevere solo raw
+fact affidabili e poi produrre semantica; non deve conoscere code di recovery,
+retry o delay.
+
+### `inotify_lost_scope_queue_t`
+
+Definizione:
+
+```c
+typedef struct inotify_lost_scope_queue {
+    inotify_lost_scope_entry_t *items;
+    size_t count;
+    size_t capacity;
+    size_t head;
+} inotify_lost_scope_queue_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `items` | buffer circolare di entry da recuperare | `backend_lost_scope_queue_init()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()` |
+| `count` | numero di scope in attesa di recovery | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_count()`, log `WATCH_LOST_QUEUED`, futuro scheduler resync |
+| `capacity` | numero di slot allocati nel buffer | `backend_lost_scope_queue_init()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()` |
+| `head` | indice del prossimo elemento FIFO da estrarre | `backend_lost_scope_queue_pop()`, `backend_lost_scope_queue_expand()`, `backend_lost_scope_queue_destroy()` | `backend_lost_scope_queue_enqueue()`, `backend_lost_scope_queue_pop()` |
+
+La queue e' un buffer circolare per rendere economici enqueue e pop. Quando si
+riempie, viene riallocata e linearizzata mantenendo l'ordine FIFO: la recovery
+deve processare gli scope nello stesso ordine in cui Alfred ha perso fiducia nei
+path.
+
+### `inotify_lost_scope_entry_t`
+
+Definizione:
+
+```c
+typedef struct inotify_lost_scope_entry {
+    int wd;
+    dev_t device_id;
+    ino_t inode_id;
+    uint64_t first_seen_ns;
+    uint64_t retry_after_ns;
+    unsigned retry_count;
+    char old_path[PATH_MAX];
+    char scan_root[PATH_MAX];
+    char reason[INOTIFY_LOST_SCOPE_REASON_SIZE];
+} inotify_lost_scope_entry_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `wd` | watch descriptor che ha perso affidabilita' del path | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro scanner/recovery |
+| `device_id` | `st_dev` salvato quando il watch era affidabile; e' un identificatore opaco e puo' essere copiato anche se numericamente zero | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, match per identita' |
+| `inode_id` | `st_ino` salvato quando il watch era affidabile; e' un identificatore opaco e puo' essere copiato anche se numericamente zero | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, match per identita' |
+| `first_seen_ns` | timestamp monotono del primo enqueue | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, futuro debounce e diagnostica |
+| `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()`, retry lost-scope | processore due-entry e policy backoff |
+| `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()`, incrementato dal retry lost-scope | policy backoff e limite tentativi |
+| `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e futuro aggiornamento prefissi |
+| `scan_root` | root delimitata in cui cercare prima dei fallback sulle altre root configurate | `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()` | recovery lost-scope e policy multi-root corrente |
+| `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e policy futura |
+
+`old_path`, `scan_root` e `reason` sono copiati nella entry. Questa scelta evita
+che la recovery posticipata dipenda da puntatori presi dalla watcher table o da
+stringhe temporanee sullo stack. Quando il worker futuro consumera' la queue, la
+entry dovra' essere autonoma.
+
+La queue non decide se `device_id` e `inode_id` siano "validi" guardando il loro
+valore numerico. Questa decisione e' gia' stata presa prima, quando
+`watcher_get_identity()` ha verificato che il watch possiede un'identita'
+salvata. Dentro la queue i due campi sono solo dati da copiare e confrontare.
+Questa separazione evita di codificare assunzioni fragili su filesystem speciali
+o futuri dove un identificatore numericamente zero potrebbe comunque arrivare da
+una `stat(2)` riuscita.
+
+`scan_root` nasce per non confondere il path stale con il perimetro di ricerca.
+Il path vecchio puo' non esistere piu' o puo' essere stato riusato da un altro
+oggetto; la root invece descrive dove Alfred e' autorizzato a cercare la stessa
+identita'. Il runtime registra le root startup riuscite in `configured_roots` e
+sceglie la root piu' specifica che contiene `old_path`. Se nessuna root
+corrisponde, resta un fallback al path locale per non perdere la diagnostica,
+ma il caso normale non dipende piu' da `app.c` o da `argv`.
+
+Nel percorso runtime il primo tentativo usa sempre la `scan_root` salvata nella
+entry. La lista `configured_roots` serve soprattutto per il passo successivo: se
+la `scan_root` non contiene piu' l'identita', Alfred puo' provare le altre root
+monitorate prima di schedulare retry/backoff. Per questo una entry completa con
+`scan_root` resta processabile anche se la lista delle root configurate non e'
+disponibile in un percorso di test o in uno stato transitorio.
 
 ### `watcher_table_t`
 
@@ -624,11 +723,11 @@ Campi:
 | --- | --- | --- | --- |
 | `wd` | watch descriptor restituito dal kernel | `watcher_store()`, `watcher_remove()` | `watcher_dump()` |
 | `active` | indica se lo slot contiene una mappatura valida | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_expand()` | `watcher_get_path()`, `watcher_exists()`, `watcher_dump()` |
-| `state` | indica se il mapping e' affidabile, stale o in resync | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_set_state()` | `watcher_get_state()`, `watcher_is_stale()`, `watcher_dump()` |
+| `state` | indica se il mapping e' affidabile, stale o in resync | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()`, `watcher_set_state()`, `watcher_set_state_prefix()` | `watcher_get_state()`, `watcher_is_stale()`, `watcher_dump()` |
 | `has_identity` | dice se `device_id` e `inode_id` sono stati catturati | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, `watcher_dump()`, probe resync |
 | `device_id` | valore `st_dev` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
 | `inode_id` | valore `st_ino` del path osservato al momento dell'installazione watch | `watcher_store_identity()`, `watcher_remove()` | `watcher_get_identity()`, probe resync |
-| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_store_identity()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
+| `path` | directory osservata associata al `wd` | `watcher_store()`, `watcher_store_identity()`, `watcher_update_path()`, `watcher_update_path_prefix()`, `watcher_remove()` | `watcher_get_path()`, `watcher_dump()` |
 
 `device_id` e `inode_id` formano la prova di identita' Unix/Linux classica:
 `st_dev` identifica il filesystem/device e `st_ino` identifica l'inode dentro
@@ -723,6 +822,50 @@ tabella attraverso quell'entry. Se la callback ritorna un valore non zero,
 l'iterazione si ferma e quel valore viene propagato al chiamante. Questo prepara
 il futuro resync: il backend potra' visitare tutti i watch `STALE` senza
 conoscere `items`, `capacity` o il layout interno della watcher table.
+
+`watcher_update_path()` serve invece al ramo di recovery in cui Alfred ha gia'
+ritrovato lo stesso oggetto filesystem a un nuovo path. Non crea un nuovo watch,
+non resetta lo stato a `VALID` e non modifica `device_id` / `inode_id`.
+Aggiorna solo il testo del path dello slot esistente. Questa distinzione e'
+importante: dopo `WATCH_LOST_FOUND`, Alfred puo' sapere il nuovo path del watch
+principale, ma deve ancora aggiornare i prefissi dei figli, fare scan strict e
+verificare la copertura prima di dichiarare la subtree di nuovo affidabile.
+
+`watcher_update_path_prefix()` e' il building block immediatamente successivo:
+riscrive il prefisso testuale di tutti gli slot attivi che corrispondono
+esattamente al vecchio path o che stanno sotto quel path come discendenti.
+Questo serve quando una directory osservata viene ritrovata con la stessa
+identita' filesystem in un'altra posizione: il watch principale puo' passare da
+`/tmp/old` a `/tmp/new`, ma i watch figli possono contenere ancora path come
+`/tmp/old/a` e `/tmp/old/a/b`.
+
+La funzione non usa un semplice "inizia con" perche' sarebbe sbagliato. Il path
+`/tmp/oldish` inizia con gli stessi caratteri di `/tmp/old`, ma non e' figlio
+di `/tmp/old`. Per questo il match e' valido solo in due casi:
+
+```text
+path == old_prefix
+path == old_prefix + "/" + resto
+```
+
+L'aggiornamento e' fatto in due passaggi. Prima Alfred calcola tutti i path che
+dovrebbero cambiare e verifica che i nuovi path entrino in `PATH_MAX`. Solo se
+tutto e' valido modifica davvero la tabella. Questa scelta evita un errore
+pericoloso: aggiornare meta' subtree e poi scoprire che un figlio non entra nel
+buffer. Durante la scrittura del nuovo path, il suffisso viene copiato in un
+buffer temporaneo prima di chiamare `snprintf()`: il suffisso originale punta
+dentro `slot->path`, quindi leggere e scrivere lo stesso buffer nella stessa
+formattazione sarebbe comportamento indefinito e puo' produrre path corrotti.
+Anche questa funzione preserva `wd`, `active`, `state`,
+`has_identity`, `device_id` e `inode_id`; ripara stringhe di path, non decide
+ancora che la subtree sia tornata semanticamente affidabile.
+
+`watcher_set_state_prefix()` completa il lato watcher-table della recovery:
+dopo identita' ritrovata, prefissi aggiornati, scan strict e reinstallazione
+dei watch mancanti, il backend puo' marcare `VALID` tutti gli slot attivi sotto
+il prefisso recuperato. Anche qui vale la regola del separatore `/`: il prefisso
+`/tmp/root` non deve toccare `/tmp/root-backup`. La funzione cambia solo
+`state`; non modifica path, identita' o watch descriptor.
 
 La scelta architetturale e' mettere questo stato nella watcher table invece che
 in una tabella separata. Il motivo e' pratico: quando arriva un evento inotify,

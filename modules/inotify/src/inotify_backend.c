@@ -38,6 +38,12 @@
 #define EVENT_BUFFER_SIZE 65536
 #endif
 
+#if defined(__GNUC__)
+#define BACKEND_MAYBE_UNUSED __attribute__((unused))
+#else
+#define BACKEND_MAYBE_UNUSED
+#endif
+
 /* ============================================================================
  * Local Types
  * ========================================================================== */
@@ -99,6 +105,74 @@ typedef enum backend_resync_scan_class {
     BACKEND_RESYNC_SCAN_NEEDS_REINSTALL
 } backend_resync_scan_class_t;
 
+#define BACKEND_LOST_SCOPE_MAX_ATTEMPTS 8U
+#define BACKEND_LOST_SCOPE_NS_PER_MS 1000000ULL
+#define BACKEND_LOST_SCOPE_POLL_BATCH_SIZE 1U
+
+/*
+ * backend_lost_scope_recovery_result - outcome of one queued identity search
+ *
+ * These values describe backend recovery control flow for one queued
+ * lost-scope entry. They are not Alfred raw events and they are not semantic
+ * core events. They exist so the delayed recovery worker/test code can
+ * distinguish "nothing to do", "recovered", "not found in this scan scope",
+ * and "technical failure".
+ *
+ * The successful path is intentionally stricter than "identity was found".
+ * BACKEND_LOST_SCOPE_RECOVERY_FOUND is returned only after the backend has
+ * found the saved filesystem identity, rewritten stale watcher-table prefixes,
+ * scanned recovered subtree coverage, reinstalled every missing watch, and
+ * marked the recovered subtree VALID. Any failure after identity discovery
+ * still returns BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED so callers keep the
+ * subtree conservative.
+ */
+typedef enum backend_lost_scope_recovery_result {
+    /*
+     * The lost-scope queue had no entry to process. This is a normal idle
+     * result for a future worker and should not produce diagnostics.
+     */
+    BACKEND_LOST_SCOPE_RECOVERY_EMPTY,
+
+    /*
+     * A queued scope was fully recovered. The matching identity was found under
+     * the scanned root, watcher-table prefixes were rewritten, missing watches
+     * were reinstalled, and the subtree was marked VALID.
+     */
+    BACKEND_LOST_SCOPE_RECOVERY_FOUND,
+
+    /*
+     * The scan completed but did not find the queued identity in the selected
+     * root. The object may be gone or may live outside the scanned scope.
+     */
+    BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND,
+
+    /*
+     * The scanner or a later repair step could not complete reliably. Recovery
+     * must stay conservative because partial search, prefix repair, coverage
+     * scan, watch reinstall, or state repair cannot prove the subtree is safe.
+     */
+    BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED
+} backend_lost_scope_recovery_result_t;
+
+/*
+ * backend_lost_scope_scan_context - state for one identity-search scan
+ * @entry: queued lost-scope record whose saved identity is being searched
+ * @found_path: caller-owned buffer that receives the matching path
+ * @found_path_size: size of @found_path in bytes
+ * @found: set to nonzero when the callback finds @entry identity
+ *
+ * fs_scan_tree() calls backend_lost_scope_scan_for_identity() with borrowed
+ * paths and stat data. This context keeps the queued identity and the caller's
+ * output buffer together so the callback can stop at the first matching
+ * directory and copy its current path out of the scanner's temporary storage.
+ */
+typedef struct backend_lost_scope_scan_context {
+    const inotify_lost_scope_entry_t *entry;
+    char *found_path;
+    size_t found_path_size;
+    int found;
+} backend_lost_scope_scan_context_t;
+
 /*
  * backend_resync_probe_result - internal outcomes of stale-watch recovery
  *
@@ -108,6 +182,13 @@ typedef enum backend_resync_scan_class {
  * messages normalized while the resync implementation grows in small steps.
  */
 typedef enum backend_resync_probe_result {
+    /*
+     * The stale watch was repaired through the local old-path probe and can
+     * return to VALID. This is the only non-failure result and is never logged
+     * as WATCH_RESYNC_FAILED.
+     */
+    BACKEND_RESYNC_PROBE_VALID,
+
     /*
      * The watcher table no longer has an entry for the watch descriptor that
      * produced the self-event. There is no stable path or saved identity to
@@ -193,6 +274,18 @@ static int backend_init(inotify_backend_context_t *ctx);
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path);
 
+static int backend_configured_roots_add(inotify_backend_t *runtime,
+                                        const char *path);
+
+static void backend_configured_roots_destroy(inotify_backend_t *runtime);
+
+static const char *backend_configured_root_for_path(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
+static int backend_path_matches_prefix(const char *path, const char *prefix);
+
 static void backend_shutdown(inotify_backend_context_t *ctx);
 
 static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
@@ -211,16 +304,44 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
 
-static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
-                                               int wd,
-                                               const char *reason);
+static backend_resync_probe_result_t backend_probe_stale_watch_identity(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *reason
+);
+
+static int backend_resync_probe_result_needs_lost_scope(
+    backend_resync_probe_result_t result
+);
+
+static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result);
 
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
                                                 const char *path,
                                                 const char *reason);
 
+static error_t backend_resync_scan_subtree_dirs(
+    inotify_backend_context_t *ctx,
+    const char *path,
+    int emit_root,
+    backend_resync_scan_context_t *scan_context
+);
+
 static error_t backend_resync_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
+);
+
+static error_t backend_lost_scope_reinstall_missing_watches(
     inotify_backend_context_t *ctx,
     int wd,
     const char *path,
@@ -259,6 +380,107 @@ static const char *backend_resync_probe_result_name(
     backend_resync_probe_result_t result
 );
 
+static int backend_lost_scope_queue_init(inotify_lost_scope_queue_t *queue,
+                                         size_t capacity);
+
+static void backend_lost_scope_queue_destroy(
+    inotify_lost_scope_queue_t *queue
+);
+
+static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_queue_count(
+    const inotify_lost_scope_queue_t *queue
+);
+
+static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_enqueue(
+    inotify_lost_scope_queue_t *queue,
+    int wd,
+    const char *old_path,
+    dev_t device_id,
+    ino_t inode_id,
+    const char *scan_root,
+    const char *reason,
+    uint64_t first_seen_ns,
+    uint64_t retry_after_ns
+);
+
+static int backend_lost_scope_queue_enqueue_entry(
+    inotify_lost_scope_queue_t *queue,
+    const inotify_lost_scope_entry_t *source
+);
+
+static BACKEND_MAYBE_UNUSED int backend_lost_scope_queue_pop(
+    inotify_lost_scope_queue_t *queue,
+    inotify_lost_scope_entry_t *out
+);
+
+static const inotify_lost_scope_entry_t *backend_lost_scope_queue_peek(
+    const inotify_lost_scope_queue_t *queue
+);
+
+static int backend_lost_scope_queue_expand(
+    inotify_lost_scope_queue_t *queue
+);
+
+static BACKEND_MAYBE_UNUSED backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
+                                const char *root,
+                                char *found_path,
+                                size_t found_path_size);
+
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_entry_with_ops(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *entry,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_process_due_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    uint64_t now_ns,
+    size_t batch_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static size_t backend_lost_scope_process_due_runtime(
+    inotify_backend_context_t *ctx
+);
+
+static BACKEND_MAYBE_UNUSED size_t
+backend_lost_scope_process_due_runtime_with_ops(
+    inotify_backend_context_t *ctx,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static uint64_t backend_lost_scope_retry_delay_ns(unsigned failed_attempts);
+
+static int backend_lost_scope_schedule_retry(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *attempted,
+    const char *retry_path,
+    backend_lost_scope_recovery_result_t result,
+    uint64_t now_ns
+);
+
+static const char *backend_lost_scope_recovery_result_name(
+    backend_lost_scope_recovery_result_t result
+);
+
+static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
+                                                void *userdata);
+
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
                                        const char *path,
@@ -287,6 +509,966 @@ static const backend_resync_watch_ops_t BACKEND_RESYNC_WATCH_MANAGER_OPS = {
     .add = backend_resync_watch_manager_add,
     .remove = backend_resync_watch_manager_remove
 };
+
+/* ============================================================================
+ * Lost Scope Queue
+ * ========================================================================== */
+
+/*
+ * backend_lost_scope_queue_init - initialize delayed recovery storage
+ * @queue: queue object owned by inotify_backend_t
+ * @capacity: initial slot count, or 0 for the default
+ *
+ * The lost-scope queue stores stale watched scopes that cannot be repaired by
+ * the immediate old-path identity probe. This first implementation is only a
+ * single-threaded FIFO data structure; later code can add debounce, backoff,
+ * worker-thread ownership, and monitored-root scanning on top of the same
+ * recorded evidence.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_init(inotify_lost_scope_queue_t *queue,
+                                         size_t capacity)
+{
+    if (queue == NULL)
+        return -1;
+
+    memset(queue, 0, sizeof(*queue));
+
+    if (capacity == 0)
+        capacity = 8;
+
+    queue->items =
+        calloc(capacity, sizeof(inotify_lost_scope_entry_t));
+
+    if (queue->items == NULL)
+        return -1;
+
+    queue->capacity = capacity;
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_destroy - release delayed recovery storage
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * Entries store fixed-size path/reason copies, so cleanup only frees the
+ * backing array and resets counters. Resetting makes repeated test setup and
+ * partial backend initialization failure paths deterministic.
+ */
+static void backend_lost_scope_queue_destroy(inotify_lost_scope_queue_t *queue)
+{
+    if (queue == NULL)
+        return;
+
+    free(queue->items);
+
+    queue->items = NULL;
+    queue->count = 0;
+    queue->capacity = 0;
+    queue->head = 0;
+}
+
+/*
+ * backend_lost_scope_queue_count - read the number of pending recoveries
+ * @queue: queue to inspect
+ *
+ * Return: pending entry count, or 0 for a NULL queue.
+ */
+static size_t backend_lost_scope_queue_count(
+    const inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL)
+        return 0;
+
+    return queue->count;
+}
+
+/*
+ * backend_lost_scope_queue_enqueue - store one stale scope for later recovery
+ * @queue: queue object owned by inotify_backend_t
+ * @wd: inotify watch descriptor that became stale
+ * @old_path: last path associated with @wd before trust was lost
+ * @device_id: st_dev captured when the watch was installed
+ * @inode_id: st_ino captured when the watch was installed
+ * @scan_root: bounded root to search before wider fallback policies
+ * @reason: backend/kernel reason for the lost scope
+ * @first_seen_ns: monotonic time when the scope was queued
+ * @retry_after_ns: earliest monotonic time for the next recovery attempt
+ *
+ * The function copies @old_path and @reason into the queue entry. Callers may
+ * pass stack or watcher-table pointers without extending their lifetime. The
+ * queue grows as needed because a burst of stale scopes should not be silently
+ * dropped before policy has a chance to batch and process them.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_enqueue(
+    inotify_lost_scope_queue_t *queue,
+    int wd,
+    const char *old_path,
+    dev_t device_id,
+    ino_t inode_id,
+    const char *scan_root,
+    const char *reason,
+    uint64_t first_seen_ns,
+    uint64_t retry_after_ns
+)
+{
+    inotify_lost_scope_entry_t entry;
+
+    if (queue == NULL || old_path == NULL || scan_root == NULL ||
+        reason == NULL) {
+        return -1;
+    }
+
+    if (wd < 0)
+        return -1;
+
+    memset(&entry, 0, sizeof(entry));
+
+    entry.wd = wd;
+    entry.device_id = device_id;
+    entry.inode_id = inode_id;
+    entry.first_seen_ns = first_seen_ns;
+    entry.retry_after_ns = retry_after_ns;
+    entry.retry_count = 0;
+
+    snprintf(entry.old_path,
+             sizeof(entry.old_path),
+             "%s",
+             old_path);
+    snprintf(entry.scan_root,
+             sizeof(entry.scan_root),
+             "%s",
+             scan_root);
+    snprintf(entry.reason,
+             sizeof(entry.reason),
+             "%s",
+             reason);
+
+    return backend_lost_scope_queue_enqueue_entry(queue, &entry);
+}
+
+/*
+ * backend_lost_scope_queue_enqueue_entry - append an existing recovery entry
+ * @queue: FIFO queue that stores delayed recovery work
+ * @source: already-built entry to copy into the queue tail
+ *
+ * The normal enqueue helper creates the first recovery record with
+ * retry_count=0. Retry scheduling needs a lower-level primitive because it must
+ * preserve first_seen_ns, saved identity, and incremented retry_count while
+ * only changing retry_after_ns and, when useful, the best known stale path.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_enqueue_entry(
+    inotify_lost_scope_queue_t *queue,
+    const inotify_lost_scope_entry_t *source
+)
+{
+    size_t tail;
+
+    if (queue == NULL || source == NULL)
+        return -1;
+
+    if (source->wd < 0)
+        return -1;
+
+    if (source->old_path[0] == '\0' || source->scan_root[0] == '\0' ||
+        source->reason[0] == '\0') {
+        return -1;
+    }
+
+    if (queue->count == queue->capacity) {
+        if (backend_lost_scope_queue_expand(queue) != 0)
+            return -1;
+    }
+
+    tail = (queue->head + queue->count) % queue->capacity;
+    queue->items[tail] = *source;
+    queue->count++;
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_pop - remove the oldest queued recovery request
+ * @queue: queue object owned by inotify_backend_t
+ * @out: destination for a copy of the popped entry
+ *
+ * The pop operation copies the entry out instead of returning an internal
+ * pointer. That keeps future worker/scanner code from holding references into
+ * a circular buffer that may later grow or be reused.
+ *
+ * Return: 0 on success, -1 for invalid input or an empty queue.
+ */
+static int backend_lost_scope_queue_pop(inotify_lost_scope_queue_t *queue,
+                                        inotify_lost_scope_entry_t *out)
+{
+    if (queue == NULL || out == NULL)
+        return -1;
+
+    if (queue->count == 0)
+        return -1;
+
+    *out = queue->items[queue->head];
+    memset(&queue->items[queue->head],
+           0,
+           sizeof(queue->items[queue->head]));
+
+    queue->head = (queue->head + 1) % queue->capacity;
+    queue->count--;
+
+    if (queue->count == 0)
+        queue->head = 0;
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_queue_peek - inspect the oldest queued recovery request
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * The due-entry processor must check retry_after_ns before deciding whether
+ * the head entry can be consumed. Returning a const pointer keeps this helper
+ * read-only: callers can inspect scheduling metadata but cannot mutate FIFO
+ * state or hold ownership of the entry.
+ *
+ * Return: pointer to the oldest queued entry, or NULL when the queue is empty.
+ */
+static const inotify_lost_scope_entry_t *backend_lost_scope_queue_peek(
+    const inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL || queue->count == 0)
+        return NULL;
+
+    return &queue->items[queue->head];
+}
+
+/*
+ * backend_lost_scope_queue_expand - double FIFO storage without reordering
+ * @queue: queue object owned by inotify_backend_t
+ *
+ * The queue uses a circular buffer so repeated pop/enqueue operations are
+ * cheap. Growing a wrapped buffer must linearize entries in FIFO order;
+ * otherwise a delayed resync worker would process scopes in a different order
+ * from the one in which path trust was lost.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_lost_scope_queue_expand(
+    inotify_lost_scope_queue_t *queue
+)
+{
+    if (queue == NULL || queue->capacity == 0)
+        return -1;
+
+    size_t new_capacity = queue->capacity * 2;
+
+    if (new_capacity < queue->capacity)
+        return -1;
+
+    inotify_lost_scope_entry_t *tmp =
+        calloc(new_capacity, sizeof(inotify_lost_scope_entry_t));
+
+    if (tmp == NULL)
+        return -1;
+
+    for (size_t i = 0; i < queue->count; i++) {
+        size_t old_index = (queue->head + i) % queue->capacity;
+        tmp[i] = queue->items[old_index];
+    }
+
+    free(queue->items);
+
+    queue->items = tmp;
+    queue->capacity = new_capacity;
+    queue->head = 0;
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_recover_next - synchronously search one queued identity
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ *
+ * This helper is intentionally synchronous and limited. It consumes one queued
+ * lost scope, scans one caller-provided root, and reports whether a directory
+ * with the saved (st_dev, st_ino) identity was found. If the identity is found,
+ * it repairs watcher-table paths for the recovered root and its already-known
+ * children by replacing the stale old prefix with the discovered path. It then
+ * measures coverage, reinstalls all missing watches with all-or-stale rollback,
+ * and returns the recovered subtree to VALID only after every step succeeds.
+ *
+ * Return: recovery result describing empty queue, found, not found, or scan
+ * failure.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next(inotify_backend_context_t *ctx,
+                                const char *root,
+                                char *found_path,
+                                size_t found_path_size)
+{
+    return backend_lost_scope_recover_next_with_ops(
+        ctx,
+        root,
+        found_path,
+        found_path_size,
+        &BACKEND_RESYNC_WATCH_MANAGER_OPS
+    );
+}
+
+/*
+ * backend_lost_scope_recover_next_with_ops - recover one lost scope with ops
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * The public-in-this-file wrapper uses the real watch manager operations. Unit
+ * tests can pass fake operations to exercise the all-or-stale branch without
+ * depending on kernel inotify descriptors or filesystem races.
+ *
+ * Return: recovery result describing empty queue, found, not found, or scan
+ * failure.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_next_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    inotify_lost_scope_entry_t entry;
+
+    if (ctx == NULL || ctx->runtime == NULL || root == NULL ||
+        found_path == NULL || found_path_size == 0 || watch_ops == NULL) {
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+    }
+
+    if (backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                     &entry) != 0) {
+        return BACKEND_LOST_SCOPE_RECOVERY_EMPTY;
+    }
+
+    return backend_lost_scope_recover_entry_with_ops(ctx,
+                                                     &entry,
+                                                     root,
+                                                     found_path,
+                                                     found_path_size,
+                                                     watch_ops);
+}
+
+/*
+ * backend_lost_scope_recover_entry_with_ops - try one root for one lost entry
+ * @ctx: backend context that owns watcher state and logger
+ * @entry: queued recovery entry already removed from the FIFO
+ * @root: monitored root inside which the identity may be searched
+ * @found_path: caller buffer that receives the discovered current path
+ * @found_path_size: size of @found_path
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * This helper does not pop from the queue. That lets the due processor try the
+ * entry's primary scan_root first and, when the result is a clean NOT_FOUND,
+ * try other configured roots before deciding whether the entry should be
+ * requeued. Technical failures stay conservative and stop the attempt.
+ *
+ * Return: recovery result for this root.
+ */
+static backend_lost_scope_recovery_result_t
+backend_lost_scope_recover_entry_with_ops(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *entry,
+    const char *root,
+    char *found_path,
+    size_t found_path_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    if (ctx == NULL || ctx->runtime == NULL || entry == NULL ||
+        root == NULL || found_path == NULL || found_path_size == 0 ||
+        watch_ops == NULL) {
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+    }
+
+    found_path[0] = '\0';
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
+                 root,
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+
+    backend_lost_scope_scan_context_t scan_context;
+
+    memset(&scan_context, 0, sizeof(scan_context));
+    scan_context.entry = entry;
+    scan_context.found_path = found_path;
+    scan_context.found_path_size = found_path_size;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_dirs = 1;
+    opts.include_files = 0;
+    opts.include_symlinks = 0;
+    opts.include_other = 0;
+    opts.follow_symlinks = 0;
+    opts.strict_child_errors = 1;
+    opts.emit_root = 1;
+
+    error_t rc =
+        fs_scan_tree(root,
+                     &opts,
+                     backend_lost_scope_scan_for_identity,
+                     &scan_context);
+
+    if (rc != ERR_OK) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=scan-failed",
+                     entry->wd,
+                     entry->old_path,
+                     entry->reason);
+        return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+    }
+
+    if (scan_context.found) {
+        size_t updated_count = 0;
+
+        if (!watcher_exists(&ctx->runtime->watchers, entry->wd)) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
+                         entry->wd,
+                         entry->old_path,
+                         entry->reason);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        /*
+         * Rewrite the recovered root and any child watches in one validated
+         * watcher-table operation. Calling watcher_update_path() first would
+         * repair the root before knowing whether children can be repaired,
+         * which could leave mixed old/new prefixes after an overflow failure.
+         */
+        if (watcher_update_path_prefix(&ctx->runtime->watchers,
+                                       entry->old_path,
+                                       found_path,
+                                       &updated_count) != 0 ||
+            updated_count == 0) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-prefix-failed",
+                         entry->wd,
+                         entry->old_path,
+                         entry->reason);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
+                     entry->wd,
+                     entry->old_path,
+                     found_path,
+                     entry->reason);
+        logger_event(ctx->logger,
+                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s new_prefix=%s children=%zu",
+                     entry->wd,
+                     entry->old_path,
+                     found_path,
+                     updated_count - 1);
+
+        backend_resync_scan_context_t coverage_context;
+
+        error_t coverage_rc =
+            backend_resync_scan_subtree_dirs(ctx,
+                                             found_path,
+                                             1,
+                                             &coverage_context);
+
+        if (coverage_rc != ERR_OK) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=coverage-scan-failed",
+                         entry->wd,
+                         found_path,
+                         entry->reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
+                     entry->wd,
+                     found_path,
+                     entry->reason,
+                     coverage_context.directories_seen,
+                     coverage_context.directories_watched,
+                     coverage_context.directories_missing_watch);
+
+        for (size_t i = 0; i < coverage_context.missing_paths_count; i++) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s missing_path=%s",
+                         entry->wd,
+                         found_path,
+                         entry->reason,
+                         coverage_context.missing_paths[i]);
+        }
+
+        backend_resync_scan_class_t coverage_class =
+            backend_classify_resync_scan(&coverage_context);
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s result=%s",
+                     entry->wd,
+                     found_path,
+                     entry->reason,
+                     backend_resync_scan_class_name(coverage_class));
+
+        error_t reinstall_rc =
+            backend_lost_scope_reinstall_missing_watches(ctx,
+                                                         entry->wd,
+                                                         found_path,
+                                                         entry->reason,
+                                                         &coverage_context,
+                                                         watch_ops);
+
+        if (reinstall_rc != ERR_OK) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=reinstall-failed",
+                         entry->wd,
+                         found_path,
+                         entry->reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        size_t valid_count = 0;
+
+        if (watcher_set_state_prefix(&ctx->runtime->watchers,
+                                     found_path,
+                                     WATCHER_STATE_VALID,
+                                     &valid_count) != 0 ||
+            valid_count == 0) {
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=set-valid-failed",
+                         entry->wd,
+                         found_path,
+                         entry->reason);
+            backend_resync_scan_context_destroy(&coverage_context);
+            return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
+        }
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s result=valid watches=%zu",
+                     entry->wd,
+                     found_path,
+                     entry->reason,
+                     valid_count);
+
+        backend_resync_scan_context_destroy(&coverage_context);
+        return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
+                 entry->wd,
+                 entry->old_path,
+                 entry->reason,
+                 entry->retry_count);
+    return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
+}
+
+/*
+ * backend_lost_scope_process_due_with_ops - process mature queued recoveries
+ * @ctx: backend context that owns the lost-scope queue and logger
+ * @root: legacy fallback root for entries that do not carry scan_root
+ * @now_ns: current monotonic time used for retry_after_ns comparisons
+ * @batch_size: maximum number of due entries to process in this call
+ * @watch_ops: watch installation/removal operations for runtime or tests
+ *
+ * This is the single-threaded bridge toward the future worker. It does not
+ * sleep, does not spawn a thread, and does not scan unbounded work. It only
+ * consumes FIFO head entries whose retry_after_ns is mature at @now_ns and
+ * stops when the queue is empty, @batch_size is reached, or the next head entry
+ * is still delayed.
+ *
+ * The function intentionally stops at the first non-due head entry instead of
+ * searching later slots. That preserves FIFO ordering and makes future backoff
+ * behavior easier to reason about. A failed attempt is appended again with a
+ * later retry_after_ns, so one delayed scope does not permanently block other
+ * due entries that were already waiting behind it.
+ *
+ * Each lost-scope entry carries its own scan_root. That field is the bounded
+ * root chosen when the backend queued the stale scope, so the processor uses it
+ * instead of guessing from the caller. @root remains a defensive fallback for
+ * older tests or transitional call paths that might build entries manually.
+ * A clean NOT_FOUND on scan_root triggers a search across the other configured
+ * roots before retry/backoff is charged. Technical failures do not fall through
+ * to other roots because a failed scan is not reliable absence evidence.
+ *
+ * Return: number of entries attempted.
+ */
+static size_t backend_lost_scope_process_due_with_ops(
+    inotify_backend_context_t *ctx,
+    const char *root,
+    uint64_t now_ns,
+    size_t batch_size,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    size_t processed = 0;
+
+    if (ctx == NULL || ctx->runtime == NULL || root == NULL ||
+        watch_ops == NULL || batch_size == 0) {
+        return 0;
+    }
+
+    while (processed < batch_size) {
+        const inotify_lost_scope_entry_t *entry =
+            backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes);
+
+        if (entry == NULL)
+            break;
+
+        if (entry->retry_after_ns > now_ns)
+            break;
+
+        inotify_lost_scope_entry_t attempted;
+
+        if (backend_lost_scope_queue_pop(&ctx->runtime->lost_scopes,
+                                         &attempted) != 0) {
+            break;
+        }
+
+        const char *scan_root = attempted.scan_root;
+
+        if (scan_root[0] == '\0')
+            scan_root = root;
+
+        char found_path[PATH_MAX];
+        backend_lost_scope_recovery_result_t result =
+            backend_lost_scope_recover_entry_with_ops(ctx,
+                                                      &attempted,
+                                                      scan_root,
+                                                      found_path,
+                                                      sizeof(found_path),
+                                                      watch_ops);
+
+        /*
+         * A clean NOT_FOUND only says the identity was not inside the primary
+         * scan_root. If the backend has other configured roots, try them before
+         * spending retry budget. Technical failures stop immediately because a
+         * failed scan is not reliable evidence that the identity is absent.
+         */
+        if (result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND) {
+            for (size_t i = 0;
+                 i < ctx->runtime->configured_roots_count &&
+                 result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
+                 i++) {
+
+                const char *candidate = ctx->runtime->configured_roots[i];
+
+                if (strcmp(candidate, scan_root) == 0)
+                    continue;
+
+                result =
+                    backend_lost_scope_recover_entry_with_ops(ctx,
+                                                              &attempted,
+                                                              candidate,
+                                                              found_path,
+                                                              sizeof(found_path),
+                                                              watch_ops);
+            }
+        }
+
+        if (result == BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND ||
+            result == BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED) {
+            const char *retry_path = attempted.old_path;
+
+            /*
+             * Some technical failures happen after the identity was found and
+             * watcher-table prefixes were already rewritten. In that case the
+             * next retry must use the best current path, not the original stale
+             * path, otherwise the retry would try to rewrite an old prefix that
+             * no longer exists in the watcher table.
+             */
+            if (found_path[0] != '\0')
+                retry_path = found_path;
+
+            backend_lost_scope_schedule_retry(ctx,
+                                              &attempted,
+                                              retry_path,
+                                              result,
+                                              now_ns);
+        }
+
+        processed++;
+    }
+
+    return processed;
+}
+
+/*
+ * backend_lost_scope_process_due_runtime - process a tiny runtime batch
+ * @ctx: backend context used by the inotify poll path
+ *
+ * The poll loop calls this helper after an idle read and after a consumed
+ * event buffer. Recovery is intentionally synchronous in this first runtime
+ * integration step: it keeps locking, worker shutdown, and debounce policy out
+ * of the design until tests show that a separate worker is needed.
+ *
+ * The batch size is deliberately one. A lost-scope scan may traverse part of a
+ * monitored tree, so each poll iteration spends a bounded amount of recovery
+ * work and then returns to fresh kernel events.
+ *
+ * Return: number of mature entries attempted.
+ */
+static size_t backend_lost_scope_process_due_runtime(
+    inotify_backend_context_t *ctx
+)
+{
+    return backend_lost_scope_process_due_runtime_with_ops(
+        ctx,
+        &BACKEND_RESYNC_WATCH_MANAGER_OPS);
+}
+
+/*
+ * backend_lost_scope_process_due_runtime_with_ops - testable runtime wrapper
+ * @ctx: backend context used by the inotify poll path
+ * @watch_ops: watch operations used when recovery reinstalls missing watches
+ *
+ * Runtime entries normally carry scan_root, so a mature entry can always drive
+ * its first bounded scan from its own data. The configured root list is still
+ * useful as a defensive fallback for older manually-built entries and, more
+ * importantly, for cross-root recovery after a clean NOT_FOUND on scan_root. If
+ * no configured root exists and the head entry has no scan_root either, the
+ * helper leaves the queue untouched because scanning an unbounded or empty path
+ * would make the recovery contract harder to reason about.
+ *
+ * Return: number of mature entries attempted.
+ */
+static BACKEND_MAYBE_UNUSED size_t
+backend_lost_scope_process_due_runtime_with_ops(
+    inotify_backend_context_t *ctx,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    const inotify_lost_scope_entry_t *entry;
+    const char *fallback_root;
+    uint64_t now_ns;
+
+    if (ctx == NULL || ctx->runtime == NULL || watch_ops == NULL)
+        return 0;
+
+    entry = backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes);
+
+    if (entry == NULL)
+        return 0;
+
+    if (ctx->runtime->configured_roots_count > 0)
+        fallback_root = ctx->runtime->configured_roots[0];
+    else if (entry->scan_root[0] != '\0')
+        fallback_root = entry->scan_root;
+    else
+        return 0;
+
+    now_ns = backend_now_ns();
+
+    return backend_lost_scope_process_due_with_ops(
+        ctx,
+        fallback_root,
+        now_ns,
+        BACKEND_LOST_SCOPE_POLL_BATCH_SIZE,
+        watch_ops);
+}
+
+/*
+ * backend_lost_scope_retry_delay_ns - choose the next retry delay
+ * @failed_attempts: number of failed attempts including the one just completed
+ *
+ * The first version uses a small fixed backoff table. It avoids a tight loop
+ * when a scope is still outside the scanned root and keeps later retries slow
+ * enough for the event loop to prioritize fresh kernel events. The values are
+ * deliberately internal constants until the recovery contract is stable enough
+ * to expose them through configuration.
+ *
+ * Return: delay in nanoseconds before the next attempt may run.
+ */
+static uint64_t backend_lost_scope_retry_delay_ns(unsigned failed_attempts)
+{
+    static const uint64_t delays_ms[] = {
+        100,
+        250,
+        500,
+        1000,
+        2000
+    };
+    size_t index;
+
+    if (failed_attempts == 0)
+        failed_attempts = 1;
+
+    index = failed_attempts - 1;
+
+    if (index >= sizeof(delays_ms) / sizeof(delays_ms[0]))
+        index = (sizeof(delays_ms) / sizeof(delays_ms[0])) - 1;
+
+    return delays_ms[index] * BACKEND_LOST_SCOPE_NS_PER_MS;
+}
+
+/*
+ * backend_lost_scope_schedule_retry - requeue or abandon a failed recovery
+ * @ctx: backend context that owns the queue and logger
+ * @attempted: entry consumed by the failed attempt
+ * @retry_path: best path to preserve for the next attempt
+ * @result: failure class returned by the recovery attempt
+ * @now_ns: current monotonic time used as the new scheduling base
+ *
+ * NOT_FOUND and technical failures are not treated as immediate permanent
+ * loss. The watched object may reappear under a scanned root, or a transient
+ * scan/watch error may clear on a later pass. This helper increments the retry
+ * counter, computes a conservative backoff, and appends the entry to the queue
+ * tail. When the bounded attempt budget is exhausted, it emits a diagnostic and
+ * leaves the watcher stale instead of looping forever.
+ *
+ * Return: 0 when the entry is requeued, -1 when it is abandoned or cannot be
+ * requeued.
+ */
+static int backend_lost_scope_schedule_retry(
+    inotify_backend_context_t *ctx,
+    const inotify_lost_scope_entry_t *attempted,
+    const char *retry_path,
+    backend_lost_scope_recovery_result_t result,
+    uint64_t now_ns
+)
+{
+    inotify_lost_scope_entry_t retry_entry;
+    unsigned failed_attempts;
+    uint64_t delay_ns;
+
+    if (ctx == NULL || ctx->runtime == NULL || attempted == NULL ||
+        retry_path == NULL || retry_path[0] == '\0') {
+        return -1;
+    }
+
+    failed_attempts = attempted->retry_count + 1;
+
+    if (failed_attempts >= BACKEND_LOST_SCOPE_MAX_ATTEMPTS) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s result=%s retries=%u",
+                     attempted->wd,
+                     retry_path,
+                     attempted->reason,
+                     backend_lost_scope_recovery_result_name(result),
+                     failed_attempts);
+        return -1;
+    }
+
+    retry_entry = *attempted;
+    retry_entry.retry_count = failed_attempts;
+    delay_ns = backend_lost_scope_retry_delay_ns(failed_attempts);
+    retry_entry.retry_after_ns = now_ns + delay_ns;
+
+    snprintf(retry_entry.old_path,
+             sizeof(retry_entry.old_path),
+             "%s",
+             retry_path);
+
+    if (backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
+                                               &retry_entry) != 0) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=requeue-failed",
+                     attempted->wd,
+                     retry_path,
+                     attempted->reason);
+        return -1;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s result=%s retry=%u delay_ms=%llu pending=%zu",
+                 retry_entry.wd,
+                 retry_entry.old_path,
+                 retry_entry.reason,
+                 backend_lost_scope_recovery_result_name(result),
+                 retry_entry.retry_count,
+                 (unsigned long long)(delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS),
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+
+    return 0;
+}
+
+/*
+ * backend_lost_scope_recovery_result_name - stringify recovery result
+ * @result: internal recovery outcome
+ *
+ * Retry diagnostics need a stable text value that explains why the entry is
+ * being scheduled again or abandoned. These names are backend diagnostics, not
+ * Alfred raw/core event names.
+ *
+ * Return: static string for @result.
+ */
+static const char *backend_lost_scope_recovery_result_name(
+    backend_lost_scope_recovery_result_t result
+)
+{
+    switch (result) {
+    case BACKEND_LOST_SCOPE_RECOVERY_EMPTY:
+        return "empty";
+    case BACKEND_LOST_SCOPE_RECOVERY_FOUND:
+        return "found";
+    case BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND:
+        return "not-found";
+    case BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED:
+        return "scan-failed";
+    default:
+        return "unknown";
+    }
+}
+
+/*
+ * backend_lost_scope_scan_for_identity - scanner callback for one lost scope
+ * @entry: filesystem entry reported by fs_scan_tree()
+ * @userdata: backend_lost_scope_scan_context_t
+ *
+ * The delayed recovery search compares filesystem identity, not names. A path
+ * can be renamed or reused; the saved (st_dev, st_ino) pair is the evidence
+ * that lets Alfred recognize the same directory at a new path. The callback
+ * stops the scan on the first matching directory.
+ *
+ * Return: nonzero to stop after a match, zero to keep scanning.
+ */
+static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
+                                                void *userdata)
+{
+    backend_lost_scope_scan_context_t *scan_context = userdata;
+
+    if (entry == NULL || entry->st == NULL || scan_context == NULL ||
+        scan_context->entry == NULL) {
+        return 0;
+    }
+
+    if (entry->type != FS_SCAN_DIR)
+        return 0;
+
+    if (entry->st->st_dev != scan_context->entry->device_id ||
+        entry->st->st_ino != scan_context->entry->inode_id) {
+        return 0;
+    }
+
+    snprintf(scan_context->found_path,
+             scan_context->found_path_size,
+             "%s",
+             entry->path);
+    scan_context->found = 1;
+
+    return 1;
+}
 
 /* ============================================================================
  * Lifecycle
@@ -337,6 +1519,14 @@ static int backend_init(inotify_backend_context_t *ctx)
     logger_info(ctx->logger,
                 "watcher table initialized");
 
+    if (backend_lost_scope_queue_init(&ctx->runtime->lost_scopes, 0) != 0) {
+        logger_error(ctx->logger,
+                     "lost scope queue initialization failed");
+
+        watcher_destroy(&ctx->runtime->watchers);
+        return ERR_ALLOC;
+    }
+
     ctx->runtime->fd =
         inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 
@@ -346,6 +1536,7 @@ static int backend_init(inotify_backend_context_t *ctx)
                      errno,
                      strerror(errno));
 
+        backend_lost_scope_queue_destroy(&ctx->runtime->lost_scopes);
         watcher_destroy(&ctx->runtime->watchers);
         return ERR_INOTIFY;
     }
@@ -400,7 +1591,165 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
             return ERR_INOTIFY;
     }
 
+    if (backend_configured_roots_add(ctx->runtime, path) != 0) {
+        logger_error(ctx->logger,
+                     "configured root registration failed path=%s",
+                     path);
+        return ERR_ALLOC;
+    }
+
     return ERR_OK;
+}
+
+/*
+ * backend_configured_roots_add - remember one successfully watched root
+ * @runtime: backend runtime that owns the root list
+ * @path: startup path that was accepted by watch installation
+ *
+ * Lost-scope recovery needs a bounded search scope that is independent from the
+ * stale path. The application passes startup paths during initialization, but
+ * app.c should not be queried later from backend recovery code. This helper
+ * copies each successfully installed startup root into backend-owned storage so
+ * delayed recovery can find the root that originally contained a stale watch.
+ *
+ * Duplicate paths are ignored. Paths are stored as supplied by startup; a later
+ * normalization pass can tighten this if Alfred starts canonicalizing startup
+ * paths before watch installation.
+ *
+ * Return: 0 on success, -1 on invalid input or allocation failure.
+ */
+static int backend_configured_roots_add(inotify_backend_t *runtime,
+                                        const char *path)
+{
+    size_t path_len;
+
+    if (runtime == NULL || path == NULL)
+        return -1;
+
+    path_len = strlen(path);
+
+    if (path_len == 0 || path_len >= PATH_MAX)
+        return -1;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) == 0)
+            return 0;
+    }
+
+    if (runtime->configured_roots_count == runtime->configured_roots_capacity) {
+        size_t new_capacity = runtime->configured_roots_capacity;
+
+        if (new_capacity == 0)
+            new_capacity = 4;
+        else
+            new_capacity *= 2;
+
+        char (*tmp)[PATH_MAX] =
+            realloc(runtime->configured_roots, new_capacity * PATH_MAX);
+
+        if (tmp == NULL)
+            return -1;
+
+        runtime->configured_roots = tmp;
+        runtime->configured_roots_capacity = new_capacity;
+    }
+
+    snprintf(runtime->configured_roots[runtime->configured_roots_count],
+             PATH_MAX,
+             "%s",
+             path);
+    runtime->configured_roots_count++;
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_destroy - release backend-owned root storage
+ * @runtime: backend runtime that owns the root list
+ *
+ * The roots are stored in one dynamic array of fixed PATH_MAX slots, so cleanup
+ * is a single free plus counter reset. The function is safe for partially
+ * initialized backends and repeated shutdown paths.
+ */
+static void backend_configured_roots_destroy(inotify_backend_t *runtime)
+{
+    if (runtime == NULL)
+        return;
+
+    free(runtime->configured_roots);
+    runtime->configured_roots = NULL;
+    runtime->configured_roots_count = 0;
+    runtime->configured_roots_capacity = 0;
+}
+
+/*
+ * backend_path_matches_prefix - check path prefix with directory boundaries
+ * @path: path to classify
+ * @prefix: candidate root/prefix
+ *
+ * A textual prefix is not enough: "/tmp/root-old" must not be treated as a
+ * child of "/tmp/root". Matching accepts exact equality, children separated by
+ * '/', and the filesystem root "/" as a prefix of every absolute path.
+ *
+ * Return: nonzero when @path belongs to @prefix.
+ */
+static int backend_path_matches_prefix(const char *path, const char *prefix)
+{
+    size_t prefix_len;
+
+    if (path == NULL || prefix == NULL)
+        return 0;
+
+    prefix_len = strlen(prefix);
+
+    if (prefix_len == 0)
+        return 0;
+
+    if (strcmp(prefix, "/") == 0)
+        return path[0] == '/';
+
+    if (strncmp(path, prefix, prefix_len) != 0)
+        return 0;
+
+    return path[prefix_len] == '\0' || path[prefix_len] == '/';
+}
+
+/*
+ * backend_configured_root_for_path - find the most specific configured root
+ * @runtime: backend runtime containing registered startup roots
+ * @path: stale or current path to classify
+ *
+ * Multiple configured roots can be nested, for example "/home/user" and
+ * "/home/user/project". Lost-scope recovery should start from the narrowest
+ * matching root to reduce scan cost and avoid searching unrelated directories.
+ *
+ * Return: borrowed pointer to the best matching root, or NULL if none matches.
+ */
+static const char *backend_configured_root_for_path(
+    const inotify_backend_t *runtime,
+    const char *path
+)
+{
+    const char *best = NULL;
+    size_t best_len = 0;
+
+    if (runtime == NULL || path == NULL)
+        return NULL;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        const char *root = runtime->configured_roots[i];
+        size_t root_len = strlen(root);
+
+        if (!backend_path_matches_prefix(path, root))
+            continue;
+
+        if (root_len > best_len) {
+            best = root;
+            best_len = root_len;
+        }
+    }
+
+    return best;
 }
 
 /*
@@ -431,6 +1780,8 @@ static void backend_shutdown(inotify_backend_context_t *ctx)
         ctx->runtime->fd = -1;
     }
 
+    backend_lost_scope_queue_destroy(&ctx->runtime->lost_scopes);
+    backend_configured_roots_destroy(ctx->runtime);
     watcher_destroy(&ctx->runtime->watchers);
 }
 
@@ -499,6 +1850,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
         if (errno == EAGAIN ||
             errno == EWOULDBLOCK) {
 
+            backend_lost_scope_process_due_runtime(ctx);
             usleep(10000); /* 10ms */
             return ERR_OK;
         }
@@ -596,6 +1948,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
+
+    backend_lost_scope_process_due_runtime(ctx);
 
     return ERR_OK;
 }
@@ -730,7 +2084,19 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason)
 {
-    backend_probe_stale_watch_identity(ctx, wd, reason);
+    if (ctx == NULL || reason == NULL)
+        return;
+
+    backend_resync_probe_result_t result =
+        backend_probe_stale_watch_identity(ctx, wd, reason);
+
+    if (!backend_resync_probe_result_needs_lost_scope(result))
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, wd);
+
+    backend_enqueue_lost_scope(ctx, wd, path ? path : "", reason, result);
 }
 
 /*
@@ -747,13 +2113,18 @@ static void backend_resync_watch(inotify_backend_context_t *ctx,
  * location. Only a matching identity can move the watch back to VALID.
  * Otherwise Alfred keeps the watch STALE and logs an explicit failure instead
  * of inventing raw Alfred events or semantic core events.
+ *
+ * Return: BACKEND_RESYNC_PROBE_VALID on local recovery, otherwise the failure
+ * classification already logged as WATCH_RESYNC_FAILED.
  */
-static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
-                                               int wd,
-                                               const char *reason)
+static backend_resync_probe_result_t backend_probe_stale_watch_identity(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *reason
+)
 {
     if (ctx == NULL || reason == NULL)
-        return;
+        return BACKEND_RESYNC_PROBE_MISSING_WATCH;
 
     backend_resync_probe_result_t result;
     int saved_errno = 0;
@@ -768,7 +2139,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_MISSING_WATCH,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_MISSING_WATCH;
     }
 
     if (watcher_get_state(&ctx->runtime->watchers, wd) !=
@@ -780,7 +2151,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_NOT_STALE,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_NOT_STALE;
     }
 
     logger_event(ctx->logger,
@@ -799,7 +2170,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED;
     }
 
     struct stat st;
@@ -818,7 +2189,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -827,7 +2198,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    saved_errno);
-        return;
+        return result;
     }
 
     if (!S_ISDIR(st.st_mode)) {
@@ -843,7 +2214,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -852,7 +2223,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     dev_t stored_device_id;
@@ -874,7 +2245,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -883,7 +2254,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     if (stored_device_id != st.st_dev ||
@@ -907,7 +2278,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -916,7 +2287,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    result,
                                    0);
-        return;
+        return result;
     }
 
     /*
@@ -936,7 +2307,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                        reason,
                                        BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
                                        0);
-            return;
+            return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
         backend_log_resync_failure(ctx,
@@ -945,7 +2316,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_REINSTALL_FAILED;
     }
 
     if (watcher_set_state(&ctx->runtime->watchers,
@@ -958,7 +2329,7 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                                    reason,
                                    BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
                                    0);
-        return;
+        return BACKEND_RESYNC_PROBE_SET_VALID_FAILED;
     }
 
     logger_event(ctx->logger,
@@ -966,6 +2337,159 @@ static void backend_probe_stale_watch_identity(inotify_backend_context_t *ctx,
                  wd,
                  path,
                  reason);
+
+    return BACKEND_RESYNC_PROBE_VALID;
+}
+
+/*
+ * backend_resync_probe_result_needs_lost_scope - classify wide recovery need
+ * @result: outcome produced by backend_probe_stale_watch_identity()
+ *
+ * The lost-scope queue is for path-trust failures where saved filesystem
+ * identity can still help a later scan find the moved object in monitored
+ * roots. It is not used for programming/bookkeeping failures, missing identity,
+ * or reinstall failures where the old path was already proven trustworthy.
+ *
+ * Return: nonzero when @result should enqueue delayed lost-scope recovery.
+ */
+static int backend_resync_probe_result_needs_lost_scope(
+    backend_resync_probe_result_t result
+)
+{
+    return result == BACKEND_RESYNC_PROBE_PATH_UNREACHABLE ||
+           result == BACKEND_RESYNC_PROBE_NOT_DIRECTORY ||
+           result == BACKEND_RESYNC_PROBE_IDENTITY_MISMATCH;
+}
+
+/*
+ * backend_enqueue_lost_scope - record one failed local recovery for later scan
+ * @ctx: narrowed backend context used by the resync path
+ * @wd: stale watch descriptor that could not be locally repaired
+ * @path: last known path for @wd, possibly no longer trustworthy
+ * @reason: kernel/backend reason that triggered the recovery attempt
+ * @result: local probe failure that made wide recovery necessary
+ *
+ * This helper is the bridge between the immediate self-event path and the
+ * future delayed scanner. It copies the saved filesystem identity from the
+ * watcher table and stores it with the stale path, but it does not scan yet and
+ * does not emit raw/core events. WATCH_LOST_QUEUED is diagnostic evidence that
+ * Alfred has recovery work queued, not proof that the directory was found.
+ *
+ * The backend now stores configured watch roots. The first search scope is the
+ * most specific registered root that contains @path. If no root matches, the
+ * helper keeps the old local-path fallback so diagnostic recovery state is
+ * still self-contained instead of dropping the entry.
+ */
+static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                       int wd,
+                                       const char *path,
+                                       const char *reason,
+                                       backend_resync_probe_result_t result)
+{
+    if (ctx == NULL || path == NULL || reason == NULL)
+        return;
+
+    dev_t device_id;
+    ino_t inode_id;
+
+    if (watcher_get_identity(&ctx->runtime->watchers,
+                             wd,
+                             &device_id,
+                             &inode_id) != 0) {
+        logger_event(ctx->logger,
+                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s error=missing-identity",
+                     wd,
+                     path,
+                     reason);
+        return;
+    }
+
+    uint64_t now_ns = backend_now_ns();
+    const char *scan_root =
+        backend_configured_root_for_path(ctx->runtime, path);
+
+    if (scan_root == NULL)
+        scan_root = path;
+
+    if (backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                         wd,
+                                         path,
+                                         device_id,
+                                         inode_id,
+                                         scan_root,
+                                         reason,
+                                         now_ns,
+                                         now_ns) != 0) {
+        logger_error(ctx->logger,
+                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s error=%s",
+                     wd,
+                     path,
+                     reason,
+                     backend_resync_probe_result_name(result));
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s pending=%zu",
+                 wd,
+                 path,
+                 reason,
+                 backend_resync_probe_result_name(result),
+                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+}
+
+/*
+ * backend_resync_scan_subtree_dirs - count directory watch coverage
+ * @ctx: narrowed backend context used by recovery code
+ * @path: trusted root path to scan
+ * @emit_root: nonzero to include @path itself in scan counters
+ * @scan_context: output scan state with counters and owned missing paths
+ *
+ * This helper performs the read-only half of subtree recovery. It scans only
+ * directories, asks the watcher table whether each path is already covered,
+ * and copies missing paths into @scan_context. It does not install watches and
+ * does not log: callers decide whether the scan belongs to local resync
+ * diagnostics or delayed lost-scope diagnostics.
+ *
+ * Return: ERR_OK on complete scan and collection, otherwise error_t.
+ */
+static error_t backend_resync_scan_subtree_dirs(
+    inotify_backend_context_t *ctx,
+    const char *path,
+    int emit_root,
+    backend_resync_scan_context_t *scan_context
+)
+{
+    if (ctx == NULL || path == NULL || scan_context == NULL)
+        return ERR_INVALID_ARG;
+
+    memset(scan_context, 0, sizeof(*scan_context));
+    scan_context->ctx = ctx;
+
+    fs_scan_options_t opts;
+
+    fs_scan_options_defaults(&opts);
+    opts.include_dirs = 1;
+    opts.include_files = 0;
+    opts.include_symlinks = 0;
+    opts.include_other = 0;
+    opts.follow_symlinks = 0;
+    opts.strict_child_errors = 1;
+    opts.emit_root = emit_root ? 1 : 0;
+
+    error_t rc =
+        fs_scan_tree(path,
+                     &opts,
+                     backend_count_resync_scanned_dir,
+                     scan_context);
+
+    if (rc != ERR_OK)
+        return rc;
+
+    if (scan_context->missing_paths_failed)
+        return ERR_ALLOC;
+
+    return ERR_OK;
 }
 
 /*
@@ -995,27 +2519,13 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
     if (ctx == NULL || path == NULL || reason == NULL)
         return ERR_INVALID_ARG;
 
-    fs_scan_options_t opts;
-
-    fs_scan_options_defaults(&opts);
-    opts.include_dirs = 1;
-    opts.include_files = 0;
-    opts.include_symlinks = 0;
-    opts.include_other = 0;
-    opts.follow_symlinks = 0;
-    opts.strict_child_errors = 1;
-    opts.emit_root = 0;
-
     backend_resync_scan_context_t scan_context;
 
-    memset(&scan_context, 0, sizeof(scan_context));
-    scan_context.ctx = ctx;
-
     error_t rc =
-        fs_scan_tree(path,
-                     &opts,
-                     backend_count_resync_scanned_dir,
-                     &scan_context);
+        backend_resync_scan_subtree_dirs(ctx,
+                                         path,
+                                         0,
+                                         &scan_context);
 
     if (rc != ERR_OK) {
         logger_error(ctx->logger,
@@ -1026,17 +2536,6 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                      rc);
         backend_resync_scan_context_destroy(&scan_context);
         return rc;
-    }
-
-    if (scan_context.missing_paths_failed) {
-        logger_error(ctx->logger,
-                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
-                     wd,
-                     path,
-                     reason,
-                     ERR_ALLOC);
-        backend_resync_scan_context_destroy(&scan_context);
-        return ERR_ALLOC;
     }
 
     logger_event(ctx->logger,
@@ -1239,6 +2738,122 @@ static error_t backend_resync_reinstall_missing_watches(
 }
 
 /*
+ * backend_lost_scope_reinstall_missing_watches - repair lost-scope coverage
+ * @ctx: narrowed backend context used by recovery code
+ * @wd: recovered root watch descriptor
+ * @path: recovered root path used for diagnostic logs
+ * @reason: kernel/backend reason that triggered recovery
+ * @scan_context: completed coverage scan with owned missing path copies
+ * @ops: watch installation/removal operations used by runtime or tests
+ *
+ * Lost-scope recovery reaches this helper only after three earlier proofs:
+ *
+ * - the queued (st_dev, st_ino) identity was found under a monitored root;
+ * - the watcher table prefixes were rewritten from the stale path to @path;
+ * - a strict directory-only coverage scan completed and collected every
+ *   directory that exists under @path but is not currently watched.
+ *
+ * The remaining gap is kernel watch coverage. A recovered subtree cannot
+ * become VALID while even one real directory lacks an inotify watch, because
+ * events below that directory could be missed immediately after recovery.
+ * Therefore this helper implements an all-or-stale policy:
+ *
+ * - every missing path must be installed successfully through ops->add();
+ * - every successful install is logged as WATCH_LOST_REINSTALLED;
+ * - if a later install fails, WATCH_LOST_REINSTALL_FAILED identifies the path;
+ * - every watch installed earlier in the same attempt is removed through
+ *   ops->remove() and logged as WATCH_LOST_ROLLBACK;
+ * - the caller receives an error and must keep the subtree non-VALID.
+ *
+ * Runtime passes wrappers around watch_manager_add()/watch_manager_remove().
+ * Tests pass fake operations so success and rollback branches can be exercised
+ * without relying on kernel-assigned watch descriptors or filesystem races.
+ *
+ * Return: ERR_OK on complete coverage, otherwise error_t.
+ */
+static error_t backend_lost_scope_reinstall_missing_watches(
+    inotify_backend_context_t *ctx,
+    int wd,
+    const char *path,
+    const char *reason,
+    const backend_resync_scan_context_t *scan_context,
+    const backend_resync_watch_ops_t *ops
+)
+{
+    if (ctx == NULL || path == NULL || reason == NULL ||
+        scan_context == NULL || ops == NULL || ops->add == NULL ||
+        ops->remove == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    /*
+     * A coverage scan with no missing paths is already complete. The caller can
+     * continue toward WATCH_LOST_RECOVERY_END without touching the kernel.
+     */
+    if (scan_context->missing_paths_count == 0)
+        return ERR_OK;
+
+    /*
+     * Rollback must remove only watches installed by this recovery attempt. It
+     * must not remove pre-existing watches that were already part of the
+     * recovered subtree before this helper started.
+     */
+    int *installed_wds =
+        calloc(scan_context->missing_paths_count, sizeof(int));
+
+    if (installed_wds == NULL)
+        return ERR_ALLOC;
+
+    size_t installed_count = 0;
+
+    for (size_t i = 0; i < scan_context->missing_paths_count; i++) {
+        const char *missing_path = scan_context->missing_paths[i];
+        int new_wd = ops->add(ctx, missing_path);
+
+        if (new_wd < 0) {
+            /*
+             * One missing watch failed to install, so the subtree is known to
+             * be only partially covered. Roll back all watches installed in
+             * this attempt and let the caller keep the recovered subtree stale.
+             */
+            logger_event(ctx->logger,
+                         "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
+                         wd,
+                         path,
+                         reason,
+                         missing_path);
+
+            for (size_t j = 0; j < installed_count; j++) {
+                logger_event(ctx->logger,
+                             "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
+                             wd,
+                             path,
+                             reason,
+                             installed_wds[j]);
+
+                (void)ops->remove(ctx, installed_wds[j]);
+            }
+
+            free(installed_wds);
+            return ERR_INOTIFY;
+        }
+
+        installed_wds[installed_count] = new_wd;
+        installed_count++;
+
+        logger_event(ctx->logger,
+                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
+                     wd,
+                     path,
+                     reason,
+                     missing_path);
+    }
+
+    free(installed_wds);
+    return ERR_OK;
+}
+
+/*
  * backend_resync_scan_add_missing_path - copy one missing watch candidate
  * @scan_context: resync scan state that owns the copied path list
  * @path: borrowed scanner path to persist after the callback returns
@@ -1421,6 +3036,8 @@ static const char *backend_resync_probe_result_name(
 )
 {
     switch (result) {
+    case BACKEND_RESYNC_PROBE_VALID:
+        return "valid";
     case BACKEND_RESYNC_PROBE_MISSING_WATCH:
         return "missing-watch";
     case BACKEND_RESYNC_PROBE_NOT_STALE:
