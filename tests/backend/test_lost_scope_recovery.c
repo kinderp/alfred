@@ -160,6 +160,25 @@ static inotify_backend_context_t make_backend_context(
 }
 
 /*
+ * test_raw_callback_noop - backend poll callback for idle runtime tests
+ * @raw: raw Alfred event, expected to be NULL for an idle nonblocking fd
+ * @userdata: unused test context
+ *
+ * The idle poll scenario uses a nonblocking pipe to force EAGAIN. No kernel
+ * inotify record is read, so the callback should not receive a raw event.
+ *
+ * Return: ERR_OK to keep the poll path successful if it is called.
+ */
+static int test_raw_callback_noop(const alfred_raw_event_t *raw,
+                                  void *userdata)
+{
+    (void)raw;
+    (void)userdata;
+
+    return ERR_OK;
+}
+
+/*
  * join_path - build a child path inside the test root
  * @dest: destination buffer
  * @dest_size: destination buffer size
@@ -816,6 +835,78 @@ static void test_process_due_falls_back_to_configured_roots(
 }
 
 /*
+ * test_idle_poll_processes_due_lost_scope - runtime poll drains one entry
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root used as configured runtime fallback
+ *
+ * This scenario proves the lost-scope processor is connected to the real
+ * backend poll path, not only to direct unit-test calls. A nonblocking pipe
+ * stands in for an idle fd: read(2) returns EAGAIN, and the poll path should
+ * spend one bounded recovery attempt before returning ERR_OK.
+ */
+static void test_idle_poll_processes_due_lost_scope(
+    inotify_backend_context_t *ctx,
+    const char *root
+)
+{
+    char original[PATH_MAX];
+    char renamed[PATH_MAX];
+    int pipe_fds[2];
+    int flags;
+    struct stat st;
+
+    reset_event_log(ctx->logger);
+    backend_configured_roots_destroy(ctx->runtime);
+
+    join_path(original, sizeof(original), root, "idle-original");
+    join_path(renamed, sizeof(renamed), root, "idle-renamed");
+
+    assert(mkdir(original, 0700) == 0);
+    assert(stat(original, &st) == 0);
+    assert(backend_configured_roots_add(ctx->runtime, root) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  32,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             32,
+                             WATCHER_STATE_STALE) == 0);
+    assert(rename(original, renamed) == 0);
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            32,
+                                            original,
+                                            st.st_dev,
+                                            st.st_ino,
+                                            root,
+                                            "IN_MOVE_SELF",
+                                            1,
+                                            1) == 0);
+
+    assert(pipe(pipe_fds) == 0);
+    flags = fcntl(pipe_fds[0], F_GETFL, 0);
+    assert(flags >= 0);
+    assert(fcntl(pipe_fds[0], F_SETFL, flags | O_NONBLOCK) == 0);
+
+    ctx->runtime->fd = pipe_fds[0];
+    assert(inotify_backend_poll(ctx, test_raw_callback_noop, NULL) == ERR_OK);
+    ctx->runtime->fd = -1;
+
+    close(pipe_fds[0]);
+    close(pipe_fds[1]);
+
+    assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
+    assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 32),
+                  renamed) == 0);
+    assert(watcher_get_state(&ctx->runtime->watchers, 32) ==
+           WATCHER_STATE_VALID);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+
+    backend_configured_roots_destroy(ctx->runtime);
+}
+
+/*
  * test_empty_queue_is_noop - no recovery work is available
  * @ctx: backend context with initialized queue and logger
  * @root: monitored root path
@@ -860,11 +951,13 @@ int main(int argc, char **argv)
     test_process_due_gives_up_after_retry_budget(&ctx, root);
     test_process_due_uses_entry_scan_root(&ctx, root);
     test_process_due_falls_back_to_configured_roots(&ctx, root);
+    test_idle_poll_processes_due_lost_scope(&ctx, root);
     test_empty_queue_is_noop(&ctx, root);
 
     fclose(logger.event);
     watcher_destroy(&runtime.watchers);
     backend_lost_scope_queue_destroy(&runtime.lost_scopes);
+    backend_configured_roots_destroy(&runtime);
 
     return 0;
 }

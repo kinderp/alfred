@@ -646,7 +646,7 @@ Campi:
 | `retry_after_ns` | momento minimo per il prossimo tentativo | `backend_lost_scope_queue_enqueue()`, retry lost-scope | processore due-entry e policy backoff |
 | `retry_count` | numero di tentativi gia' fatti | inizialmente `0` in `backend_lost_scope_queue_enqueue()`, incrementato dal retry lost-scope | policy backoff e limite tentativi |
 | `old_path` | copia del path non piu' affidabile | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e futuro aggiornamento prefissi |
-| `scan_root` | root delimitata in cui cercare prima di eventuali fallback piu' ampi | `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()` | recovery lost-scope e futura policy multi-root |
+| `scan_root` | root delimitata in cui cercare prima dei fallback sulle altre root configurate | `backend_enqueue_lost_scope()`, `backend_lost_scope_queue_enqueue()` | recovery lost-scope e policy multi-root corrente |
 | `reason` | causa backend, per esempio `IN_MOVE_SELF` | `backend_lost_scope_queue_enqueue()` | `backend_lost_scope_queue_pop()`, diagnostica e policy futura |
 
 `old_path`, `scan_root` e `reason` sono copiati nella entry. Questa scelta evita

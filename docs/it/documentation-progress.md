@@ -1361,3 +1361,9 @@ Stati usati:
   in `watcher_update_path_prefix()` che copia il suffisso prima di riscrivere
   `slot->path`, evitando sorgente/destinazione sovrapposte e path corrotti
   durante la recovery lost-scope.
+- `05-modulo-inotify.md`, `21-roadmap-scanner-resync.md`,
+  `14-scenari-test.md` e `16-mappa-codice-e-strutture.md`: documentato il
+  collegamento del processore lost-scope al poll runtime. `backend_poll()`
+  processa ora un batch sincrono minimo sul ramo idle e dopo un buffer di eventi
+  consumato, usando `backend_now_ns()` e `batch_size=1`; worker thread,
+  debounce e configurazione pubblica restano esplicitamente rimandati.

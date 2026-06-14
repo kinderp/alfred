@@ -107,6 +107,7 @@ typedef enum backend_resync_scan_class {
 
 #define BACKEND_LOST_SCOPE_MAX_ATTEMPTS 8U
 #define BACKEND_LOST_SCOPE_NS_PER_MS 1000000ULL
+#define BACKEND_LOST_SCOPE_POLL_BATCH_SIZE 1U
 
 /*
  * backend_lost_scope_recovery_result - outcome of one queued identity search
@@ -450,6 +451,16 @@ static BACKEND_MAYBE_UNUSED size_t backend_lost_scope_process_due_with_ops(
     const char *root,
     uint64_t now_ns,
     size_t batch_size,
+    const backend_resync_watch_ops_t *watch_ops
+);
+
+static size_t backend_lost_scope_process_due_runtime(
+    inotify_backend_context_t *ctx
+);
+
+static BACKEND_MAYBE_UNUSED size_t
+backend_lost_scope_process_due_runtime_with_ops(
+    inotify_backend_context_t *ctx,
     const backend_resync_watch_ops_t *watch_ops
 );
 
@@ -1204,6 +1215,72 @@ static size_t backend_lost_scope_process_due_with_ops(
 }
 
 /*
+ * backend_lost_scope_process_due_runtime - process a tiny runtime batch
+ * @ctx: backend context used by the inotify poll path
+ *
+ * The poll loop calls this helper after an idle read and after a consumed
+ * event buffer. Recovery is intentionally synchronous in this first runtime
+ * integration step: it keeps locking, worker shutdown, and debounce policy out
+ * of the design until tests show that a separate worker is needed.
+ *
+ * The batch size is deliberately one. A lost-scope scan may traverse part of a
+ * monitored tree, so each poll iteration spends a bounded amount of recovery
+ * work and then returns to fresh kernel events.
+ *
+ * Return: number of mature entries attempted.
+ */
+static size_t backend_lost_scope_process_due_runtime(
+    inotify_backend_context_t *ctx
+)
+{
+    return backend_lost_scope_process_due_runtime_with_ops(
+        ctx,
+        &BACKEND_RESYNC_WATCH_MANAGER_OPS);
+}
+
+/*
+ * backend_lost_scope_process_due_runtime_with_ops - testable runtime wrapper
+ * @ctx: backend context used by the inotify poll path
+ * @watch_ops: watch operations used when recovery reinstalls missing watches
+ *
+ * Older transitional tests may still build queue entries without scan_root.
+ * The runtime fallback root is therefore the first configured root, not an
+ * arbitrary filesystem path. If the backend has no configured root, the helper
+ * leaves the queue untouched because scanning an unbounded or empty path would
+ * make the recovery contract harder to reason about.
+ *
+ * Return: number of mature entries attempted.
+ */
+static BACKEND_MAYBE_UNUSED size_t
+backend_lost_scope_process_due_runtime_with_ops(
+    inotify_backend_context_t *ctx,
+    const backend_resync_watch_ops_t *watch_ops
+)
+{
+    const char *fallback_root;
+    uint64_t now_ns;
+
+    if (ctx == NULL || ctx->runtime == NULL || watch_ops == NULL)
+        return 0;
+
+    if (backend_lost_scope_queue_peek(&ctx->runtime->lost_scopes) == NULL)
+        return 0;
+
+    if (ctx->runtime->configured_roots_count == 0)
+        return 0;
+
+    fallback_root = ctx->runtime->configured_roots[0];
+    now_ns = backend_now_ns();
+
+    return backend_lost_scope_process_due_with_ops(
+        ctx,
+        fallback_root,
+        now_ns,
+        BACKEND_LOST_SCOPE_POLL_BATCH_SIZE,
+        watch_ops);
+}
+
+/*
  * backend_lost_scope_retry_delay_ns - choose the next retry delay
  * @failed_attempts: number of failed attempts including the one just completed
  *
@@ -1765,6 +1842,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
         if (errno == EAGAIN ||
             errno == EWOULDBLOCK) {
 
+            backend_lost_scope_process_due_runtime(ctx);
             usleep(10000); /* 10ms */
             return ERR_OK;
         }
@@ -1862,6 +1940,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
+
+    backend_lost_scope_process_due_runtime(ctx);
 
     return ERR_OK;
 }

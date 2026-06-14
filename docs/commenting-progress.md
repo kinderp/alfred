@@ -398,3 +398,14 @@ Completed in the configured-root fallback pass:
 - expanded `modules/inotify/src/watcher.c` comments in
   `watcher_update_path_prefix()` to explain why the suffix must be copied before
   rewriting `slot->path`
+
+Completed in the runtime poll integration pass:
+
+- updated `modules/inotify/include/inotify_backend.h` comments for
+  `inotify_lost_scope_entry_t::scan_root` and `inotify_backend_poll()` so they
+  describe the current configured-root fallback and synchronous poll batch
+- added comments around `backend_lost_scope_process_due_runtime()` and its
+  testable wrapper to explain why the first runtime integration is synchronous
+  and why the poll batch is deliberately one entry
+- added a dedicated `tests/backend/test_lost_scope_recovery.c` scenario comment
+  for the idle poll path that processes a mature lost-scope entry on `EAGAIN`

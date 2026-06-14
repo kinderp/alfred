@@ -37,12 +37,11 @@
  * @reason: backend/kernel reason that moved the scope into recovery
  *
  * This is backend recovery state, not an Alfred raw event and not a semantic
- * core event. The entry preserves enough evidence for a future delayed scan to
- * search monitored roots for the same filesystem object without trusting the
- * stale textual path. @scan_root records the best bounded search scope known at
- * enqueue time. The current runtime still uses the stale local path as this
- * value; a later step will replace it with the configured watch root and then
- * add the configured-roots fallback policy.
+ * core event. The entry preserves enough evidence for delayed scans to search
+ * monitored roots for the same filesystem object without trusting the stale
+ * textual path. @scan_root records the best bounded search scope known at
+ * enqueue time. Runtime recovery tries that root first and then, on a clean
+ * not-found result, falls back to the other configured backend roots.
  */
 typedef struct inotify_lost_scope_entry {
     int wd;
@@ -161,7 +160,9 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * Reads from the nonblocking inotify descriptor, logs backend raw diagnostics,
  * converts records to alfred_raw_event_t, and emits synthetic raw directory
  * creates when recursive discovery finds directories created before their
- * parent watch was installed.
+ * parent watch was installed. The poll path also processes a tiny synchronous
+ * batch of mature lost-scope recoveries after idle reads and after consumed
+ * event buffers; heavier worker/debounce policy remains a later step.
  *
  * Return: ERR_OK on success or idle poll, a negative error_t value on failure.
  */

@@ -404,10 +404,26 @@ semantica finale e' responsabilita' del core.
 4. consegnare il raw event alla callback dell'app, che lo inoltra al core
 5. aggiornare i watch ricorsivi e generare raw event sintetici se lo scan scopre
    directory create prima dell'aggiunta del watch
+6. processare un batch minimo di recovery lost-scope mature
 
 Questa sequenza fissa un confine importante: il backend puo' scoprire fatti e
 mantenere lo stato dei watch, ma non deve decidere la semantica finale degli
 eventi.
+
+Il punto 6 e' intenzionalmente piccolo. La recovery lost-scope puo' attraversare
+una parte dell'albero monitorato per cercare una directory spostata o rinominata
+di cui Alfred conosce ancora l'identita' `(st_dev, st_ino)`. Per non bloccare il
+consumo degli eventi freschi, il poll processa per ora una sola entry matura per
+giro. La chiamata avviene:
+
+- quando `read(2)` sul file descriptor non bloccante restituisce `EAGAIN` o
+  `EWOULDBLOCK`, cioe' quando non ci sono eventi kernel pronti
+- dopo aver consumato un buffer di eventi inotify gia' letto
+
+Questa scelta mantiene il modello single-threaded e rende il comportamento
+facile da testare. Worker thread, debounce avanzato, configurazione pubblica del
+batch e tuning del backoff sono rimandati a una fase successiva, quando avremo
+misure reali sul costo degli scan.
 
 ## Perche' l'adapter non fa semantica
 

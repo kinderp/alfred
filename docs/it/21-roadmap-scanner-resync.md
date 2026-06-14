@@ -2921,10 +2921,9 @@ figli fallisse dopo l'aggiornamento del principale, la watcher table avrebbe
 una miscela di vecchi e nuovi prefissi. La sostituzione per prefisso invece
 valida tutti i path prima di mutare la tabella.
 
-Restano i passi successivi:
-
-1. collegare il processore due-entry al loop reale del backend
-2. solo dopo aggiungere worker thread e configurazione pubblica
+Il processore due-entry e' ora collegato al loop reale del backend. Resta da
+osservare il comportamento sotto carico prima di aggiungere worker thread e
+configurazione pubblica.
 
 #### Processore sincrono delle entry mature
 
@@ -3004,6 +3003,40 @@ assenza: puo' indicare permessi, root non leggibile, errore I/O o stato
 transitorio. Saltare a un'altra root dopo un errore tecnico rischierebbe di
 produrre una diagnosi rassicurante mentre una parte del perimetro monitorato non
 e' stata letta in modo affidabile.
+
+#### Collegamento al poll runtime
+
+Il primo collegamento runtime usa:
+
+```text
+backend_lost_scope_process_due_runtime(ctx)
+  -> backend_now_ns()
+  -> backend_lost_scope_process_due_with_ops(
+         batch_size = 1,
+         ops = BACKEND_RESYNC_WATCH_MANAGER_OPS
+     )
+```
+
+La funzione e' chiamata da `backend_poll()` in due punti:
+
+- sul ramo idle, quando `read(2)` restituisce `EAGAIN` o `EWOULDBLOCK`
+- dopo la gestione di un buffer di eventi inotify letto con successo
+
+Il ramo idle e' importante perche' una directory persa potrebbe diventare
+ritrovabile anche quando il kernel non ha nuovi eventi pronti da consegnare. Il
+ramo post-buffer evita invece che una coda lost-scope matura resti ferma in un
+sistema che continua a produrre eventi.
+
+Il `batch_size` e' fissato internamente a `1`. Questa scelta e' conservativa:
+ogni giro di poll puo' pagare al massimo un tentativo di recovery, poi torna al
+flusso normale degli eventi. Per ora non esponiamo questo valore nel file di
+configurazione perche' non abbiamo ancora abbastanza misure sul costo reale
+degli scan in alberi grandi.
+
+Se il backend non ha root configurate, il wrapper runtime non processa la coda.
+Questo evita di trasformare vecchie entry incomplete in scan non delimitati. Nel
+percorso normale le entry hanno gia' `scan_root`, e le root configurate sono
+registrate durante lo startup.
 
 Anche alcuni fallimenti tecnici vengono rischedulati. Questo include errori di
 scan, fallimenti di copertura o fallimenti di reinstallazione dei watch. La
@@ -3160,17 +3193,15 @@ aggressiva.
 
 Alla ripresa del lavoro, partire da questi punti senza rileggere tutta la chat:
 
-1. Collegare `backend_lost_scope_process_due_with_ops()` al punto runtime piu'
-   adatto del loop backend, mantenendo `batch_size` piccolo e misurabile.
-2. Decidere come calcolare `now_ns` nel runtime reale. La funzione
-   `backend_now_ns()` esiste gia', ma va usata nel punto corretto per non
-   duplicare clock e logica temporale.
-3. Definire se il primo collegamento deve essere solo sincrono nel poll oppure
-   se serve subito una chiamata periodica separata. La preferenza corrente e':
-   prima sincrono, poi worker thread solo se i test mostrano blocchi o latenza.
-4. Aggiungere test runtime/backend che provino l'integrazione del processore con
-   una queue gia' popolata, non solo test unitari chiamati direttamente.
-5. Documentare il comportamento prestazionale: massimo lavoro per poll,
+1. Il collegamento sincrono al poll esiste gia': `backend_poll()` chiama
+   `backend_lost_scope_process_due_runtime()` sul ramo idle e dopo un buffer di
+   eventi consumato.
+2. Il runtime usa `backend_now_ns()` e `batch_size=1`.
+3. Il test C `tests/backend/test_lost_scope_recovery.c` copre l'integrazione
+   idle del poll con una queue gia' popolata.
+4. Aggiungere test end-to-end o functional che provino un `IN_MOVE_SELF` reale
+   seguito da recovery delayed.
+5. Documentare e misurare il comportamento prestazionale: massimo lavoro per poll,
    costo dello scan, rischio di molte directory lost-scope, e motivazione del
    backoff.
 6. Valutare configurazione futura, ma non esporla ancora: `max_attempts`,
@@ -3245,14 +3276,18 @@ Lo stato corrente del branch e':
 - retry/backoff sincrono disponibile
 - `scan_root` presente nella entry e popolato dalla root configurata piu'
   specifica quando disponibile
+- processore lost-scope collegato al poll runtime con `backend_now_ns()` e
+  `batch_size=1`
 
 I prossimi passi, in ordine, sono:
 
-1. collegare il processore al loop runtime con `backend_now_ns()` e
-   `batch_size` piccolo
-2. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
-   quando il percorso sincrono multi-root e' stabile
+1. aggiungere uno scenario piu' vicino all'end-to-end per `IN_MOVE_SELF` reale
+   con recovery delayed
+2. misurare e documentare il costo di scan su alberi piu' grandi
+3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+   quando il percorso sincrono multi-root e' stabile sotto test
 
-Questo ordine evita di attaccare al runtime un processore che non conosce ancora
-il perimetro corretto di ricerca. Le root sono ora esplicite; il prossimo punto
-e' decidere quanta ricerca fare per ogni retry.
+Questo ordine evita di aggiungere concorrenza prima di sapere se il percorso
+sincrono bounded e' sufficiente. Le root sono esplicite e il poll spende un solo
+tentativo per giro; il prossimo punto e' verificare il comportamento con eventi
+kernel reali e con alberi piu' grandi.
