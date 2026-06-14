@@ -419,3 +419,13 @@ Completed in the runtime lost-scope scenario pass:
   `WATCH_LOST_RECOVERY_END`, and the final proof `FILE_CREATED`
 - updated the Italian scenario map and resync roadmap so the new test is tied
   to the backend recovery design, not treated as an isolated shell script
+
+Completed in the first performance benchmark pass:
+
+- added `tests/perf/bench_lost_scope_recovery.c` with comments that explain the
+  manual benchmark contract, output columns, fake watch operations, and why the
+  benchmark must not be used as a correctness or CI threshold
+- added `tests/perf/run_lost_scope_recovery.sh` as the build/run wrapper for the
+  manual lost-scope recovery benchmark
+- updated Italian docs to describe `make perf-lost-scope` and the future
+  performance-suite requirements for Alfred

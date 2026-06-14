@@ -1373,3 +1373,9 @@ Stati usati:
   configurata a un'altra. Il test fissa la catena `IN_MOVE_SELF` ->
   `WATCH_LOST_QUEUED` -> scan root A -> fallback root B ->
   `WATCH_LOST_RECOVERY_END` -> `FILE_CREATED` nel path recuperato.
+- `Makefile`, `tests/perf/bench_lost_scope_recovery.c`,
+  `tests/perf/run_lost_scope_recovery.sh`, `10-debugging-test-e-strumenti.md`
+  e `21-roadmap-scanner-resync.md`: aggiunto il primo benchmark manuale
+  `make perf-lost-scope` per misurare il costo della recovery lost-scope su
+  alberi sintetici. La doc chiarisce che non e' un gate CI e introduce la
+  roadmap per una futura suite performance stabile con baseline e percentili.

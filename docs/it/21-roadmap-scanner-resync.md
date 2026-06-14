@@ -3298,14 +3298,104 @@ Ottimizzazioni possibili:
 
 - usare `dirent.d_type` come fast path quando affidabile
 - chiamare `fstatat()` solo se servono metadati completi
-- aggiungere statistiche di scan
+- aggiungere statistiche di scan nel runtime
 - valutare batching o callback piu' specializzate
+- costruire una suite performance stabile con baseline e ripetizioni, non solo
+  benchmark manuali
 
 Non conviene ottimizzare prima di avere:
 
 - contratto stabile
 - test su errori/symlink
 - primo uso reale nel backend
+
+### Fase 10 - Benchmark manuale lost-scope
+
+Stato: primo strumento operativo.
+
+Il target:
+
+```bash
+make perf-lost-scope
+```
+
+compila `tests/perf/bench_lost_scope_recovery.c` ed esegue una recovery
+lost-scope sintetica su alberi di dimensioni crescenti. Il benchmark crea una
+subtree, salva l'identita' della directory osservata, sposta la subtree sotto
+una seconda root configurata e misura il tempo della recovery sincrona.
+
+Output:
+
+```text
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+```
+
+Esempio:
+
+```text
+dirs,result,elapsed_us,fake_adds,fake_removes,queue_after
+1000,found,230435,1000,0,0
+```
+
+Come leggerlo:
+
+- `dirs=1000`: il benchmark ha creato 1000 directory figlie dentro la subtree
+  spostata. La root della subtree, per esempio `lost/`, non e' contata in
+  questo numero.
+- `result=found`: la recovery ha ritrovato la directory osservata tramite la
+  sua identita' filesystem `(st_dev, st_ino)`, ha aggiornato il path salvato
+  nella watcher table e ha completato il ritorno a `VALID`.
+- `elapsed_us=230435`: la funzione misurata ha impiegato circa 230435
+  microsecondi, cioe' circa 230 millisecondi. Il valore e' utile per confrontare
+  due versioni del codice sulla stessa macchina, non come soglia assoluta.
+- `fake_adds=1000`: durante lo scan di copertura Alfred ha trovato 1000
+  directory reali senza watch gia' presente e avrebbe provato a reinstallare un
+  watch per ciascuna. Nel benchmark l'installazione e' finta per non misurare
+  `inotify_add_watch()`.
+- `fake_removes=0`: non c'e' stato rollback. Un valore maggiore di zero
+  indicherebbe che una reinstallazione finta e' fallita dopo alcune
+  reinstallazioni riuscite, quindi Alfred ha rimosso i watch aggiunti nello
+  stesso tentativo.
+- `queue_after=0`: la entry lost-scope e' stata consumata e non e' stata
+  rischedulata. Se il valore fosse maggiore di zero, significherebbe che la
+  recovery non ha chiuso il lavoro e la coda conserva ancora entry pendenti.
+
+Un'altra riga possibile:
+
+```text
+1000,failed,500000,300,300,1
+```
+
+Questa riga direbbe che la recovery non e' riuscita, ha provato a reinstallare
+300 watch finti, li ha rimossi in rollback e ha lasciato una entry in coda.
+Sarebbe un caso da analizzare nei log o in un benchmark piu' dettagliato.
+
+Perche' fake watch operations:
+
+- vogliamo misurare scanner, ricerca identita', aggiornamento path e policy di
+  recovery
+- non vogliamo confondere questi numeri con limiti kernel, allocazione reale dei
+  watch descriptor o latenza di `inotify_add_watch()`
+- il benchmark deve restare ripetibile anche su macchine con limiti inotify
+  diversi
+
+Questo strumento non e' ancora una suite performance completa. Serve per
+confrontare modifiche sullo stesso ambiente. I numeri non vanno usati come
+soglie assolute in CI.
+
+Roadmap performance futura:
+
+1. aggiungere ripetizioni e warmup
+2. calcolare min/median/p95 invece di una singola misura
+3. salvare baseline versionate per macchina o profilo di test
+4. distinguere benchmark micro, come scanner/recovery, da benchmark end-to-end
+   del binario `alfred`
+5. misurare separatamente throughput eventi, latenza di consegna, costo di
+   recovery, costo di startup ricorsivo e costo di logging
+6. documentare ambiente: filesystem, kernel, CPU, governor, debug/release,
+   sanitizers attivi o disattivi
+7. decidere quali benchmark possono essere informativi in CI e quali restano
+   manuali
 
 ## Prossimi passi consigliati
 
@@ -3322,14 +3412,19 @@ Lo stato corrente del branch e':
   `batch_size=1`
 - scenario runtime reale per `IN_MOVE_SELF` con directory spostata tra due root
   configurate e recovery delayed completata
+- benchmark manuale `make perf-lost-scope` per iniziare a misurare il costo
+  della recovery su alberi sintetici
 
 I prossimi passi, in ordine, sono:
 
-1. misurare e documentare il costo di scan su alberi piu' grandi
-2. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
+1. raccogliere qualche misura locale con `make perf-lost-scope` e, se serve,
+   aumentare le dimensioni degli alberi
+2. progettare la suite performance stabile di Alfred: baseline, ripetizioni,
+   percentili, profili e benchmark end-to-end
+3. rimandare worker thread, debounce avanzato e configurazione pubblica fino a
    quando il percorso sincrono multi-root e' stabile sotto test
 
 Questo ordine evita di aggiungere concorrenza prima di sapere se il percorso
 sincrono bounded e' sufficiente. Le root sono esplicite e il poll spende un solo
-tentativo per giro; il prossimo punto e' misurare il comportamento con alberi
-piu' grandi.
+tentativo per giro; il prossimo punto e' usare misure ripetibili per scegliere
+se questa soluzione basta o se serve una pipeline di recovery piu' articolata.
