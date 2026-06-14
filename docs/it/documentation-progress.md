@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `test_delete_self_nested_watch.sh`, `14-scenari-test.md`,
+  `20-matrice-eventi-inotify.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: fissato il contratto didattico per `IN_DELETE_SELF`
+  nel caso nested. Se parent e child sono entrambi watched, il parent
+  `IN_DELETE | IN_ISDIR name=child` produce un solo `DIR_DELETED`, mentre il
+  child `IN_DELETE_SELF` produce solo diagnostica `WATCH_STALE` e cleanup
+  `WATCH_REMOVED`, senza lost-scope recovery.
 - `inotify_backend.c`, `test_lost_scope_queue.c`,
   `test_lost_scope_recovery.c`, `14-scenari-test.md` e
   `21-roadmap-scanner-resync.md`: aggiunto il primo processore sincrono delle

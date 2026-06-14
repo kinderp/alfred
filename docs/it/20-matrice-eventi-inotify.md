@@ -227,13 +227,30 @@ modificato, cancellato o pronto.
 `IN_MOVED_FROM` e `IN_MOVED_TO`.
 
 Gli eventi senza suffisso `_SELF` descrivono figli dentro una directory
-osservata:
+osservata. Esempio da shell:
 
 ```text
 watch su /tmp/root
 rm /tmp/root/file.txt
     -> IN_DELETE name=file.txt
 ```
+
+Se il figlio e' una directory:
+
+```bash
+mkdir /tmp/root/child
+rm -rf /tmp/root/child
+```
+
+il watch sul parent `/tmp/root` puo' ricevere:
+
+```text
+IN_DELETE | IN_ISDIR name=child
+```
+
+Questo e' un fatto semantico sul figlio: Alfred conosce il parent, conosce il
+nome `child`, puo' costruire il path `/tmp/root/child` e puo' produrre
+`DIR_DELETED`.
 
 Gli eventi con suffisso `_SELF` descrivono invece il path osservato
 direttamente:
@@ -257,6 +274,51 @@ inoltrare solo i delete dei figli che il kernel produce davvero. Il segnale
 affidabile aggiuntivo di `IN_DELETE_SELF` e' che il path osservato direttamente
 non e' piu' valido. Quindi la futura semantica di `IN_DELETE_SELF` deve
 riguardare il path osservato.
+
+Il caso nested mostra perche' questa regola evita duplicati:
+
+```text
+watch su /tmp/root
+watch su /tmp/root/child
+
+rm -rf /tmp/root/child
+```
+
+Il parent puo' vedere:
+
+```text
+IN_DELETE | IN_ISDIR name=child
+```
+
+e questo puo' diventare:
+
+```text
+DIR_DELETED path=/tmp/root/child
+```
+
+Il watch del child puo' vedere anche:
+
+```text
+IN_DELETE_SELF name=
+IN_IGNORED name=
+```
+
+ma questi due fatti non devono generare un secondo `DIR_DELETED`. Alfred li usa
+come diagnostica del watch:
+
+```text
+WATCH_STALE               path=/tmp/root/child reason=IN_DELETE_SELF
+WATCH_STALE_EVENT_DROPPED path=/tmp/root/child mask=IN_IGNORED name=
+WATCH_REMOVED             path=/tmp/root/child
+```
+
+La differenza e' il payload: il parent event ha un `name` e quindi descrive il
+figlio cancellato; il self event non ha destinazione o nome figlio, descrive solo
+che il watch corrente non e' piu' affidabile e poi verra' rimosso dal kernel.
+L'ordine fra `DIR_DELETED` prodotto dal parent e `WATCH_STALE` prodotto dal child
+non e' il contratto: il kernel puo' consegnare prima il self-event o prima il
+parent event. Il contratto e' che il delete semantico compaia una sola volta e
+che nasca dal fatto con `name=child`, non dal self-event.
 
 Per `IN_MOVE_SELF` il discorso e' ancora piu' delicato:
 
@@ -307,11 +369,16 @@ piu' essere usato; un watch stale, invece, conserva informazione diagnostica ma
 richiede una policy di recovery prima di ricostruire path e semantica con
 sicurezza.
 
-Il test backend `test_self_events_root_watch.sh` fissa per ora il comportamento
-osservativo: controlla il raw log per gli eventi `_SELF`/`IN_IGNORED`, verifica
-che `IN_DELETE_SELF` e `IN_MOVE_SELF` producano `WATCH_STALE`, controlla il
-cleanup `WATCH_REMOVED` dopo `IN_DELETE_SELF` e conferma che Alfred non inventi
-delete dei figli o relocation semantiche.
+I test backend fissano per ora il comportamento osservativo:
+
+- `test_self_events_root_watch.sh` controlla il raw log per gli eventi
+  `_SELF`/`IN_IGNORED`, verifica che `IN_DELETE_SELF` e `IN_MOVE_SELF` producano
+  `WATCH_STALE`, controlla il cleanup `WATCH_REMOVED` dopo `IN_DELETE_SELF` e
+  conferma che Alfred non inventi delete dei figli o relocation semantiche
+- `test_delete_self_nested_watch.sh` controlla il caso nested con parent e child
+  entrambi watched: il parent `IN_DELETE | IN_ISDIR` produce un solo
+  `DIR_DELETED`, mentre il child `IN_DELETE_SELF` produce solo diagnostica
+  `WATCH_STALE` / `WATCH_REMOVED`
 
 ## Prossimi punti da discutere
 

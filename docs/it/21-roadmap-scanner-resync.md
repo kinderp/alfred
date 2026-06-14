@@ -210,11 +210,40 @@ rm -rf /tmp/root
     -> IN_IGNORED name=
 ```
 
+Esempio nested con parent e child entrambi osservati:
+
+```bash
+mkdir /tmp/root/child
+rm -rf /tmp/root/child
+```
+
+possibili fatti inotify:
+
+```text
+wd(parent=/tmp/root):
+    IN_DELETE | IN_ISDIR name=child
+
+wd(child=/tmp/root/child):
+    IN_DELETE_SELF name=
+    IN_IGNORED name=
+```
+
+Il primo fatto e' un evento su un figlio della directory parent. Alfred puo'
+costruire `/tmp/root/child` e produrre `DIR_DELETED`. Gli ultimi due fatti sono
+invece eventi sul watch del child: non portano un nome figlio, non devono
+generare un secondo `DIR_DELETED` e servono solo ad aggiornare lo stato backend
+del watch.
+
 Decisione per `IN_DELETE_SELF`:
 
 - non inventare delete per tutti i figli partendo da `IN_DELETE_SELF`
 - se il kernel produce davvero `IN_DELETE` per figli immediati, inoltrare quei
   fatti al core come oggi
+- se parent e child sono entrambi osservati, il delete semantico deve nascere dal
+  parent event `IN_DELETE | IN_ISDIR name=child`; il child self-event produce
+  solo `WATCH_STALE` e poi `WATCH_REMOVED`
+- non accodare lost-scope recovery per `IN_DELETE_SELF`: nel caso comune il
+  kernel sta rimuovendo il watch e non c'e' una destinazione da cercare
 - in futuro, valutare mapping di `IN_DELETE_SELF` a `ALFRED_RAW_DELETE` per il
   path osservato direttamente
 - la semantica candidata sarebbe `DIR_DELETED` per root directory osservate
@@ -1628,6 +1657,46 @@ modello diagnostico:
 - il core non riceve un nuovo raw delete per il path osservato direttamente
 - Alfred non inventa delete per i figli: restano validi solo i delete realmente
   consegnati dal kernel
+
+Il test `tests/backend/test_delete_self_nested_watch.sh` fissa il caso nested
+piu' importante:
+
+```bash
+mkdir "$TEST_ROOT/child"
+rm -rf "$TEST_ROOT/child"
+```
+
+Contratto atteso:
+
+```text
+parent raw:
+    IN_DELETE IN_ISDIR path=$TEST_ROOT name=child
+
+child raw:
+    IN_DELETE_SELF path=$TEST_ROOT/child name=
+    IN_IGNORED    path=$TEST_ROOT/child name=
+
+events:
+    DIR_DELETED               path=$TEST_ROOT/child
+    WATCH_STALE               path=$TEST_ROOT/child reason=IN_DELETE_SELF
+    WATCH_STALE_EVENT_DROPPED path=$TEST_ROOT/child mask=IN_IGNORED name=
+    WATCH_REMOVED             path=$TEST_ROOT/child
+```
+
+Il punto didattico e' che `DIR_DELETED` compare una sola volta. Se in futuro
+qualcuno trasformasse anche `IN_DELETE_SELF` in delete semantico senza una
+deduplica esplicita, questo scenario produrrebbe due delete per lo stesso path e
+il test fallirebbe. Per ora il self-event resta quindi diagnostico.
+
+L'ordine tra `DIR_DELETED` e `WATCH_STALE` non e' parte del contratto. In alcuni
+run il kernel consegna prima il self-event del child, in altri puo' consegnare
+prima il delete visto dal parent. Il test controlla invece tre proprieta' piu'
+importanti:
+
+- il delete semantico e' unico
+- `IN_DELETE_SELF` non accoda lost-scope recovery
+- `IN_IGNORED` su un watch gia' stale viene loggato come
+  `WATCH_STALE_EVENT_DROPPED` prima del cleanup `WATCH_REMOVED`
 
 Il prossimo passo prudente e':
 
