@@ -195,6 +195,16 @@ il candidato piu' utile da studiare per evitare sostituzioni accidentali di
 watch. `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu' legati a profili
 configurabili di hardening e riduzione rumore.
 
+`IN_MASK_CREATE` non dovrebbe entrare direttamente nella sintassi di
+`inotify_watch_mask`. Se Alfred lo usera', la scelta dovrebbe essere espressa
+come policy del backend, non come bit raw scelto dall'utente. Il motivo e'
+pratico: il flag non cambia gli eventi ricevuti, ma il comportamento di
+`inotify_add_watch()` quando un watch esiste gia'. In modalita' futura
+`strict`, un errore `EEXIST` indicherebbe una duplicazione reale da gestire o
+diagnosticare; non sarebbe corretto fare fallback silenzioso. Un fallback ha
+senso solo per compatibilita' con kernel che non supportano il flag, dopo aver
+distinto quel caso da una maschera davvero invalida.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:

@@ -315,7 +315,8 @@ proprietario reale di quelle opzioni e sono la forma preferita per i nuovi file
 di configurazione.
 
 La chiave `inotify_watch_mask` configura la maschera passata a
-`inotify_add_watch()`. Il valore puo' essere:
+`inotify_add_watch()` per scegliere quali eventi filesystem chiedere al kernel.
+Il valore puo' essere:
 
 ```text
 default
@@ -342,6 +343,14 @@ marca il watch `STALE` e produce `WATCH_STALE`, ma non diventa un evento core.
 Flag inotify reali ma non ancora supportati da Alfred, per esempio `IN_OPEN` o
 `IN_ACCESS`, vengono rifiutati finche' non decidiamo esplicitamente come
 osservarli e documentarli.
+
+`inotify_watch_mask` non e' il posto giusto per flag di installazione come
+`IN_ONLYDIR` o `IN_MASK_CREATE`. `IN_ONLYDIR` e' applicato internamente dal watch
+manager per garantire che Alfred installi watch solo su directory.
+`IN_MASK_CREATE`, se verra' introdotto, dovra' essere governato da una policy
+separata del backend, per esempio `inotify_watch_create_policy=strict|compat`.
+Questa distinzione evita di confondere due decisioni diverse: quali eventi
+osservare e con quale disciplina installare i watch.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

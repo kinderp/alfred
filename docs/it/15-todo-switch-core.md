@@ -746,6 +746,10 @@ resta rimandata. La nuova area di lavoro non e' piu' "shadow vs core", ma la
 mappa degli eventi/flag inotify non ancora abilitati: `IN_ACCESS`, `IN_OPEN` e
 `IN_CLOSE_NOWRITE` come possibili eventi audit; `IN_ONLYDIR` e
 `IN_MASK_CREATE` come candidati di robustezza per l'installazione dei watch.
+`IN_MASK_CREATE` non deve essere aggiunto alla configurazione come semplice
+token di `inotify_watch_mask`: serve prima una policy esplicita del backend,
+per esempio `strict|compat`, per distinguere l'errore utile `EEXIST` dal
+fallback di compatibilita' su kernel che non supportano il flag.
 
 ### 1b. Stabilizzare la suite core end-to-end
 
@@ -1179,8 +1183,10 @@ Stato aggiornato: la traduzione minima dell'overflow e' stata implementata, ma
 la parte difficile descritta sopra resta valida. In parallelo, la matrice
 eventi inotify ora classifica anche gli eventi audit non gestiti e i flag di
 installazione watch. Il primo flag da valutare in codice dovrebbe essere
-`IN_ONLYDIR`; subito dopo, `IN_MASK_CREATE` con fallback per kernel che non lo
-supportano.
+`IN_ONLYDIR`, gia' implementato. Il passo successivo su `IN_MASK_CREATE` deve
+invece partire dalla policy: modalita' strict per evitare sostituzioni
+accidentali di watch esistenti, modalita' compat per mantenere il comportamento
+storico o supportare kernel senza quel flag.
 
 ## Fase A: documentazione pesante del codice
 

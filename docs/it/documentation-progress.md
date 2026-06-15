@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_MASK_CREATE`. La scelta e' di non esporlo ora dentro
+  `inotify_watch_mask`, perche' e' un flag di installazione dei watch e non un
+  evento filesystem. La documentazione distingue la futura modalita'
+  `strict|compat`, l'errore `EEXIST` e il fallback di compatibilita' su kernel
+  vecchi.
 - `watch_manager.c`, `test_onlydir_rejects_file_root.sh`,
   `05-modulo-inotify.md`, `14-scenari-test.md`,
   `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md` e

@@ -232,7 +232,7 @@ eventi filesystem e quindi non devono diventare `ALFRED_RAW_*`.
 | `IN_MASK_ADD` | Aggiunge eventi a un watch esistente invece di sostituire la maschera | No | Riguarda la policy di gestione watch. Da valutare quando si rivede `watch_manager_add()`. |
 | `IN_ONESHOT` | Rimuove il watch dopo un solo evento | No | Non adatto al monitoraggio continuo di Alfred. |
 | `IN_ONLYDIR` | Aggiunge il watch solo se il path e' una directory | Si | Usato internamente da `watch_manager_add()` come hardening backend. Non e' configurabile e non entra in `ALFRED_RAW_*`. |
-| `IN_MASK_CREATE` | Crea il watch solo se non esiste gia' | No | Potrebbe aiutare a evitare sostituzioni accidentali di watch su stesso inode. Da studiare insieme alla tabella watch. |
+| `IN_MASK_CREATE` | Crea il watch solo se non esiste gia' | No | Potrebbe aiutare a evitare sostituzioni accidentali di watch su stesso inode. Non va esposto ora come token di `inotify_watch_mask`: e' una policy di installazione, non una scelta sugli eventi da osservare. |
 
 ### Decisione dettagliata sui flag di watch
 
@@ -257,6 +257,57 @@ decisione di compatibilita' kernel: non tutti gli ambienti vecchi supportano il
 flag. `IN_EXCL_UNLINK` e `IN_DONT_FOLLOW` sono piu' legati a profili
 configurabili: prestazioni/rumore nel primo caso, hardening/symlink policy nel
 secondo.
+
+#### Policy proposta per `IN_MASK_CREATE`
+
+`IN_MASK_CREATE` non deve essere trattato come `IN_CREATE` o `IN_MODIFY`.
+Questi ultimi sono eventi che l'utente chiede al kernel di notificare.
+`IN_MASK_CREATE`, invece, cambia il modo in cui il backend installa un watch:
+chiede al kernel di fallire se sull'oggetto esiste gia' un watch inotify invece
+di aggiornare implicitamente la maschera del watch esistente.
+
+Per questo motivo la scelta corrente e' di non renderlo configurabile come
+token dentro `inotify_watch_mask`. Quella chiave deve restare una maschera di
+sottoscrizione degli eventi filesystem. Mischiare nello stesso campo anche i
+flag di installazione renderebbe piu' difficile spiegare cosa stia scegliendo
+l'utente e potrebbe trasformare un dettaglio interno del backend in un
+contratto pubblico prematuro.
+
+La configurazione futura dovrebbe essere una policy esplicita, per esempio:
+
+```text
+inotify_watch_create_policy=strict
+inotify_watch_create_policy=compat
+```
+
+Il significato proposto e':
+
+- `strict`: Alfred prova a usare `IN_MASK_CREATE` quando installa un watch.
+  Se il kernel risponde `EEXIST`, significa che sullo stesso oggetto esiste gia'
+  un watch. In quel caso Alfred non deve fare fallback silenzioso, perche'
+  perderebbe proprio la protezione che il flag offre.
+- `compat`: Alfred usa il comportamento storico senza `IN_MASK_CREATE`.
+  Questa modalita' puo' servire su kernel vecchi o in ambienti dove si vuole
+  mantenere esattamente la semantica precedente.
+
+Il fallback e' accettabile solo per il caso di compatibilita' kernel. Un errore
+`EINVAL` puo' indicare che il kernel non conosce `IN_MASK_CREATE`, ma puo' anche
+indicare una maschera non valida. Per questo Alfred dovrebbe idealmente fare un
+probe controllato oppure una singola retry documentata togliendo solo
+`IN_MASK_CREATE`, registrando nel log diagnostico che la modalita' strict e'
+stata degradata per compatibilita'. `EEXIST`, invece, non e' un problema di
+compatibilita': e' il segnale che il watch esiste gia' e deve restare visibile
+come fatto di policy/debug.
+
+I test futuri dovranno coprire almeno tre casi:
+
+- aggiunta duplicata della stessa directory, con risultato atteso `EEXIST` in
+  modalita' strict
+- path diversi che raggiungono lo stesso oggetto filesystem, quando l'ambiente
+  di test lo permette
+- fallback compatibile su kernel senza supporto a `IN_MASK_CREATE`, da testare
+  preferibilmente con helper/fake o test condizionale, senza richiedere un
+  kernel vecchio nella CI ordinaria
 
 La scelta su `IN_ONLYDIR` deriva anche da una considerazione prestazionale:
 Alfred non dovrebbe installare un watch per ogni file. Se una directory padre e'
