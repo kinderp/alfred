@@ -232,6 +232,11 @@ sono eventi semantici del core.
 | `WATCH_STALE wd=N path=P reason=R` | backend self-event/unmount handling | dopo `IN_MOVE_SELF`, `IN_DELETE_SELF` o `IN_UNMOUNT` sul path osservato direttamente | il mapping `wd -> path` non e' piu' affidabile e non va usato come se fosse valido | non significa delete, move o rename semantico; e' stato interno del backend. Nel caso nested, `IN_DELETE_SELF` del child non deve duplicare il `DIR_DELETED` prodotto dal parent `IN_DELETE | IN_ISDIR name=child`; nel caso `IN_UNMOUNT`, lo smontaggio non equivale a cancellazione del contenuto | `test_self_events_root_watch.sh`, `test_delete_self_nested_watch.sh`, `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh` |
 | `WATCH_STALE_EVENT_DROPPED wd=N path=P mask=M name=Q` | `backend_poll()` | il kernel invia un evento per un `wd` ancora attivo ma marcato `STALE` | Alfred ha visto un fatto kernel, ma non lo inoltra al core perche' `P` non e' piu' affidabile | non significa che l'evento non sia accaduto; significa che Alfred non puo' costruire un raw/core event con path corretto | `test_self_events_root_watch.sh` |
 
+`WATCH_ADDED` oggi implica anche che il path osservato e' una directory:
+`watch_manager_add()` passa `IN_ONLYDIR` a `inotify_add_watch()`. Un file
+passato come root non deve produrre `WATCH_ADDED`; deve fallire con diagnostica
+di errore backend, come verificato da `test_onlydir_rejects_file_root.sh`.
+
 ## Diagnostica backend del resync
 
 Questi log descrivono il tentativo di recuperare fiducia dopo che un watch e'

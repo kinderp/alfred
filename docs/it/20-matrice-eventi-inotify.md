@@ -231,7 +231,7 @@ eventi filesystem e quindi non devono diventare `ALFRED_RAW_*`.
 | `IN_EXCL_UNLINK` | Evita eventi su figli gia' rimossi dalla directory | No | Potrebbe ridurre rumore in directory come `/tmp`. Da valutare come opzione backend. |
 | `IN_MASK_ADD` | Aggiunge eventi a un watch esistente invece di sostituire la maschera | No | Riguarda la policy di gestione watch. Da valutare quando si rivede `watch_manager_add()`. |
 | `IN_ONESHOT` | Rimuove il watch dopo un solo evento | No | Non adatto al monitoraggio continuo di Alfred. |
-| `IN_ONLYDIR` | Aggiunge il watch solo se il path e' una directory | No | Potrebbe essere utile per rendere race-free i watch ricorsivi. Da valutare nel backend, non nel core. |
+| `IN_ONLYDIR` | Aggiunge il watch solo se il path e' una directory | Si | Usato internamente da `watch_manager_add()` come hardening backend. Non e' configurabile e non entra in `ALFRED_RAW_*`. |
 | `IN_MASK_CREATE` | Crea il watch solo se non esiste gia' | No | Potrebbe aiutare a evitare sostituzioni accidentali di watch su stesso inode. Da studiare insieme alla tabella watch. |
 
 ### Decisione dettagliata sui flag di watch
@@ -244,19 +244,25 @@ configurazione del backend inotify, probabilmente in una chiave separata da
 
 | Flag | Priorita' | Decisione proposta | Motivazione tecnica | Test futuro |
 | --- | --- | --- | --- | --- |
-| `IN_ONLYDIR` | Alta | Valutare per i watch ricorsivi su directory | Rende atomico il controllo "questo path e' una directory" dentro `inotify_add_watch()`. Oggi Alfred fa `stat()` prima e dopo, ma `IN_ONLYDIR` aggiungerebbe una garanzia kernel specifica per directory | provare che un file passato come root o scoperto come child non venga accettato come directory watched |
+| `IN_ONLYDIR` | Implementata | Usata sempre per i watch directory-scoped | Rende atomico il controllo "questo path e' una directory" dentro `inotify_add_watch()`. Alfred fa ancora `stat()` prima e dopo per l'identita', ma il kernel rifiuta subito i file con `ENOTDIR` | `tests/backend/test_onlydir_rejects_file_root.sh` prova che un file root non riceve `WATCH_ADDED` |
 | `IN_MASK_CREATE` | Alta, con fallback | Valutare per evitare sostituzioni accidentali di watch esistenti | Senza questo flag, una nuova `inotify_add_watch()` sullo stesso oggetto puo' modificare la maschera di un watch gia' presente. Alfred ha una watcher table propria, quindi deve evitare di clobberare policy esistenti senza accorgersene | test con due path che arrivano allo stesso inode quando l'ambiente lo permette; fallback se il kernel non supporta Linux >= 4.18 |
 | `IN_DONT_FOLLOW` | Media | Possibile hardening configurabile | Evita di seguire symlink quando il path del watch e' un link simbolico. Utile per sicurezza e prevedibilita', ma cambia comportamento per utenti che vogliono osservare il target del link | test con symlink root: una modalita' segue il target, una modalita' rifiuta/non segue |
 | `IN_EXCL_UNLINK` | Media | Possibile opzione prestazionale per directory rumorose | Riduce eventi su figli gia' rimossi dalla directory, caso tipico di `/tmp` e file temporanei unlinkati subito. Puo' diminuire rumore, ma rischia di nascondere fatti utili ad audit forense | stress test su file temporanei creati e unlinkati subito; confrontare volume raw log |
 | `IN_MASK_ADD` | Bassa | Non necessario finche' Alfred possiede tutta la maschera del watch | Serve ad aggiungere bit a una maschera esistente. Alfred oggi preferisce calcolare una maschera completa e installarla in modo controllato | test unitario solo se introdurremo aggiornamento dinamico parziale delle mask |
 | `IN_ONESHOT` | Esclusa per runtime | Non usare nel monitoraggio normale | Alfred e' un motore continuo. Un watch che si rimuove dopo un solo evento romperebbe la copertura ricorsiva e produrrebbe cleanup inatteso | eventualmente solo test diagnostico isolato, non runtime |
 
-La priorita' piu' concreta e' `IN_ONLYDIR`, perche' si lega direttamente alla
-robustezza dei watch ricorsivi. `IN_MASK_CREATE` e' promettente ma richiede una
+`IN_ONLYDIR` e' stato implementato perche' si lega direttamente alla robustezza
+dei watch ricorsivi. `IN_MASK_CREATE` resta promettente ma richiede una
 decisione di compatibilita' kernel: non tutti gli ambienti vecchi supportano il
 flag. `IN_EXCL_UNLINK` e `IN_DONT_FOLLOW` sono piu' legati a profili
 configurabili: prestazioni/rumore nel primo caso, hardening/symlink policy nel
 secondo.
+
+La scelta su `IN_ONLYDIR` deriva anche da una considerazione prestazionale:
+Alfred non dovrebbe installare un watch per ogni file. Se una directory padre e'
+osservata, gli eventi sui file figli arrivano gia' tramite quella directory. I
+watch file-level consumerebbero descrittori e memoria kernel senza migliorare
+la copertura del modello corrente.
 
 ## Stato per livello Alfred
 

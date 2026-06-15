@@ -125,11 +125,14 @@ config_defaults()
 app_build_inotify_backend_context()
     -> ctx.config = &app->config.inotify
 watch_manager_add()
-    -> inotify_add_watch(..., ctx->config->watch_mask)
+    -> inotify_add_watch(..., ctx->config->watch_mask | IN_ONLYDIR)
 ```
 
 Quindi la configurazione applicativa contiene davvero la maschera usata dal
 runtime, ma dentro una sottostruttura dedicata al backend inotify.
+`IN_ONLYDIR` non e' configurazione di eventi: e' un flag di installazione del
+watch. Alfred lo aggiunge sempre nel watch manager perche' il backend inotify
+osserva directory root e subdirectory ricorsive, non file singoli.
 
 La maschera e' configurabile da file con:
 
@@ -187,9 +190,10 @@ watch, raw event Alfred e semantica core.
 La scelta corrente sui flag non gestiti e' conservativa: `IN_ACCESS`,
 `IN_OPEN` e `IN_CLOSE_NOWRITE` restano fuori dal core filesystem perche'
 descrivono audit/lettura, non mutazioni. Tra i flag di installazione del watch,
-`IN_ONLYDIR` e `IN_MASK_CREATE` sono i candidati piu' utili da studiare per
-robustezza del backend; `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu'
-legati a profili configurabili di hardening e riduzione rumore.
+`IN_ONLYDIR` e' ora usato come hardening interno, mentre `IN_MASK_CREATE` resta
+il candidato piu' utile da studiare per evitare sostituzioni accidentali di
+watch. `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu' legati a profili
+configurabili di hardening e riduzione rumore.
 
 ## Watch descriptor
 

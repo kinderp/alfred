@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `watch_manager.c`, `test_onlydir_rejects_file_root.sh`,
+  `05-modulo-inotify.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md` e
+  `22-contratto-log.md`: `IN_ONLYDIR` e' ora applicato internamente dal watch
+  manager. Alfred installa watch su directory, non su file singoli; i file sono
+  osservati tramite la directory padre per evitare consumo inutile di watch
+  descriptor e memoria kernel.
 - `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
   `15-todo-switch-core.md`: ampliata la mappa degli eventi e flag inotify non
   gestiti. La documentazione ora distingue eventi audit rumorosi

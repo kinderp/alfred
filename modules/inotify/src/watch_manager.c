@@ -81,6 +81,25 @@ static int watch_manager_add_scanned_dir(const fs_scan_entry_t *entry,
     return 0;
 }
 
+/*
+ * watch_manager_install_mask - combine event subscription with install flags
+ * @ctx: backend context that owns the inotify configuration
+ *
+ * config.watch_mask contains the events Alfred wants to receive. IN_ONLYDIR is
+ * different: it is an inotify_add_watch() installation flag that asks the
+ * kernel to reject non-directory paths atomically. Alfred currently watches
+ * directory roots and recursive subdirectories, so file-level watches would
+ * add cost without improving coverage: changes to files are already observed
+ * through the parent directory watch.
+ *
+ * Return: mask passed to inotify_add_watch().
+ */
+static uint32_t watch_manager_install_mask(
+    const inotify_backend_context_t *ctx)
+{
+    return ctx->config->watch_mask | IN_ONLYDIR;
+}
+
 /* ============================================================================
  * DEFAULT WATCH MASK
  * ========================================================================== */
@@ -128,8 +147,12 @@ uint32_t watch_manager_default_mask(void)
  * before and after inotify_add_watch() so Alfred does not store identity for a
  * different object if @path changes during watch installation.
  *
- * The WATCH_ADDED log documents that Alfred can now observe @path. It is not a
- * substitute for DIR_CREATED and must not be consumed as a semantic core event.
+ * IN_ONLYDIR is added at install time so a caller cannot accidentally add a
+ * file watch. Watching every file would waste watch descriptors and memory
+ * while the parent directory watch already reports file create/delete/modify
+ * facts. The WATCH_ADDED log documents that Alfred can now observe @path. It
+ * is not a substitute for DIR_CREATED and must not be consumed as a semantic
+ * core event.
  *
  * Return: watch descriptor on success, -1 on failure.
  */
@@ -160,7 +183,7 @@ int watch_manager_add(inotify_backend_context_t *ctx,
     int wd =
         inotify_add_watch(ctx->runtime->fd,
                           path,
-                          ctx->config->watch_mask);
+                          watch_manager_install_mask(ctx));
 
     if (wd < 0) {
 

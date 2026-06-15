@@ -113,8 +113,10 @@ Passi principali del ciclo backend:
 2. `inotify_backend_add_startup_watch()` installa i watch sui path passati da
    riga di comando.
 3. `watch_manager_add()` cattura l'identita' con `stat()`, chiama
-   `inotify_add_watch()` usando `config.inotify.watch_mask`, poi ricontrolla
-   l'identita' con una seconda `stat()`.
+   `inotify_add_watch()` usando `config.inotify.watch_mask | IN_ONLYDIR`, poi
+   ricontrolla l'identita' con una seconda `stat()`. `IN_ONLYDIR` e' un flag di
+   installazione: impedisce watch file-level e preserva il modello
+   directory-scoped del backend.
 4. `watcher_store_identity()` salva `wd -> path` e l'identita' `st_dev/st_ino`.
 5. `inotify_backend_poll()` legge uno o piu' record dal file descriptor.
 6. `watcher_get_path()` recupera la directory parent associata al `wd`.
@@ -513,7 +515,7 @@ flowchart TD
     B --> M["watch_mask"]
 
     D --> F["watcher_init(capacity)"]
-    M --> G["inotify_add_watch(mask)"]
+    M --> G["inotify_add_watch(mask | IN_ONLYDIR)"]
 ```
 
 Campi rilevanti:
@@ -522,12 +524,12 @@ Campi rilevanti:
 | --- | --- | --- | --- |
 | `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
-| `inotify.watch_mask` | maschera inotify usata per aggiungere watch | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
+| `inotify.watch_mask` | maschera eventi inotify usata per aggiungere watch; il watch manager aggiunge poi `IN_ONLYDIR` come flag di installazione | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` delega a `inotify_config_defaults()`, questa prende il
 valore da `watch_manager_default_mask()`, poi `watch_manager_add()` usa quel
-valore quando chiama `inotify_add_watch()`.
+valore insieme a `IN_ONLYDIR` quando chiama `inotify_add_watch()`.
 
 ```mermaid
 sequenceDiagram
