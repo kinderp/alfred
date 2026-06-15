@@ -229,7 +229,7 @@ sono eventi semantici del core.
 | --- | --- | --- | --- | --- | --- |
 | `WATCH_ADDED wd=N path=P` | `watch_manager_add()` | dopo un `inotify_add_watch()` riuscito | Alfred sta osservando `P` con il watch descriptor `N` | non significa `DIR_CREATED`; una directory puo' esistere gia' e ricevere solo ora un watch | `test_watch_added_create_dir.sh`, `test_recursive_slow_watch_tree.sh` |
 | `WATCH_REMOVED wd=N path=P` | `watch_manager_remove()` | dopo rimozione esplicita o cleanup da `IN_IGNORED` | Alfred non osserva piu' `P` con quel watch | non significa `DIR_DELETED`; la rimozione del watch e la cancellazione del path sono fatti diversi. Se esiste un delete semantico, deve arrivare da un raw delete reale, per esempio dal parent `IN_DELETE name=child` | `test_watch_removed_delete_dir.sh`, `test_self_events_root_watch.sh`, `test_delete_self_nested_watch.sh` |
-| `WATCH_STALE wd=N path=P reason=R` | backend self-event handling | dopo `IN_MOVE_SELF` o `IN_DELETE_SELF` sul path osservato direttamente | il mapping `wd -> path` non e' piu' affidabile e non va usato come se fosse valido | non significa delete, move o rename semantico; e' stato interno del backend. Nel caso nested, `IN_DELETE_SELF` del child non deve duplicare il `DIR_DELETED` prodotto dal parent `IN_DELETE | IN_ISDIR name=child` | `test_self_events_root_watch.sh`, `test_delete_self_nested_watch.sh`, `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh` |
+| `WATCH_STALE wd=N path=P reason=R` | backend self-event/unmount handling | dopo `IN_MOVE_SELF`, `IN_DELETE_SELF` o `IN_UNMOUNT` sul path osservato direttamente | il mapping `wd -> path` non e' piu' affidabile e non va usato come se fosse valido | non significa delete, move o rename semantico; e' stato interno del backend. Nel caso nested, `IN_DELETE_SELF` del child non deve duplicare il `DIR_DELETED` prodotto dal parent `IN_DELETE | IN_ISDIR name=child`; nel caso `IN_UNMOUNT`, lo smontaggio non equivale a cancellazione del contenuto | `test_self_events_root_watch.sh`, `test_delete_self_nested_watch.sh`, `test_self_move_identity_match.sh`, `test_self_move_identity_mismatch.sh` |
 | `WATCH_STALE_EVENT_DROPPED wd=N path=P mask=M name=Q` | `backend_poll()` | il kernel invia un evento per un `wd` ancora attivo ma marcato `STALE` | Alfred ha visto un fatto kernel, ma non lo inoltra al core perche' `P` non e' piu' affidabile | non significa che l'evento non sia accaduto; significa che Alfred non puo' costruire un raw/core event con path corretto | `test_self_events_root_watch.sh` |
 
 ## Diagnostica backend del resync
@@ -340,7 +340,7 @@ l'utente. Possono essere combinati con `ALFRED_RAW_ISDIR`.
 | `ALFRED_RAW_CLOSE_WRITE` | `IN_CLOSE_WRITE` | uno scrittore ha chiuso il file |
 | `ALFRED_RAW_MOVED_FROM` | `IN_MOVED_FROM` | vecchio path di una correlazione move/rename |
 | `ALFRED_RAW_MOVED_TO` | `IN_MOVED_TO` | nuovo path di una correlazione move/rename |
-| `ALFRED_RAW_OVERFLOW` | `IN_Q_OVERFLOW` | la coda ha perso eventi |
+| `ALFRED_RAW_OVERFLOW` | `IN_Q_OVERFLOW` con `wd=-1` | la coda ha perso eventi; il raw event e' globale e porta path vuoto |
 | `ALFRED_RAW_ISDIR` | `IN_ISDIR` | flag: il soggetto e' una directory |
 
 ## Eventi semantici core
@@ -362,7 +362,7 @@ emessi dal core e formattati in `events.log`.
 | `DIR_MOVED from=A to=B` | come sopra per directory | stessa directory spostata in altro parent |
 | `FILE_RELOCATED from=A to=B` | parent e basename diversi | file spostato e rinominato insieme |
 | `DIR_RELOCATED from=A to=B` | come sopra per directory | directory spostata e rinominata insieme |
-| `OVERFLOW path=` | raw overflow | lo stream e' incompleto; serve rescan/recovery |
+| `OVERFLOW path=` | raw overflow | lo stream e' incompleto; serve rescan/recovery futura. Il path e' vuoto perche' l'overflow riguarda l'istanza inotify, non un singolo watch |
 
 ## Regole da ricordare
 

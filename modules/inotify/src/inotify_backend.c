@@ -300,6 +300,9 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
 static void backend_handle_delete_self(inotify_backend_context_t *ctx,
                                        const struct inotify_event *ev);
 
+static void backend_handle_unmount(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev);
+
 static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
@@ -487,6 +490,9 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        const char *reason,
                                        backend_resync_probe_result_t result,
                                        int saved_errno);
+
+static int backend_build_overflow_raw(const struct inotify_event *ev,
+                                      alfred_raw_event_t *out);
 
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
@@ -1903,7 +1909,10 @@ static int backend_poll(inotify_backend_context_t *ctx,
         char full_path[PATH_MAX];
         const alfred_raw_event_t *raw_ptr = NULL;
 
-        if (parent != NULL && !stale_watch) {
+        if (backend_build_overflow_raw(ev, &raw) == 0) {
+            raw_ptr = &raw;
+        }
+        else if (parent != NULL && !stale_watch) {
             if (inotify_adapter_build_raw(ev,
                                           parent,
                                           full_path,
@@ -1941,6 +1950,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
         backend_handle_move_self(ctx, ev);
 
         backend_handle_delete_self(ctx, ev);
+
+        backend_handle_unmount(ctx, ev);
 
         backend_handle_ignored(ctx, ev);
 
@@ -2065,6 +2076,51 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
 
     logger_event(ctx->logger,
                  "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
+                 ev->wd,
+                 path ? path : "");
+}
+
+/*
+ * backend_handle_unmount - mark a watched filesystem scope as unavailable
+ * @ctx: narrowed backend context used by the poll path
+ * @ev: raw inotify event currently being processed
+ *
+ * IN_UNMOUNT says that the filesystem containing the watched object was
+ * unmounted. That is not a semantic delete: the object may become available
+ * again if the filesystem is mounted again, and inotify does not describe
+ * child paths that should be deleted. The only safe immediate contract is
+ * backend diagnostics: mark the wd -> path mapping STALE, then let the
+ * following IN_IGNORED cleanup remove the watch-table slot.
+ *
+ * Unlike IN_MOVE_SELF, this handler does not start lost-scope recovery. The
+ * watched filesystem is not available through the current mount namespace, so
+ * an identity scan would spend work on a scope that cannot be trusted.
+ */
+static void backend_handle_unmount(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev)
+{
+    if (ctx == NULL || ev == NULL)
+        return;
+
+    if ((ev->mask & IN_UNMOUNT) == 0)
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, ev->wd);
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          ev->wd,
+                          WATCHER_STATE_STALE) != 0) {
+
+        logger_error(ctx->logger,
+                     "failed to mark watch stale wd=%d reason=IN_UNMOUNT",
+                     ev->wd);
+
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE wd=%d path=%s reason=IN_UNMOUNT",
                  ev->wd,
                  path ? path : "");
 }
@@ -3244,6 +3300,44 @@ static uint64_t backend_now_ns(void)
 }
 
 /*
+ * backend_build_overflow_raw - build the global raw event for IN_Q_OVERFLOW
+ * @ev: raw inotify event currently being processed
+ * @out: destination raw event for the core
+ *
+ * Queue overflow is different from ordinary inotify records: the kernel emits
+ * it with wd=-1 because it describes the whole inotify instance, not one
+ * watched path. The normal adapter path needs a watcher-table parent path, so
+ * overflow must be bridged explicitly at the backend boundary.
+ *
+ * The resulting raw event intentionally carries an empty path. The core treats
+ * ALFRED_RAW_OVERFLOW as a stream-integrity diagnostic and emits OVERFLOW
+ * without reading raw.path. Complete cache/watch recovery remains a separate
+ * resync policy.
+ *
+ * Return: 0 when @ev is an overflow event and @out was filled, -1 otherwise.
+ */
+static int backend_build_overflow_raw(const struct inotify_event *ev,
+                                      alfred_raw_event_t *out)
+{
+    if (ev == NULL || out == NULL)
+        return -1;
+
+    if ((ev->mask & IN_Q_OVERFLOW) == 0)
+        return -1;
+
+    memset(out, 0, sizeof(*out));
+
+    out->ts_ns = backend_now_ns();
+    out->source = ALFRED_SRC_INOTIFY;
+    out->mask = ALFRED_RAW_OVERFLOW;
+    out->cookie = ev->cookie;
+    out->pid = 0;
+    out->path = "";
+
+    return 0;
+}
+
+/*
  * backend_raw_event_name_from_mask - render an inotify mask for raw logging
  * @mask: Linux inotify event mask
  * @dest: destination buffer
@@ -3282,6 +3376,8 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
         strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVE_SELF)
         strncat(dest, "IN_MOVE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_UNMOUNT)
+        strncat(dest, "IN_UNMOUNT ", dest_size - strlen(dest) - 1);
     if (mask & IN_IGNORED)
         strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
     if (mask & IN_Q_OVERFLOW)

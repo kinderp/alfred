@@ -89,9 +89,9 @@ static int watch_manager_add_scanned_dir(const fs_scan_entry_t *entry,
  * watch_manager_default_mask - return the default inotify subscription mask
  *
  * The mask includes creation/deletion, modify/attrib/close-write, child move
- * pairs, watched-object self events, watch removal diagnostics, and queue
- * overflow. It is stored in config_t so future configuration can override it
- * without changing watch_manager_add().
+ * pairs, watched-object self events, unmount diagnostics, watch removal
+ * diagnostics, and queue overflow. It is stored in config_t so future
+ * configuration can override it without changing watch_manager_add().
  *
  * Return: OR-ed IN_* mask flags.
  */
@@ -107,6 +107,7 @@ uint32_t watch_manager_default_mask(void)
         IN_MOVED_TO    |
         IN_DELETE_SELF |
         IN_MOVE_SELF   |
+        IN_UNMOUNT     |
         IN_IGNORED     |
         IN_Q_OVERFLOW;
 }
