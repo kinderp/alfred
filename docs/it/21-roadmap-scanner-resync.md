@@ -31,6 +31,7 @@ Stato funzionale dopo i micro-step successivi:
 - la watcher table salva identita' filesystem `(st_dev, st_ino)`
 - i watch possono passare tra `VALID`, `STALE`, `RESYNCING` e `REMOVED`
 - `IN_MOVE_SELF` marca il watch come `STALE`
+- `IN_UNMOUNT` marca il watch come `STALE` e attende `IN_IGNORED`
 - il ramo `IN_MOVE_SELF` con identita' confermata esegue uno scan
   directory-only sul vecchio path tornato affidabile
 - lo scan conta directory viste, directory gia' watched e directory missing
@@ -1595,12 +1596,35 @@ stato. La seconda preserva informazione diagnostica per decidere una recovery.
 | --- | --- | --- |
 | `IN_DELETE_SELF` | Il path osservato direttamente e' stato cancellato | Implementato: marcare stale e loggare `WATCH_STALE`; attendere `IN_IGNORED` per cleanup; valutare in futuro `ALFRED_RAW_DELETE` sul path osservato |
 | `IN_MOVE_SELF` | Il path osservato e' stato spostato senza destinazione | Implementato: marcare stale e loggare `WATCH_STALE`; non emettere move/rename/relocated |
-| `IN_UNMOUNT` | Il filesystem osservato non e' piu' disponibile | Marcare la subtree non affidabile e produrre diagnostica backend |
+| `IN_UNMOUNT` | Il filesystem osservato non e' piu' disponibile | Implementato il primo livello: marcare stale e loggare `WATCH_STALE`; attendere `IN_IGNORED` per cleanup; non avviare lost-scope recovery immediata |
 | `IN_Q_OVERFLOW` | La coda ha perso eventi, quindi lo stream e' incompleto | Marcare lo stato globale o la subtree come stale e progettare una procedura di resync |
 
 Questa tabella non decide ancora la semantica finale. Decide il primo livello:
 quando il backend puo' continuare a fidarsi della propria tabella e quando deve
 fermarsi, diagnosticare o ricostruire.
+
+Per `IN_UNMOUNT` la scelta e' volutamente piu' conservativa di `IN_MOVE_SELF`.
+Nel caso `IN_MOVE_SELF` l'oggetto osservato puo' ancora esistere nella stessa
+mount namespace e il backend puo' provare a ritrovarlo tramite identita'
+salvata. Nel caso `IN_UNMOUNT`, invece, il filesystem che contiene l'oggetto
+non e' piu' disponibile: una scansione immediata dello stesso scope non puo'
+dimostrare affidabilita'. Per questo il micro-step corrente si ferma a:
+
+```text
+IN_UNMOUNT
+    -> raw backend log "IN_UNMOUNT"
+    -> WATCH_STALE reason=IN_UNMOUNT
+IN_IGNORED
+    -> WATCH_REMOVED
+core
+    -> nessun evento semantico
+```
+
+Un test end-to-end che generi davvero `IN_UNMOUNT` richiederebbe privilegi di
+mount/unmount o una mount namespace controllata. Per la suite portabile viene
+fissato solo il contratto configurabile (`IN_UNMOUNT` e' un token accettato) e
+il resto rimane documentato come comportamento runtime atteso quando il kernel
+emette l'evento.
 
 #### Ruolo dello scanner nel resync
 

@@ -300,6 +300,9 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
 static void backend_handle_delete_self(inotify_backend_context_t *ctx,
                                        const struct inotify_event *ev);
 
+static void backend_handle_unmount(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev);
+
 static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
                                  const char *reason);
@@ -1942,6 +1945,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
 
         backend_handle_delete_self(ctx, ev);
 
+        backend_handle_unmount(ctx, ev);
+
         backend_handle_ignored(ctx, ev);
 
         backend_handle_dir_create(ctx, ev, on_event, userdata);
@@ -2065,6 +2070,51 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
 
     logger_event(ctx->logger,
                  "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
+                 ev->wd,
+                 path ? path : "");
+}
+
+/*
+ * backend_handle_unmount - mark a watched filesystem scope as unavailable
+ * @ctx: narrowed backend context used by the poll path
+ * @ev: raw inotify event currently being processed
+ *
+ * IN_UNMOUNT says that the filesystem containing the watched object was
+ * unmounted. That is not a semantic delete: the object may become available
+ * again if the filesystem is mounted again, and inotify does not describe
+ * child paths that should be deleted. The only safe immediate contract is
+ * backend diagnostics: mark the wd -> path mapping STALE, then let the
+ * following IN_IGNORED cleanup remove the watch-table slot.
+ *
+ * Unlike IN_MOVE_SELF, this handler does not start lost-scope recovery. The
+ * watched filesystem is not available through the current mount namespace, so
+ * an identity scan would spend work on a scope that cannot be trusted.
+ */
+static void backend_handle_unmount(inotify_backend_context_t *ctx,
+                                   const struct inotify_event *ev)
+{
+    if (ctx == NULL || ev == NULL)
+        return;
+
+    if ((ev->mask & IN_UNMOUNT) == 0)
+        return;
+
+    const char *path =
+        watcher_get_path(&ctx->runtime->watchers, ev->wd);
+
+    if (watcher_set_state(&ctx->runtime->watchers,
+                          ev->wd,
+                          WATCHER_STATE_STALE) != 0) {
+
+        logger_error(ctx->logger,
+                     "failed to mark watch stale wd=%d reason=IN_UNMOUNT",
+                     ev->wd);
+
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE wd=%d path=%s reason=IN_UNMOUNT",
                  ev->wd,
                  path ? path : "");
 }
@@ -3282,6 +3332,8 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
         strncat(dest, "IN_DELETE_SELF ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVE_SELF)
         strncat(dest, "IN_MOVE_SELF ", dest_size - strlen(dest) - 1);
+    if (mask & IN_UNMOUNT)
+        strncat(dest, "IN_UNMOUNT ", dest_size - strlen(dest) - 1);
     if (mask & IN_IGNORED)
         strncat(dest, "IN_IGNORED ", dest_size - strlen(dest) - 1);
     if (mask & IN_Q_OVERFLOW)

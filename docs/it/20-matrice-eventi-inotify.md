@@ -84,12 +84,13 @@ utente.
 | `IN_IGNORED` | Il watch e' stato rimosso esplicitamente o automaticamente | Backend | Nessuno | Nessuna | Gestito come stato backend: Alfred rimuove il watch dalla tabella. Deve restare diagnostica, non evento semantico. |
 | `IN_ISDIR` | Il soggetto dell'evento e' una directory | Si | `ALFRED_RAW_ISDIR` | Modifica il tipo dell'evento semantico | Non e' un evento autonomo. Serve a scegliere tra `FILE_*` e `DIR_*`. |
 | `IN_Q_OVERFLOW` | La coda inotify ha perso eventi | Si | `ALFRED_RAW_OVERFLOW` | `OVERFLOW` | Supportato come diagnostica semantica minima. La recovery completa e' rimandata: servira' una policy di resync. |
-| `IN_UNMOUNT` | Il filesystem contenente l'oggetto osservato e' stato smontato | No | Nessuno | Nessuna | Rimandato. Dovrebbe probabilmente essere trattato come perdita di affidabilita' della subtree, vicino a overflow/resync. |
+| `IN_UNMOUNT` | Il filesystem contenente l'oggetto osservato e' stato smontato | Backend | Nessuno | Nessuna | Supportato come diagnostica backend minima: Alfred lo logga nel raw backend, marca il watch `STALE` con `reason=IN_UNMOUNT` e lascia a `IN_IGNORED` il cleanup `WATCH_REMOVED`. Non e' un delete semantico. La recovery completa post-mount e' rimandata. |
 
 Nota tecnica importante: oggi il parser di `inotify_watch_mask` e la maschera
 predefinita accettano anche alcuni bit restituiti dal kernel, come
-`IN_IGNORED` e `IN_Q_OVERFLOW`, perche' Alfred li sa nominare o gestire quando
-arrivano negli eventi. Dal punto di vista didattico, pero', conviene separare:
+`IN_IGNORED`, `IN_UNMOUNT` e `IN_Q_OVERFLOW`, perche' Alfred li sa nominare o
+gestire quando arrivano negli eventi. Dal punto di vista didattico, pero',
+conviene separare:
 
 ```text
 subscription mask  = eventi che chiediamo al kernel
@@ -132,6 +133,19 @@ Significa che il kernel non manterra' piu' quel watch. Il backend deve usare
 questa informazione per aggiornare la tabella `wd -> path`; il core, invece,
 non deve ricevere automaticamente un evento utente solo perche' un watch e'
 stato rimosso.
+
+Altro esempio:
+
+```text
+IN_UNMOUNT
+```
+
+significa che il filesystem contenente l'oggetto osservato non e' piu'
+disponibile nella mount namespace corrente. Il kernel genera poi anche
+`IN_IGNORED` per il watch descriptor. Alfred deve quindi trattarlo come perdita
+di affidabilita' dello scope, non come `DIR_DELETED`: il contenuto puo'
+ricomparire se il filesystem viene montato di nuovo, e l'evento non contiene
+una lista di figli cancellati.
 
 La separazione futura serve quindi a rendere esplicite due responsabilita':
 

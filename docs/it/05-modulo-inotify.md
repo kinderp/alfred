@@ -111,6 +111,7 @@ IN_MOVED_FROM
 IN_MOVED_TO
 IN_DELETE_SELF
 IN_MOVE_SELF
+IN_UNMOUNT
 IN_IGNORED
 IN_Q_OVERFLOW
 ```
@@ -152,6 +153,14 @@ backend. `IN_MOVE_SELF`, per esempio, non diventa un raw Alfred semantico, ma
 marca il watch come `STALE` e produce il log diagnostico `WATCH_STALE`.
 Questa scelta evita configurazioni apparentemente valide ma non osservabili in
 modo chiaro da Alfred.
+
+`IN_UNMOUNT` segue la stessa logica di diagnostica backend: Alfred lo richiede
+nella maschera predefinita, lo accetta nel parser della configurazione e lo
+nomina nel raw log. Quando il kernel lo emette, il backend marca il watch come
+`STALE` con `reason=IN_UNMOUNT` e aspetta il successivo `IN_IGNORED` per
+rimuovere la voce dalla watcher table. Non viene prodotto un raw Alfred e non
+viene prodotto un evento core: uno smontaggio non e' una cancellazione
+semantica del path, ma una perdita di accessibilita' del filesystem osservato.
 
 `IN_MODIFY` e `IN_CLOSE_WRITE` rendono visibili al core gli eventi necessari per
 produrre `FILE_MODIFIED` e `FILE_READY`. `IN_ATTRIB` rende visibili cambiamenti

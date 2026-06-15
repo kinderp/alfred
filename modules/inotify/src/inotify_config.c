@@ -46,6 +46,7 @@ static const inotify_mask_name_t INOTIFY_MASK_NAMES[] = {
     { "IN_MOVE_SELF", IN_MOVE_SELF },
     { "IN_MOVED_FROM", IN_MOVED_FROM },
     { "IN_MOVED_TO", IN_MOVED_TO },
+    { "IN_UNMOUNT", IN_UNMOUNT },
     { "IN_IGNORED", IN_IGNORED },
     { "IN_Q_OVERFLOW", IN_Q_OVERFLOW },
 };
