@@ -340,7 +340,7 @@ l'utente. Possono essere combinati con `ALFRED_RAW_ISDIR`.
 | `ALFRED_RAW_CLOSE_WRITE` | `IN_CLOSE_WRITE` | uno scrittore ha chiuso il file |
 | `ALFRED_RAW_MOVED_FROM` | `IN_MOVED_FROM` | vecchio path di una correlazione move/rename |
 | `ALFRED_RAW_MOVED_TO` | `IN_MOVED_TO` | nuovo path di una correlazione move/rename |
-| `ALFRED_RAW_OVERFLOW` | `IN_Q_OVERFLOW` | la coda ha perso eventi |
+| `ALFRED_RAW_OVERFLOW` | `IN_Q_OVERFLOW` con `wd=-1` | la coda ha perso eventi; il raw event e' globale e porta path vuoto |
 | `ALFRED_RAW_ISDIR` | `IN_ISDIR` | flag: il soggetto e' una directory |
 
 ## Eventi semantici core
@@ -362,7 +362,7 @@ emessi dal core e formattati in `events.log`.
 | `DIR_MOVED from=A to=B` | come sopra per directory | stessa directory spostata in altro parent |
 | `FILE_RELOCATED from=A to=B` | parent e basename diversi | file spostato e rinominato insieme |
 | `DIR_RELOCATED from=A to=B` | come sopra per directory | directory spostata e rinominata insieme |
-| `OVERFLOW path=` | raw overflow | lo stream e' incompleto; serve rescan/recovery |
+| `OVERFLOW path=` | raw overflow | lo stream e' incompleto; serve rescan/recovery futura. Il path e' vuoto perche' l'overflow riguarda l'istanza inotify, non un singolo watch |
 
 ## Regole da ricordare
 

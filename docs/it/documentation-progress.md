@@ -42,6 +42,13 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `inotify_backend.c`, `test_overflow_raw_bridge.c`,
+  `test_overflow_raw_bridge.sh`, `14-scenari-test.md`,
+  `20-matrice-eventi-inotify.md`, `21-roadmap-scanner-resync.md` e
+  `22-contratto-log.md`: fissato il bridge minimo per `IN_Q_OVERFLOW`.
+  Poiche' il kernel emette overflow con `wd=-1`, il backend costruisce
+  direttamente `ALFRED_RAW_OVERFLOW` con path vuoto e il core continua a
+  emettere `OVERFLOW`. La recovery completa resta rimandata.
 - `watch_manager.c`, `inotify_config.c`, `inotify_backend.c`,
   `test_watch_mask_unmount_token.sh`, `05-modulo-inotify.md`,
   `14-scenari-test.md`, `20-matrice-eventi-inotify.md`,

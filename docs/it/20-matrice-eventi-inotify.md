@@ -83,7 +83,7 @@ utente.
 | --- | --- | --- | --- | --- | --- |
 | `IN_IGNORED` | Il watch e' stato rimosso esplicitamente o automaticamente | Backend | Nessuno | Nessuna | Gestito come stato backend: Alfred rimuove il watch dalla tabella. Deve restare diagnostica, non evento semantico. |
 | `IN_ISDIR` | Il soggetto dell'evento e' una directory | Si | `ALFRED_RAW_ISDIR` | Modifica il tipo dell'evento semantico | Non e' un evento autonomo. Serve a scegliere tra `FILE_*` e `DIR_*`. |
-| `IN_Q_OVERFLOW` | La coda inotify ha perso eventi | Si | `ALFRED_RAW_OVERFLOW` | `OVERFLOW` | Supportato come diagnostica semantica minima. La recovery completa e' rimandata: servira' una policy di resync. |
+| `IN_Q_OVERFLOW` | La coda inotify ha perso eventi | Si | `ALFRED_RAW_OVERFLOW` | `OVERFLOW` | Supportato come diagnostica semantica minima. L'evento e' globale e arriva con `wd=-1`, quindi il backend lo converte esplicitamente senza usare la watcher table. La recovery completa e' rimandata: servira' una policy di resync. |
 | `IN_UNMOUNT` | Il filesystem contenente l'oggetto osservato e' stato smontato | Backend | Nessuno | Nessuna | Supportato come diagnostica backend minima: Alfred lo logga nel raw backend, marca il watch `STALE` con `reason=IN_UNMOUNT` e lascia a `IN_IGNORED` il cleanup `WATCH_REMOVED`. Non e' un delete semantico. La recovery completa post-mount e' rimandata. |
 
 Nota tecnica importante: oggi il parser di `inotify_watch_mask` e la maschera
@@ -121,6 +121,19 @@ ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR
 ```
 
 e il core sceglie `DIR_CREATED` invece di `FILE_CREATED`.
+
+Altro esempio:
+
+```text
+IN_Q_OVERFLOW
+```
+
+significa che la coda dell'istanza inotify ha perso uno o piu' eventi. Il
+kernel usa `wd=-1`, quindi non esiste un path osservato da ricostruire. Alfred
+lo trasforma in `ALFRED_RAW_OVERFLOW` con path vuoto e il core emette
+`OVERFLOW`. Questo non ripara lo stato: segnala solo che lo stream non e' piu'
+completo e che una futura policy dovra' decidere se ricostruire tutte le root,
+una subtree o l'intero backend.
 
 Altro esempio:
 
@@ -215,10 +228,10 @@ Questa vista compatta risponde alla domanda pratica: cosa gestiamo davvero oggi?
 
 | Livello | Gestito oggi | Rimandato |
 | --- | --- | --- |
-| Inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_Q_OVERFLOW` | `IN_ACCESS`, `IN_CLOSE_NOWRITE`, `IN_OPEN`, `IN_UNMOUNT` |
+| Inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_UNMOUNT`, `IN_Q_OVERFLOW` | `IN_ACCESS`, `IN_CLOSE_NOWRITE`, `IN_OPEN` |
 | Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_ATTRIB`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`, `ALFRED_RAW_MOVED_TO`, `ALFRED_RAW_OVERFLOW`, `ALFRED_RAW_ISDIR` | Access/open/close-nowrite/move-self/unmount raw dedicati |
 | Core semantico | create, delete, modify, ready, move/rename/relocated, overflow | metadata changed, access/open audit, close-nowrite, watched-object moved/deleted-self policy, unmount/resync |
-| Backend state | recursive watch add, synthetic directory create, ignored-watch cleanup, `IN_MOVE_SELF -> WATCH_STALE`, `IN_DELETE_SELF -> WATCH_STALE -> WATCH_REMOVED` | resync dopo unmount/overflow |
+| Backend state | recursive watch add, synthetic directory create, ignored-watch cleanup, `IN_MOVE_SELF -> WATCH_STALE`, `IN_DELETE_SELF -> WATCH_STALE -> WATCH_REMOVED`, `IN_UNMOUNT -> WATCH_STALE -> WATCH_REMOVED` | recovery completa dopo unmount/overflow |
 
 ## Decisioni operative
 

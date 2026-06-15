@@ -491,6 +491,9 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        backend_resync_probe_result_t result,
                                        int saved_errno);
 
+static int backend_build_overflow_raw(const struct inotify_event *ev,
+                                      alfred_raw_event_t *out);
+
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
                                              size_t dest_size);
@@ -1906,7 +1909,10 @@ static int backend_poll(inotify_backend_context_t *ctx,
         char full_path[PATH_MAX];
         const alfred_raw_event_t *raw_ptr = NULL;
 
-        if (parent != NULL && !stale_watch) {
+        if (backend_build_overflow_raw(ev, &raw) == 0) {
+            raw_ptr = &raw;
+        }
+        else if (parent != NULL && !stale_watch) {
             if (inotify_adapter_build_raw(ev,
                                           parent,
                                           full_path,
@@ -3291,6 +3297,44 @@ static uint64_t backend_now_ns(void)
 
     return ((uint64_t)ts.tv_sec * 1000000000ULL) +
            (uint64_t)ts.tv_nsec;
+}
+
+/*
+ * backend_build_overflow_raw - build the global raw event for IN_Q_OVERFLOW
+ * @ev: raw inotify event currently being processed
+ * @out: destination raw event for the core
+ *
+ * Queue overflow is different from ordinary inotify records: the kernel emits
+ * it with wd=-1 because it describes the whole inotify instance, not one
+ * watched path. The normal adapter path needs a watcher-table parent path, so
+ * overflow must be bridged explicitly at the backend boundary.
+ *
+ * The resulting raw event intentionally carries an empty path. The core treats
+ * ALFRED_RAW_OVERFLOW as a stream-integrity diagnostic and emits OVERFLOW
+ * without reading raw.path. Complete cache/watch recovery remains a separate
+ * resync policy.
+ *
+ * Return: 0 when @ev is an overflow event and @out was filled, -1 otherwise.
+ */
+static int backend_build_overflow_raw(const struct inotify_event *ev,
+                                      alfred_raw_event_t *out)
+{
+    if (ev == NULL || out == NULL)
+        return -1;
+
+    if ((ev->mask & IN_Q_OVERFLOW) == 0)
+        return -1;
+
+    memset(out, 0, sizeof(*out));
+
+    out->ts_ns = backend_now_ns();
+    out->source = ALFRED_SRC_INOTIFY;
+    out->mask = ALFRED_RAW_OVERFLOW;
+    out->cookie = ev->cookie;
+    out->pid = 0;
+    out->path = "";
+
+    return 0;
 }
 
 /*
