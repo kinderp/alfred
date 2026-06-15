@@ -42,6 +42,14 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md`: ampliata la mappa degli eventi e flag inotify non
+  gestiti. La documentazione ora distingue eventi audit rumorosi
+  (`IN_ACCESS`, `IN_OPEN`, `IN_CLOSE_NOWRITE`), macro di comodita'
+  (`IN_ALL_EVENTS`, `IN_MOVE`, `IN_CLOSE`) e flag di installazione watch
+  (`IN_ONLYDIR`, `IN_MASK_CREATE`, `IN_DONT_FOLLOW`, `IN_EXCL_UNLINK`,
+  `IN_MASK_ADD`, `IN_ONESHOT`), con priorita', motivazione tecnica e test
+  futuri.
 - `inotify_backend.c`, `test_overflow_raw_bridge.c`,
   `test_overflow_raw_bridge.sh`, `14-scenari-test.md`,
   `20-matrice-eventi-inotify.md`, `21-roadmap-scanner-resync.md` e

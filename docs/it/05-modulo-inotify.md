@@ -184,6 +184,13 @@ Alfred non gestisce ancora, vedi
 eventi richiedibili, bit restituiti dal kernel, flag di configurazione del
 watch, raw event Alfred e semantica core.
 
+La scelta corrente sui flag non gestiti e' conservativa: `IN_ACCESS`,
+`IN_OPEN` e `IN_CLOSE_NOWRITE` restano fuori dal core filesystem perche'
+descrivono audit/lettura, non mutazioni. Tra i flag di installazione del watch,
+`IN_ONLYDIR` e `IN_MASK_CREATE` sono i candidati piu' utili da studiare per
+robustezza del backend; `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu'
+legati a profili configurabili di hardening e riduzione rumore.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:

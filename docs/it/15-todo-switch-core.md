@@ -740,6 +740,13 @@ Scenari gia' usati durante quella fase:
 - overflow: non risolto in shadow mode, rimandato alla progettazione
   post-switch
 
+Nota successiva allo switch: il bridge minimo di overflow ora esiste
+(`IN_Q_OVERFLOW -> ALFRED_RAW_OVERFLOW -> OVERFLOW`), ma la recovery completa
+resta rimandata. La nuova area di lavoro non e' piu' "shadow vs core", ma la
+mappa degli eventi/flag inotify non ancora abilitati: `IN_ACCESS`, `IN_OPEN` e
+`IN_CLOSE_NOWRITE` come possibili eventi audit; `IN_ONLYDIR` e
+`IN_MASK_CREATE` come candidati di robustezza per l'installazione dei watch.
+
 ### 1b. Stabilizzare la suite core end-to-end
 
 La suite parallela `tests/core/` fissa il comportamento futuro del percorso
@@ -1167,6 +1174,13 @@ decidere se fare resync, emettere diagnostica, ricostruire eventi sintetici o
 combinare piu' strategie. Farlo prima dello switch rischierebbe di mescolare due
 problemi diversi: migrazione della semantica al core e recovery da perdita di
 eventi.
+
+Stato aggiornato: la traduzione minima dell'overflow e' stata implementata, ma
+la parte difficile descritta sopra resta valida. In parallelo, la matrice
+eventi inotify ora classifica anche gli eventi audit non gestiti e i flag di
+installazione watch. Il primo flag da valutare in codice dovrebbe essere
+`IN_ONLYDIR`; subito dopo, `IN_MASK_CREATE` con fallback per kernel che non lo
+supportano.
 
 ## Fase A: documentazione pesante del codice
 
