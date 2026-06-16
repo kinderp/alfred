@@ -44,6 +44,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `25-roadmap-unificata-dossier.md` |
 | Completo | `26-stato-funzionalita.md` |
 | Completo | `27-guida-lettura-documentazione.md` |
+| Completo | `28-audit-documentazione-e-debiti.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -104,3 +105,11 @@ Non sostituisce gli altri capitoli: spiega in quale ordine leggerli, separa i
 percorsi per utente, contributore, studente e sviluppatore, e fornisce un indice
 tematico rapido per ritrovare argomenti come eventi, test, log, scanner,
 resync, plugin backend, configurazione e roadmap.
+
+## Aggiornamento audit documentazione
+
+`28-audit-documentazione-e-debiti.md` raccoglie il controllo corrente su link
+locali, diagrammi Mermaid, animazioni rimandate e debiti dichiarati nella
+documentazione. Serve come punto di discussione per distinguere cosa e' rotto,
+cosa e' volutamente rimandato e quali decisioni architetturali conviene
+affrontare per prime.

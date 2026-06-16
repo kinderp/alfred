@@ -32,7 +32,8 @@ piu' dettaglio.
 23. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 24. [Stato funzionalita' supportate](26-stato-funzionalita.md)
 25. [Guida alla lettura della documentazione](27-guida-lettura-documentazione.md)
-26. [Glossario](glossario.md)
+26. [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md)
+27. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

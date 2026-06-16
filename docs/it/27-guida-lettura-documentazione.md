@@ -31,6 +31,8 @@ problema, poi l'architettura e infine il codice.
 5. [Stato funzionalita' supportate](26-stato-funzionalita.md)
    riassume cosa funziona oggi, cosa e' diagnostico, cosa e' configurabile e
    cosa e' ancora fuori dallo scope corrente.
+6. [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md)
+   separa problemi documentali reali, debiti tecnici rimandati e idee future.
 
 Dopo questi cinque documenti il lettore dovrebbe sapere che Alfred oggi usa il
 core come stream ufficiale, che inotify e' solo il backend Linux corrente e che
@@ -212,6 +214,7 @@ controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 | Output strutturato futuro | [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin backend | [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |
 | Regex nei test shell | [10](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell) |
 | Scanner filesystem | [21](21-roadmap-scanner-resync.md) |
 | Self events | [20](20-matrice-eventi-inotify.md#eventi-sul-watch-stesso), [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md) |
@@ -255,6 +258,8 @@ riferimento veloce:
   per orientarsi nel codice.
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md):
   per capire la direzione futura.
+- [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md):
+  per distinguere problemi reali, scelte rimandate e punti da discutere.
 - [documentation-progress.md](documentation-progress.md):
   per sapere quali capitoli sono completi, parziali o rimossi.
 

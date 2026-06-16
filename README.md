@@ -162,6 +162,7 @@ Detailed documentation is currently maintained in Italian:
 - [AI agent guardrail roadmap](docs/it/24-roadmap-ai-agent-guardrail.md)
 - [Unified dossier roadmap](docs/it/25-roadmap-unificata-dossier.md)
 - [Supported feature matrix](docs/it/26-stato-funzionalita.md)
+- [Documentation audit and declared debt](docs/it/28-audit-documentazione-e-debiti.md)
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 
