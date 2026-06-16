@@ -31,7 +31,8 @@ piu' dettaglio.
 22. [Contratto dei log](22-contratto-log.md)
 23. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 24. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
-25. [Glossario](glossario.md)
+25. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
+26. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

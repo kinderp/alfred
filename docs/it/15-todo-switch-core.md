@@ -949,6 +949,7 @@ chi rilegge la migrazione.
 | Overflow/resync | Alto | E' rimandato a dopo lo switch perche' richiede una policy di recovery quando il backend perde eventi. |
 | Separare subscription mask e bit riconosciuti | Medio | Il parser di `inotify_watch_mask` oggi vive vicino ai bit che Alfred sa nominare o gestire in output. Per chiarezza futura, gli eventi che l'utente puo' chiedere al kernel vanno separati dai bit tecnici che il kernel aggiunge agli eventi. |
 | Gestire `IN_MOVE_SELF` per evitare path stale | Parziale | Il backend ora richiede e logga `IN_MOVE_SELF`, marca il watch `STALE` e scrive `WATCH_STALE` senza inventare eventi core. Resta da progettare la recovery/resync che riporti il watch a `VALID` o lo invalidi definitivamente. |
+| Valutare `IN_MASK_CREATE` nel watch manager | Rimandato | Il flag puo' evitare che una seconda `inotify_add_watch()` sullo stesso oggetto aggiorni silenziosamente la maschera di un watch gia' esistente. Non e' urgente per il runtime corrente: e' hardening contro bug, resync duplicati, symlink o path equivalenti. Va ripreso quando rivedremo la policy di installazione watch e la compatibilita' con kernel Linux precedenti a 4.18. |
 
 ### Stato di chiusura della fase post-switch
 
@@ -965,7 +966,9 @@ Restano aperti solo lavori futuri separati:
    riconosciuti in output
 4. progettare la gestione `IN_MOVE_SELF` per evitare path stale dopo lo
    spostamento della root osservata
-5. aggiungere nuove passate di documentazione o test solo quando un refactor,
+5. valutare `IN_MASK_CREATE` come hardening interno del watch manager, non come
+   token utente di `inotify_watch_mask`
+6. aggiungere nuove passate di documentazione o test solo quando un refactor,
    un bug reale o un nuovo scenario utente lo richiedono
 
 Questa chiusura non significa che il progetto sia finito. Significa che lo

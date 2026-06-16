@@ -1492,3 +1492,11 @@ Stati usati:
   decisione provvisoria di mantenere recovery sincrona, `batch_size=1` interno
   e nessuna configurazione pubblica o worker thread finche' non esistono
   benchmark ripetibili e un profilo end-to-end piu' realistico.
+- `15-todo-switch-core.md`: aggiunto `IN_MASK_CREATE` come hardening rimandato
+  del watch manager. La nota spiega che il flag serve a evitare aggiornamenti
+  silenziosi della maschera quando `inotify_add_watch()` viene chiamata due
+  volte sullo stesso oggetto, ma che non e' il prossimo passo prioritario.
+- `25-roadmap-unificata-dossier.md` e `README.md`: aggiunta la sintesi dei
+  dossier in `dossier/`, fissando l'ordine consigliato: Event Model v0, Backend
+  API v0, refactor inotify verso la nuova API, JSONL/tracepoint, Alfred Lab,
+  performance suite e solo dopo backend complessi come fanotify, audit ed eBPF.
