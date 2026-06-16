@@ -494,6 +494,8 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
 static int backend_build_overflow_raw(const struct inotify_event *ev,
                                       alfred_raw_event_t *out);
 
+static int backend_raw_mask_has_dispatch_action(uint32_t mask);
+
 static void backend_raw_event_name_from_mask(uint32_t mask,
                                              char *dest,
                                              size_t dest_size);
@@ -1918,7 +1920,7 @@ static int backend_poll(inotify_backend_context_t *ctx,
                                           full_path,
                                           sizeof(full_path),
                                           &raw) == 0) {
-                if (raw.mask != 0)
+                if (backend_raw_mask_has_dispatch_action(raw.mask))
                     raw_ptr = &raw;
             }
             else {
@@ -3336,6 +3338,34 @@ static int backend_build_overflow_raw(const struct inotify_event *ev,
     out->path = "";
 
     return 0;
+}
+
+/*
+ * backend_raw_mask_has_dispatch_action - decide whether raw facts reach core
+ * @mask: ALFRED_RAW_* bitmask returned by the inotify adapter
+ *
+ * ALFRED_RAW_ISDIR is a modifier, not an action. Audit-only directory events
+ * such as IN_OPEN | IN_ISDIR may therefore map to a non-zero Alfred mask that
+ * contains only ALFRED_RAW_ISDIR. Forwarding that modifier-only fact would break
+ * the audit contract: open/access/close-nowrite are raw-log-only until Alfred
+ * has explicit audit raw events.
+ *
+ * Return: non-zero when @mask contains at least one raw fact that the core is
+ * allowed to inspect, zero when it only contains modifiers or no bits.
+ */
+static int backend_raw_mask_has_dispatch_action(uint32_t mask)
+{
+    const uint32_t action_mask =
+        ALFRED_RAW_CREATE |
+        ALFRED_RAW_DELETE |
+        ALFRED_RAW_MODIFY |
+        ALFRED_RAW_ATTRIB |
+        ALFRED_RAW_CLOSE_WRITE |
+        ALFRED_RAW_MOVED_FROM |
+        ALFRED_RAW_MOVED_TO |
+        ALFRED_RAW_OVERFLOW;
+
+    return (mask & action_mask) != 0;
 }
 
 /*
