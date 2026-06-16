@@ -42,6 +42,11 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `22-contratto-log.md` documenta il contratto dei raw log audit inotify:
+  `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` possono comparire in `raw.log`
+  solo quando `inotify_audit_events` li abilita, non diventano ancora
+  `ALFRED_RAW_*`, non arrivano al core e non producono `FILE_READY` o
+  `FILE_MODIFIED`.
 - `04-livello-applicazione.md` e `10-debugging-test-e-strumenti.md` spiegano
   in modo operativo la nuova configurazione `inotify_audit_events`: valori
   ammessi, valori rifiutati, comando di avvio con `ALFRED_CONFIG`, differenza

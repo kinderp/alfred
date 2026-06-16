@@ -49,6 +49,64 @@ Esempi:
   produce `ALFRED_RAW_MOVED_*` e non produce `DIR_MOVED`
 - `WATCH_ADDED` descrive un nuovo watch inotify, non una directory creata
 
+## Raw log audit inotify
+
+Quando `inotify_audit_events` e' configurato, Alfred puo' chiedere al kernel
+eventi audit come:
+
+```text
+IN_OPEN
+IN_ACCESS
+IN_CLOSE_NOWRITE
+```
+
+Questi eventi appaiono solo nel `raw.log` del backend inotify. Non sono ancora
+`ALFRED_RAW_*`, non vengono inoltrati al core e non producono righe semantiche
+in `events.log`.
+
+Esempio di righe possibili nel `raw.log`:
+
+```text
+IN_OPEN wd=3 path=/tmp/alfred-audit-demo name=read-only.txt
+IN_ACCESS wd=3 path=/tmp/alfred-audit-demo name=read-only.txt
+IN_CLOSE_NOWRITE wd=3 path=/tmp/alfred-audit-demo name=read-only.txt
+```
+
+Significato:
+
+| Raw inotify | Quando appare | Significato | Cosa non significa |
+| --- | --- | --- | --- |
+| `IN_OPEN` | un file o una directory viene aperto | il kernel ha osservato un'apertura | non indica creazione, modifica o intenzione dell'attore |
+| `IN_ACCESS` | un file viene letto o eseguito | il kernel ha osservato accesso/lettura | non indica scrittura o modifica |
+| `IN_CLOSE_NOWRITE` | un file o una directory viene chiuso senza scrittura | la sessione si e' chiusa senza write | non e' `FILE_READY` |
+
+La regola piu' importante e':
+
+```text
+IN_CLOSE_NOWRITE != FILE_READY
+```
+
+`FILE_READY` e' prodotto da `IN_CLOSE_WRITE`, cioe' da una chiusura dopo
+scrittura. Una chiusura senza scrittura puo' essere utile per audit/debug, ma
+non significa che un nuovo contenuto sia pronto per essere consumato.
+
+Contratto attuale:
+
+- `inotify_audit_events=off` e' il default
+- `inotify_audit_events=open,access,close-nowrite` rende visibili i fatti nel
+  `raw.log`
+- `events.log` non deve ricevere `FILE_READY` o `FILE_MODIFIED` per una lettura
+  read-only
+- `inotify_watch_mask=default,+IN_OPEN` resta invalido
+- `inotify_audit_events=IN_OPEN` resta invalido, perche' la chiave audit usa
+  nomi di policy in minuscolo
+
+Test principali:
+
+- `tests/backend/test_audit_kernel_events.sh`
+- `tests/backend/test_audit_config_raw_log.sh`
+- `tests/backend/test_audit_config_invalid_token.sh`
+
 ## Testo oggi, protocollo domani
 
 Oggi questa reference descrive soprattutto righe testuali scritte nei file di
