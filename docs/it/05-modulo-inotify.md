@@ -125,11 +125,14 @@ config_defaults()
 app_build_inotify_backend_context()
     -> ctx.config = &app->config.inotify
 watch_manager_add()
-    -> inotify_add_watch(..., ctx->config->watch_mask)
+    -> inotify_add_watch(..., ctx->config->watch_mask | IN_ONLYDIR)
 ```
 
 Quindi la configurazione applicativa contiene davvero la maschera usata dal
 runtime, ma dentro una sottostruttura dedicata al backend inotify.
+`IN_ONLYDIR` non e' configurazione di eventi: e' un flag di installazione del
+watch. Alfred lo aggiunge sempre nel watch manager perche' il backend inotify
+osserva directory root e subdirectory ricorsive, non file singoli.
 
 La maschera e' configurabile da file con:
 
@@ -183,6 +186,49 @@ Alfred non gestisce ancora, vedi
 [Matrice eventi inotify](20-matrice-eventi-inotify.md). Quel capitolo distingue
 eventi richiedibili, bit restituiti dal kernel, flag di configurazione del
 watch, raw event Alfred e semantica core.
+
+La scelta corrente sui flag non gestiti e' conservativa: `IN_ACCESS`,
+`IN_OPEN` e `IN_CLOSE_NOWRITE` restano fuori dal core filesystem perche'
+descrivono audit/lettura, non mutazioni. Tra i flag di installazione del watch,
+`IN_ONLYDIR` e' ora usato come hardening interno, mentre `IN_MASK_CREATE` resta
+il candidato piu' utile da studiare per evitare sostituzioni accidentali di
+watch. `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu' legati a profili
+configurabili di hardening e riduzione rumore.
+
+`IN_MASK_CREATE` non dovrebbe entrare direttamente nella sintassi di
+`inotify_watch_mask`. Se Alfred lo usera', la scelta dovrebbe essere espressa
+come policy del backend, non come bit raw scelto dall'utente. Il motivo e'
+pratico: il flag non cambia gli eventi ricevuti, ma il comportamento di
+`inotify_add_watch()` quando un watch esiste gia'. In modalita' futura
+`strict`, un errore `EEXIST` indicherebbe una duplicazione reale da gestire o
+diagnosticare; non sarebbe corretto fare fallback silenzioso. Un fallback ha
+senso solo per compatibilita' con kernel che non supportano il flag, dopo aver
+distinto quel caso da una maschera davvero invalida.
+
+Lo stesso ragionamento vale per `IN_DONT_FOLLOW`. Il flag non aggiunge un
+evento e non cambia la semantica core; decide se il backend deve seguire un
+symlink quando installa un watch. Per questo una futura configurazione dovrebbe
+essere una policy leggibile, per esempio `inotify_symlink_policy=follow` oppure
+`inotify_symlink_policy=no-follow`, non un token dentro `inotify_watch_mask`.
+La modalita' `no-follow` e' utile per hardening perche' evita di monitorare
+un target diverso dal path visibile all'utente, ma va testata insieme allo
+scanner ricorsivo: i symlink dentro l'albero osservato non devono diventare
+nuove radici ricorsive senza una scelta esplicita.
+
+`IN_EXCL_UNLINK` e' un'altra policy backend, ma orientata a rumore e
+prestazioni. Puo' ridurre eventi in directory come `/tmp`, dove file temporanei
+vengono spesso creati, rimossi dalla directory e usati ancora tramite file
+descriptor aperto. Non deve diventare default globale finche' Alfred ha anche
+obiettivi audit/security: un file gia' unlinkato ma ancora usato puo' essere un
+segnale importante. Una futura opzione dovrebbe rendere esplicita la perdita di
+visibilita', per esempio `inotify_unlinked_child_policy=observe|suppress`.
+
+`IN_MASK_ADD` e `IN_ONESHOT` non sono candidati per il runtime corrente.
+`IN_MASK_ADD` avrebbe senso solo con aggiornamenti dinamici parziali della mask:
+oggi Alfred preferisce calcolare e possedere sempre la maschera completa di un
+watch. `IN_ONESHOT` e' ancora meno adatto: Alfred deve osservare in modo
+continuo, mentre quel flag rimuove il watch dopo il primo evento e renderebbe
+piu' fragile la copertura ricorsiva.
 
 ## Watch descriptor
 

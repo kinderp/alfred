@@ -208,6 +208,18 @@ leggere quando il kernel restituisce un evento.
 | `IN_MOVE` | `IN_MOVED_FROM | IN_MOVED_TO` | Non supportata come token. La documentazione usa i due eventi reali per rendere chiara la correlazione. |
 | `IN_CLOSE` | `IN_CLOSE_WRITE | IN_CLOSE_NOWRITE` | Non supportata come token. Alfred supporta solo `IN_CLOSE_WRITE` perche' produce `FILE_READY`. |
 
+### Decisione dettagliata sulle macro
+
+Le macro di comodita' sono utili quando si scrive un piccolo programma inotify,
+ma sono meno adatte a una configurazione didattica e a un motore che vuole
+contratti stabili.
+
+| Macro | Perche' non accettarla ora | Rischio se la accettiamo troppo presto | Eventuale futuro |
+| --- | --- | --- | --- |
+| `IN_ALL_EVENTS` | Nasconde quali eventi Alfred sta davvero chiedendo al kernel | Abiliterebbe anche eventi rumorosi come `IN_ACCESS`, `IN_OPEN` e `IN_CLOSE_NOWRITE` senza avere raw/core contract pronti | Possibile solo come scorciatoia debug, mai come default |
+| `IN_MOVE` | E' solo un alias di `IN_MOVED_FROM | IN_MOVED_TO` | Gli studenti perderebbero la distinzione tra vecchio path, nuovo path e cookie di correlazione | Rimane inutile finche' il parser accetta gia' i due bit reali |
+| `IN_CLOSE` | Include anche `IN_CLOSE_NOWRITE`, che Alfred non usa per `FILE_READY` | Potrebbe far credere che ogni close significhi file pronto dopo scrittura | Valutabile solo se introdurremo audit di apertura/chiusura file |
+
 ## Flag di configurazione del watch
 
 Questi flag modificano il comportamento di `inotify_add_watch()`. Non sono
@@ -219,8 +231,251 @@ eventi filesystem e quindi non devono diventare `ALFRED_RAW_*`.
 | `IN_EXCL_UNLINK` | Evita eventi su figli gia' rimossi dalla directory | No | Potrebbe ridurre rumore in directory come `/tmp`. Da valutare come opzione backend. |
 | `IN_MASK_ADD` | Aggiunge eventi a un watch esistente invece di sostituire la maschera | No | Riguarda la policy di gestione watch. Da valutare quando si rivede `watch_manager_add()`. |
 | `IN_ONESHOT` | Rimuove il watch dopo un solo evento | No | Non adatto al monitoraggio continuo di Alfred. |
-| `IN_ONLYDIR` | Aggiunge il watch solo se il path e' una directory | No | Potrebbe essere utile per rendere race-free i watch ricorsivi. Da valutare nel backend, non nel core. |
-| `IN_MASK_CREATE` | Crea il watch solo se non esiste gia' | No | Potrebbe aiutare a evitare sostituzioni accidentali di watch su stesso inode. Da studiare insieme alla tabella watch. |
+| `IN_ONLYDIR` | Aggiunge il watch solo se il path e' una directory | Si | Usato internamente da `watch_manager_add()` come hardening backend. Non e' configurabile e non entra in `ALFRED_RAW_*`. |
+| `IN_MASK_CREATE` | Crea il watch solo se non esiste gia' | No | Potrebbe aiutare a evitare sostituzioni accidentali di watch su stesso inode. Non va esposto ora come token di `inotify_watch_mask`: e' una policy di installazione, non una scelta sugli eventi da osservare. |
+
+### Decisione dettagliata sui flag di watch
+
+Questi flag non descrivono eventi avvenuti nel filesystem. Sono opzioni di
+installazione del watch. Per questo non devono entrare in `ALFRED_RAW_*` e non
+devono essere gestiti dal core. Se li useremo, dovranno vivere nella
+configurazione del backend inotify, probabilmente in una chiave separata da
+`inotify_watch_mask`, per esempio `inotify_watch_flags`.
+
+| Flag | Priorita' | Decisione proposta | Motivazione tecnica | Test futuro |
+| --- | --- | --- | --- | --- |
+| `IN_ONLYDIR` | Implementata | Usata sempre per i watch directory-scoped | Rende atomico il controllo "questo path e' una directory" dentro `inotify_add_watch()`. Alfred fa ancora `stat()` prima e dopo per l'identita', ma il kernel rifiuta subito i file con `ENOTDIR` | `tests/backend/test_onlydir_rejects_file_root.sh` prova che un file root non riceve `WATCH_ADDED` |
+| `IN_MASK_CREATE` | Alta, con fallback | Valutare per evitare sostituzioni accidentali di watch esistenti | Senza questo flag, una nuova `inotify_add_watch()` sullo stesso oggetto puo' modificare la maschera di un watch gia' presente. Alfred ha una watcher table propria, quindi deve evitare di clobberare policy esistenti senza accorgersene | test con due path che arrivano allo stesso inode quando l'ambiente lo permette; fallback se il kernel non supporta Linux >= 4.18 |
+| `IN_DONT_FOLLOW` | Media | Possibile hardening configurabile | Evita di seguire symlink quando il path del watch e' un link simbolico. Utile per sicurezza e prevedibilita', ma cambia comportamento per utenti che vogliono osservare il target del link | test con symlink root: una modalita' segue il target, una modalita' rifiuta/non segue |
+| `IN_EXCL_UNLINK` | Media | Possibile opzione prestazionale per directory rumorose | Riduce eventi su figli gia' rimossi dalla directory, caso tipico di `/tmp` e file temporanei unlinkati subito. Puo' diminuire rumore, ma rischia di nascondere fatti utili ad audit forense | stress test su file temporanei creati e unlinkati subito; confrontare volume raw log |
+| `IN_MASK_ADD` | Bassa | Non necessario finche' Alfred possiede tutta la maschera del watch | Serve ad aggiungere bit a una maschera esistente. Alfred oggi preferisce calcolare una maschera completa e installarla in modo controllato | test unitario solo se introdurremo aggiornamento dinamico parziale delle mask |
+| `IN_ONESHOT` | Esclusa per runtime | Non usare nel monitoraggio normale | Alfred e' un motore continuo. Un watch che si rimuove dopo un solo evento romperebbe la copertura ricorsiva e produrrebbe cleanup inatteso | eventualmente solo test diagnostico isolato, non runtime |
+
+`IN_ONLYDIR` e' stato implementato perche' si lega direttamente alla robustezza
+dei watch ricorsivi. `IN_MASK_CREATE` resta promettente ma richiede una
+decisione di compatibilita' kernel: non tutti gli ambienti vecchi supportano il
+flag. `IN_EXCL_UNLINK` e `IN_DONT_FOLLOW` sono piu' legati a profili
+configurabili: prestazioni/rumore nel primo caso, hardening/symlink policy nel
+secondo.
+
+#### Policy proposta per `IN_DONT_FOLLOW`
+
+`IN_DONT_FOLLOW` dice al kernel di non seguire un link simbolico quando Alfred
+installa un watch sul path passato a `inotify_add_watch()`. Anche questo non e'
+un evento filesystem: non racconta che cosa e' successo nel filesystem, ma come
+Alfred decide di interpretare un path configurato o scoperto durante lo scan.
+
+La scelta corrente e' di non cambiare il comportamento runtime: Alfred continua
+a usare la policy esistente. Questo evita una regressione per chi si aspetta
+che un path symlink venga risolto verso il target reale. La scelta futura
+dovrebbe essere una policy esplicita, per esempio:
+
+```text
+inotify_symlink_policy=follow
+inotify_symlink_policy=no-follow
+```
+
+Il significato proposto e':
+
+- `follow`: comportamento compatibile. Se il kernel segue il symlink, Alfred
+  monitora il target reale del link.
+- `no-follow`: comportamento hardening. Alfred aggiunge `IN_DONT_FOLLOW`
+  quando installa il watch; se il path e' un symlink, il backend deve rifiutare
+  o diagnosticare chiaramente il caso invece di monitorare un target inatteso.
+
+Il punto delicato e' che i symlink possono comparire in due posizioni diverse:
+
+- root configurata dall'utente, per esempio `alfred ./watched-link`
+- subdirectory incontrata durante scan ricorsivo o recovery
+
+Nel primo caso la policy deve essere molto chiara per l'utente, perche' cambia
+il significato del path passato da riga di comando o da file di configurazione.
+Nel secondo caso si collega alla policy dello scanner: oggi il resync non segue
+symlink di default per evitare cicli, attraversamenti fuori root e consumo
+imprevisto di risorse. La documentazione dello scanner spiega gia' le policy
+anti-ciclo: visited set su `(st_dev, st_ino)`, limiti di profondita', restare
+sotto la root iniziale e, se serve, non attraversare device diversi.
+
+I test futuri dovranno coprire almeno:
+
+- root symlink in modalita' `follow`: Alfred monitora il target reale
+- root symlink in modalita' `no-follow`: Alfred rifiuta o logga una diagnostica
+  esplicita
+- symlink dentro una directory osservata: Alfred non deve trasformarlo
+  automaticamente in una nuova root ricorsiva senza una policy dedicata
+- coerenza con lo scanner: `follow_symlinks = 0` resta il default conservativo
+  per resync/watch
+
+Questa policy e' collegata alla sicurezza: seguire symlink senza controllo puo'
+portare Alfred a osservare un albero diverso da quello che l'utente pensa di
+aver indicato. E' collegata anche alle prestazioni: seguire link verso alberi
+grandi o ciclici puo' aumentare drasticamente il numero di directory visitate e
+di watch installati.
+
+#### Policy proposta per `IN_EXCL_UNLINK`
+
+`IN_EXCL_UNLINK` chiede al kernel di ridurre gli eventi relativi a figli che
+sono gia' stati rimossi dalla directory osservata. Il caso tipico e' una
+directory molto rumorosa, per esempio `/tmp`, dove molti programmi creano file
+temporanei, li aprono, li rimuovono subito dalla directory e continuano a usare
+il file tramite file descriptor aperto.
+
+Dal punto di vista prestazionale il flag e' interessante: puo' diminuire il
+numero di eventi che Alfred deve leggere, loggare, convertire in raw Alfred e
+inoltrare al core. Questo riduce rumore, CPU, I/O di log e pressione sulle code
+interne quando una directory produce molti file temporanei.
+
+Dal punto di vista audit/security, pero', il flag e' delicato. Un file
+unlinkato ma ancora aperto puo' essere ancora usato da un processo. In scenari
+di analisi forense, runtime security o agent guardrail, il fatto che un processo
+continui a scrivere o usare un oggetto non piu' visibile nella directory puo'
+essere significativo. Attivare `IN_EXCL_UNLINK` come default globale rischia
+quindi di nascondere proprio eventi utili a capire un comportamento sospetto.
+
+Per questo la scelta corrente e':
+
+- non abilitarlo di default
+- non esporlo come token diretto dentro `inotify_watch_mask`
+- non produrre eventi raw/core dedicati, perche' non e' un evento filesystem
+- valutarlo in futuro come policy backend configurabile
+
+Una configurazione futura dovrebbe essere leggibile come policy, per esempio:
+
+```text
+inotify_unlinked_child_policy=observe
+inotify_unlinked_child_policy=suppress
+```
+
+Il significato proposto e':
+
+- `observe`: comportamento conservativo per audit/security. Alfred non usa
+  `IN_EXCL_UNLINK` e continua a osservare il maggior numero possibile di eventi
+  sui figli della directory osservata.
+- `suppress`: comportamento orientato a prestazioni/rumore. Alfred usa
+  `IN_EXCL_UNLINK` per chiedere al kernel di filtrare eventi su figli gia'
+  unlinkati, sapendo che questa scelta riduce la visibilita' diagnostica.
+
+I test futuri dovranno essere sia funzionali sia prestazionali:
+
+- scenario `/tmp`-like con file temporaneo creato, aperto, unlinkato e poi
+  scritto tramite file descriptor ancora aperto
+- confronto raw log tra `observe` e `suppress`
+- benchmark sul volume di eventi, sul tempo di polling e sulla dimensione dei
+  log prodotti
+- verifica esplicita che `suppress` sia documentato come perdita intenzionale
+  di visibilita', non come semantica equivalente a `observe`
+
+#### Policy proposta per `IN_MASK_ADD`
+
+`IN_MASK_ADD` dice al kernel di aggiungere nuovi bit alla maschera di un watch
+gia' esistente, invece di sostituirla. E' utile quando un programma gestisce
+watch in modo incrementale: prima chiede alcuni eventi, poi decide di aggiungerne
+altri senza ricostruire la maschera completa.
+
+Alfred oggi non lavora cosi'. Il backend deve possedere la maschera completa del
+watch: la configurazione parte da `default`, applica eventuali `+TOKEN` e
+`-TOKEN`, e produce un valore finale controllato. Questa scelta e' piu'
+semplice da spiegare e da testare, perche' ogni watch installato ha una policy
+completa e non dipende dalla storia degli aggiornamenti precedenti.
+
+Per questo `IN_MASK_ADD` resta rimandato. Potrebbe diventare utile solo se in
+futuro introdurremo un aggiornamento dinamico parziale delle maschere, per
+esempio:
+
+```text
+runtime: abilita temporaneamente IN_OPEN su una subtree gia' osservata
+watch esistente: IN_CREATE | IN_DELETE
+update parziale: aggiungi IN_OPEN senza ricalcolare tutta la mask
+```
+
+Prima di arrivare a quel punto dovremmo definire:
+
+- chi possiede la maschera finale di un watch
+- come si rappresentano aggiornamenti parziali nella configurazione
+- come si evita che due componenti aggiornino la stessa maschera in modo
+  incoerente
+- quali log diagnostici mostrano che una mask e' stata estesa a runtime
+
+Finche' Alfred non ha aggiornamento dinamico delle mask, `IN_MASK_ADD` non deve
+essere usato nel runtime e non deve essere esposto in `inotify_watch_mask`.
+
+#### Policy proposta per `IN_ONESHOT`
+
+`IN_ONESHOT` rimuove automaticamente il watch dopo il primo evento ricevuto.
+Questo comportamento e' in contrasto con il modello principale di Alfred:
+osservazione continua, copertura ricorsiva e tabella watch stabile finche' il
+filesystem o la configurazione non impongono un cambiamento.
+
+Se lo usassimo nel runtime normale, ogni evento potrebbe rimuovere un watch
+dietro le quinte. Alfred dovrebbe allora reinstallare watch continuamente,
+distinguere rimozioni attese da rimozioni dovute a `IN_IGNORED`, aggiornare la
+watcher table e proteggere la copertura ricorsiva. Il risultato sarebbe piu'
+complesso, piu' fragile e probabilmente meno performante.
+
+La decisione e' quindi:
+
+- escluso dal runtime normale
+- non configurabile tramite `inotify_watch_mask`
+- nessuna semantica raw/core dedicata
+- eventualmente utilizzabile solo in test diagnostici isolati o strumenti
+  futuri che vogliano osservare un singolo fatto e poi chiudere il watch
+
+#### Policy proposta per `IN_MASK_CREATE`
+
+`IN_MASK_CREATE` non deve essere trattato come `IN_CREATE` o `IN_MODIFY`.
+Questi ultimi sono eventi che l'utente chiede al kernel di notificare.
+`IN_MASK_CREATE`, invece, cambia il modo in cui il backend installa un watch:
+chiede al kernel di fallire se sull'oggetto esiste gia' un watch inotify invece
+di aggiornare implicitamente la maschera del watch esistente.
+
+Per questo motivo la scelta corrente e' di non renderlo configurabile come
+token dentro `inotify_watch_mask`. Quella chiave deve restare una maschera di
+sottoscrizione degli eventi filesystem. Mischiare nello stesso campo anche i
+flag di installazione renderebbe piu' difficile spiegare cosa stia scegliendo
+l'utente e potrebbe trasformare un dettaglio interno del backend in un
+contratto pubblico prematuro.
+
+La configurazione futura dovrebbe essere una policy esplicita, per esempio:
+
+```text
+inotify_watch_create_policy=strict
+inotify_watch_create_policy=compat
+```
+
+Il significato proposto e':
+
+- `strict`: Alfred prova a usare `IN_MASK_CREATE` quando installa un watch.
+  Se il kernel risponde `EEXIST`, significa che sullo stesso oggetto esiste gia'
+  un watch. In quel caso Alfred non deve fare fallback silenzioso, perche'
+  perderebbe proprio la protezione che il flag offre.
+- `compat`: Alfred usa il comportamento storico senza `IN_MASK_CREATE`.
+  Questa modalita' puo' servire su kernel vecchi o in ambienti dove si vuole
+  mantenere esattamente la semantica precedente.
+
+Il fallback e' accettabile solo per il caso di compatibilita' kernel. Un errore
+`EINVAL` puo' indicare che il kernel non conosce `IN_MASK_CREATE`, ma puo' anche
+indicare una maschera non valida. Per questo Alfred dovrebbe idealmente fare un
+probe controllato oppure una singola retry documentata togliendo solo
+`IN_MASK_CREATE`, registrando nel log diagnostico che la modalita' strict e'
+stata degradata per compatibilita'. `EEXIST`, invece, non e' un problema di
+compatibilita': e' il segnale che il watch esiste gia' e deve restare visibile
+come fatto di policy/debug.
+
+I test futuri dovranno coprire almeno tre casi:
+
+- aggiunta duplicata della stessa directory, con risultato atteso `EEXIST` in
+  modalita' strict
+- path diversi che raggiungono lo stesso oggetto filesystem, quando l'ambiente
+  di test lo permette
+- fallback compatibile su kernel senza supporto a `IN_MASK_CREATE`, da testare
+  preferibilmente con helper/fake o test condizionale, senza richiedere un
+  kernel vecchio nella CI ordinaria
+
+La scelta su `IN_ONLYDIR` deriva anche da una considerazione prestazionale:
+Alfred non dovrebbe installare un watch per ogni file. Se una directory padre e'
+osservata, gli eventi sui file figli arrivano gia' tramite quella directory. I
+watch file-level consumerebbero descrittori e memoria kernel senza migliorare
+la copertura del modello corrente.
 
 ## Stato per livello Alfred
 
@@ -247,6 +502,36 @@ Questa regola evita l'errore di copiare automaticamente tutta la superficie di
 inotify dentro l'API semantica. `IN_OPEN`, per esempio, e' reale e utile per
 alcuni strumenti di audit, ma non significa che un file sia stato creato,
 modificato, cancellato o pronto.
+
+## Eventi rimandati per audit
+
+`IN_ACCESS`, `IN_OPEN` e `IN_CLOSE_NOWRITE` sono eventi reali e importanti per
+strumenti di audit. Non sono pero' eventi di mutazione del filesystem. La
+decisione corrente e' quindi: non inserirli nella maschera predefinita, non
+accettarli ancora nel parser `inotify_watch_mask` e non creare semantica core
+finche' non nasce un requisito esplicito di audit/guardrail.
+
+| Evento | Fatto kernel | Perche' e' rimandato | Possibile raw futuro | Possibile semantica futura | Impatto prestazionale | Test futuro |
+| --- | --- | --- | --- | --- | --- | --- |
+| `IN_ACCESS` | file letto o eseguito | E' molto rumoroso e non indica modifica. Per un agent runtime security puo' diventare utile, ma solo dentro un modello audit separato | `ALFRED_RAW_ACCESS` | `FILE_ACCESSED` o evento audit non semantico filesystem | Alto: letture, scansioni, editor e programmi possono generare molti eventi | `cat file`, esecuzione file, lettura ripetuta con confronto volume log |
+| `IN_OPEN` | file o directory aperto | Da solo non dice se ci sara' lettura, scrittura o modifica. Rischia di moltiplicare eventi senza significato operativo immediato | `ALFRED_RAW_OPEN` | `FILE_OPENED` / `DIR_OPENED` solo in modalita' audit | Alto: quasi ogni operazione passa da open | `cat`, editor, listing directory; verificare che non diventi create/modify |
+| `IN_CLOSE_NOWRITE` | file o directory chiuso senza scrittura | Non e' `FILE_READY`: `FILE_READY` oggi significa close dopo scrittura (`IN_CLOSE_WRITE`) | `ALFRED_RAW_CLOSE_NOWRITE` | `FILE_CLOSED_READ` o evento audit di sessione file | Medio-alto, soprattutto se abbinato a `IN_OPEN` | aprire e chiudere file read-only; assicurare nessun `FILE_READY` |
+
+Per questi eventi servira' probabilmente una distinzione architetturale tra:
+
+```text
+filesystem mutation stream
+    create/delete/modify/ready/move/overflow
+
+audit stream
+    access/open/close-nowrite, forse con pid/processo quando il backend lo sa
+```
+
+Con `inotify` non abbiamo pid/processo dell'attore, quindi il valore per un
+guardrail agentico sarebbe limitato. Backend futuri come fanotify, audit o eBPF
+potrebbero fornire piu' contesto. Per questo gli eventi audit non vanno
+promossi nel core filesystem principale senza progettare prima il modello
+multi-backend.
 
 ## Eventi sul watch stesso
 

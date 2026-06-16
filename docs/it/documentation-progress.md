@@ -42,6 +42,46 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md` completano la prima revisione dei flag di
+  installazione watch con `IN_MASK_ADD` e `IN_ONESHOT`. `IN_MASK_ADD` e'
+  rimandato finche' Alfred non avra' aggiornamenti dinamici parziali delle
+  maschere; `IN_ONESHOT` e' escluso dal runtime continuo perche' rimuove il
+  watch dopo un solo evento.
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_EXCL_UNLINK`. La scelta e' di non abilitarlo come default e
+  di non esporlo dentro `inotify_watch_mask`: il flag potra' diventare una
+  futura policy `observe|suppress` solo dopo test funzionali e benchmark sul
+  rapporto tra rumore, prestazioni e perdita di visibilita' audit.
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_DONT_FOLLOW`. La scelta e' di non implementarlo come token
+  di `inotify_watch_mask`, ma come futura policy leggibile sui symlink
+  (`follow|no-follow`) collegata alla sicurezza, alle prestazioni e alla policy
+  dello scanner.
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_MASK_CREATE`. La scelta e' di non esporlo ora dentro
+  `inotify_watch_mask`, perche' e' un flag di installazione dei watch e non un
+  evento filesystem. La documentazione distingue la futura modalita'
+  `strict|compat`, l'errore `EEXIST` e il fallback di compatibilita' su kernel
+  vecchi.
+- `watch_manager.c`, `test_onlydir_rejects_file_root.sh`,
+  `05-modulo-inotify.md`, `14-scenari-test.md`,
+  `16-mappa-codice-e-strutture.md`, `20-matrice-eventi-inotify.md` e
+  `22-contratto-log.md`: `IN_ONLYDIR` e' ora applicato internamente dal watch
+  manager. Alfred installa watch su directory, non su file singoli; i file sono
+  osservati tramite la directory padre per evitare consumo inutile di watch
+  descriptor e memoria kernel.
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md`: ampliata la mappa degli eventi e flag inotify non
+  gestiti. La documentazione ora distingue eventi audit rumorosi
+  (`IN_ACCESS`, `IN_OPEN`, `IN_CLOSE_NOWRITE`), macro di comodita'
+  (`IN_ALL_EVENTS`, `IN_MOVE`, `IN_CLOSE`) e flag di installazione watch
+  (`IN_ONLYDIR`, `IN_MASK_CREATE`, `IN_DONT_FOLLOW`, `IN_EXCL_UNLINK`,
+  `IN_MASK_ADD`, `IN_ONESHOT`), con priorita', motivazione tecnica e test
+  futuri.
 - `inotify_backend.c`, `test_overflow_raw_bridge.c`,
   `test_overflow_raw_bridge.sh`, `14-scenari-test.md`,
   `20-matrice-eventi-inotify.md`, `21-roadmap-scanner-resync.md` e
