@@ -31,12 +31,19 @@ piu' dettaglio.
 22. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 23. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 24. [Stato funzionalita' supportate](26-stato-funzionalita.md)
-25. [Glossario](glossario.md)
+25. [Guida alla lettura della documentazione](27-guida-lettura-documentazione.md)
+26. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 
 Leggi i capitoli in ordine se parti da zero. Se invece stai lavorando su una
 parte specifica della codebase, usa l'indice come riferimento rapido.
+
+Per un percorso piu' guidato usa
+[Guida alla lettura della documentazione](27-guida-lettura-documentazione.md).
+Quel documento divide la lettura per obiettivi: capire il progetto da zero,
+usare Alfred, contribuire al codice, studiare gli eventi, leggere i test,
+seguire scanner/resync e orientarsi nella roadmap futura.
 
 Per capire il codice in modo guidato, dopo aver letto architettura, app, modulo
 inotify e core, passa a [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md).

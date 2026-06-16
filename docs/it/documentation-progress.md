@@ -43,6 +43,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `24-roadmap-ai-agent-guardrail.md` |
 | Completo | `25-roadmap-unificata-dossier.md` |
 | Completo | `26-stato-funzionalita.md` |
+| Completo | `27-guida-lettura-documentazione.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -95,3 +96,11 @@ Sono state aggiunte tre bozze di pagine man:
 
 Le pagine sono marcate come parziali perche' dovranno essere riallineate dopo
 Event Model v0, Backend API v0, JSONL e futura CLI con opzioni esplicite.
+
+## Aggiornamento guida di lettura
+
+`27-guida-lettura-documentazione.md` e' stato aggiunto come documento d'insieme.
+Non sostituisce gli altri capitoli: spiega in quale ordine leggerli, separa i
+percorsi per utente, contributore, studente e sviluppatore, e fornisce un indice
+tematico rapido per ritrovare argomenti come eventi, test, log, scanner,
+resync, plugin backend, configurazione e roadmap.

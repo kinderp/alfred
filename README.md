@@ -136,6 +136,7 @@ ALFRED_KEEP_TEST_LOGS=1 make test-backend-diagnostics
 Detailed documentation is currently maintained in Italian:
 
 - [Italian documentation index](docs/it/README.md)
+- [Guided documentation reading order](docs/it/27-guida-lettura-documentazione.md)
 - [Operational rules](docs/it/00-regole-operative.md)
 - [Project overview](docs/it/01-panoramica-progetto.md)
 - [Architecture](docs/it/02-architettura-generale.md)
