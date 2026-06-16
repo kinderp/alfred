@@ -1,0 +1,196 @@
+.TH ALFRED-EVENTS 7 "June 2026" "Alfred" "Alfred Architecture"
+.SH NAME
+alfred-events \- Alfred event layers, current model, and supported semantics
+.SH DESCRIPTION
+Alfred separates backend-specific facts from stable semantic events.
+This page describes the current model before Event Model v0. It is more formal
+than the Italian design documents, but it is still a draft: Event Model v0 may
+rename fields, split streams, or introduce JSONL records.
+.SH EVENT LAYERS
+.SS Backend raw log
+The backend raw log records facts close to the operating system backend. With
+the current Linux inotify backend, examples are:
+.EX
+IN_CREATE IN_ISDIR wd=1 path=/tmp/root name=dir
+IN_MOVED_FROM wd=1 path=/tmp/root name=old cookie=123
+IN_Q_OVERFLOW wd=-1 path= name=
+.EE
+These lines are useful for debugging and backend diagnostics. They are not the
+stable application-facing API.
+.SS Alfred raw events
+The inotify adapter converts selected backend facts into
+.B alfred_raw_event_t
+records for the core. Current raw flags are:
+.EX
+ALFRED_RAW_CREATE
+ALFRED_RAW_DELETE
+ALFRED_RAW_MODIFY
+ALFRED_RAW_ATTRIB
+ALFRED_RAW_CLOSE_WRITE
+ALFRED_RAW_MOVED_FROM
+ALFRED_RAW_MOVED_TO
+ALFRED_RAW_OVERFLOW
+ALFRED_RAW_ISDIR
+.EE
+.B ALFRED_RAW_ISDIR
+is a modifier, not an action. A modifier-only raw mask is not enough to dispatch
+an event to the core.
+.SS Core semantic events
+The core correlates raw events and emits stable semantic events such as:
+.EX
+FILE_CREATED
+DIR_CREATED
+FILE_DELETED
+DIR_DELETED
+FILE_MODIFIED
+FILE_READY
+FILE_RENAMED
+DIR_RENAMED
+FILE_MOVED
+DIR_MOVED
+FILE_RELOCATED
+DIR_RELOCATED
+OVERFLOW
+.EE
+These events are the current user-visible filesystem semantics.
+.SS Backend diagnostics
+Some events describe backend state rather than filesystem domain semantics:
+.EX
+WATCH_ADDED
+WATCH_REMOVED
+WATCH_STALE
+WATCH_RESYNC_BEGIN
+WATCH_RESYNC_FAILED
+WATCH_LOST_QUEUED
+WATCH_LOST_RECOVERY_END
+.EE
+They are important for testing and operations, but they must not be confused
+with file or directory events.
+.SH CURRENT SEMANTIC RULES
+.TP
+.B create
+.B IN_CREATE
+becomes
+.B ALFRED_RAW_CREATE
+and then
+.B FILE_CREATED
+or
+.B DIR_CREATED
+depending on
+.BR IN_ISDIR .
+.TP
+.B delete
+.B IN_DELETE
+becomes
+.B ALFRED_RAW_DELETE
+and then
+.B FILE_DELETED
+or
+.BR DIR_DELETED .
+.TP
+.B modify
+.B IN_MODIFY
+becomes
+.B ALFRED_RAW_MODIFY
+and then
+.BR FILE_MODIFIED .
+The core can debounce repeated modify events.
+.TP
+.B close-write
+.B IN_CLOSE_WRITE
+becomes
+.B ALFRED_RAW_CLOSE_WRITE
+and then
+.BR FILE_READY .
+This is not a duplicate of
+.BR FILE_MODIFIED ;
+it means the writer closed the file after writing.
+.TP
+.B move and rename
+.B IN_MOVED_FROM
+and
+.B IN_MOVED_TO
+are correlated by cookie. Same parent and different basename becomes rename.
+Different parent and same basename becomes move. Different parent and different
+basename becomes relocated.
+.TP
+.B moved-to fallback
+If
+.B IN_MOVED_TO
+arrives without the matching
+.BR IN_MOVED_FROM ,
+the core emits a create fallback because an object entered the observed tree.
+.TP
+.B overflow
+.B IN_Q_OVERFLOW
+becomes
+.B ALFRED_RAW_OVERFLOW
+and then
+.BR OVERFLOW .
+Full recovery after overflow is not complete.
+.SH INOTIFY AUDIT EVENTS
+The current backend can request these events only when
+.B inotify_audit_events
+enables them:
+.EX
+IN_OPEN
+IN_ACCESS
+IN_CLOSE_NOWRITE
+.EE
+They are raw-log-only. They do not become
+.B ALFRED_RAW_OPEN
+or similar raw events, and they do not produce core semantic events. This keeps
+filesystem mutation semantics separate from future audit/guardrail streams.
+.SH SELF EVENTS AND WATCH STATE
+.B IN_MOVE_SELF ,
+.B IN_DELETE_SELF ,
+.B IN_IGNORED ,
+and
+.B IN_UNMOUNT
+describe the watched object or watch state. Alfred handles them as backend
+state first.
+.TP
+.B IN_MOVE_SELF
+Marks the watch stale. Alfred does not emit move, rename, or relocated directly
+because inotify does not provide the destination path. Resync or lost-scope
+recovery may later restore reliable coverage.
+.TP
+.B IN_DELETE_SELF
+Marks the watch stale and waits for cleanup. Alfred does not currently emit a
+semantic delete directly from the self-event.
+.TP
+.B IN_IGNORED
+Means the kernel removed the watch. Alfred removes the watcher entry and emits
+diagnostic cleanup.
+.TP
+.B IN_UNMOUNT
+Marks the watch stale and waits for ignored-watch cleanup. It is not treated as
+a semantic delete.
+.SH LOST-SCOPE RECOVERY
+When a stale watch still has useful filesystem identity, Alfred can enqueue a
+delayed recovery request. The recovery scans configured roots for the same
+identity, updates path prefixes if the object is found, reinstalls missing
+watches, and returns the watch subtree to a valid state only when coverage is
+complete.
+.PP
+The current runtime processes recovery synchronously with a small batch size.
+A worker thread and public recovery tuning are future work.
+.SH FUTURE EVENT MODEL V0
+Event Model v0 is expected to formalize fields such as:
+.EX
+schema_version
+event_id
+timestamp_ns
+source_module
+subject
+action
+target
+context
+control
+.EE
+JSONL, MessagePack, Protobuf, socket output, Alfred Lab and plugin backends
+should be built on that structured model, not on ad hoc log strings.
+.SH SEE ALSO
+.BR alfred (1),
+.BR alfred.conf (5),
+.BR inotify (7)

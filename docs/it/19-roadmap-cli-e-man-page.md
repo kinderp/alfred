@@ -199,18 +199,46 @@ direttamente il core.
 
 ## Pagina man
 
-Quando l'interfaccia CLI sara' stabile, Alfred dovrebbe avere almeno una pagina
-man in sezione 1:
+Alfred ora ha una prima bozza di pagine man dentro `docs/man/`. Sono piu'
+formali degli MD e servono come contratto consultabile da terminale, ma restano
+bozze: Event Model v0 e la futura CLI con opzioni vere potranno modificarle.
+
+Per leggerle senza installarle:
+
+```bash
+man -l docs/man/man1/alfred.1
+man -l docs/man/man5/alfred.conf.5
+man -l docs/man/man7/alfred-events.7
+```
+
+Le pagine iniziali sono:
 
 ```text
 alfred(1)
+alfred.conf(5)
+alfred-events(7)
 ```
 
-Se il formato del file di configurazione diventa stabile, ha senso aggiungere
-anche:
+`alfred(1)` documenta l'uso utente corrente: path posizionali, variabile
+`ALFRED_CONFIG`, log prodotti, ambiente e limiti attuali.
+
+`alfred.conf(5)` documenta il formato key-value reale, le chiavi supportate, i
+default, la maschera inotify e `inotify_audit_events`.
+
+`alfred-events(7)` documenta il modello architetturale corrente: raw backend
+log, `ALFRED_RAW_*`, eventi semantici core, diagnostica backend, self events e
+lost-scope recovery.
+
+Quando l'interfaccia CLI sara' stabile, queste pagine dovranno essere aggiornate
+insieme a eventuali opzioni come:
 
 ```text
-alfred.conf(5)
+--help
+--version
+-c FILE
+--config FILE
+--print-config
+--check-config
 ```
 
 Struttura consigliata per `alfred(1)`:

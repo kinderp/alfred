@@ -1,0 +1,179 @@
+.TH ALFRED.CONF 5 "June 2026" "Alfred" "File Formats"
+.SH NAME
+alfred.conf \- Alfred runtime configuration file
+.SH DESCRIPTION
+An Alfred configuration file is a plain text file containing
+.B key=value
+records.
+.PP
+Empty lines are ignored. Lines whose first character is
+.B #
+are ignored. Unknown keys are ignored, so newer configuration files remain
+mostly compatible with older binaries. Values are not quoted by the parser; the
+text after the first
+.B =
+is used as the value.
+.PP
+The file is loaded only when the
+.B ALFRED_CONFIG
+environment variable points to it:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.SH BOOLEAN VALUES
+Boolean true values are:
+.EX
+1
+true
+yes
+on
+.EE
+Every other value is treated as false.
+.SH GENERAL KEYS
+.TP
+.B recursive
+Alias for
+.BR inotify_recursive .
+Controls recursive directory watching for the inotify backend.
+.TP
+.B use_epoll
+Reserved for a future epoll-based event loop. The current runtime does not use
+an epoll loop.
+.TP
+.B flush_immediately
+When true, log streams are flushed after writes. The default is true to improve
+visibility during development and failures.
+.TP
+.B watcher_capacity
+Alias for
+.BR inotify_watcher_capacity .
+Initial watcher table capacity.
+.TP
+.B event_engine
+Semantic engine selector kept only for validation. The only supported value is
+.BR core .
+The historical value
+.B shadow
+is invalid.
+.TP
+.B raw_log
+Path of the backend raw log. Default:
+.BR raw.log .
+.TP
+.B event_log
+Path of the semantic/diagnostic event log. Default:
+.BR events.log .
+.TP
+.B error_log
+Path of the error log. Default:
+.BR errors.log .
+.SH INOTIFY KEYS
+.TP
+.B inotify_recursive
+Boolean. Enables recursive watch installation for directories. Default:
+.BR true .
+.TP
+.B inotify_watcher_capacity
+Initial capacity of the inotify watcher table. Invalid numeric values keep the
+previous value. Default:
+.BR 128 .
+.TP
+.B inotify_watch_mask
+Comma-separated inotify subscription mask expression.
+.PP
+A plain list starts from an empty mask:
+.EX
+inotify_watch_mask=IN_CREATE,IN_DELETE,IN_MODIFY
+.EE
+.PP
+The token
+.B default
+starts from Alfred's backend-defined default mask:
+.EX
+inotify_watch_mask=default,-IN_ATTRIB
+.EE
+.PP
+Tokens prefixed with
+.B +
+are added. Tokens prefixed with
+.B -
+are removed.
+.PP
+Supported tokens are:
+.EX
+IN_ATTRIB
+IN_CLOSE_WRITE
+IN_CREATE
+IN_DELETE
+IN_DELETE_SELF
+IN_MODIFY
+IN_MOVE_SELF
+IN_MOVED_FROM
+IN_MOVED_TO
+IN_UNMOUNT
+IN_IGNORED
+IN_Q_OVERFLOW
+.EE
+.PP
+Unknown tokens make configuration loading fail.
+.TP
+.B inotify_audit_events
+Comma-separated opt-in audit policy names. These are intentionally not raw
+.B IN_*
+tokens. Supported values are:
+.EX
+off
+open
+access
+close-nowrite
+open,access,close-nowrite
+.EE
+.PP
+Audit events are visible only in
+.BR raw.log .
+They do not become
+.B ALFRED_RAW_*
+events and do not produce core semantic events.
+.SH DEFAULTS
+The current defaults are:
+.EX
+inotify_recursive=true
+inotify_watcher_capacity=128
+inotify_audit_events=off
+event_engine=core
+raw_log=raw.log
+event_log=events.log
+error_log=errors.log
+flush_immediately=true
+use_epoll=false
+.EE
+.PP
+The default inotify watch mask is defined by the inotify backend and includes
+the filesystem events, self-events, ignored-watch cleanup, unmount and overflow
+diagnostics that Alfred currently understands.
+.SH EXAMPLES
+.TP
+Disable attribute observation:
+.EX
+inotify_watch_mask=default,-IN_ATTRIB
+.EE
+.TP
+Use custom log paths:
+.EX
+raw_log=/tmp/alfred.raw.log
+event_log=/tmp/alfred.events.log
+error_log=/tmp/alfred.errors.log
+.EE
+.TP
+Enable raw-log-only audit events:
+.EX
+inotify_audit_events=open,access,close-nowrite
+.EE
+.SH NOTES
+This file format is intentionally simple and does not yet have include
+directives, sections, quoting rules, variable expansion or CLI override
+precedence.
+.SH SEE ALSO
+.BR alfred (1),
+.BR alfred-events (7),
+.BR inotify (7)

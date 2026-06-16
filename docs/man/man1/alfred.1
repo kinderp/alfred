@@ -1,0 +1,131 @@
+.TH ALFRED 1 "June 2026" "Alfred" "User Commands"
+.SH NAME
+alfred \- filesystem event engine and future AI agent runtime guard
+.SH SYNOPSIS
+.B alfred
+.IR PATH ...
+.br
+.B ALFRED_CONFIG=FILE alfred
+.IR PATH ...
+.SH DESCRIPTION
+.B alfred
+starts the Alfred runtime and watches one or more filesystem roots.
+The current implementation uses the Linux
+.BR inotify (7)
+backend, converts backend events into Alfred raw events, passes those raw
+events through the core correlator, and writes human-readable log files.
+.PP
+The current command line is intentionally small. Positional arguments are
+interpreted as paths to watch. Alfred does not yet implement
+.BR --help ,
+.BR --version ,
+.BR -c ,
+or
+.BR --config .
+Configuration is loaded through the
+.B ALFRED_CONFIG
+environment variable.
+.PP
+The runtime is core-only. Historical shadow mode was removed. If configuration
+or environment asks for
+.BR shadow ,
+startup fails instead of silently falling back.
+.SH ARGUMENTS
+.TP
+.I PATH
+Filesystem root to observe. At least one path is required for a normal
+monitoring run. Each startup path is passed to the inotify backend, which
+installs a directory-scoped watch and recursively discovers subdirectories when
+recursive watching is enabled.
+.SH ENVIRONMENT
+.TP
+.B ALFRED_CONFIG
+Path to a key-value configuration file. If set, Alfred loads this file after
+applying built-in defaults. Invalid configuration makes startup fail.
+.TP
+.B ALFRED_EVENT_ENGINE
+Compatibility validation hook. The only accepted value is
+.BR core .
+The value
+.B shadow
+is rejected because the legacy dispatcher no longer exists.
+.TP
+.B ALFRED_KEEP_TEST_LOGS
+Test-suite variable used by project scripts to keep temporary log files after a
+test run. It is not a general runtime feature of the Alfred binary.
+.SH CONFIGURATION
+Alfred reads simple
+.B key=value
+configuration files. Empty lines and lines starting with
+.B #
+are ignored. Unknown keys are ignored so configuration files can evolve.
+.PP
+Common keys are documented in
+.BR alfred.conf (5).
+.SH LOG FILES
+By default Alfred writes the following files in the current working directory:
+.TP
+.B raw.log
+Human-readable backend raw log. For the inotify backend this contains Linux
+inotify event names such as
+.BR IN_CREATE ,
+.BR IN_MOVED_FROM ,
+or
+.BR IN_Q_OVERFLOW .
+.TP
+.B events.log
+Human-readable event log. It contains semantic core events such as
+.B FILE_CREATED
+and
+.BR DIR_RELOCATED ,
+and backend diagnostics such as
+.B WATCH_ADDED
+or
+.BR WATCH_STALE .
+.TP
+.B errors.log
+Error and diagnostic failure log.
+.SH EXIT STATUS
+.TP
+.B 0
+The process terminated normally.
+.TP
+.B non-zero
+Startup, configuration, backend initialization, watch installation, or runtime
+processing failed.
+.SH EXAMPLES
+.TP
+Watch one directory with defaults:
+.EX
+alfred /tmp/project
+.EE
+.TP
+Watch two roots:
+.EX
+alfred /tmp/project /tmp/other-root
+.EE
+.TP
+Load configuration from a file:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.TP
+Enable inotify audit raw-log events:
+.EX
+cat > alfred.conf <<'EOF'
+inotify_audit_events=open,access,close-nowrite
+EOF
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.SH CURRENT LIMITATIONS
+.PP
+Alfred currently has no stable JSONL output, no public plugin ABI, no fanotify
+or eBPF backend, and no production policy engine. Those are roadmap items.
+.PP
+The current inotify backend can observe filesystem effects, but it is not a
+general preventive enforcement mechanism. Blocking before an operation will
+require a backend or sandbox mechanism with permission/enforcement capability.
+.SH SEE ALSO
+.BR alfred.conf (5),
+.BR alfred-events (7),
+.BR inotify (7)

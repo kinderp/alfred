@@ -78,3 +78,19 @@ Ogni capitolo dovrebbe contenere:
 
 Il file [documentation-progress.md](documentation-progress.md) tiene traccia dei
 capitoli scritti, incompleti o ancora da iniziare.
+
+## Pagine man
+
+Le prime bozze delle pagine man sono in `docs/man/`:
+
+- [alfred(1)](../man/man1/alfred.1)
+- [alfred.conf(5)](../man/man5/alfred.conf.5)
+- [alfred-events(7)](../man/man7/alfred-events.7)
+
+Si possono leggere localmente con:
+
+```bash
+man -l docs/man/man1/alfred.1
+man -l docs/man/man5/alfred.conf.5
+man -l docs/man/man7/alfred-events.7
+```

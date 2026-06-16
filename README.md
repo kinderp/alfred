@@ -164,6 +164,15 @@ Detailed documentation is currently maintained in Italian:
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 
+Draft manual pages are available locally:
+
+- [alfred(1)](docs/man/man1/alfred.1)
+- [alfred.conf(5)](docs/man/man5/alfred.conf.5)
+- [alfred-events(7)](docs/man/man7/alfred-events.7)
+
+They can be read with `man -l docs/man/man1/alfred.1`, `man -l
+docs/man/man5/alfred.conf.5`, and `man -l docs/man/man7/alfred-events.7`.
+
 Code browsing tools are documented separately:
 
 - [Code browsing tools](docs/code-browser/README.md)

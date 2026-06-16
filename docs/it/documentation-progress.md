@@ -59,6 +59,9 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `docs/code-browser/README.md` |
 | Completo | `docs/sourcebot-browser/README.md` |
 | Parziale | `docs/kythe-browser/README.md` |
+| Parziale | `docs/man/man1/alfred.1` |
+| Parziale | `docs/man/man5/alfred.conf.5` |
+| Parziale | `docs/man/man7/alfred-events.7` |
 
 ## Aggiornamento recente
 
@@ -80,3 +83,15 @@ supportate dal backend inotify, dal raw log, dagli `ALFRED_RAW_*`, dal core
 semantico, dalla diagnostica backend e dalla lost-scope recovery. Il documento
 rimanda ai test principali e deve essere letto prima di progettare Event Model
 v0, Backend API v0 o JSONL.
+
+## Aggiornamento pagine man
+
+Sono state aggiunte tre bozze di pagine man:
+
+- `alfred(1)`: uso utente corrente, ambiente, log, limiti e esempi
+- `alfred.conf(5)`: formato key-value, chiavi supportate e default
+- `alfred-events(7)`: modello eventi corrente, self events, diagnostica e
+  lost-scope recovery
+
+Le pagine sono marcate come parziali perche' dovranno essere riallineate dopo
+Event Model v0, Backend API v0, JSONL e futura CLI con opzioni esplicite.
