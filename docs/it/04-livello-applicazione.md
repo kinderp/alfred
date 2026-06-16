@@ -305,6 +305,7 @@ inotify_recursive=true
 watcher_capacity=256
 inotify_watcher_capacity=256
 inotify_watch_mask=default,-IN_ATTRIB
+inotify_audit_events=off
 event_engine=core
 raw_log=myraw.log
 ```
@@ -356,6 +357,48 @@ introdotto, dovra' essere una policy rumore/visibilita', per esempio
 `inotify_unlinked_child_policy=observe|suppress`. Questa distinzione evita di
 confondere due decisioni diverse: quali eventi osservare e con quale disciplina
 installare i watch.
+
+La chiave `inotify_audit_events` e' separata da `inotify_watch_mask` per lo
+stesso motivo. Valori come `open`, `access` e `close-nowrite` abilitano fatti
+audit rumorosi e non mutazioni filesystem. Oggi questi eventi restano nel raw
+log inotify e non diventano ancora raw Alfred o eventi core.
+
+Valori supportati:
+
+```text
+inotify_audit_events=off
+inotify_audit_events=open
+inotify_audit_events=access
+inotify_audit_events=close-nowrite
+inotify_audit_events=open,access,close-nowrite
+```
+
+Significato dei campi:
+
+| Valore | Bit inotify richiesto | Significato | Effetto Alfred corrente |
+| --- | --- | --- | --- |
+| `off` | nessuno | disabilita lo stream audit inotify | comportamento predefinito |
+| `open` | `IN_OPEN` | un file o una directory e' stato aperto | visibile solo in `raw.log` |
+| `access` | `IN_ACCESS` | un file e' stato letto o eseguito | visibile solo in `raw.log` |
+| `close-nowrite` | `IN_CLOSE_NOWRITE` | un file o directory e' stato chiuso senza scrittura | visibile solo in `raw.log`; non e' `FILE_READY` |
+
+La sintassi usa nomi di policy in minuscolo, non token raw `IN_*`. Per esempio
+`inotify_audit_events=open` e' valido, mentre
+`inotify_audit_events=IN_OPEN` e' un errore di configurazione. Questa scelta
+obbliga chi configura Alfred a distinguere gli eventi audit dalla maschera
+filesystem principale.
+
+Esempio operativo:
+
+```text
+inotify_watch_mask=default
+inotify_audit_events=open,access,close-nowrite
+```
+
+Con questa configurazione una lettura read-only puo' produrre righe come
+`IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel `raw.log`. Non deve pero'
+produrre `FILE_MODIFIED` o `FILE_READY` nell'`events.log`, perche' non c'e'
+stata scrittura.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

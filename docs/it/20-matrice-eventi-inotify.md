@@ -559,6 +559,12 @@ raw dedicati solo per chi accetta rumore e costo aggiuntivo. Questa chiave non
 dovrebbe essere un alias libero per `inotify_watch_mask`: deve dire
 esplicitamente che l'utente sta entrando in un modello audit.
 
+Stato implementativo corrente: `inotify_audit_events` e' accettato dal file di
+configurazione e aggiunge i bit audit alla mask kernel, ma gli eventi restano
+limitati al raw log inotify. Non esistono ancora `ALFRED_RAW_OPEN`,
+`ALFRED_RAW_ACCESS` o `ALFRED_RAW_CLOSE_NOWRITE`, e il core non riceve eventi
+audit.
+
 I livelli restano separati:
 
 | Livello | Stream filesystem | Stream audit futuro |
@@ -616,13 +622,19 @@ Il test controlla anche che non compaia `IN_CLOSE_WRITE`.
 Questo test non abilita nulla nel runtime Alfred. Serve a separare due livelli:
 
 - fatto kernel: gli eventi audit esistono e sono osservabili
-- contratto Alfred: finche' non esiste `inotify_audit_events`, questi eventi
-  restano fuori da `inotify_watch_mask`, raw Alfred e semantica core
+- contratto Alfred: anche quando `inotify_audit_events` li rende visibili nel
+  raw log inotify, questi eventi restano fuori da `inotify_watch_mask`, raw
+  Alfred e semantica core
 
 Il valore didattico del test e' importante: prima di progettare un evento
 `ALFRED_RAW_OPEN` o `ALFRED_RAW_ACCESS`, gli studenti possono vedere quale
 segnale elementare offre davvero inotify e quali informazioni mancano, in
 particolare pid/processo/prompt.
+
+`tests/backend/test_audit_config_raw_log.sh` verifica il primo passo runtime:
+con `inotify_audit_events=open,access,close-nowrite`, Alfred rende visibili
+`IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel raw log inotify, ma non produce
+`FILE_READY` o `FILE_MODIFIED`.
 
 ## Eventi sul watch stesso
 

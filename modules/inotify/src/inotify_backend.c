@@ -1918,7 +1918,8 @@ static int backend_poll(inotify_backend_context_t *ctx,
                                           full_path,
                                           sizeof(full_path),
                                           &raw) == 0) {
-                raw_ptr = &raw;
+                if (raw.mask != 0)
+                    raw_ptr = &raw;
             }
             else {
                 logger_error(ctx->logger,
@@ -3366,6 +3367,12 @@ static void backend_raw_event_name_from_mask(uint32_t mask,
         strncat(dest, "IN_ATTRIB ", dest_size - strlen(dest) - 1);
     if (mask & IN_CLOSE_WRITE)
         strncat(dest, "IN_CLOSE_WRITE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_CLOSE_NOWRITE)
+        strncat(dest, "IN_CLOSE_NOWRITE ", dest_size - strlen(dest) - 1);
+    if (mask & IN_OPEN)
+        strncat(dest, "IN_OPEN ", dest_size - strlen(dest) - 1);
+    if (mask & IN_ACCESS)
+        strncat(dest, "IN_ACCESS ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVED_FROM)
         strncat(dest, "IN_MOVED_FROM ", dest_size - strlen(dest) - 1);
     if (mask & IN_MOVED_TO)

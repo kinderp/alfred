@@ -42,6 +42,18 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `04-livello-applicazione.md` e `10-debugging-test-e-strumenti.md` spiegano
+  in modo operativo la nuova configurazione `inotify_audit_events`: valori
+  ammessi, valori rifiutati, comando di avvio con `ALFRED_CONFIG`, differenza
+  fra `raw.log` ed `events.log` e motivo per cui `IN_CLOSE_NOWRITE` non diventa
+  `FILE_READY`.
+- `inotify_config.c`, `watch_manager.c`, `inotify_backend.c`,
+  `test_audit_config_raw_log.sh`, `test_audit_config_invalid_token.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`, `14-scenari-test.md` e
+  `20-matrice-eventi-inotify.md`: introdotto il primo opt-in runtime
+  `inotify_audit_events`. Gli eventi audit vengono aggiunti alla mask kernel e
+  mostrati nel raw log inotify, ma non diventano ancora raw Alfred o eventi
+  core.
 - `tests/backend/test_audit_kernel_events.c`,
   `tests/backend/test_audit_kernel_events.sh`, `14-scenari-test.md` e
   `20-matrice-eventi-inotify.md`: aggiunto un test osservativo diretto del

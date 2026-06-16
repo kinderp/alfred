@@ -29,6 +29,7 @@ void inotify_config_defaults(inotify_config_t *cfg)
     cfg->recursive = 1;
     cfg->watcher_capacity = 128;
     cfg->watch_mask = watch_manager_default_mask();
+    cfg->audit_mask = 0;
 }
 
 typedef struct inotify_mask_name {
@@ -156,5 +157,76 @@ int inotify_config_set_watch_mask(inotify_config_t *cfg, const char *value)
         return -1;
 
     cfg->watch_mask = mask;
+    return 0;
+}
+
+/*
+ * inotify_config_set_audit_events - parse opt-in audit event names
+ * @cfg: inotify configuration object to update
+ * @value: comma-separated audit event expression
+ *
+ * This parser deliberately accepts lowercase policy names instead of raw
+ * IN_* tokens. The separation keeps inotify_watch_mask reserved for filesystem
+ * mutation/backend diagnostic events while audit subscriptions remain an
+ * explicit opt-in policy.
+ */
+int inotify_config_set_audit_events(inotify_config_t *cfg, const char *value)
+{
+    if (cfg == NULL || value == NULL || value[0] == '\0')
+        return -1;
+
+    char buffer[512];
+    int written = snprintf(buffer, sizeof(buffer), "%s", value);
+
+    if (written < 0 || written >= (int)sizeof(buffer))
+        return -1;
+
+    uint32_t mask = 0;
+    int saw_token = 0;
+
+    char *save = NULL;
+    char *token = strtok_r(buffer, ",", &save);
+
+    while (token != NULL) {
+        token = trim_space(token);
+
+        if (token[0] == '\0')
+            return -1;
+
+        if (strcmp(token, "off") == 0) {
+            if (saw_token)
+                return -1;
+
+            mask = 0;
+            saw_token = 1;
+            token = strtok_r(NULL, ",", &save);
+
+            if (token != NULL)
+                return -1;
+
+            break;
+        }
+
+        if (strcmp(token, "open") == 0) {
+            mask |= IN_OPEN;
+        }
+        else if (strcmp(token, "access") == 0) {
+            mask |= IN_ACCESS;
+        }
+        else if (strcmp(token, "close-nowrite") == 0) {
+            mask |= IN_CLOSE_NOWRITE;
+        }
+        else {
+            return -1;
+        }
+
+        saw_token = 1;
+        token = strtok_r(NULL, ",", &save);
+    }
+
+    if (!saw_token)
+        return -1;
+
+    cfg->audit_mask = mask;
     return 0;
 }
