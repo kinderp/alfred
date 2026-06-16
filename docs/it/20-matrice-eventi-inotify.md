@@ -511,6 +511,16 @@ decisione corrente e' quindi: non inserirli nella maschera predefinita, non
 accettarli ancora nel parser `inotify_watch_mask` e non creare semantica core
 finche' non nasce un requisito esplicito di audit/guardrail.
 
+Questa scelta e' ancora piu' importante dopo aver chiarito l'obiettivo di lungo
+periodo di Alfred: osservare azioni di agenti intelligenti sulla macchina e
+costruire guardrail runtime. In quel contesto gli eventi di apertura, accesso e
+chiusura possono diventare utili, ma solo se appartengono a uno stream audit
+esplicito. Non devono entrare di nascosto nello stream principale delle
+mutazioni filesystem, perche' romperebbero il contratto didattico e operativo:
+`FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY`, `FILE_DELETED` e gli eventi di
+move/rename descrivono cambiamenti osservabili dello stato filesystem, non il
+fatto che un processo abbia guardato o aperto un path.
+
 | Evento | Fatto kernel | Perche' e' rimandato | Possibile raw futuro | Possibile semantica futura | Impatto prestazionale | Test futuro |
 | --- | --- | --- | --- | --- | --- | --- |
 | `IN_ACCESS` | file letto o eseguito | E' molto rumoroso e non indica modifica. Per un agent runtime security puo' diventare utile, ma solo dentro un modello audit separato | `ALFRED_RAW_ACCESS` | `FILE_ACCESSED` o evento audit non semantico filesystem | Alto: letture, scansioni, editor e programmi possono generare molti eventi | `cat file`, esecuzione file, lettura ripetuta con confronto volume log |
@@ -532,6 +542,67 @@ guardrail agentico sarebbe limitato. Backend futuri come fanotify, audit o eBPF
 potrebbero fornire piu' contesto. Per questo gli eventi audit non vanno
 promossi nel core filesystem principale senza progettare prima il modello
 multi-backend.
+
+### Policy proposta per lo stream audit
+
+La policy futura dovrebbe essere esplicita e disabilitata di default. Una forma
+possibile e':
+
+```text
+inotify_audit_events=off
+inotify_audit_events=open
+inotify_audit_events=open,access,close-nowrite
+```
+
+`off` mantiene il comportamento corrente. Le altre modalita' abilitano eventi
+raw dedicati solo per chi accetta rumore e costo aggiuntivo. Questa chiave non
+dovrebbe essere un alias libero per `inotify_watch_mask`: deve dire
+esplicitamente che l'utente sta entrando in un modello audit.
+
+I livelli restano separati:
+
+| Livello | Stream filesystem | Stream audit futuro |
+| --- | --- | --- |
+| Inotify mask | eventi di mutazione e diagnostica watch | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` solo se richiesti |
+| Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, ... | `ALFRED_RAW_OPEN`, `ALFRED_RAW_ACCESS`, `ALFRED_RAW_CLOSE_NOWRITE` |
+| Core | eventi filesystem stabili | eventi audit separati o consumer dedicato |
+| Utente | "il filesystem e' cambiato" | "un processo ha interagito con un path" |
+
+`IN_CLOSE_NOWRITE` merita una regola speciale: non deve mai essere confuso con
+`FILE_READY`. In Alfred, `FILE_READY` nasce da `IN_CLOSE_WRITE`, cioe' chiusura
+dopo scrittura. Una chiusura senza scrittura puo' essere utile per audit di una
+sessione file, ma non significa che un contenuto nuovo sia pronto per essere
+consumato.
+
+`IN_OPEN` e `IN_ACCESS` sono utili solo se il consumer accetta che inotify non
+identifica l'attore. Un backend eBPF, audit o fanotify puo' aggiungere processo,
+utente, comando, container o relazione con prompt/azione agente. Inotify da solo
+puo' dire "questo path e' stato aperto o letto", ma non "chi lo ha fatto" con la
+precisione richiesta da un guardrail.
+
+Per questo la roadmap corretta e':
+
+1. documentare il contratto audit separato
+2. aggiungere test backend che misurano volume e raw log senza semantica core
+3. introdurre raw audit solo dietro configurazione esplicita
+4. decidere piu' avanti se il core deve avere una categoria audit separata o se
+   gli eventi audit devono uscire da un consumer dedicato
+5. confrontare inotify con backend piu' ricchi prima di promettere guardrail
+   basati su processo/prompt
+
+Esempi di comandi per scenari futuri:
+
+```bash
+cat watched/file.txt
+stat watched/file.txt
+python3 -c 'open("watched/file.txt").read()'
+exec 3< watched/file.txt
+exec 3<&-
+```
+
+Questi comandi possono generare aperture, accessi o chiusure senza scrittura.
+I test dovranno verificare che nessuno di questi scenari produca
+`FILE_MODIFIED` o `FILE_READY`.
 
 ## Eventi sul watch stesso
 

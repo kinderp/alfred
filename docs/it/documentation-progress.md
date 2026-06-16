@@ -43,6 +43,12 @@ Stati usati:
 ## Aggiornamenti recenti
 
 - `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md` rafforzano la policy per gli eventi audit
+  `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`. La documentazione ora lega questi
+  eventi all'obiettivo agent runtime security/guardrail, ma mantiene separati
+  stream filesystem e stream audit e chiarisce che inotify da solo non fornisce
+  il contesto processo/prompt necessario a un guardrail completo.
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
   `15-todo-switch-core.md` completano la prima revisione dei flag di
   installazione watch con `IN_MASK_ADD` e `IN_ONESHOT`. `IN_MASK_ADD` e'
   rimandato finche' Alfred non avra' aggiornamenti dinamici parziali delle
