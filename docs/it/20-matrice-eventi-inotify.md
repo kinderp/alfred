@@ -258,6 +258,60 @@ flag. `IN_EXCL_UNLINK` e `IN_DONT_FOLLOW` sono piu' legati a profili
 configurabili: prestazioni/rumore nel primo caso, hardening/symlink policy nel
 secondo.
 
+#### Policy proposta per `IN_DONT_FOLLOW`
+
+`IN_DONT_FOLLOW` dice al kernel di non seguire un link simbolico quando Alfred
+installa un watch sul path passato a `inotify_add_watch()`. Anche questo non e'
+un evento filesystem: non racconta che cosa e' successo nel filesystem, ma come
+Alfred decide di interpretare un path configurato o scoperto durante lo scan.
+
+La scelta corrente e' di non cambiare il comportamento runtime: Alfred continua
+a usare la policy esistente. Questo evita una regressione per chi si aspetta
+che un path symlink venga risolto verso il target reale. La scelta futura
+dovrebbe essere una policy esplicita, per esempio:
+
+```text
+inotify_symlink_policy=follow
+inotify_symlink_policy=no-follow
+```
+
+Il significato proposto e':
+
+- `follow`: comportamento compatibile. Se il kernel segue il symlink, Alfred
+  monitora il target reale del link.
+- `no-follow`: comportamento hardening. Alfred aggiunge `IN_DONT_FOLLOW`
+  quando installa il watch; se il path e' un symlink, il backend deve rifiutare
+  o diagnosticare chiaramente il caso invece di monitorare un target inatteso.
+
+Il punto delicato e' che i symlink possono comparire in due posizioni diverse:
+
+- root configurata dall'utente, per esempio `alfred ./watched-link`
+- subdirectory incontrata durante scan ricorsivo o recovery
+
+Nel primo caso la policy deve essere molto chiara per l'utente, perche' cambia
+il significato del path passato da riga di comando o da file di configurazione.
+Nel secondo caso si collega alla policy dello scanner: oggi il resync non segue
+symlink di default per evitare cicli, attraversamenti fuori root e consumo
+imprevisto di risorse. La documentazione dello scanner spiega gia' le policy
+anti-ciclo: visited set su `(st_dev, st_ino)`, limiti di profondita', restare
+sotto la root iniziale e, se serve, non attraversare device diversi.
+
+I test futuri dovranno coprire almeno:
+
+- root symlink in modalita' `follow`: Alfred monitora il target reale
+- root symlink in modalita' `no-follow`: Alfred rifiuta o logga una diagnostica
+  esplicita
+- symlink dentro una directory osservata: Alfred non deve trasformarlo
+  automaticamente in una nuova root ricorsiva senza una policy dedicata
+- coerenza con lo scanner: `follow_symlinks = 0` resta il default conservativo
+  per resync/watch
+
+Questa policy e' collegata alla sicurezza: seguire symlink senza controllo puo'
+portare Alfred a osservare un albero diverso da quello che l'utente pensa di
+aver indicato. E' collegata anche alle prestazioni: seguire link verso alberi
+grandi o ciclici puo' aumentare drasticamente il numero di directory visitate e
+di watch installati.
+
 #### Policy proposta per `IN_MASK_CREATE`
 
 `IN_MASK_CREATE` non deve essere trattato come `IN_CREATE` o `IN_MODIFY`.

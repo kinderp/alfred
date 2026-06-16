@@ -345,12 +345,15 @@ Flag inotify reali ma non ancora supportati da Alfred, per esempio `IN_OPEN` o
 osservarli e documentarli.
 
 `inotify_watch_mask` non e' il posto giusto per flag di installazione come
-`IN_ONLYDIR` o `IN_MASK_CREATE`. `IN_ONLYDIR` e' applicato internamente dal watch
-manager per garantire che Alfred installi watch solo su directory.
-`IN_MASK_CREATE`, se verra' introdotto, dovra' essere governato da una policy
-separata del backend, per esempio `inotify_watch_create_policy=strict|compat`.
-Questa distinzione evita di confondere due decisioni diverse: quali eventi
-osservare e con quale disciplina installare i watch.
+`IN_ONLYDIR`, `IN_MASK_CREATE` o `IN_DONT_FOLLOW`. `IN_ONLYDIR` e' applicato
+internamente dal watch manager per garantire che Alfred installi watch solo su
+directory. `IN_MASK_CREATE`, se verra' introdotto, dovra' essere governato da
+una policy separata del backend, per esempio
+`inotify_watch_create_policy=strict|compat`. `IN_DONT_FOLLOW`, se verra'
+introdotto, dovra' essere una policy sui symlink, per esempio
+`inotify_symlink_policy=follow|no-follow`. Questa distinzione evita di
+confondere due decisioni diverse: quali eventi osservare e con quale disciplina
+installare i watch.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

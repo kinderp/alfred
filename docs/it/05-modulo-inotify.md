@@ -205,6 +205,16 @@ diagnosticare; non sarebbe corretto fare fallback silenzioso. Un fallback ha
 senso solo per compatibilita' con kernel che non supportano il flag, dopo aver
 distinto quel caso da una maschera davvero invalida.
 
+Lo stesso ragionamento vale per `IN_DONT_FOLLOW`. Il flag non aggiunge un
+evento e non cambia la semantica core; decide se il backend deve seguire un
+symlink quando installa un watch. Per questo una futura configurazione dovrebbe
+essere una policy leggibile, per esempio `inotify_symlink_policy=follow` oppure
+`inotify_symlink_policy=no-follow`, non un token dentro `inotify_watch_mask`.
+La modalita' `no-follow` e' utile per hardening perche' evita di monitorare
+un target diverso dal path visibile all'utente, ma va testata insieme allo
+scanner ricorsivo: i symlink dentro l'albero osservato non devono diventare
+nuove radici ricorsive senza una scelta esplicita.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:

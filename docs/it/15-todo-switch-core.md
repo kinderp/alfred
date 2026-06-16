@@ -1186,7 +1186,10 @@ installazione watch. Il primo flag da valutare in codice dovrebbe essere
 `IN_ONLYDIR`, gia' implementato. Il passo successivo su `IN_MASK_CREATE` deve
 invece partire dalla policy: modalita' strict per evitare sostituzioni
 accidentali di watch esistenti, modalita' compat per mantenere il comportamento
-storico o supportare kernel senza quel flag.
+storico o supportare kernel senza quel flag. Anche `IN_DONT_FOLLOW` deve
+partire dalla policy, non dal codice: il default compatibile puo' continuare a
+seguire symlink, mentre una modalita' hardening futura dovrebbe rifiutare o
+diagnosticare root symlink e symlink scoperti nello scan ricorsivo.
 
 ## Fase A: documentazione pesante del codice
 

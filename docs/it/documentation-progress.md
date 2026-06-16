@@ -44,6 +44,12 @@ Stati usati:
 
 - `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
   `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_DONT_FOLLOW`. La scelta e' di non implementarlo come token
+  di `inotify_watch_mask`, ma come futura policy leggibile sui symlink
+  (`follow|no-follow`) collegata alla sicurezza, alle prestazioni e alla policy
+  dello scanner.
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
   proposta per `IN_MASK_CREATE`. La scelta e' di non esporlo ora dentro
   `inotify_watch_mask`, perche' e' un flag di installazione dei watch e non un
   evento filesystem. La documentazione distingue la futura modalita'
