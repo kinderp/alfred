@@ -85,19 +85,22 @@ static int watch_manager_add_scanned_dir(const fs_scan_entry_t *entry,
  * watch_manager_install_mask - combine event subscription with install flags
  * @ctx: backend context that owns the inotify configuration
  *
- * config.watch_mask contains the events Alfred wants to receive. IN_ONLYDIR is
- * different: it is an inotify_add_watch() installation flag that asks the
- * kernel to reject non-directory paths atomically. Alfred currently watches
- * directory roots and recursive subdirectories, so file-level watches would
- * add cost without improving coverage: changes to files are already observed
- * through the parent directory watch.
+ * config.watch_mask contains the filesystem mutation and backend diagnostic
+ * events Alfred wants to receive. config.audit_mask is a separate opt-in
+ * subscription for audit-style kernel facts that currently stop at raw inotify
+ * logging. IN_ONLYDIR is different again: it is an inotify_add_watch()
+ * installation flag that asks the kernel to reject non-directory paths
+ * atomically. Alfred currently watches directory roots and recursive
+ * subdirectories, so file-level watches would add cost without improving
+ * coverage: changes to files are already observed through the parent directory
+ * watch.
  *
  * Return: mask passed to inotify_add_watch().
  */
 static uint32_t watch_manager_install_mask(
     const inotify_backend_context_t *ctx)
 {
-    return ctx->config->watch_mask | IN_ONLYDIR;
+    return ctx->config->watch_mask | ctx->config->audit_mask | IN_ONLYDIR;
 }
 
 /* ============================================================================

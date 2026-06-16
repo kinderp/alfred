@@ -244,6 +244,14 @@ error_t config_load(config_t *cfg, const char *path)
             }
         }
 
+        else if (strcmp(key, "inotify_audit_events") == 0) {
+
+            if (inotify_config_set_audit_events(&cfg->inotify, value) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+        }
+
         else if (strcmp(key, "event_engine") == 0) {
 
             if (config_set_event_engine(cfg, value) != ERR_OK) {

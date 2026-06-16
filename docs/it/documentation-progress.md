@@ -42,6 +42,35 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `22-contratto-log.md` documenta il contratto dei raw log audit inotify:
+  `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` possono comparire in `raw.log`
+  solo quando `inotify_audit_events` li abilita, non diventano ancora
+  `ALFRED_RAW_*`, non arrivano al core e non producono `FILE_READY` o
+  `FILE_MODIFIED`.
+- `04-livello-applicazione.md` e `10-debugging-test-e-strumenti.md` spiegano
+  in modo operativo la nuova configurazione `inotify_audit_events`: valori
+  ammessi, valori rifiutati, comando di avvio con `ALFRED_CONFIG`, differenza
+  fra `raw.log` ed `events.log` e motivo per cui `IN_CLOSE_NOWRITE` non diventa
+  `FILE_READY`.
+- `inotify_config.c`, `watch_manager.c`, `inotify_backend.c`,
+  `test_audit_config_raw_log.sh`, `test_audit_config_invalid_token.sh`,
+  `04-livello-applicazione.md`, `05-modulo-inotify.md`, `14-scenari-test.md` e
+  `20-matrice-eventi-inotify.md`: introdotto il primo opt-in runtime
+  `inotify_audit_events`. Gli eventi audit vengono aggiunti alla mask kernel e
+  mostrati nel raw log inotify, ma non diventano ancora raw Alfred o eventi
+  core.
+- `tests/backend/test_audit_kernel_events.c`,
+  `tests/backend/test_audit_kernel_events.sh`, `14-scenari-test.md` e
+  `20-matrice-eventi-inotify.md`: aggiunto un test osservativo diretto del
+  kernel per `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`. Il test non cambia il
+  runtime Alfred: dimostra che gli eventi audit esistono, ma restano fuori da
+  raw/core finche' non viene progettata una policy audit esplicita.
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md` rafforzano la policy per gli eventi audit
+  `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`. La documentazione ora lega questi
+  eventi all'obiettivo agent runtime security/guardrail, ma mantiene separati
+  stream filesystem e stream audit e chiarisce che inotify da solo non fornisce
+  il contesto processo/prompt necessario a un guardrail completo.
 - `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
   `15-todo-switch-core.md` completano la prima revisione dei flag di
   installazione watch con `IN_MASK_ADD` e `IN_ONESHOT`. `IN_MASK_ADD` e'

@@ -746,6 +746,9 @@ resta rimandata. La nuova area di lavoro non e' piu' "shadow vs core", ma la
 mappa degli eventi/flag inotify non ancora abilitati: `IN_ACCESS`, `IN_OPEN` e
 `IN_CLOSE_NOWRITE` come possibili eventi audit; `IN_ONLYDIR` e
 `IN_MASK_CREATE` come candidati di robustezza per l'installazione dei watch.
+Gli eventi audit non devono essere aggiunti al core filesystem principale:
+servira' uno stream separato, disabilitato di default e attivabile solo con una
+configurazione esplicita.
 `IN_MASK_CREATE` non deve essere aggiunto alla configurazione come semplice
 token di `inotify_watch_mask`: serve prima una policy esplicita del backend,
 per esempio `strict|compat`, per distinguere l'errore utile `EEXIST` dal
@@ -1196,6 +1199,10 @@ eventi utili su file gia' unlinkati e ancora aperti.
 `IN_MASK_ADD` resta fuori finche' non esiste aggiornamento dinamico parziale
 delle maschere. `IN_ONESHOT` e' escluso dal runtime continuo di Alfred perche'
 rimuove il watch dopo un solo evento.
+Il prossimo filone sugli eventi audit deve partire dal contratto, non dal raw:
+`IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` sono utili solo se separiamo lo
+stream audit dallo stream filesystem e se documentiamo che inotify da solo non
+fornisce il contesto processo/prompt necessario a un guardrail completo.
 
 ## Fase A: documentazione pesante del codice
 

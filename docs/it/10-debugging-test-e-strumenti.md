@@ -1884,6 +1884,63 @@ Quindi il file caricato da `ALFRED_CONFIG` puo' cambiare opzioni come
 dei log. `ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo
 il file per rifiutare esplicitamente valori vecchi come `shadow`.
 
+### Provare gli eventi audit inotify
+
+Gli eventi audit inotify sono disabilitati di default. Per provarli manualmente
+si usa la chiave `inotify_audit_events`, separata da `inotify_watch_mask`.
+
+Esempio:
+
+```bash
+mkdir -p /tmp/alfred-audit-demo
+printf "hello\n" > /tmp/alfred-audit-demo/read-only.txt
+
+cat > /tmp/alfred-audit.conf <<'EOF'
+inotify_audit_events=open,access,close-nowrite
+EOF
+
+ALFRED_CONFIG=/tmp/alfred-audit.conf ./alfred /tmp/alfred-audit-demo
+```
+
+In un altro terminale:
+
+```bash
+cat /tmp/alfred-audit-demo/read-only.txt
+```
+
+Cosa aspettarsi:
+
+- `raw.log` puo' contenere `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`
+- `events.log` non deve contenere `FILE_READY` per quella lettura
+- `events.log` non deve contenere `FILE_MODIFIED` per quella lettura
+
+Il significato e' preciso: Alfred ha chiesto al kernel fatti audit read-only,
+ma non li ha promossi a semantica filesystem. `IN_CLOSE_NOWRITE` significa
+"chiusura senza scrittura"; `FILE_READY` invece resta legato a
+`IN_CLOSE_WRITE`, cioe' chiusura dopo scrittura.
+
+Valori ammessi:
+
+```text
+off
+open
+access
+close-nowrite
+open,access,close-nowrite
+```
+
+Valori non ammessi:
+
+```text
+IN_OPEN
+IN_ACCESS
+IN_CLOSE_NOWRITE
+```
+
+La configurazione audit usa nomi di policy in minuscolo. I token raw `IN_*`
+restano fuori da questa chiave per evitare confusione con
+`inotify_watch_mask`.
+
 Per debug conviene usare anche:
 
 ```bash

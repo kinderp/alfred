@@ -60,10 +60,10 @@ nella `mask` di `struct inotify_event`.
 
 | Evento inotify | Quando nasce | Stato backend Alfred | Raw Alfred | Semantica core | Decisione |
 | --- | --- | --- | --- | --- | --- |
-| `IN_ACCESS` | File letto o eseguito | No | Nessuno | Nessuna | Non supportato per ora. E' molto rumoroso e non abbiamo ancora un caso utente chiaro. Se servira', andra' introdotto come raw dedicato, per esempio `ALFRED_RAW_ACCESS`, prima di discutere una semantica. |
+| `IN_ACCESS` | File letto o eseguito | Raw log opt-in | Nessuno | Nessuna | Supportato solo come osservabilita' backend quando `inotify_audit_events=access` lo richiede esplicitamente. Non entra nello stream raw Alfred e non produce semantica core. Un futuro stream audit potra' introdurre `ALFRED_RAW_ACCESS` o un evento dedicato. |
 | `IN_ATTRIB` | Metadati cambiati: permessi, timestamp, xattr, link count, owner, group | Si | `ALFRED_RAW_ATTRIB` | Nessuna | Supportato come osservabilita' raw/backend. La semantica `FILE_METADATA_CHANGED` / `DIR_METADATA_CHANGED` e' rimandata. |
 | `IN_CLOSE_WRITE` | File aperto in scrittura e poi chiuso | Si | `ALFRED_RAW_CLOSE_WRITE` | `FILE_READY` | Supportato end-to-end. Non e' un duplicato di `FILE_MODIFIED`: indica che uno scrittore ha chiuso il file. |
-| `IN_CLOSE_NOWRITE` | File o directory chiusi senza scrittura | No | Nessuno | Nessuna | Non supportato per ora. Utile forse per audit/debug, ma non per la semantica filesystem principale. |
+| `IN_CLOSE_NOWRITE` | File o directory chiusi senza scrittura | Raw log opt-in | Nessuno | Nessuna | Supportato solo come osservabilita' backend quando `inotify_audit_events=close-nowrite` lo richiede esplicitamente. Non e' `FILE_READY`, perche' non c'e' stata scrittura. |
 | `IN_CREATE` | File, directory, link, symlink o socket creato dentro una directory osservata | Si | `ALFRED_RAW_CREATE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_CREATED` o `DIR_CREATED` | Supportato end-to-end. In modalita' ricorsiva Alfred puo' emettere anche create sintetici per directory scoperte dopo l'aggiunta del watch. |
 | `IN_DELETE` | File o directory cancellato da una directory osservata | Si | `ALFRED_RAW_DELETE` con eventuale `ALFRED_RAW_ISDIR` | `FILE_DELETED` o `DIR_DELETED` | Supportato end-to-end quando l'evento riguarda un figlio della directory osservata. |
 | `IN_DELETE_SELF` | Il file o la directory osservata direttamente e' stata cancellata | Backend | Nessuno | Nessuna | Alfred lo logga nel raw backend, marca il watch `STALE`, scrive `WATCH_STALE` e lascia poi a `IN_IGNORED` il cleanup `WATCH_REMOVED`. Decisione proposta: valutare in futuro `ALFRED_RAW_DELETE` per il path osservato direttamente, non per i figli. |
@@ -71,7 +71,7 @@ nella `mask` di `struct inotify_event`.
 | `IN_MOVE_SELF` | Il file o la directory osservata direttamente e' stata spostata | Backend | Nessuno | Nessuna | Gestito come perdita di affidabilita' del mapping `wd -> path`: Alfred lo logga nel raw backend, marca il watch `STALE` e scrive `WATCH_STALE`. Non produce rename/move/relocated perche' manca il nuovo path. |
 | `IN_MOVED_FROM` | Vecchio nome di un rename/move dentro directory osservata | Si | `ALFRED_RAW_MOVED_FROM` | Nessuna immediata | Supportato come prima meta' di una correlazione. Il core lo conserva in tabella in attesa di `IN_MOVED_TO` con lo stesso cookie. |
 | `IN_MOVED_TO` | Nuovo nome di un rename/move dentro directory osservata | Si | `ALFRED_RAW_MOVED_TO` | `FILE_RENAMED`, `FILE_MOVED`, `FILE_RELOCATED`, `DIR_RENAMED`, `DIR_MOVED`, `DIR_RELOCATED` oppure create fallback | Supportato. Se manca il `MOVED_FROM`, il core emette un create fallback perche' l'oggetto e' entrato nell'albero osservato. |
-| `IN_OPEN` | File o directory aperto | No | Nessuno | Nessuna | Non supportato per ora. Puo' essere utile per audit, ma e' molto rumoroso e non descrive una modifica del filesystem. |
+| `IN_OPEN` | File o directory aperto | Raw log opt-in | Nessuno | Nessuna | Supportato solo come osservabilita' backend quando `inotify_audit_events=open` lo richiede esplicitamente. E' rumoroso e non descrive una modifica del filesystem, quindi resta fuori dal core. |
 
 ## Bit restituiti dal kernel
 
@@ -483,7 +483,7 @@ Questa vista compatta risponde alla domanda pratica: cosa gestiamo davvero oggi?
 
 | Livello | Gestito oggi | Rimandato |
 | --- | --- | --- |
-| Inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_UNMOUNT`, `IN_Q_OVERFLOW` | `IN_ACCESS`, `IN_CLOSE_NOWRITE`, `IN_OPEN` |
+| Inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_UNMOUNT`, `IN_Q_OVERFLOW`; opt-in tramite `inotify_audit_events`: `IN_ACCESS`, `IN_CLOSE_NOWRITE`, `IN_OPEN` | audit arricchito con processo/pid e policy guardrail multi-backend |
 | Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_ATTRIB`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`, `ALFRED_RAW_MOVED_TO`, `ALFRED_RAW_OVERFLOW`, `ALFRED_RAW_ISDIR` | Access/open/close-nowrite/move-self/unmount raw dedicati |
 | Core semantico | create, delete, modify, ready, move/rename/relocated, overflow | metadata changed, access/open audit, close-nowrite, watched-object moved/deleted-self policy, unmount/resync |
 | Backend state | recursive watch add, synthetic directory create, ignored-watch cleanup, `IN_MOVE_SELF -> WATCH_STALE`, `IN_DELETE_SELF -> WATCH_STALE -> WATCH_REMOVED`, `IN_UNMOUNT -> WATCH_STALE -> WATCH_REMOVED` | recovery completa dopo unmount/overflow |
@@ -503,13 +503,24 @@ inotify dentro l'API semantica. `IN_OPEN`, per esempio, e' reale e utile per
 alcuni strumenti di audit, ma non significa che un file sia stato creato,
 modificato, cancellato o pronto.
 
-## Eventi rimandati per audit
+## Eventi audit opt-in
 
 `IN_ACCESS`, `IN_OPEN` e `IN_CLOSE_NOWRITE` sono eventi reali e importanti per
 strumenti di audit. Non sono pero' eventi di mutazione del filesystem. La
 decisione corrente e' quindi: non inserirli nella maschera predefinita, non
-accettarli ancora nel parser `inotify_watch_mask` e non creare semantica core
-finche' non nasce un requisito esplicito di audit/guardrail.
+accettarli nel parser `inotify_watch_mask` e abilitarli solo con la chiave
+esplicita `inotify_audit_events`. Anche quando sono abilitati, restano nel raw
+log inotify e non creano semantica core.
+
+Questa scelta e' ancora piu' importante dopo aver chiarito l'obiettivo di lungo
+periodo di Alfred: osservare azioni di agenti intelligenti sulla macchina e
+costruire guardrail runtime. In quel contesto gli eventi di apertura, accesso e
+chiusura possono diventare utili, ma solo se appartengono a uno stream audit
+esplicito. Non devono entrare di nascosto nello stream principale delle
+mutazioni filesystem, perche' romperebbero il contratto didattico e operativo:
+`FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY`, `FILE_DELETED` e gli eventi di
+move/rename descrivono cambiamenti osservabili dello stato filesystem, non il
+fatto che un processo abbia guardato o aperto un path.
 
 | Evento | Fatto kernel | Perche' e' rimandato | Possibile raw futuro | Possibile semantica futura | Impatto prestazionale | Test futuro |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -532,6 +543,98 @@ guardrail agentico sarebbe limitato. Backend futuri come fanotify, audit o eBPF
 potrebbero fornire piu' contesto. Per questo gli eventi audit non vanno
 promossi nel core filesystem principale senza progettare prima il modello
 multi-backend.
+
+### Policy implementata per il primo stream audit
+
+La prima policy e' esplicita e disabilitata di default:
+
+```text
+inotify_audit_events=off
+inotify_audit_events=open
+inotify_audit_events=open,access,close-nowrite
+```
+
+`off` mantiene il comportamento corrente. Le altre modalita' abilitano eventi
+nel raw log inotify solo per chi accetta rumore e costo aggiuntivo. Questa
+chiave non e' un alias libero per `inotify_watch_mask`: dice esplicitamente che
+l'utente sta entrando in un modello audit.
+
+Stato implementativo corrente: `inotify_audit_events` e' accettato dal file di
+configurazione e aggiunge i bit audit alla mask kernel, ma gli eventi restano
+limitati al raw log inotify. Non esistono ancora `ALFRED_RAW_OPEN`,
+`ALFRED_RAW_ACCESS` o `ALFRED_RAW_CLOSE_NOWRITE`, e il core non riceve eventi
+audit.
+
+I livelli restano separati:
+
+| Livello | Stream filesystem | Stream audit futuro |
+| --- | --- | --- |
+| Inotify mask | eventi di mutazione e diagnostica watch | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` solo se richiesti |
+| Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, ... | `ALFRED_RAW_OPEN`, `ALFRED_RAW_ACCESS`, `ALFRED_RAW_CLOSE_NOWRITE` |
+| Core | eventi filesystem stabili | eventi audit separati o consumer dedicato |
+| Utente | "il filesystem e' cambiato" | "un processo ha interagito con un path" |
+
+`IN_CLOSE_NOWRITE` merita una regola speciale: non deve mai essere confuso con
+`FILE_READY`. In Alfred, `FILE_READY` nasce da `IN_CLOSE_WRITE`, cioe' chiusura
+dopo scrittura. Una chiusura senza scrittura puo' essere utile per audit di una
+sessione file, ma non significa che un contenuto nuovo sia pronto per essere
+consumato.
+
+`IN_OPEN` e `IN_ACCESS` sono utili solo se il consumer accetta che inotify non
+identifica l'attore. Un backend eBPF, audit o fanotify puo' aggiungere processo,
+utente, comando, container o relazione con prompt/azione agente. Inotify da solo
+puo' dire "questo path e' stato aperto o letto", ma non "chi lo ha fatto" con la
+precisione richiesta da un guardrail.
+
+Per questo la roadmap corretta e':
+
+1. documentare il contratto audit separato
+2. aggiungere test backend che misurano volume e raw log senza semantica core
+3. introdurre raw audit solo dietro configurazione esplicita
+4. decidere piu' avanti se il core deve avere una categoria audit separata o se
+   gli eventi audit devono uscire da un consumer dedicato
+5. confrontare inotify con backend piu' ricchi prima di promettere guardrail
+   basati su processo/prompt
+
+Esempi di comandi per scenari futuri:
+
+```bash
+cat watched/file.txt
+stat watched/file.txt
+python3 -c 'open("watched/file.txt").read()'
+exec 3< watched/file.txt
+exec 3<&-
+```
+
+Questi comandi possono generare aperture, accessi o chiusure senza scrittura.
+I test dovranno verificare che nessuno di questi scenari produca
+`FILE_MODIFIED` o `FILE_READY`.
+
+### Test osservativo kernel
+
+`tests/backend/test_audit_kernel_events.sh` e
+`tests/backend/test_audit_kernel_events.c` fissano un primo fatto sperimentale:
+se una directory e' osservata direttamente con
+`IN_OPEN | IN_ACCESS | IN_CLOSE_NOWRITE`, una sessione read-only su un file gia'
+esistente produce eventi kernel di apertura, accesso e chiusura senza scrittura.
+Il test controlla anche che non compaia `IN_CLOSE_WRITE`.
+
+Questo test non abilita nulla nel runtime Alfred. Serve a separare due livelli:
+
+- fatto kernel: gli eventi audit esistono e sono osservabili
+- contratto Alfred: anche quando `inotify_audit_events` li rende visibili nel
+  raw log inotify, questi eventi restano fuori da `inotify_watch_mask`, raw
+  Alfred e semantica core
+
+Il valore didattico del test e' importante: prima di progettare un evento
+`ALFRED_RAW_OPEN` o `ALFRED_RAW_ACCESS`, gli studenti possono vedere quale
+segnale elementare offre davvero inotify e quali informazioni mancano, in
+particolare pid/processo/prompt.
+
+`tests/backend/test_audit_config_raw_log.sh` verifica il primo passo runtime:
+con `inotify_audit_events=open,access,close-nowrite`, Alfred rende visibili
+`IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel raw log inotify, ma non produce
+`FILE_READY` o `FILE_MODIFIED`.
 
 ## Eventi sul watch stesso
 

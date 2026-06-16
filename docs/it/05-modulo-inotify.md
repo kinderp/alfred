@@ -195,6 +195,20 @@ il candidato piu' utile da studiare per evitare sostituzioni accidentali di
 watch. `IN_DONT_FOLLOW` e `IN_EXCL_UNLINK` sono invece piu' legati a profili
 configurabili di hardening e riduzione rumore.
 
+Gli eventi audit richiedono una linea architetturale separata. `IN_OPEN`,
+`IN_ACCESS` e `IN_CLOSE_NOWRITE` possono essere utili per runtime security e
+agent guardrail, ma il modulo inotify non conosce pid, processo, comando,
+utente o prompt che ha causato l'accesso. Per questo, con il solo inotify, il
+valore audit e' limitato e non deve contaminare la semantica filesystem del
+core. Una futura configurazione dovrebbe essere esplicita, per esempio
+`inotify_audit_events=off|open|open,access,close-nowrite`, e dovrebbe produrre
+raw audit dedicati solo quando il consumer li richiede consapevolmente.
+
+Stato corrente: la chiave `inotify_audit_events` e' disponibile come opt-in
+iniziale, ma ferma gli eventi al raw log inotify. Questo permette di misurare
+volume e comportamento del kernel senza cambiare il contratto raw Alfred o gli
+eventi semantici del core.
+
 `IN_MASK_CREATE` non dovrebbe entrare direttamente nella sintassi di
 `inotify_watch_mask`. Se Alfred lo usera', la scelta dovrebbe essere espressa
 come policy del backend, non come bit raw scelto dall'utente. Il motivo e'
