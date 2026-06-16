@@ -42,6 +42,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `23-roadmap-plugin-backend.md` |
 | Parziale | `24-roadmap-ai-agent-guardrail.md` |
 | Completo | `25-roadmap-unificata-dossier.md` |
+| Completo | `26-stato-funzionalita.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -71,3 +72,11 @@ La pulizia corrente ha:
   documenti storici come prossimo passo
 - mantenuto solo le note storiche necessarie a capire perche' `shadow` e'
   invalido e perche' il core e' l'unico riferimento semantico corrente
+
+## Aggiornamento feature matrix
+
+`26-stato-funzionalita.md` raccoglie in un unico posto le funzionalita'
+supportate dal backend inotify, dal raw log, dagli `ALFRED_RAW_*`, dal core
+semantico, dalla diagnostica backend e dalla lost-scope recovery. Il documento
+rimanda ai test principali e deve essere letto prima di progettare Event Model
+v0, Backend API v0 o JSONL.

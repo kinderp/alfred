@@ -30,7 +30,8 @@ piu' dettaglio.
 21. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 22. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 23. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
-24. [Glossario](glossario.md)
+24. [Stato funzionalita' supportate](26-stato-funzionalita.md)
+25. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 
