@@ -312,6 +312,59 @@ aver indicato. E' collegata anche alle prestazioni: seguire link verso alberi
 grandi o ciclici puo' aumentare drasticamente il numero di directory visitate e
 di watch installati.
 
+#### Policy proposta per `IN_EXCL_UNLINK`
+
+`IN_EXCL_UNLINK` chiede al kernel di ridurre gli eventi relativi a figli che
+sono gia' stati rimossi dalla directory osservata. Il caso tipico e' una
+directory molto rumorosa, per esempio `/tmp`, dove molti programmi creano file
+temporanei, li aprono, li rimuovono subito dalla directory e continuano a usare
+il file tramite file descriptor aperto.
+
+Dal punto di vista prestazionale il flag e' interessante: puo' diminuire il
+numero di eventi che Alfred deve leggere, loggare, convertire in raw Alfred e
+inoltrare al core. Questo riduce rumore, CPU, I/O di log e pressione sulle code
+interne quando una directory produce molti file temporanei.
+
+Dal punto di vista audit/security, pero', il flag e' delicato. Un file
+unlinkato ma ancora aperto puo' essere ancora usato da un processo. In scenari
+di analisi forense, runtime security o agent guardrail, il fatto che un processo
+continui a scrivere o usare un oggetto non piu' visibile nella directory puo'
+essere significativo. Attivare `IN_EXCL_UNLINK` come default globale rischia
+quindi di nascondere proprio eventi utili a capire un comportamento sospetto.
+
+Per questo la scelta corrente e':
+
+- non abilitarlo di default
+- non esporlo come token diretto dentro `inotify_watch_mask`
+- non produrre eventi raw/core dedicati, perche' non e' un evento filesystem
+- valutarlo in futuro come policy backend configurabile
+
+Una configurazione futura dovrebbe essere leggibile come policy, per esempio:
+
+```text
+inotify_unlinked_child_policy=observe
+inotify_unlinked_child_policy=suppress
+```
+
+Il significato proposto e':
+
+- `observe`: comportamento conservativo per audit/security. Alfred non usa
+  `IN_EXCL_UNLINK` e continua a osservare il maggior numero possibile di eventi
+  sui figli della directory osservata.
+- `suppress`: comportamento orientato a prestazioni/rumore. Alfred usa
+  `IN_EXCL_UNLINK` per chiedere al kernel di filtrare eventi su figli gia'
+  unlinkati, sapendo che questa scelta riduce la visibilita' diagnostica.
+
+I test futuri dovranno essere sia funzionali sia prestazionali:
+
+- scenario `/tmp`-like con file temporaneo creato, aperto, unlinkato e poi
+  scritto tramite file descriptor ancora aperto
+- confronto raw log tra `observe` e `suppress`
+- benchmark sul volume di eventi, sul tempo di polling e sulla dimensione dei
+  log prodotti
+- verifica esplicita che `suppress` sia documentato come perdita intenzionale
+  di visibilita', non come semantica equivalente a `observe`
+
 #### Policy proposta per `IN_MASK_CREATE`
 
 `IN_MASK_CREATE` non deve essere trattato come `IN_CREATE` o `IN_MODIFY`.

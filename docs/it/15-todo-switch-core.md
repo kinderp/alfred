@@ -1190,6 +1190,9 @@ storico o supportare kernel senza quel flag. Anche `IN_DONT_FOLLOW` deve
 partire dalla policy, non dal codice: il default compatibile puo' continuare a
 seguire symlink, mentre una modalita' hardening futura dovrebbe rifiutare o
 diagnosticare root symlink e symlink scoperti nello scan ricorsivo.
+`IN_EXCL_UNLINK` va rimandato a benchmark e scenari audit: puo' ridurre molto
+il rumore in directory temporanee, ma una modalita' suppress puo' nascondere
+eventi utili su file gia' unlinkati e ancora aperti.
 
 ## Fase A: documentazione pesante del codice
 

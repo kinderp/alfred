@@ -215,6 +215,14 @@ un target diverso dal path visibile all'utente, ma va testata insieme allo
 scanner ricorsivo: i symlink dentro l'albero osservato non devono diventare
 nuove radici ricorsive senza una scelta esplicita.
 
+`IN_EXCL_UNLINK` e' un'altra policy backend, ma orientata a rumore e
+prestazioni. Puo' ridurre eventi in directory come `/tmp`, dove file temporanei
+vengono spesso creati, rimossi dalla directory e usati ancora tramite file
+descriptor aperto. Non deve diventare default globale finche' Alfred ha anche
+obiettivi audit/security: un file gia' unlinkato ma ancora usato puo' essere un
+segnale importante. Una futura opzione dovrebbe rendere esplicita la perdita di
+visibilita', per esempio `inotify_unlinked_child_policy=observe|suppress`.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:

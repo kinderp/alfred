@@ -44,6 +44,12 @@ Stati usati:
 
 - `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
   `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
+  proposta per `IN_EXCL_UNLINK`. La scelta e' di non abilitarlo come default e
+  di non esporlo dentro `inotify_watch_mask`: il flag potra' diventare una
+  futura policy `observe|suppress` solo dopo test funzionali e benchmark sul
+  rapporto tra rumore, prestazioni e perdita di visibilita' audit.
+- `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
+  `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
   proposta per `IN_DONT_FOLLOW`. La scelta e' di non implementarlo come token
   di `inotify_watch_mask`, ma come futura policy leggibile sui symlink
   (`follow|no-follow`) collegata alla sicurezza, alle prestazioni e alla policy
