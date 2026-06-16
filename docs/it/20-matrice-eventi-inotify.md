@@ -604,6 +604,26 @@ Questi comandi possono generare aperture, accessi o chiusure senza scrittura.
 I test dovranno verificare che nessuno di questi scenari produca
 `FILE_MODIFIED` o `FILE_READY`.
 
+### Test osservativo kernel
+
+`tests/backend/test_audit_kernel_events.sh` e
+`tests/backend/test_audit_kernel_events.c` fissano un primo fatto sperimentale:
+se una directory e' osservata direttamente con
+`IN_OPEN | IN_ACCESS | IN_CLOSE_NOWRITE`, una sessione read-only su un file gia'
+esistente produce eventi kernel di apertura, accesso e chiusura senza scrittura.
+Il test controlla anche che non compaia `IN_CLOSE_WRITE`.
+
+Questo test non abilita nulla nel runtime Alfred. Serve a separare due livelli:
+
+- fatto kernel: gli eventi audit esistono e sono osservabili
+- contratto Alfred: finche' non esiste `inotify_audit_events`, questi eventi
+  restano fuori da `inotify_watch_mask`, raw Alfred e semantica core
+
+Il valore didattico del test e' importante: prima di progettare un evento
+`ALFRED_RAW_OPEN` o `ALFRED_RAW_ACCESS`, gli studenti possono vedere quale
+segnale elementare offre davvero inotify e quali informazioni mancano, in
+particolare pid/processo/prompt.
+
 ## Eventi sul watch stesso
 
 `IN_DELETE_SELF` e `IN_MOVE_SELF` sono diversi da `IN_DELETE`,

@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `tests/backend/test_audit_kernel_events.c`,
+  `tests/backend/test_audit_kernel_events.sh`, `14-scenari-test.md` e
+  `20-matrice-eventi-inotify.md`: aggiunto un test osservativo diretto del
+  kernel per `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`. Il test non cambia il
+  runtime Alfred: dimostra che gli eventi audit esistono, ma restano fuori da
+  raw/core finche' non viene progettata una policy audit esplicita.
 - `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
   `15-todo-switch-core.md` rafforzano la policy per gli eventi audit
   `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`. La documentazione ora lega questi
