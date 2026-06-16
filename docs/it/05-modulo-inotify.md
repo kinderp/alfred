@@ -223,6 +223,13 @@ obiettivi audit/security: un file gia' unlinkato ma ancora usato puo' essere un
 segnale importante. Una futura opzione dovrebbe rendere esplicita la perdita di
 visibilita', per esempio `inotify_unlinked_child_policy=observe|suppress`.
 
+`IN_MASK_ADD` e `IN_ONESHOT` non sono candidati per il runtime corrente.
+`IN_MASK_ADD` avrebbe senso solo con aggiornamenti dinamici parziali della mask:
+oggi Alfred preferisce calcolare e possedere sempre la maschera completa di un
+watch. `IN_ONESHOT` e' ancora meno adatto: Alfred deve osservare in modo
+continuo, mentre quel flag rimuove il watch dopo il primo evento e renderebbe
+piu' fragile la copertura ricorsiva.
+
 ## Watch descriptor
 
 Quando si aggiunge un watch con inotify, il kernel restituisce un intero:

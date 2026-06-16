@@ -42,6 +42,12 @@ Stati usati:
 
 ## Aggiornamenti recenti
 
+- `20-matrice-eventi-inotify.md`, `05-modulo-inotify.md` e
+  `15-todo-switch-core.md` completano la prima revisione dei flag di
+  installazione watch con `IN_MASK_ADD` e `IN_ONESHOT`. `IN_MASK_ADD` e'
+  rimandato finche' Alfred non avra' aggiornamenti dinamici parziali delle
+  maschere; `IN_ONESHOT` e' escluso dal runtime continuo perche' rimuove il
+  watch dopo un solo evento.
 - `20-matrice-eventi-inotify.md`, `04-livello-applicazione.md`,
   `05-modulo-inotify.md` e `15-todo-switch-core.md` documentano la policy
   proposta per `IN_EXCL_UNLINK`. La scelta e' di non abilitarlo come default e

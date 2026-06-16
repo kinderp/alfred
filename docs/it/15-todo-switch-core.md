@@ -1193,6 +1193,9 @@ diagnosticare root symlink e symlink scoperti nello scan ricorsivo.
 `IN_EXCL_UNLINK` va rimandato a benchmark e scenari audit: puo' ridurre molto
 il rumore in directory temporanee, ma una modalita' suppress puo' nascondere
 eventi utili su file gia' unlinkati e ancora aperti.
+`IN_MASK_ADD` resta fuori finche' non esiste aggiornamento dinamico parziale
+delle maschere. `IN_ONESHOT` e' escluso dal runtime continuo di Alfred perche'
+rimuove il watch dopo un solo evento.
 
 ## Fase A: documentazione pesante del codice
 

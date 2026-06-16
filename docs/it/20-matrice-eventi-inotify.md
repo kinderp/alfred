@@ -365,6 +365,61 @@ I test futuri dovranno essere sia funzionali sia prestazionali:
 - verifica esplicita che `suppress` sia documentato come perdita intenzionale
   di visibilita', non come semantica equivalente a `observe`
 
+#### Policy proposta per `IN_MASK_ADD`
+
+`IN_MASK_ADD` dice al kernel di aggiungere nuovi bit alla maschera di un watch
+gia' esistente, invece di sostituirla. E' utile quando un programma gestisce
+watch in modo incrementale: prima chiede alcuni eventi, poi decide di aggiungerne
+altri senza ricostruire la maschera completa.
+
+Alfred oggi non lavora cosi'. Il backend deve possedere la maschera completa del
+watch: la configurazione parte da `default`, applica eventuali `+TOKEN` e
+`-TOKEN`, e produce un valore finale controllato. Questa scelta e' piu'
+semplice da spiegare e da testare, perche' ogni watch installato ha una policy
+completa e non dipende dalla storia degli aggiornamenti precedenti.
+
+Per questo `IN_MASK_ADD` resta rimandato. Potrebbe diventare utile solo se in
+futuro introdurremo un aggiornamento dinamico parziale delle maschere, per
+esempio:
+
+```text
+runtime: abilita temporaneamente IN_OPEN su una subtree gia' osservata
+watch esistente: IN_CREATE | IN_DELETE
+update parziale: aggiungi IN_OPEN senza ricalcolare tutta la mask
+```
+
+Prima di arrivare a quel punto dovremmo definire:
+
+- chi possiede la maschera finale di un watch
+- come si rappresentano aggiornamenti parziali nella configurazione
+- come si evita che due componenti aggiornino la stessa maschera in modo
+  incoerente
+- quali log diagnostici mostrano che una mask e' stata estesa a runtime
+
+Finche' Alfred non ha aggiornamento dinamico delle mask, `IN_MASK_ADD` non deve
+essere usato nel runtime e non deve essere esposto in `inotify_watch_mask`.
+
+#### Policy proposta per `IN_ONESHOT`
+
+`IN_ONESHOT` rimuove automaticamente il watch dopo il primo evento ricevuto.
+Questo comportamento e' in contrasto con il modello principale di Alfred:
+osservazione continua, copertura ricorsiva e tabella watch stabile finche' il
+filesystem o la configurazione non impongono un cambiamento.
+
+Se lo usassimo nel runtime normale, ogni evento potrebbe rimuovere un watch
+dietro le quinte. Alfred dovrebbe allora reinstallare watch continuamente,
+distinguere rimozioni attese da rimozioni dovute a `IN_IGNORED`, aggiornare la
+watcher table e proteggere la copertura ricorsiva. Il risultato sarebbe piu'
+complesso, piu' fragile e probabilmente meno performante.
+
+La decisione e' quindi:
+
+- escluso dal runtime normale
+- non configurabile tramite `inotify_watch_mask`
+- nessuna semantica raw/core dedicata
+- eventualmente utilizzabile solo in test diagnostici isolati o strumenti
+  futuri che vogliano osservare un singolo fatto e poi chiudere il watch
+
 #### Policy proposta per `IN_MASK_CREATE`
 
 `IN_MASK_CREATE` non deve essere trattato come `IN_CREATE` o `IN_MODIFY`.
