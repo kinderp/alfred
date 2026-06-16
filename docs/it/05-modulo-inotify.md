@@ -521,5 +521,5 @@ Il core e' ormai il runtime di default. Il prossimo passo tecnico non e' piu'
 1. mantenere aggiornata la lettura guidata di backend, core e app
 2. mantenere nel backend solo lettura inotify, watch e raw event
 3. lasciare al core tutta la semantica finale
-4. archiviare o aggiornare i test storici che dipendevano dallo shadow
-5. progettare overflow/resync come passo separato
+4. progettare Event Model v0 e Backend API v0 prima di nuovi backend
+5. trasformare progressivamente diagnostica e output in record strutturati

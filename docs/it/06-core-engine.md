@@ -302,6 +302,7 @@ riceve pochi eventi.
 il punto in cui svuotare anche debounce o altri stati pendenti prima dello
 shutdown.
 
-Il prossimo passo resta archiviare o aggiornare i test e i documenti storici che
-facevano riferimento al confronto legacy, mantenendo il core come unica sorgente
-semantica ufficiale.
+Il prossimo passo architetturale non riguarda piu' lo switch dal legacy: il core
+e' gia' la sorgente semantica ufficiale. La fase successiva e' rendere esplicito
+il modello dati comune che il core riceve, correla e poi serializza verso output
+strutturati.

@@ -280,7 +280,7 @@ Per i dettagli, leggere:
 
 - [Debugging, test e strumenti](10-debugging-test-e-strumenti.md)
 - [Makefile e build system](09-makefile-e-build-system.md)
-- [Confronto shadow mode](12-confronto-shadow-mode.md)
+- [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 
 Questa procedura deve essere riproducibile anche senza strumenti di AI: ogni contributore
 deve poterla eseguire manualmente prima di proporre o committare una modifica.

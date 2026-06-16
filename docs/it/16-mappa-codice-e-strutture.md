@@ -1727,16 +1727,3 @@ frame 5 - output diagnostico:
 
 Messaggio didattico: `WATCH_REMOVED` descrive stato del backend. Non e' un
 evento semantico del filesystem come `DIR_DELETED`.
-
-## Strutture legacy shadow
-
-Il percorso legacy non e' piu' presente nel codice corrente. I file
-`events.c`, `events.h`, `move_cache.c` e `move_cache.h` sono stati rimossi:
-la semantica finale vive nel core e il backend inotify non emette piu' eventi
-utente.
-
-Questa sezione resta per fissare una differenza storica importante: quando
-cambiavano sia directory sia nome, il legacy poteva emettere due eventi
-(`MOVED` e poi `RENAMED`). Il core invece emette un solo evento `RELOCATED`.
-Questa scelta non dipende piu' da una `move_cache_t` nel modulo inotify: la
-correlazione dei move appartiene al core.

@@ -38,7 +38,7 @@ inotify ha segnalato IN_IGNORED
 Questi eventi sono utili per debug, test diagnostici e studio del backend.
 Non sono necessariamente parte dell'API semantica del core.
 
-Nel codice attuale il legacy logga gia':
+Nel codice attuale il backend logga gia':
 
 ```text
 WATCH_ADDED
@@ -260,8 +260,8 @@ moduli.
 
 ## Il core e' il riferimento
 
-Durante lo shadow mode confrontiamo il legacy dispatcher e il core. Questo non
-significa che il legacy abbia sempre ragione.
+Durante la migrazione abbiamo confrontato il vecchio dispatcher e il core.
+Quella fase e' chiusa: oggi il runtime ufficiale e' il core.
 
 Decisione:
 
@@ -269,8 +269,8 @@ Decisione:
 il core definisce la semantica target.
 ```
 
-Il legacy serve come riferimento storico per non perdere casi importanti, ma se
-una differenza e' dovuta a una semantica migliore del core, preferiamo il core.
+Il comportamento legacy resta solo un riferimento storico recuperabile da Git.
+La documentazione corrente deve descrivere la semantica del core.
 
 ## Directory contenitore
 

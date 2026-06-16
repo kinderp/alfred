@@ -91,9 +91,9 @@ core
 app/logger
 ```
 
-La direzione futura non e' cambiare questo flusso, ma renderlo piu' pulito:
-archiviare i test storici rimasti e progettare overflow/resync come feature
-separata.
+La direzione futura non e' cambiare questo flusso, ma renderlo piu' esplicito:
+definire Event Model v0, Backend API v0 e output strutturato JSONL prima di
+aggiungere backend piu' complessi.
 
 ## Diagramma generale
 

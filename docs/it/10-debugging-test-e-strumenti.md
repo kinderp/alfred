@@ -1215,16 +1215,17 @@ Prima di proporre una modifica architetturale, bisogna confrontare il codice con
 la documentazione esistente. Per il refactor backend/core:
 
 ```bash
-sed -n '185,375p' docs/it/15-todo-switch-core.md
+sed -n '1,180p' docs/it/25-roadmap-unificata-dossier.md
 ```
 
 Il significato del comando e' lo stesso visto sopra: stampa solo le righe da
-`185` a `375`.
+`1` a `180`.
 
 Questo passaggio evita un errore comune: modificare il codice dimenticando una
-decisione gia' discussa. Nel nostro caso, `15-todo-switch-core.md` contiene la
-mappa delle dipendenze residue, la strategia a micro-refactor e la distinzione
-tra backend core e vecchio ponte legacy ormai rimosso.
+decisione gia' discussa. Nel nostro caso,
+`25-roadmap-unificata-dossier.md` contiene l'ordine architetturale corrente:
+Event Model v0, Backend API v0, refactor inotify, output strutturato JSONL e
+solo dopo Alfred Lab, performance e backend complessi.
 
 ### 5. Formulare la proposta
 

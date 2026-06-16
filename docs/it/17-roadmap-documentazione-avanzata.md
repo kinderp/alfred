@@ -41,7 +41,7 @@ E' il livello gia' presente in `docs/it`.
 Serve a spiegare:
 
 - perche' il progetto e' fatto in un certo modo
-- quali responsabilita' hanno app, backend, core e legacy shadow
+- quali responsabilita' hanno app, backend, core, output e futuri plugin
 - quali decisioni sono state prese
 - quali alternative sono state scartate o rimandate
 - quali concetti C/Linux servono per leggere il codice

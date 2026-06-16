@@ -140,13 +140,13 @@ Esempi:
 Per questo il vecchio dispatcher e' stato rimosso dal runtime corrente e non e'
 piu' un percorso di confronto eseguibile.
 
-## Prossimo obiettivo
+## Obiettivo corrente
 
-Il prossimo obiettivo non e' rimuovere alla cieca il vecchio codice. Prima
-bisogna:
+Lo switch al core e' chiuso. L'obiettivo corrente e' rendere il flusso piu'
+adatto a una piattaforma multi-backend:
 
-1. mantenere documentata la differenza tra stream core e stream legacy
-2. archiviare o aggiornare i test funzionali storici rimasti
-3. mantenere la suite core come contratto semantico ufficiale
-4. mantenere la suite backend diagnostics per i log tecnici dei watch
-5. progettare overflow/resync come passo separato
+1. mantenere la suite core come contratto semantico ufficiale
+2. mantenere la suite backend diagnostics per i log tecnici dei watch
+3. definire Event Model v0 per raw, normalized e semantic event
+4. definire Backend API v0 e capabilities dei backend
+5. aggiungere output strutturato JSONL e tracepoint logici
