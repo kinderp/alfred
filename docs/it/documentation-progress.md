@@ -126,9 +126,10 @@ controllato per ogni coppia layer/category. Il documento include campi comuni,
 campi filesystem, campi watch/recovery, campi security futuri opzionali, un
 diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
 rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
-Resta parziale perche' `alfred_record_t` esiste solo come contratto dati in
-`core/include/alfred_record.h`: mancano ancora adapter, writer JSONL e uso
-runtime nella Backend API v0.
+Resta parziale perche' `alfred_record_t` esiste come contratto dati in
+`core/include/alfred_record.h` e il primo adapter raw esiste in
+`core/src/alfred_record_adapter.c`, ma mancano ancora builder diagnostici,
+writer JSONL e uso runtime nella Backend API v0.
 
 ## Aggiornamento Backend API v0
 
@@ -136,6 +137,8 @@ runtime nella Backend API v0.
 Il documento stabilisce lifecycle, target management, emit sink basato su Event
 Model v0, capabilities, error model, ownership, mapping del backend inotify
 corrente e roadmap implementativa. Il primo tipo C comune,
-`core/include/alfred_record.h`, e' stato aggiunto come contratto dati. Resta
-parziale perche' la API non e' ancora implementata come runtime: mancano adapter,
-builder diagnostici, writer e migrazione di inotify a `emit(record)`.
+`core/include/alfred_record.h`, e' stato aggiunto come contratto dati. Esiste
+anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
+`normalized_raw + filesystem + RAW_*`. Resta parziale perche' la API non e'
+ancora implementata come runtime: mancano builder diagnostici, writer e
+migrazione di inotify a `emit(record)`.

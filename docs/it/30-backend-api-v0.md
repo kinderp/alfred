@@ -502,6 +502,8 @@ Non va anticipata nella prima implementazione.
 2. Introdurre una rappresentazione C minima di `alfred_record_t`.
    Fatto in `core/include/alfred_record.h`.
 3. Scrivere adapter da `alfred_raw_event_t` ad `alfred_record_t`.
+   Fatto per il raw normalizzato in `core/include/alfred_record_adapter.h` e
+   `core/src/alfred_record_adapter.c`.
 4. Scrivere builder diagnostici per `WATCH_*`.
 5. Aggiungere un text writer che produca le righe correnti da record.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
@@ -520,6 +522,11 @@ campo e' commentato nel codice in inglese per chiarire:
 
 Questa scelta permette agli studenti di leggere il modello dati direttamente nel
 codice prima di vedere gli adapter e i writer.
+
+L'adapter `alfred_record_from_raw()` produce record
+`normalized_raw + filesystem + RAW_*`. Non usa tipi semantici `FILE_*` o
+`DIR_*`, perche' la semantica resta responsabilita' del core. Per esempio un
+`ALFRED_RAW_MOVED_FROM` diventa `RAW_MOVED_FROM`, non `FILE_MOVED`.
 
 ## Test futuri
 

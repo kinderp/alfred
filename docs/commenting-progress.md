@@ -26,6 +26,14 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `core/include/alfred_record.h`, added
+  `core/include/alfred_record_adapter.h`,
+  `core/src/alfred_record_adapter.c`, and
+  `tests/backend/test_record_raw_adapter.c` after introducing the first
+  Event Model v0 raw adapter. Comments now explain why normalized raw record
+  types use explicit `RAW_*` names, why the adapter must not promote
+  `MOVED_FROM`/`MOVED_TO` to semantic move/rename outcomes, and why record
+  string fields remain borrowed.
 - refreshed `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_lost_scope_queue.c`, and
   `tests/backend/test_lost_scope_recovery.c` after the PR review fixes for

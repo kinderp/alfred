@@ -677,6 +677,21 @@ CORE_SRCS := \
     $(CORE_DIR)/src/nuovo_file.c
 ```
 
+Esempio reale:
+
+```make
+CORE_SRCS := \
+    $(CORE_DIR)/src/alfred_correlator.c \
+    $(CORE_DIR)/src/alfred_record_adapter.c \
+    $(CORE_DIR)/src/alfred_tables.c \
+    $(CORE_DIR)/src/alfred_utils.c
+```
+
+In questo esempio `alfred_record_adapter.c` deve stare in `CORE_SRCS` perche'
+traduce tipi core correnti (`alfred_raw_event_t`) nel record comune
+`alfred_record_t`. Non appartiene al modulo inotify: deve restare disponibile
+anche quando in futuro arriveranno altri backend.
+
 Se appartiene al modulo inotify:
 
 ```make
@@ -803,6 +818,7 @@ Devi aggiungerlo alla lista giusta:
 ```make
 CORE_SRCS := \
     $(CORE_DIR)/src/alfred_correlator.c \
+    $(CORE_DIR)/src/alfred_record_adapter.c \
     $(CORE_DIR)/src/alfred_tables.c \
     $(CORE_DIR)/src/alfred_utils.c \
     $(CORE_DIR)/src/alfred_new_rule.c
@@ -941,6 +957,16 @@ file backend con quel nome entra automaticamente in
 In entrambi i casi il Makefile non cambia, perche' il target entra gia' nella
 directory della suite ed esegue `run_all.sh`.
 
+Esempio corrente:
+
+```text
+tests/backend/test_record_raw_adapter.sh
+```
+
+entra automaticamente in `make test-backend-diagnostics`, perche'
+`tests/backend/run_all.sh` esegue tutti gli script `test_*.sh`. Il Makefile non
+deve elencarlo uno per uno.
+
 Se invece aggiungi una nuova categoria di test, per esempio:
 
 ```text
@@ -958,6 +984,26 @@ test-performance:
 e aggiungerlo anche a `.PHONY`.
 
 ### Caso 7: aggiungi un nuovo comando di automazione
+
+Se aggiungi un nuovo file sorgente in una directory gia' gestita, controlla
+anche i target di manutenzione:
+
+```make
+format
+scan
+tidy
+```
+
+Questi target non costruiscono il binario per gli utenti, ma aiutano i
+contributori a mantenere stile e qualita'. Se `make` compila `core/src/*.c` ma
+`make format`, `make scan` o `make tidy` guardano solo `app/src` e
+`modules/inotify/src`, allora una parte del codice resta fuori dai controlli.
+Per questo i target di manutenzione devono includere anche:
+
+```make
+$(CORE_DIR)/src/*.c
+$(CORE_DIR)/include/*.h
+```
 
 Se vuoi rendere riproducibile un'operazione manuale, puoi aggiungere un target.
 Esempi possibili:

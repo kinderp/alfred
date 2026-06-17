@@ -123,16 +123,16 @@ Esempi:
 semantic + filesystem + FILE_CREATED
 diagnostic + watch + WATCH_STALE
 diagnostic + recovery + WATCH_LOST_RECOVERY_END
-normalized_raw + filesystem + MOVED_FROM
+normalized_raw + filesystem + RAW_MOVED_FROM
 backend_observed + filesystem + IN_CREATE
 backend_observed + audit + IN_ACCESS
 security + policy + POLICY_BLOCKED
 trace + pipeline + RAW_EVENT_DISPATCHED
 ```
 
-Il nome `type` non basta da solo. `CREATE` in `normalized_raw` non e' la stessa
-cosa di `FILE_CREATED` in `semantic`, e `IN_CREATE` in `backend_observed` resta
-un fatto del backend Linux.
+Il nome `type` non basta da solo. `RAW_CREATE` in `normalized_raw` non e' la
+stessa cosa di `FILE_CREATED` in `semantic`, e `IN_CREATE` in
+`backend_observed` resta un fatto del backend Linux.
 
 ## Campi comuni
 
@@ -225,8 +225,10 @@ Regola: questi campi sono opzionali e non bloccano il filesystem v0.
 
 ## Diagramma dei record implementati oggi
 
-Questo diagramma mostra i record che Alfred sa rappresentare oggi, anche se non
-esiste ancora una `struct alfred_record_t`. Ogni nodo usa la forma:
+Questo diagramma mostra i record che Alfred sa rappresentare oggi. Il tipo C
+`alfred_record_t` esiste in `core/include/alfred_record.h`, ma il runtime usa
+ancora `alfred_raw_event_t`, `alfred_event_t` e log testuali. Ogni nodo usa la
+forma:
 
 ```text
 layer / category / type
@@ -253,14 +255,14 @@ flowchart TD
     end
 
     subgraph NR[normalized_raw]
-        NR1["filesystem<br/>CREATE"]
-        NR2["filesystem<br/>DELETE"]
-        NR3["filesystem<br/>MODIFY"]
-        NR4["filesystem<br/>ATTRIB"]
-        NR5["filesystem<br/>CLOSE_WRITE"]
-        NR6["filesystem<br/>MOVED_FROM"]
-        NR7["filesystem<br/>MOVED_TO"]
-        NR8["filesystem<br/>OVERFLOW"]
+        NR1["filesystem<br/>RAW_CREATE"]
+        NR2["filesystem<br/>RAW_DELETE"]
+        NR3["filesystem<br/>RAW_MODIFY"]
+        NR4["filesystem<br/>RAW_ATTRIB"]
+        NR5["filesystem<br/>RAW_CLOSE_WRITE"]
+        NR6["filesystem<br/>RAW_MOVED_FROM"]
+        NR7["filesystem<br/>RAW_MOVED_TO"]
+        NR8["filesystem<br/>RAW_OVERFLOW"]
     end
 
     subgraph SE[semantic]
@@ -339,8 +341,8 @@ flowchart TD
 
 Note di lettura:
 
-- `IN_ATTRIB` arriva fino a `normalized_raw + filesystem + ATTRIB`, ma oggi non
-  produce semantica core.
+- `IN_ATTRIB` arriva fino a `normalized_raw + filesystem + RAW_ATTRIB`, ma oggi
+  non produce semantica core.
 - gli eventi audit `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` restano raw log
   opt-in, non diventano `normalized_raw`.
 - `IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT` e `IN_IGNORED` sono eventi sul
@@ -350,7 +352,8 @@ Note di lettura:
 ## Tabella dei record implementati oggi
 
 Questa tabella elenca i record che Alfred puo' rappresentare oggi secondo Event
-Model v0, anche se il codice non ha ancora una struct comune.
+Model v0. I record `normalized_raw` hanno tipi `RAW_*` per non confonderli con
+gli eventi semantici `FILE_*` e `DIR_*`.
 
 | Layer | Category | Type | Generato da | Significato | Rimandi |
 | --- | --- | --- | --- | --- | --- |
@@ -365,14 +368,14 @@ Model v0, anche se il codice non ha ancora una struct comune.
 | `backend_observed` | `audit` | `IN_OPEN` | audit opt-in inotify | apertura osservata | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
 | `backend_observed` | `audit` | `IN_ACCESS` | audit opt-in inotify | lettura/accesso osservato | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
 | `backend_observed` | `audit` | `IN_CLOSE_NOWRITE` | audit opt-in inotify | close senza scrittura | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
-| `normalized_raw` | `filesystem` | `CREATE` | `ALFRED_RAW_CREATE` | fatto raw normalizzato di creazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
-| `normalized_raw` | `filesystem` | `DELETE` | `ALFRED_RAW_DELETE` | fatto raw normalizzato di cancellazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
-| `normalized_raw` | `filesystem` | `MODIFY` | `ALFRED_RAW_MODIFY` | fatto raw normalizzato di modifica | [06](06-core-engine.md), [13](13-semantica-eventi.md) |
-| `normalized_raw` | `filesystem` | `ATTRIB` | `ALFRED_RAW_ATTRIB` | metadati normalizzati, senza semantica core oggi | [13](13-semantica-eventi.md#attributi-e-metadati), [26](26-stato-funzionalita.md#attributi-e-metadati) |
-| `normalized_raw` | `filesystem` | `CLOSE_WRITE` | `ALFRED_RAW_CLOSE_WRITE` | close dopo scrittura | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [22](22-contratto-log.md) |
-| `normalized_raw` | `filesystem` | `MOVED_FROM` | `ALFRED_RAW_MOVED_FROM` | sorgente raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
-| `normalized_raw` | `filesystem` | `MOVED_TO` | `ALFRED_RAW_MOVED_TO` | destinazione raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
-| `normalized_raw` | `filesystem` | `OVERFLOW` | `ALFRED_RAW_OVERFLOW` | stream non affidabile per overflow | [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
+| `normalized_raw` | `filesystem` | `RAW_CREATE` | `ALFRED_RAW_CREATE` | fatto raw normalizzato di creazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
+| `normalized_raw` | `filesystem` | `RAW_DELETE` | `ALFRED_RAW_DELETE` | fatto raw normalizzato di cancellazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
+| `normalized_raw` | `filesystem` | `RAW_MODIFY` | `ALFRED_RAW_MODIFY` | fatto raw normalizzato di modifica | [06](06-core-engine.md), [13](13-semantica-eventi.md) |
+| `normalized_raw` | `filesystem` | `RAW_ATTRIB` | `ALFRED_RAW_ATTRIB` | metadati normalizzati, senza semantica core oggi | [13](13-semantica-eventi.md#attributi-e-metadati), [26](26-stato-funzionalita.md#attributi-e-metadati) |
+| `normalized_raw` | `filesystem` | `RAW_CLOSE_WRITE` | `ALFRED_RAW_CLOSE_WRITE` | close dopo scrittura | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [22](22-contratto-log.md) |
+| `normalized_raw` | `filesystem` | `RAW_MOVED_FROM` | `ALFRED_RAW_MOVED_FROM` | sorgente raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
+| `normalized_raw` | `filesystem` | `RAW_MOVED_TO` | `ALFRED_RAW_MOVED_TO` | destinazione raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
+| `normalized_raw` | `filesystem` | `RAW_OVERFLOW` | `ALFRED_RAW_OVERFLOW` | stream non affidabile per overflow | [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | `semantic` | `filesystem` | `FILE_CREATED` | core da raw create file | file creato | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
 | `semantic` | `filesystem` | `DIR_CREATED` | core da raw create dir | directory creata | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
 | `semantic` | `filesystem` | `FILE_DELETED` | core da raw delete file | file cancellato | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
@@ -415,7 +418,7 @@ source_backend=inotify
 ```
 
 ```text
-normalized_raw + filesystem + CREATE
+normalized_raw + filesystem + RAW_CREATE
 path=/tmp/root/a.txt
 object_kind=file
 ```
@@ -429,14 +432,14 @@ object_kind=file
 ### Rename directory
 
 ```text
-normalized_raw + filesystem + MOVED_FROM
+normalized_raw + filesystem + RAW_MOVED_FROM
 path=/tmp/root/old
 cookie=42
 object_kind=dir
 ```
 
 ```text
-normalized_raw + filesystem + MOVED_TO
+normalized_raw + filesystem + RAW_MOVED_TO
 path=/tmp/root/new
 cookie=42
 object_kind=dir

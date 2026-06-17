@@ -1727,6 +1727,12 @@ La copertura iniziale include:
   pubblica. Il test usa fake `add/remove` per simulare un fallimento dopo una
   reinstallazione riuscita, legge il `tmpfile()` usato dal logger e verifica il
   rollback all-or-stale con diagnostica `WATCH_RESYNC_ROLLBACK`
+- `test_record_raw_adapter.sh`: compila `test_record_raw_adapter.c` e verifica
+  il primo adapter verso Event Model v0. Il test controlla che
+  `alfred_raw_event_t` diventi `alfred_record_t` con layer
+  `normalized_raw`, category `filesystem` e tipi `RAW_*`, senza promuovere
+  `MOVED_FROM` o `MOVED_TO` a eventi semantici `FILE_MOVED`,
+  `FILE_RENAMED` o `FILE_RELOCATED`
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

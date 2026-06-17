@@ -99,6 +99,7 @@ APP_SRCS := \
 
 CORE_SRCS := \
 	$(CORE_DIR)/src/alfred_correlator.c \
+	$(CORE_DIR)/src/alfred_record_adapter.c \
 	$(CORE_DIR)/src/alfred_tables.c \
 	$(CORE_DIR)/src/alfred_utils.c
 
@@ -257,6 +258,8 @@ format:
 	clang-format -i \
 		$(APP_DIR)/src/*.c \
 		$(APP_DIR)/include/*.h \
+		$(CORE_DIR)/src/*.c \
+		$(CORE_DIR)/include/*.h \
 		$(MODULE_DIR)/inotify/src/*.c \
 		$(MODULE_DIR)/inotify/include/*.h
 
@@ -271,6 +274,7 @@ scan:
 		--std=gnu99 \
 		$(INCLUDES) \
 		$(APP_DIR)/src \
+		$(CORE_DIR)/src \
 		$(MODULE_DIR)/inotify/src
 
 # -----------------------------------------------------------------------------
@@ -280,6 +284,7 @@ scan:
 tidy:
 	clang-tidy \
 		$(APP_DIR)/src/*.c \
+		$(CORE_DIR)/src/*.c \
 		$(MODULE_DIR)/inotify/src/*.c \
 		-- $(INCLUDES)
 

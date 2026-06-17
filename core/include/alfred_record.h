@@ -158,6 +158,13 @@ typedef enum {
  * These values intentionally mirror the names documented in Event Model v0.
  * The enum is not a bitmask: each record has exactly one type. Raw inotify or
  * Alfred raw flags remain in alfred_record_t.raw_mask.
+ *
+ * Important split:
+ *   ALFRED_RECORD_TYPE_RAW_* values describe normalized raw backend facts.
+ *   ALFRED_RECORD_TYPE_FILE_* and ALFRED_RECORD_TYPE_DIR_* values describe
+ *   semantic core outcomes. Keeping both groups separate prevents an adapter
+ *   from pretending that a low-level MOVED_FROM or MOVED_TO fact is already a
+ *   stable move, rename, or relocated semantic event.
  */
 typedef enum {
 
@@ -167,11 +174,79 @@ typedef enum {
     ALFRED_RECORD_TYPE_UNKNOWN = 0,
 
     /*
+     * Raw backend create fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. Consumers must inspect
+     * alfred_record_t.raw_mask to know whether the created object is a file or
+     * directory. The semantic core later decides whether this becomes
+     * FILE_CREATED, DIR_CREATED, or part of a more complex scenario.
+     */
+    ALFRED_RECORD_TYPE_RAW_CREATE,
+
+    /*
+     * Raw backend delete fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. The directory bit, if
+     * present, remains in raw_mask. This is not yet a semantic FILE_DELETED or
+     * DIR_DELETED decision.
+     */
+    ALFRED_RECORD_TYPE_RAW_DELETE,
+
+    /*
+     * Raw backend modify fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. The semantic core may
+     * debounce or suppress these records before emitting FILE_MODIFIED.
+     */
+    ALFRED_RECORD_TYPE_RAW_MODIFY,
+
+    /*
+     * Raw backend attribute-change fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. Alfred currently keeps
+     * IN_ATTRIB observable at the raw/backend level while the final semantic
+     * policy for metadata changes remains deferred.
+     */
+    ALFRED_RECORD_TYPE_RAW_ATTRIB,
+
+    /*
+     * Raw backend close-after-write fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. The semantic core maps
+     * this to FILE_READY when appropriate.
+     */
+    ALFRED_RECORD_TYPE_RAW_CLOSE_WRITE,
+
+    /*
+     * Raw backend move-from fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. This is one half of a
+     * move pair and must not be treated as a complete move/rename by itself.
+     */
+    ALFRED_RECORD_TYPE_RAW_MOVED_FROM,
+
+    /*
+     * Raw backend move-to fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. The core correlates it
+     * with RAW_MOVED_FROM through cookie before choosing moved, renamed, or
+     * relocated semantics.
+     */
+    ALFRED_RECORD_TYPE_RAW_MOVED_TO,
+
+    /*
+     * Raw backend queue-overflow fact.
+     *
+     * Used only with ALFRED_RECORD_LAYER_NORMALIZED_RAW. It means the raw
+     * stream is incomplete and higher layers should schedule recovery.
+     */
+    ALFRED_RECORD_TYPE_RAW_OVERFLOW,
+
+    /*
      * A regular file appeared at path.
      *
-     * In normalized raw, this usually comes from a backend create fact without
-     * the directory bit. In semantic output, it is the core-approved file
-     * creation event.
+     * Used with ALFRED_RECORD_LAYER_SEMANTIC after the core has accepted the
+     * raw create fact as a stable file creation event.
      */
     ALFRED_RECORD_TYPE_FILE_CREATED,
 
