@@ -500,6 +500,7 @@ Non va anticipata nella prima implementazione.
 
 1. Usare questa specifica come riferimento del refactor.
 2. Introdurre una rappresentazione C minima di `alfred_record_t`.
+   Fatto in `core/include/alfred_record.h`.
 3. Scrivere adapter da `alfred_raw_event_t` ad `alfred_record_t`.
 4. Scrivere builder diagnostici per `WATCH_*`.
 5. Aggiungere un text writer che produca le righe correnti da record.
@@ -507,6 +508,18 @@ Non va anticipata nella prima implementazione.
 7. Solo dopo progettare JSONL writer.
 8. Solo dopo progettare backend statici ulteriori.
 9. Solo dopo valutare plugin dinamici.
+
+`core/include/alfred_record.h` e' volutamente un header di contratto. Non
+contiene logica runtime e non cambia ancora il comportamento di Alfred. Ogni
+campo e' commentato nel codice in inglese per chiarire:
+
+- significato del campo
+- layer o record in cui il campo e' utile
+- regola di ownership per le stringhe
+- relazione con raw event, evento semantico, diagnostica watch e recovery
+
+Questa scelta permette agli studenti di leggere il modello dati direttamente nel
+codice prima di vedere gli adapter e i writer.
 
 ## Test futuri
 

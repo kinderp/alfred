@@ -33,6 +33,13 @@ e' identificato da `layer + category + type`, per esempio
 `diagnostic + watch + WATCH_STALE`. Serve come base per JSONL, Backend API v0,
 plugin, tracepoint e futuri guardrail.
 
+## alfred_record_t
+
+Struttura C definita in `core/include/alfred_record.h` che rappresenta il record
+comune di Event Model v0. Per ora e' un contratto dati: descrive come
+rappresentare raw event normalizzati, eventi semantici e diagnostica backend,
+ma non e' ancora collegata al runtime o ai writer.
+
 ## Backend API v0
 
 Specifiche del contratto comune con cui un backend Alfred inizializza il proprio

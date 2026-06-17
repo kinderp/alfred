@@ -1,9 +1,10 @@
 # Event Model v0
 
 Questo documento definisce la prima versione del modello eventi di Alfred.
-L'obiettivo non e' cambiare subito il codice C, ma stabilire il contratto
-concettuale che guidera' JSONL, Backend API v0, plugin, tracepoint, Alfred Lab e
-futuri guardrail per agenti AI.
+L'obiettivo e' stabilire il contratto che guidera' JSONL, Backend API v0,
+plugin, tracepoint, Alfred Lab e futuri guardrail per agenti AI. Il primo ponte
+verso il codice C e' `core/include/alfred_record.h`, che definisce il tipo
+comune `alfred_record_t`.
 
 La decisione approvata e':
 
@@ -45,13 +46,22 @@ Rimandi principali:
 - [Backend API v0](30-backend-api-v0.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 
-## Cosa non cambia adesso
+## Stato nel codice C
 
-Questo documento non implementa ancora:
+Il codice ora contiene una prima rappresentazione C minima del record comune:
+`core/include/alfred_record.h`. Questo header definisce:
 
-- una nuova `struct alfred_record_t`;
+- `alfred_record_layer_t`
+- `alfred_record_category_t`
+- `alfred_record_type_t`
+- `alfred_record_identity_t`
+- `alfred_record_watch_t`
+- `alfred_record_t`
+
+Il tipo esiste come contratto dati, ma non cambia ancora il flusso runtime.
+Quindi non sono ancora implementati:
+
 - un writer JSONL;
-- una Backend API v0;
 - una policy security;
 - modifiche a `alfred_raw_event_t`;
 - modifiche a `alfred_event_t`;
@@ -503,9 +513,9 @@ stesso record strutturato. Non dovremo convertire testo in JSON.
 1. `alfred_raw_event_t` resta il tipo C corrente per l'ingresso del core.
 2. `alfred_event_t` resta il tipo C corrente per l'uscita semantica del core.
 3. I log testuali restano il contratto pratico dei test correnti.
-4. Event Model v0 diventa il contratto concettuale per i nuovi output.
-5. Un futuro `alfred_record_t` dovra' poter rappresentare almeno tutti i record
-   della tabella sopra.
+4. Event Model v0 diventa il contratto dati per i nuovi output.
+5. `alfred_record_t` deve poter rappresentare almeno tutti i record della
+   tabella sopra.
 6. Backend API v0 dovra' produrre record o fatti convertibili in record.
 7. Security e trace sono previsti ma non obbligatori nel filesystem v0.
 
@@ -513,7 +523,6 @@ stesso record strutturato. Non dovremo convertire testo in JSON.
 
 Restano da decidere:
 
-- forma C concreta di `alfred_record_t`;
 - se `event_id` sara' numerico, UUID-like o composto da `source + seq`;
 - se `ts_wall_ns` verra' generato sempre o solo dai writer;
 - formato esatto di JSONL;
@@ -523,7 +532,5 @@ Restano da decidere:
 - stream audit strutturato separato dallo stream filesystem;
 - tracepoint minimi per Alfred Lab.
 
-Il passo successivo documentale e' stato aggiunto in
-[Backend API v0](30-backend-api-v0.md). Il prossimo lavoro di codice dovrebbe
-partire da quel documento: introdurre il record C minimo, adapter e diagnostica
-strutturata prima di progettare JSONL.
+Il passo successivo e' usare [Backend API v0](30-backend-api-v0.md) come guida
+per scrivere adapter e diagnostica strutturata prima di progettare JSONL.

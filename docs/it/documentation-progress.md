@@ -126,14 +126,16 @@ controllato per ogni coppia layer/category. Il documento include campi comuni,
 campi filesystem, campi watch/recovery, campi security futuri opzionali, un
 diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
 rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
-Resta parziale perche' non esistono ancora `alfred_record_t`, writer JSONL o
-Backend API v0.
+Resta parziale perche' `alfred_record_t` esiste solo come contratto dati in
+`core/include/alfred_record.h`: mancano ancora adapter, writer JSONL e uso
+runtime nella Backend API v0.
 
 ## Aggiornamento Backend API v0
 
 `30-backend-api-v0.md` definisce la proposta documentale della Backend API v0.
 Il documento stabilisce lifecycle, target management, emit sink basato su Event
 Model v0, capabilities, error model, ownership, mapping del backend inotify
-corrente e roadmap implementativa. Resta parziale perche' la API non e' ancora
-implementata in C: la prima fase deve restare a link statico, mentre i plugin
-dinamici `.so` sono esplicitamente rimandati.
+corrente e roadmap implementativa. Il primo tipo C comune,
+`core/include/alfred_record.h`, e' stato aggiunto come contratto dati. Resta
+parziale perche' la API non e' ancora implementata come runtime: mancano adapter,
+builder diagnostici, writer e migrazione di inotify a `emit(record)`.
