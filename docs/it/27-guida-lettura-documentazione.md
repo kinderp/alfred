@@ -111,15 +111,18 @@ raw Alfred, eventi semantici e diagnostica.
 1. [Semantica degli eventi](13-semantica-eventi.md)
    spiega le decisioni semantiche: create, delete, modify, file-ready, move,
    rename, relocate, dedup e overflow.
-2. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
+2. [Event Model v0](29-event-model-v0.md)
+   definisce il record strutturato comune basato su
+   `layer + category + type`.
+3. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
    elenca gli eventi inotify, indica se Alfred li richiede, li osserva, li
    converte in raw event o li lascia come diagnostica.
-3. [Contratto dei log](22-contratto-log.md)
+4. [Contratto dei log](22-contratto-log.md)
    spiega cosa significano le righe scritte nei log e in quale contesto vengono
    generate.
-4. [Scenari di test](14-scenari-test.md)
+5. [Scenari di test](14-scenari-test.md)
    collega gli scenari reali ai log attesi.
-5. [alfred-events(7)](../man/man7/alfred-events.7)
+6. [alfred-events(7)](../man/man7/alfred-events.7)
    riassume il modello in forma da manuale tecnico.
 
 La distinzione principale e': il raw log del backend racconta cosa arriva dal
@@ -202,6 +205,7 @@ controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 | Core engine | [06](06-core-engine.md), [13](13-semantica-eventi.md), [16](16-mappa-codice-e-strutture.md) |
 | Dedup | [13](13-semantica-eventi.md#dedup), [glossario](glossario.md#dedup) |
 | Diagnostica backend | [22](22-contratto-log.md), [14](14-scenari-test.md) |
+| Event Model v0 | [29](29-event-model-v0.md), [22](22-contratto-log.md), [25](25-roadmap-unificata-dossier.md) |
 | Eventi inotify | [20](20-matrice-eventi-inotify.md), [05](05-modulo-inotify.md), [alfred-events(7)](../man/man7/alfred-events.7) |
 | Eventi semantici | [13](13-semantica-eventi.md), [06](06-core-engine.md), [22](22-contratto-log.md) |
 | File ready / close-write | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [14](14-scenari-test.md) |

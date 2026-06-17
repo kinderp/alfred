@@ -25,6 +25,14 @@ esempio una directory creata prima che fosse aggiunto il watch inotify.
 
 Evento gia' interpretato dal core, per esempio `FILE_RENAMED`.
 
+## Event Model v0
+
+Specifiche del record strutturato comune di Alfred. In Event Model v0 un record
+e' identificato da `layer + category + type`, per esempio
+`semantic + filesystem + FILE_CREATED` oppure
+`diagnostic + watch + WATCH_STALE`. Serve come base per JSONL, Backend API v0,
+plugin, tracepoint e futuri guardrail.
+
 ## Directory contenitore
 
 Directory che contiene direttamente un file o un'altra directory. Per il path

@@ -133,21 +133,23 @@ futuri, rimandati o da discutere. Non tutti hanno la stessa priorita'.
 
 ### Event Model v0
 
-Stato: da progettare.
+Stato: documentato, da implementare nel codice.
 
 Documenti collegati:
 
+- [Event Model v0](29-event-model-v0.md)
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 - [Stato funzionalita' supportate](26-stato-funzionalita.md)
 - [Contratto dei log](22-contratto-log.md)
 - [alfred-events(7)](../man/man7/alfred-events.7)
 
-Motivo: prima di stabilizzare JSONL, plugin backend e policy guardrail serve un
-modello eventi piu' esplicito. Oggi esistono raw event e semantic event, ma il
-progetto futuro avra' bisogno di campi strutturati come sorgente, timestamp,
-identita', categoria, severita', sessione e contesto.
+Motivo: prima di stabilizzare JSONL, plugin backend e policy guardrail serviva
+un modello eventi piu' esplicito. Il documento ora definisce il record comune
+basato su `layer + category + type`. Il debito rimasto non e' piu' scrivere la
+specifica, ma tradurla in `alfred_record_t`, writer e adapter.
 
-Priorita' consigliata: alta.
+Priorita' consigliata: usare questa specifica come base del prossimo passo,
+cioe' Backend API v0.
 
 ### Backend API v0
 
@@ -337,12 +339,13 @@ Priorita' consigliata: media-bassa. Prima scegliere uno scenario pilota.
 Alla luce dell'audit, i prossimi temi da discutere non sono altri cleanup
 documentali generici. I punti veramente decisionali sono:
 
-1. partire da Event Model v0;
-2. progettare Backend API v0;
-3. decidere se anticipare una CLI stabile;
-4. scegliere uno scenario pilota per animazioni/watch state;
-5. definire quando introdurre una performance suite ripetibile.
+1. usare Event Model v0 come base per Backend API v0;
+2. decidere se anticipare una CLI stabile;
+3. scegliere uno scenario pilota per animazioni/watch state;
+4. definire quando introdurre una performance suite ripetibile;
+5. progettare JSONL solo dopo aver scelto il record C o gli adapter minimi.
 
-La mia raccomandazione e': prima Event Model v0. Senza quello, CLI, JSONL,
-plugin backend, guardrail e output binario rischiano di nascere su un modello
-ancora troppo implicito.
+La mia raccomandazione aggiornata e': ora che Event Model v0 esiste, il prossimo
+passo architetturale e' Backend API v0. JSONL, plugin backend, guardrail e
+output binario dovrebbero riusare il record comune, non inventare un modello
+parallelo.

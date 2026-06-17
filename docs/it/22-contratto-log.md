@@ -124,13 +124,15 @@ In futuro Alfred potrebbe inviare gli stessi fatti a un altro device di uscita:
 - scrittura diretta di strutture compatte definite da Alfred
 
 Il punto architetturale e' che il contratto non deve essere "parse di stringhe".
-Il contratto deve essere il fatto strutturato:
+Il contratto deve essere il fatto strutturato. La specifica comune di quel fatto
+e' [Event Model v0](29-event-model-v0.md): un record identificato da
+`layer + category + type`.
 
 ```text
-channel    = events
-category   = backend-diagnostic
-name       = WATCH_RESYNC_FAILED
-wd         = 7
+layer      = diagnostic
+category   = recovery
+type       = WATCH_RESYNC_FAILED
+watch_id   = 7
 path       = /tmp/root
 reason     = IN_MOVE_SELF
 error      = identity-mismatch
@@ -155,8 +157,9 @@ In quel modello:
 - dovremo invece serializzare direttamente lo stesso evento strutturato verso
   destinazioni diverse
 
-Questa reference quindi va letta come contratto semantico dei campi, non solo
-come formato definitivo dei file `.log`.
+Questa reference quindi va letta come contratto semantico dei campi testuali
+oggi esistenti, non solo come formato definitivo dei file `.log`. Event Model v0
+e' invece il riferimento per tradurre quei fatti in record strutturati.
 
 ### Strategia consigliata
 

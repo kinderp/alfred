@@ -45,6 +45,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `26-stato-funzionalita.md` |
 | Completo | `27-guida-lettura-documentazione.md` |
 | Completo | `28-audit-documentazione-e-debiti.md` |
+| Parziale | `29-event-model-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -83,8 +84,9 @@ La pulizia corrente ha:
 `26-stato-funzionalita.md` raccoglie in un unico posto le funzionalita'
 supportate dal backend inotify, dal raw log, dagli `ALFRED_RAW_*`, dal core
 semantico, dalla diagnostica backend e dalla lost-scope recovery. Il documento
-rimanda ai test principali e deve essere letto prima di progettare Event Model
-v0, Backend API v0 o JSONL.
+rimanda ai test principali ed e' stato usato come base per Event Model v0. Deve
+restare il controllo da leggere prima di progettare Backend API v0, JSONL o
+nuovi record.
 
 ## Aggiornamento pagine man
 
@@ -113,3 +115,15 @@ locali, diagrammi Mermaid, animazioni rimandate e debiti dichiarati nella
 documentazione. Serve come punto di discussione per distinguere cosa e' rotto,
 cosa e' volutamente rimandato e quali decisioni architetturali conviene
 affrontare per prime.
+
+## Aggiornamento Event Model v0
+
+`29-event-model-v0.md` definisce il modello eventi approvato per il prossimo
+filone architetturale: un record comune identificato da
+`layer + category + type`, con `layer` e `category` controllati e `type`
+controllato per ogni coppia layer/category. Il documento include campi comuni,
+campi filesystem, campi watch/recovery, campi security futuri opzionali, un
+diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
+rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
+Resta parziale perche' non esistono ancora `alfred_record_t`, writer JSONL o
+Backend API v0.

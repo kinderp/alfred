@@ -3,9 +3,12 @@
 alfred-events \- Alfred event layers, current model, and supported semantics
 .SH DESCRIPTION
 Alfred separates backend-specific facts from stable semantic events.
-This page describes the current model before Event Model v0. It is more formal
-than the Italian design documents, but it is still a draft: Event Model v0 may
-rename fields, split streams, or introduce JSONL records.
+This page describes the current runtime model and should be read together with
+the Italian Event Model v0 design document in
+.IR docs/it/29-event-model-v0.md .
+That document defines the future structured record based on layer, category,
+and type. This manual page remains a draft until that model is implemented in
+code and exposed through stable machine-readable output.
 .SH EVENT LAYERS
 .SS Backend raw log
 The backend raw log records facts close to the operating system backend. With
@@ -175,18 +178,23 @@ complete.
 .PP
 The current runtime processes recovery synchronously with a small batch size.
 A worker thread and public recovery tuning are future work.
-.SH FUTURE EVENT MODEL V0
-Event Model v0 is expected to formalize fields such as:
+.SH EVENT MODEL V0
+Event Model v0 formalizes Alfred records around:
+.EX
+layer
+category
+type
+.EE
+It also defines common fields such as:
 .EX
 schema_version
 event_id
-timestamp_ns
-source_module
-subject
-action
-target
-context
-control
+seq
+ts_monotonic_ns
+ts_wall_ns
+source_backend
+severity
+flags
 .EE
 JSONL, MessagePack, Protobuf, socket output, Alfred Lab and plugin backends
 should be built on that structured model, not on ad hoc log strings.

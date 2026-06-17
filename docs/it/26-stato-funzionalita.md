@@ -156,7 +156,7 @@ definitivamente una directory osservata rinominata o spostata.
 
 | Area | Stato | Motivo del rinvio |
 | --- | --- | --- |
-| JSONL stabile | Rimandato | Prima serve Event Model v0: JSONL e' output, non Backend API |
+| JSONL stabile | Rimandato | Ora deve basarsi su Event Model v0: JSONL e' output, non Backend API |
 | Tracepoint logici | Rimandato | Servono per Lab e debug strutturato, ma vanno progettati dopo il modello eventi |
 | Backend API v0 | Rimandato | Prossima fase architetturale, prima di fanotify/audit/eBPF |
 | Plugin dinamici `.so` | Rimandato | Prima stabilizzare API statica e ownership memoria |
@@ -167,14 +167,16 @@ definitivamente una directory osservata rinominata o spostata.
 
 ## Prossimo uso pratico
 
-Questa matrice deve essere usata prima di progettare Event Model v0:
+Questa matrice e' stata usata per progettare
+[Event Model v0](29-event-model-v0.md) e resta il controllo da consultare prima
+di cambiare il modello:
 
 1. leggere cosa Alfred supporta oggi
 2. distinguere raw backend, Alfred raw, core semantico e diagnostica
 3. evitare di perdere funzionalita' gia' coperte dai test
 4. scegliere quali campi del futuro modello eventi servono davvero
 
-Il prossimo documento architetturale dovrebbe quindi partire da questa domanda:
+Il modello corrente parte da questa domanda:
 
 ```text
 quale struttura dati comune rappresenta tutte le righe "Supportato" di questa

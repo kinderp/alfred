@@ -79,10 +79,11 @@ decisione formale su:
 Questa fase dovrebbe produrre un documento dedicato, per esempio:
 
 ```text
-docs/it/26-event-model-v0.md
+docs/it/29-event-model-v0.md
 ```
 
-Solo dopo questa fase ha senso disegnare JSONL con precisione.
+Il documento ora esiste: [Event Model v0](29-event-model-v0.md). Solo dopo
+questa fase ha senso disegnare JSONL con precisione.
 
 ## Fase 2 - Backend API v0
 
@@ -250,7 +251,7 @@ inotify e non e' una suite performance completa.
 Il prossimo step migliore e':
 
 ```text
-scrivere Event Model v0
+usare Event Model v0 come base per Backend API v0
 ```
 
 Subito dopo:
@@ -271,6 +272,7 @@ Solo dopo questi due documenti conviene decidere se il primo refactor sara':
 
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+- [Event Model v0](29-event-model-v0.md)
 - [Contratto dei log](22-contratto-log.md)
 - [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
 - [Matrice eventi inotify](20-matrice-eventi-inotify.md)
