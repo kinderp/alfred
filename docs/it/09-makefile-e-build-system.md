@@ -683,14 +683,16 @@ Esempio reale:
 CORE_SRCS := \
     $(CORE_DIR)/src/alfred_correlator.c \
     $(CORE_DIR)/src/alfred_record_adapter.c \
+    $(CORE_DIR)/src/alfred_record_diagnostic.c \
     $(CORE_DIR)/src/alfred_tables.c \
     $(CORE_DIR)/src/alfred_utils.c
 ```
 
-In questo esempio `alfred_record_adapter.c` deve stare in `CORE_SRCS` perche'
-traduce tipi core correnti (`alfred_raw_event_t`) nel record comune
-`alfred_record_t`. Non appartiene al modulo inotify: deve restare disponibile
-anche quando in futuro arriveranno altri backend.
+In questo esempio `alfred_record_adapter.c` e
+`alfred_record_diagnostic.c` devono stare in `CORE_SRCS` perche' traducono tipi
+core correnti e diagnostica Alfred nel record comune `alfred_record_t`. Non
+appartengono al modulo inotify: devono restare disponibili anche quando in
+futuro arriveranno altri backend.
 
 Se appartiene al modulo inotify:
 
@@ -819,6 +821,7 @@ Devi aggiungerlo alla lista giusta:
 CORE_SRCS := \
     $(CORE_DIR)/src/alfred_correlator.c \
     $(CORE_DIR)/src/alfred_record_adapter.c \
+    $(CORE_DIR)/src/alfred_record_diagnostic.c \
     $(CORE_DIR)/src/alfred_tables.c \
     $(CORE_DIR)/src/alfred_utils.c \
     $(CORE_DIR)/src/alfred_new_rule.c

@@ -26,6 +26,13 @@ runtime architecture.
 
 Latest refresh:
 
+- added `core/include/alfred_record_diagnostic.h`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_diagnostic_builder.c` after introducing the first
+  Event Model v0 diagnostic builder. Comments now explain how WATCH_* types are
+  classified as watch or recovery diagnostics, why raw/semantic types are
+  rejected, and why borrowed string ownership is preserved for future hot-path
+  writers.
 - refreshed `core/include/alfred_record.h`, added
   `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, and

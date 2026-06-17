@@ -511,6 +511,16 @@ Esempio diagnostico:
 Il writer testuale corrente e il futuro writer JSONL dovranno ricevere lo
 stesso record strutturato. Non dovremo convertire testo in JSON.
 
+Nel codice C questo passaggio e' iniziato con due helper:
+
+- `alfred_record_from_raw()` converte `alfred_raw_event_t` in record
+  `normalized_raw + filesystem + RAW_*`
+- `alfred_record_build_watch_diagnostic()` costruisce record
+  `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
+
+Questi helper non sostituiscono ancora il runtime testuale. Servono a fissare
+il contratto dati prima di introdurre writer e migrazione Backend API.
+
 ## Regole di compatibilita'
 
 1. `alfred_raw_event_t` resta il tipo C corrente per l'ingresso del core.
@@ -536,4 +546,4 @@ Restano da decidere:
 - tracepoint minimi per Alfred Lab.
 
 Il passo successivo e' usare [Backend API v0](30-backend-api-v0.md) come guida
-per scrivere adapter e diagnostica strutturata prima di progettare JSONL.
+per scrivere il writer testuale da record prima di progettare JSONL.

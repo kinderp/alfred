@@ -146,6 +146,14 @@ WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-misma
 
 e' solo una serializzazione leggibile di quel fatto.
 
+Il primo builder C per questa direzione e'
+`alfred_record_build_watch_diagnostic()`, dichiarato in
+`core/include/alfred_record_diagnostic.h`. Il builder costruisce record
+`diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
+senza fare parsing della riga testuale. Le stringhe (`backend`, `path`,
+`state`, `reason`, `error`) restano borrowed come nel resto di
+`alfred_record_t`: chi vuole conservarle deve copiarle.
+
 Questa distinzione sara' importante quando introdurremo output performanti. Il
 backend e il core dovranno produrre eventi strutturati; poi un writer potra'
 scegliere se serializzarli come testo, MessagePack, Protobuf o altro formato.

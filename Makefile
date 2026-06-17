@@ -100,6 +100,7 @@ APP_SRCS := \
 CORE_SRCS := \
 	$(CORE_DIR)/src/alfred_correlator.c \
 	$(CORE_DIR)/src/alfred_record_adapter.c \
+	$(CORE_DIR)/src/alfred_record_diagnostic.c \
 	$(CORE_DIR)/src/alfred_tables.c \
 	$(CORE_DIR)/src/alfred_utils.c
 

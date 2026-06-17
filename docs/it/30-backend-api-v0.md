@@ -505,6 +505,9 @@ Non va anticipata nella prima implementazione.
    Fatto per il raw normalizzato in `core/include/alfred_record_adapter.h` e
    `core/src/alfred_record_adapter.c`.
 4. Scrivere builder diagnostici per `WATCH_*`.
+   Fatto per i tipi watch/recovery principali in
+   `core/include/alfred_record_diagnostic.h` e
+   `core/src/alfred_record_diagnostic.c`.
 5. Aggiungere un text writer che produca le righe correnti da record.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
 7. Solo dopo progettare JSONL writer.
@@ -527,6 +530,12 @@ L'adapter `alfred_record_from_raw()` produce record
 `normalized_raw + filesystem + RAW_*`. Non usa tipi semantici `FILE_*` o
 `DIR_*`, perche' la semantica resta responsabilita' del core. Per esempio un
 `ALFRED_RAW_MOVED_FROM` diventa `RAW_MOVED_FROM`, non `FILE_MOVED`.
+
+Il builder `alfred_record_build_watch_diagnostic()` produce record
+`diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
+gia' presenti in `alfred_record_type_t`. Anche questo e' behavior-neutral: il
+runtime continua a scrivere le righe `WATCH_*` con `logger_event()`, ma ora
+esiste la rappresentazione strutturata equivalente.
 
 ## Test futuri
 

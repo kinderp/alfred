@@ -1733,6 +1733,12 @@ La copertura iniziale include:
   `normalized_raw`, category `filesystem` e tipi `RAW_*`, senza promuovere
   `MOVED_FROM` o `MOVED_TO` a eventi semantici `FILE_MOVED`,
   `FILE_RENAMED` o `FILE_RELOCATED`
+- `test_record_diagnostic_builder.sh`: compila
+  `test_record_diagnostic_builder.c` e verifica il builder strutturato per
+  diagnostica `WATCH_*`. Il test controlla che `WATCH_STALE` diventi
+  `diagnostic + watch`, che `WATCH_RESYNC_FAILED` diventi
+  `diagnostic + recovery`, che le stringhe restino borrowed e che tipi raw o
+  semantici vengano rifiutati
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che
