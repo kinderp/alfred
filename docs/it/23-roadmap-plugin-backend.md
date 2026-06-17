@@ -62,11 +62,24 @@ Un backend non deve:
 
 ## Contratto comune
 
-Il contratto minimo tra backend e Alfred dovrebbe essere composto da due stream:
+Il contratto minimo tra backend e Alfred ora e' descritto in
+[Backend API v0](30-backend-api-v0.md). In sintesi, un backend deve produrre
+record compatibili con [Event Model v0](29-event-model-v0.md), non stringhe di
+log come API primaria.
+
+La vecchia formulazione a due stream era:
 
 ```text
 raw event stream        -> alfred_raw_event_t
 diagnostic event stream -> alfred_log_record_t o equivalente strutturato
+```
+
+La formulazione aggiornata e':
+
+```text
+backend -> alfred_record_t layer=backend_observed
+backend -> alfred_record_t layer=normalized_raw
+backend -> alfred_record_t layer=diagnostic
 ```
 
 `alfred_raw_event_t` serve al core:
@@ -94,11 +107,13 @@ WATCH_RESYNC_FAILED
 ```
 
 Questi nomi non devono essere solo stringhe stampate. Devono diventare record
-strutturati, come descritto in [Contratto dei log](22-contratto-log.md).
+strutturati, come descritto in [Backend API v0](30-backend-api-v0.md) e
+[Contratto dei log](22-contratto-log.md).
 
 ## API C proposta
 
-Una prima API comune potrebbe avere questa forma:
+La forma aggiornata della API e' descritta in
+[Backend API v0](30-backend-api-v0.md). La bozza storica era:
 
 ```c
 typedef struct alfred_backend alfred_backend_t;
@@ -134,8 +149,9 @@ typedef struct {
 } alfred_backend_ops_t;
 ```
 
-Questa non e' ancora una API implementata. E' una direzione di progettazione.
-Prima di scrivere codice, dovremo decidere:
+Questa non e' una API implementata. La specifica aggiornata usa un emit sink
+basato su `alfred_record_t` e separa lifecycle, target management, capabilities,
+ownership ed error model. Prima di scrivere codice restano da decidere:
 
 - dove vive `alfred_backend_t`
 - quali campi contiene `alfred_backend_config_t`
@@ -226,11 +242,10 @@ Se ogni backend emette solo stringhe, allora:
 - sarebbe difficile produrre output binario performante
 - sarebbe difficile mantenere compatibilita' tra plugin
 
-Se invece ogni backend emette record strutturati:
+Se invece ogni backend emette record strutturati secondo Backend API v0:
 
 ```text
-backend -> alfred_raw_event_t
-backend -> alfred_log_record_t
+backend -> alfred_record_t
 ```
 
 allora Alfred puo':
@@ -298,15 +313,17 @@ Decisioni fissate per ora:
 
 ## Prossimi passi
 
-1. completare il resync inotify sul branch corrente
-2. consolidare `alfred_log_record_t` o struttura equivalente nel design
-3. disegnare una prima `alfred_backend_ops_t` senza implementarla subito
-4. verificare quali funzioni inotify correnti corrispondono a `init`, `start`,
-   `poll`, `stop`, `destroy`
-5. solo dopo, iniziare un refactor verso backend statici multipli
+1. usare [Backend API v0](30-backend-api-v0.md) come riferimento del refactor
+2. introdurre una rappresentazione C minima di `alfred_record_t`
+3. scrivere adapter da `alfred_raw_event_t` ad `alfred_record_t`
+4. scrivere builder diagnostici per `WATCH_*`
+5. migrare gradualmente inotify verso `emit(record)`
+6. solo dopo, iniziare un refactor verso backend statici multipli
 
 ## Rimandi
 
+- [Backend API v0](30-backend-api-v0.md)
+- [Event Model v0](29-event-model-v0.md)
 - [Contratto dei log](22-contratto-log.md)
 - [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md)
 - [Modulo inotify](05-modulo-inotify.md)

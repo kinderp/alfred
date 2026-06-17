@@ -148,5 +148,5 @@ adatto a una piattaforma multi-backend:
 1. mantenere la suite core come contratto semantico ufficiale
 2. mantenere la suite backend diagnostics per i log tecnici dei watch
 3. usare Event Model v0 come riferimento per raw, normalized e semantic event
-4. definire Backend API v0 e capabilities dei backend
+4. usare Backend API v0 per capabilities e refactor backend
 5. aggiungere output strutturato JSONL e tracepoint logici

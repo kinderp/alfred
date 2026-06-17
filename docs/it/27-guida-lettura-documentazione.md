@@ -176,15 +176,17 @@ Questo percorso serve per capire dove sta andando il progetto.
 1. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
    ordina Event Model v0, Backend API v0, JSONL, tracepoint logici, Alfred Lab,
    performance suite e backend complessi.
-2. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+2. [Backend API v0](30-backend-api-v0.md)
+   definisce lifecycle, target, capabilities e record emessi dai backend.
+3. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
    descrive l'idea di una API comune per backend inotify, fanotify, audit, eBPF,
    Windows e macOS.
-3. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+4. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    collega Alfred all'obiettivo piu' ampio: runtime security per agenti AI.
-4. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
+5. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
-5. [Modello licenze](18-modello-licenze.md)
+6. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
 
@@ -198,6 +200,7 @@ controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 | --- | --- |
 | Architettura generale | [02](02-architettura-generale.md), [07](07-flusso-eventi.md), [16](16-mappa-codice-e-strutture.md) |
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
+| Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
 | Build e Makefile | [09](09-makefile-e-build-system.md) |
 | CLI e configurazione | [19](19-roadmap-cli-e-man-page.md), [alfred(1)](../man/man1/alfred.1), [alfred.conf(5)](../man/man5/alfred.conf.5) |
 | Commenti nel codice | [11](11-come-contribuire.md#stile-dei-commenti-nel-codice), `docs/commenting-style.md`, `docs/commenting-progress.md` |
@@ -217,7 +220,7 @@ controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
-| Plugin backend | [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |
 | Regex nei test shell | [10](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell) |
 | Scanner filesystem | [21](21-roadmap-scanner-resync.md) |

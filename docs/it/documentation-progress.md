@@ -46,6 +46,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `27-guida-lettura-documentazione.md` |
 | Completo | `28-audit-documentazione-e-debiti.md` |
 | Parziale | `29-event-model-v0.md` |
+| Parziale | `30-backend-api-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -127,3 +128,12 @@ diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
 rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
 Resta parziale perche' non esistono ancora `alfred_record_t`, writer JSONL o
 Backend API v0.
+
+## Aggiornamento Backend API v0
+
+`30-backend-api-v0.md` definisce la proposta documentale della Backend API v0.
+Il documento stabilisce lifecycle, target management, emit sink basato su Event
+Model v0, capabilities, error model, ownership, mapping del backend inotify
+corrente e roadmap implementativa. Resta parziale perche' la API non e' ancora
+implementata in C: la prima fase deve restare a link statico, mentre i plugin
+dinamici `.so` sono esplicitamente rimandati.

@@ -153,20 +153,22 @@ cioe' Backend API v0.
 
 ### Backend API v0
 
-Stato: da progettare.
+Stato: documentata, da implementare nel codice.
 
 Documenti collegati:
 
+- [Backend API v0](30-backend-api-v0.md)
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 - [Modulo inotify](05-modulo-inotify.md)
 
-Motivo: Alfred oggi ha il backend inotify integrato nel codice. Prima di
-aggiungere fanotify, audit, eBPF, Windows o macOS serve una API comune per
-inizializzare backend, produrre raw event normalizzati, gestire configurazione,
-diagnostica, recovery e ownership memoria.
+Motivo: Alfred oggi ha il backend inotify integrato nel codice. La specifica
+Backend API v0 ora definisce lifecycle, target, capabilities, ownership,
+diagnostica e emit sink basato su Event Model v0. Il debito rimasto e'
+implementarla gradualmente.
 
-Priorita' consigliata: alta, ma dopo Event Model v0.
+Priorita' consigliata: alta. E' il prossimo riferimento per il refactor
+inotify, prima di fanotify/audit/eBPF.
 
 ### JSONL e output strutturato
 
@@ -339,13 +341,13 @@ Priorita' consigliata: media-bassa. Prima scegliere uno scenario pilota.
 Alla luce dell'audit, i prossimi temi da discutere non sono altri cleanup
 documentali generici. I punti veramente decisionali sono:
 
-1. usare Event Model v0 come base per Backend API v0;
-2. decidere se anticipare una CLI stabile;
-3. scegliere uno scenario pilota per animazioni/watch state;
-4. definire quando introdurre una performance suite ripetibile;
-5. progettare JSONL solo dopo aver scelto il record C o gli adapter minimi.
+1. usare Backend API v0 come base per il refactor inotify;
+2. introdurre il record C minimo e adapter dai tipi correnti;
+3. decidere se anticipare una CLI stabile;
+4. scegliere uno scenario pilota per animazioni/watch state;
+5. definire quando introdurre una performance suite ripetibile;
+6. progettare JSONL solo dopo aver scelto il record C o gli adapter minimi.
 
-La mia raccomandazione aggiornata e': ora che Event Model v0 esiste, il prossimo
-passo architetturale e' Backend API v0. JSONL, plugin backend, guardrail e
-output binario dovrebbero riusare il record comune, non inventare un modello
-parallelo.
+La mia raccomandazione aggiornata e': ora che Event Model v0 e Backend API v0
+esistono come documenti, il prossimo passo tecnico e' un refactor minimo verso
+record C e adapter, senza saltare direttamente a JSONL o plugin dinamici.

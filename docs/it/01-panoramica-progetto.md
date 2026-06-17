@@ -92,8 +92,8 @@ app/logger
 ```
 
 La direzione futura non e' cambiare questo flusso, ma renderlo piu' esplicito:
-usare Event Model v0, definire Backend API v0 e progettare output strutturato JSONL prima di
-aggiungere backend piu' complessi.
+usare Event Model v0 e Backend API v0, poi progettare output strutturato JSONL
+prima di aggiungere backend piu' complessi.
 
 ## Diagramma generale
 

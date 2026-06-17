@@ -89,6 +89,10 @@ questa fase ha senso disegnare JSONL con precisione.
 
 Obiettivo: definire come un backend/plugin parla con Alfred.
 
+Il documento ora esiste: [Backend API v0](30-backend-api-v0.md). La specifica
+definisce lifecycle, target management, emit sink basato su Event Model v0,
+capabilities, ownership, error model e mapping del backend inotify corrente.
+
 La Backend API deve coprire almeno:
 
 - lifecycle: `init`, `start`, `poll`, `stop`, `destroy`
@@ -251,13 +255,13 @@ inotify e non e' una suite performance completa.
 Il prossimo step migliore e':
 
 ```text
-usare Event Model v0 come base per Backend API v0
+usare Backend API v0 come base per il refactor inotify
 ```
 
 Subito dopo:
 
 ```text
-scrivere Backend API v0
+introdurre record C, adapter e diagnostica strutturata
 ```
 
 Solo dopo questi due documenti conviene decidere se il primo refactor sara':
@@ -273,6 +277,7 @@ Solo dopo questi due documenti conviene decidere se il primo refactor sara':
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 - [Event Model v0](29-event-model-v0.md)
+- [Backend API v0](30-backend-api-v0.md)
 - [Contratto dei log](22-contratto-log.md)
 - [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
 - [Matrice eventi inotify](20-matrice-eventi-inotify.md)

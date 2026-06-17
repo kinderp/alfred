@@ -164,6 +164,7 @@ Detailed documentation is currently maintained in Italian:
 - [Supported feature matrix](docs/it/26-stato-funzionalita.md)
 - [Documentation audit and declared debt](docs/it/28-audit-documentazione-e-debiti.md)
 - [Event Model v0](docs/it/29-event-model-v0.md)
+- [Backend API v0](docs/it/30-backend-api-v0.md)
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 

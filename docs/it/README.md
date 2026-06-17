@@ -34,7 +34,8 @@ piu' dettaglio.
 25. [Guida alla lettura della documentazione](27-guida-lettura-documentazione.md)
 26. [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md)
 27. [Event Model v0](29-event-model-v0.md)
-28. [Glossario](glossario.md)
+28. [Backend API v0](30-backend-api-v0.md)
+29. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

@@ -42,6 +42,7 @@ Rimandi principali:
 - [Stato funzionalita' supportate](26-stato-funzionalita.md)
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+- [Backend API v0](30-backend-api-v0.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 
 ## Cosa non cambia adesso
@@ -522,6 +523,7 @@ Restano da decidere:
 - stream audit strutturato separato dallo stream filesystem;
 - tracepoint minimi per Alfred Lab.
 
-Il prossimo passo dopo questo documento e' progettare Backend API v0 o, se si
-vuole rendere subito visibile il modello, uno spike documentale di JSONL senza
-cambiare il runtime.
+Il passo successivo documentale e' stato aggiunto in
+[Backend API v0](30-backend-api-v0.md). Il prossimo lavoro di codice dovrebbe
+partire da quel documento: introdurre il record C minimo, adapter e diagnostica
+strutturata prima di progettare JSONL.

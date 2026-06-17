@@ -33,6 +33,13 @@ e' identificato da `layer + category + type`, per esempio
 `diagnostic + watch + WATCH_STALE`. Serve come base per JSONL, Backend API v0,
 plugin, tracepoint e futuri guardrail.
 
+## Backend API v0
+
+Specifiche del contratto comune con cui un backend Alfred inizializza il proprio
+runtime, gestisce target, dichiara capabilities ed emette record compatibili con
+Event Model v0. Nasce per backend linkati staticamente; i plugin dinamici sono
+una fase successiva.
+
 ## Directory contenitore
 
 Directory che contiene direttamente un file o un'altra directory. Per il path
