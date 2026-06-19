@@ -1733,6 +1733,10 @@ La copertura iniziale include:
   `normalized_raw`, category `filesystem` e tipi `RAW_*`, senza promuovere
   `MOVED_FROM` o `MOVED_TO` a eventi semantici `FILE_MOVED`,
   `FILE_RENAMED` o `FILE_RELOCATED`
+- `test_record_semantic_adapter.sh`: compila
+  `test_record_semantic_adapter.c` e verifica che `alfred_event_t` diventi un
+  record `semantic + filesystem`, preservando i path borrowed e usando tipi
+  semantici `FILE_*` / `DIR_*`
 - `test_record_diagnostic_builder.sh`: compila
   `test_record_diagnostic_builder.c` e verifica il builder strutturato per
   diagnostica `WATCH_*`. Il test controlla che `WATCH_STALE` diventi

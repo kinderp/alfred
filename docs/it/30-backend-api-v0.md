@@ -504,6 +504,8 @@ Non va anticipata nella prima implementazione.
 3. Scrivere adapter da `alfred_raw_event_t` ad `alfred_record_t`.
    Fatto per il raw normalizzato in `core/include/alfred_record_adapter.h` e
    `core/src/alfred_record_adapter.c`.
+   Nello stesso adapter esiste anche `alfred_record_from_event()`, che converte
+   `alfred_event_t` semantici in record `semantic + filesystem + FILE_*|DIR_*`.
 4. Scrivere builder diagnostici per `WATCH_*`.
    Fatto per i tipi watch/recovery principali in
    `core/include/alfred_record_diagnostic.h` e
@@ -578,15 +580,15 @@ flowchart TD
     WD[WATCH_* diagnostic fact] --> DB[alfred_record_build_watch_diagnostic]
     DB --> DR[alfred_record_t<br/>diagnostic / watch|recovery / WATCH_*]
 
-    CE[alfred_event_t<br/>semantic core event] -. futuro .-> SA[semantic adapter]
-    SA -. futuro .-> SR[alfred_record_t<br/>semantic / filesystem / FILE_*|DIR_*]
+    CE[alfred_event_t<br/>semantic core event] --> SA[alfred_record_from_event]
+    SA --> SR[alfred_record_t<br/>semantic / filesystem / FILE_*|DIR_*]
 
     RR --> TW[alfred_record_format_text]
     DR --> TW
     SR -. futuro .-> TW
 
     TW --> TXT[text payload<br/>senza timestamp o newline]
-    TXT --> LG[logger / events.log<br/>futuro wiring]
+    TXT --> LG[logger / events.log]
 
     RR -. futuro .-> JSON[JSONL writer]
     DR -. futuro .-> JSON
@@ -608,9 +610,9 @@ Lettura passo per passo:
    `alfred_record_build_watch_diagnostic()` costruisce un `alfred_record_t`
    con layer `diagnostic`. La category distingue diagnostica di watch da
    diagnostica di recovery.
-4. In futuro aggiungeremo anche un adapter da `alfred_event_t` a
-   `alfred_record_t` semantico. Per ora il core continua a emettere
-   `alfred_event_t` come prima.
+4. Il core continua a emettere `alfred_event_t`, ma `core_logger_on_event()`
+   ora lo converte con `alfred_record_from_event()` prima di formattare il
+   payload testuale.
 5. `alfred_record_format_text()` prende un record e produce solo la parte
    testuale leggibile, per esempio:
 
@@ -626,9 +628,10 @@ Lettura passo per passo:
    MessagePack, protobuf o socket binaria. Il punto chiave e' non fare parsing
    del testo per ottenere dati strutturati.
 
-Stato attuale: i pezzi esistono e sono testati, ma non sono ancora collegati al
-runtime principale. Questa scelta riduce il rischio: prima fissiamo contratto e
-test, poi migriamo `inotify_backend_poll()` e i logger verso `emit(record)`.
+Stato attuale: il lato output semantico del core usa gia' record + formatter
+per produrre lo stesso payload testuale di prima. Il backend inotify invece non
+e' ancora migrato a `emit(record)`: continua a produrre raw event e diagnostica
+con il percorso runtime corrente.
 
 ## Test futuri
 

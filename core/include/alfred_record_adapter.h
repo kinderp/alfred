@@ -36,6 +36,21 @@ extern "C" {
 int alfred_record_from_raw(const alfred_raw_event_t *raw,
                            alfred_record_t *out);
 
+/*
+ * alfred_record_from_event - convert one semantic core event into a v0 record
+ * @event: current semantic core event to describe
+ * @out: destination record written by this function
+ *
+ * The output record is a semantic filesystem record. It borrows all string
+ * memory from @event, especially event->src_path and event->dst_path. The
+ * caller must keep @event and its pointed-to storage alive while @out is
+ * consumed.
+ *
+ * Return: 0 on success, -1 on invalid input or unsupported event type.
+ */
+int alfred_record_from_event(const alfred_event_t *event,
+                             alfred_record_t *out);
+
 #ifdef __cplusplus
 }
 #endif

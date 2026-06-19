@@ -515,14 +515,17 @@ Nel codice C questo passaggio e' iniziato con due helper:
 
 - `alfred_record_from_raw()` converte `alfred_raw_event_t` in record
   `normalized_raw + filesystem + RAW_*`
+- `alfred_record_from_event()` converte `alfred_event_t` in record
+  `semantic + filesystem + FILE_*|DIR_*`
 - `alfred_record_build_watch_diagnostic()` costruisce record
   `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
 - `alfred_record_format_text()` formatta il payload testuale di un record,
   senza timestamp, livello log o newline
 
-Questi helper non sostituiscono ancora il runtime testuale. Servono a fissare
-il contratto dati e il formato di compatibilita' prima della migrazione Backend
-API.
+Il lato output semantico usa gia' questi helper: `core_logger_on_event()`
+converte `alfred_event_t` in `alfred_record_t`, formatta il payload e poi lo
+scrive con `logger_event()`. Il backend inotify non e' ancora migrato a
+`emit(record)`.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in

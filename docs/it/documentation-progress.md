@@ -128,10 +128,12 @@ diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
 rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
 Resta parziale perche' `alfred_record_t` esiste come contratto dati in
 `core/include/alfred_record.h` e il primo adapter raw esiste in
-`core/src/alfred_record_adapter.c`. Esiste anche il builder diagnostico
-`WATCH_*` in `core/src/alfred_record_diagnostic.c` e il formatter testuale in
+`core/src/alfred_record_adapter.c`. Lo stesso file contiene anche l'adapter
+semantico `alfred_event_t -> alfred_record_t`, usato da `core_logger_on_event()`
+prima del formatter testuale. Esiste anche il builder diagnostico `WATCH_*` in
+`core/src/alfred_record_diagnostic.c` e il formatter testuale in
 `core/src/alfred_record_text.c`, ma mancano ancora writer JSONL e uso runtime
-nella Backend API v0.
+nel backend inotify.
 
 ## Aggiornamento Backend API v0
 
@@ -141,8 +143,9 @@ Model v0, capabilities, error model, ownership, mapping del backend inotify
 corrente e roadmap implementativa. Il primo tipo C comune,
 `core/include/alfred_record.h`, e' stato aggiunto come contratto dati. Esiste
 anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
-`normalized_raw + filesystem + RAW_*` e il builder diagnostico per i principali
+`normalized_raw + filesystem + RAW_*`, l'adapter semantico
+`alfred_event_t -> alfred_record_t` e il builder diagnostico per i principali
 record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
 payload testuale da record. Il documento include ora uno schema Mermaid della
 pipeline C introdotta finora. Resta parziale perche' la API non e' ancora
-implementata come runtime: manca la migrazione di inotify a `emit(record)`.
+implementata nel backend inotify: manca la migrazione a `emit(record)`.

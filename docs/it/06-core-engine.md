@@ -169,7 +169,7 @@ Questi file stanno in `app/` perche' non appartengono al core puro. Sono un
 adattatore applicativo:
 
 ```text
-alfred_event_t -> logger_event()
+alfred_event_t -> alfred_record_t -> payload testuale -> logger_event()
 ```
 
 La funzione principale e':
@@ -178,8 +178,9 @@ La funzione principale e':
 void core_logger_on_event(const alfred_event_t *ev, void *userdata);
 ```
 
-Quando il core emette un evento, questa callback lo formatta e lo scrive nel log
-degli eventi.
+Quando il core emette un evento, questa callback lo converte in
+`alfred_record_t` con `alfred_record_from_event()`, formatta il payload con
+`alfred_record_format_text()` e lo scrive nel log degli eventi.
 
 Dentro la callback succede questo:
 
@@ -220,7 +221,12 @@ Questo permette di cambiare destinazione in futuro.
 Oggi:
 
 ```text
-alfred_event_t -> core_logger_on_event -> events.log
+alfred_event_t
+-> core_logger_on_event
+-> alfred_record_from_event()
+-> alfred_record_format_text()
+-> logger_event()
+-> events.log
 ```
 
 Domani:
@@ -248,6 +254,8 @@ sequenceDiagram
     Inotify->>Core: alfred_raw_event_t
     Core->>Core: correlation/debounce
     Core->>Callback: alfred_event_t
+    Callback->>Callback: alfred_record_from_event()
+    Callback->>Callback: alfred_record_format_text()
     Callback->>Logger: logger_event()
 ```
 

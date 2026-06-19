@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `core/include/alfred_record_adapter.h`,
+  `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
+  `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
+  output through Event Model v0 records. Comments now explain why semantic
+  events map to FILE_* / DIR_* record types, why core_logger keeps a fallback
+  to the old formatter, and why output payloads must remain compatible.
 - added `core/include/alfred_record_text.h`, `core/src/alfred_record_text.c`,
   and `tests/backend/test_record_text_writer.c` after introducing the first
   Event Model v0 text payload formatter. Comments now explain why the formatter
