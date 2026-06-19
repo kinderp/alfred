@@ -146,6 +146,8 @@ anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
 `normalized_raw + filesystem + RAW_*`, l'adapter semantico
 `alfred_event_t -> alfred_record_t` e il builder diagnostico per i principali
 record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
-payload testuale da record. Il documento include ora uno schema Mermaid della
-pipeline C introdotta finora. Resta parziale perche' la API non e' ancora
-implementata nel backend inotify: manca la migrazione a `emit(record)`.
+payload testuale da record. `WATCH_ADDED` e' il primo log diagnostico backend
+che il runtime costruisce come record e formatta poi come testo compatibile. Il
+documento include uno schema Mermaid della pipeline C introdotta finora. Resta
+parziale perche' manca ancora un vero `emit(record)` comune e gli altri
+`WATCH_*` runtime non sono ancora migrati.

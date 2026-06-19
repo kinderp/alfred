@@ -14,6 +14,8 @@
  * ========================================================================== */
 
 #include "watch_manager.h"
+#include "alfred_record_diagnostic.h"
+#include "alfred_record_text.h"
 #include "fs_scanner.h"
 #include "watcher.h"
 #include "logger.h"
@@ -34,6 +36,49 @@ typedef struct watch_manager_scan_context {
     inotify_backend_context_t *ctx;
     int failed;
 } watch_manager_scan_context_t;
+
+/*
+ * watch_manager_log_watch_added - emit WATCH_ADDED through Event Model records
+ * @ctx: borrowed backend context that owns the event logger
+ * @wd: inotify watch descriptor returned by the kernel
+ * @path: borrowed watched directory path
+ *
+ * WATCH_ADDED is still a backend diagnostic, not a semantic filesystem event.
+ * This helper is the first runtime step toward the Backend API v0 output path:
+ * build a structured diagnostic record, format it with the shared text writer,
+ * then let the existing logger add timestamp/level/newline details. The
+ * fallback preserves the old payload if record creation or formatting fails.
+ */
+static void watch_manager_log_watch_added(
+    const inotify_backend_context_t *ctx,
+    int wd,
+    const char *path)
+{
+    alfred_record_t record;
+    char payload[PATH_MAX + 64u];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return;
+
+    if (alfred_record_build_watch_diagnostic(
+            ALFRED_RECORD_TYPE_WATCH_ADDED,
+            "inotify",
+            wd,
+            path,
+            NULL,
+            NULL,
+            NULL,
+            &record) == 0 &&
+        alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+        logger_event(ctx->logger, "%s", payload);
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_ADDED wd=%d path=%s",
+                 wd,
+                 path != NULL ? path : "");
+}
 
 /*
  * watch_manager_context_is_valid - validate borrowed backend dependencies
@@ -248,10 +293,9 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_ADDED wd=%d path=%s",
-                 wd,
-                 path);
+    watch_manager_log_watch_added(ctx,
+                                  wd,
+                                  path);
 
     return wd;
 }

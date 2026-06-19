@@ -26,6 +26,11 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/watch_manager.c` and
+  `tests/backend/test_record_text_writer.c` after routing the first runtime
+  backend diagnostic, `WATCH_ADDED`, through Event Model v0 records and the
+  text formatter. Comments now explain why this is a behavior-neutral migration
+  step toward Backend API v0 and why the fallback keeps the old payload stable.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
