@@ -314,11 +314,12 @@ Decisioni fissate per ora:
 ## Prossimi passi
 
 1. usare [Backend API v0](30-backend-api-v0.md) come riferimento del refactor
-2. introdurre una rappresentazione C minima di `alfred_record_t`
-3. scrivere adapter da `alfred_raw_event_t` ad `alfred_record_t`
-4. scrivere builder diagnostici per `WATCH_*`
-5. migrare gradualmente inotify verso `emit(record)`
-6. solo dopo, iniziare un refactor verso backend statici multipli
+2. usare i tipi e helper gia' introdotti:
+   `alfred_record_t`, `alfred_record_from_raw()`,
+   `alfred_record_build_watch_diagnostic()` e
+   `alfred_record_format_text()`
+3. migrare gradualmente inotify verso `emit(record)`
+4. solo dopo, iniziare un refactor verso backend statici multipli
 
 ## Rimandi
 

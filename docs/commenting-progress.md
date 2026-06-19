@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- added `core/include/alfred_record_text.h`, `core/src/alfred_record_text.c`,
+  and `tests/backend/test_record_text_writer.c` after introducing the first
+  Event Model v0 text payload formatter. Comments now explain why the formatter
+  owns only payload text, why timestamps and FILE streams remain logger/output
+  device concerns, and how semantic, diagnostic, and normalized raw records are
+  formatted without changing runtime behavior.
 - added `core/include/alfred_record_diagnostic.h`,
   `core/src/alfred_record_diagnostic.c`, and
   `tests/backend/test_record_diagnostic_builder.c` after introducing the first

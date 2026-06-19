@@ -154,6 +154,17 @@ senza fare parsing della riga testuale. Le stringhe (`backend`, `path`,
 `state`, `reason`, `error`) restano borrowed come nel resto di
 `alfred_record_t`: chi vuole conservarle deve copiarle.
 
+Il primo formatter testuale e' `alfred_record_format_text()`, dichiarato in
+`core/include/alfred_record_text.h`. Questo formatter produce solo il payload:
+
+```text
+WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-mismatch
+```
+
+Non produce timestamp, livello log o newline. Questi dettagli restano nel
+logger, cosi' lo stesso payload puo' essere usato da test, file log, socket o
+altri output device.
+
 Questa distinzione sara' importante quando introdurremo output performanti. Il
 backend e il core dovranno produrre eventi strutturati; poi un writer potra'
 scegliere se serializzarli come testo, MessagePack, Protobuf o altro formato.

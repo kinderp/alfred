@@ -517,9 +517,16 @@ Nel codice C questo passaggio e' iniziato con due helper:
   `normalized_raw + filesystem + RAW_*`
 - `alfred_record_build_watch_diagnostic()` costruisce record
   `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
+- `alfred_record_format_text()` formatta il payload testuale di un record,
+  senza timestamp, livello log o newline
 
 Questi helper non sostituiscono ancora il runtime testuale. Servono a fissare
-il contratto dati prima di introdurre writer e migrazione Backend API.
+il contratto dati e il formato di compatibilita' prima della migrazione Backend
+API.
+
+Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
+testuale, e' documentato in
+[Backend API v0 - Pipeline C introdotta finora](30-backend-api-v0.md#pipeline-c-introdotta-finora).
 
 ## Regole di compatibilita'
 
@@ -546,4 +553,5 @@ Restano da decidere:
 - tracepoint minimi per Alfred Lab.
 
 Il passo successivo e' usare [Backend API v0](30-backend-api-v0.md) come guida
-per scrivere il writer testuale da record prima di progettare JSONL.
+per iniziare la migrazione runtime verso `emit(record)` prima di progettare
+JSONL.

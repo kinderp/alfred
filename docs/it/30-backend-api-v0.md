@@ -509,6 +509,8 @@ Non va anticipata nella prima implementazione.
    `core/include/alfred_record_diagnostic.h` e
    `core/src/alfred_record_diagnostic.c`.
 5. Aggiungere un text writer che produca le righe correnti da record.
+   Fatto come formatter di payload in `core/include/alfred_record_text.h` e
+   `core/src/alfred_record_text.c`.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
 7. Solo dopo progettare JSONL writer.
 8. Solo dopo progettare backend statici ulteriori.
@@ -536,6 +538,97 @@ Il builder `alfred_record_build_watch_diagnostic()` produce record
 gia' presenti in `alfred_record_type_t`. Anche questo e' behavior-neutral: il
 runtime continua a scrivere le righe `WATCH_*` con `logger_event()`, ma ora
 esiste la rappresentazione strutturata equivalente.
+
+Il formatter `alfred_record_format_text()` produce solo il payload testuale del
+record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive
+timestamp, livello log, newline o file: queste responsabilita' restano del
+logger corrente o di futuri output device. Questo rende possibile riusare lo
+stesso formatter per `events.log`, test, debug e confronti di compatibilita'.
+
+## Pipeline C introdotta finora
+
+La cosa importante da capire e' che `alfred_record_t` non sostituisce ancora il
+runtime. Per ora abbiamo costruito i pezzi che permetteranno la migrazione:
+
+- un tipo dati comune: `alfred_record_t`
+- un adapter dai raw event correnti: `alfred_record_from_raw()`
+- un builder per diagnostica watch/recovery:
+  `alfred_record_build_watch_diagnostic()`
+- un formatter testuale di payload: `alfred_record_format_text()`
+
+Non esiste una struttura separata chiamata `alfred_record_diagnostic_t`.
+La diagnostica usa sempre `alfred_record_t`, con:
+
+```text
+layer    = diagnostic
+category = watch oppure recovery
+type     = WATCH_*
+watch    = payload diagnostico con wd/state/reason/error
+```
+
+Schema dei passaggi:
+
+```mermaid
+flowchart TD
+    I[Kernel inotify event] --> IA[inotify_adapter_build_raw]
+    IA --> RAW[alfred_raw_event_t]
+    RAW --> RA[alfred_record_from_raw]
+    RA --> RR[alfred_record_t<br/>normalized_raw / filesystem / RAW_*]
+
+    WD[WATCH_* diagnostic fact] --> DB[alfred_record_build_watch_diagnostic]
+    DB --> DR[alfred_record_t<br/>diagnostic / watch|recovery / WATCH_*]
+
+    CE[alfred_event_t<br/>semantic core event] -. futuro .-> SA[semantic adapter]
+    SA -. futuro .-> SR[alfred_record_t<br/>semantic / filesystem / FILE_*|DIR_*]
+
+    RR --> TW[alfred_record_format_text]
+    DR --> TW
+    SR -. futuro .-> TW
+
+    TW --> TXT[text payload<br/>senza timestamp o newline]
+    TXT --> LG[logger / events.log<br/>futuro wiring]
+
+    RR -. futuro .-> JSON[JSONL writer]
+    DR -. futuro .-> JSON
+    SR -. futuro .-> JSON
+
+    RR -. futuro .-> BIN[binary/socket writer]
+    DR -. futuro .-> BIN
+    SR -. futuro .-> BIN
+```
+
+Lettura passo per passo:
+
+1. Il backend inotify riceve un evento kernel e oggi costruisce un
+   `alfred_raw_event_t`.
+2. `alfred_record_from_raw()` prende quel raw event e produce un
+   `alfred_record_t` con layer `normalized_raw`. Questo record conserva
+   `source`, `raw_mask`, `cookie`, `pid`, timestamp e path borrowed.
+3. Quando Alfred produce una diagnostica `WATCH_*`, il builder
+   `alfred_record_build_watch_diagnostic()` costruisce un `alfred_record_t`
+   con layer `diagnostic`. La category distingue diagnostica di watch da
+   diagnostica di recovery.
+4. In futuro aggiungeremo anche un adapter da `alfred_event_t` a
+   `alfred_record_t` semantico. Per ora il core continua a emettere
+   `alfred_event_t` come prima.
+5. `alfred_record_format_text()` prende un record e produce solo la parte
+   testuale leggibile, per esempio:
+
+   ```text
+   FILE_CREATED path=/tmp/root/a.txt
+   WATCH_STALE wd=7 path=/tmp/root reason=IN_MOVE_SELF
+   RAW_CREATE path=/tmp/root/dir mask=257
+   ```
+
+6. Il formatter non apre file e non scrive log. Il logger resta il proprietario
+   di timestamp, livello log, newline e `FILE *`.
+7. La stessa struttura potra' alimentare piu' output: testo, JSONL,
+   MessagePack, protobuf o socket binaria. Il punto chiave e' non fare parsing
+   del testo per ottenere dati strutturati.
+
+Stato attuale: i pezzi esistono e sono testati, ma non sono ancora collegati al
+runtime principale. Questa scelta riduce il rischio: prima fissiamo contratto e
+test, poi migriamo `inotify_backend_poll()` e i logger verso `emit(record)`.
 
 ## Test futuri
 

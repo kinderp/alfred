@@ -1739,6 +1739,11 @@ La copertura iniziale include:
   `diagnostic + watch`, che `WATCH_RESYNC_FAILED` diventi
   `diagnostic + recovery`, che le stringhe restino borrowed e che tipi raw o
   semantici vengano rifiutati
+- `test_record_text_writer.sh`: compila `test_record_text_writer.c` e verifica
+  il formatter testuale da `alfred_record_t`. Il test controlla payload
+  semantici (`FILE_CREATED path=...`, `FILE_RENAMED from=... to=...`),
+  diagnostici (`WATCH_STALE`, `WATCH_RESYNC_FAILED`), raw normalizzati
+  (`RAW_CREATE ... mask=...`) e gestione della truncation
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

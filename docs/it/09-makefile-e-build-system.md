@@ -684,15 +684,17 @@ CORE_SRCS := \
     $(CORE_DIR)/src/alfred_correlator.c \
     $(CORE_DIR)/src/alfred_record_adapter.c \
     $(CORE_DIR)/src/alfred_record_diagnostic.c \
+    $(CORE_DIR)/src/alfred_record_text.c \
     $(CORE_DIR)/src/alfred_tables.c \
     $(CORE_DIR)/src/alfred_utils.c
 ```
 
 In questo esempio `alfred_record_adapter.c` e
-`alfred_record_diagnostic.c` devono stare in `CORE_SRCS` perche' traducono tipi
-core correnti e diagnostica Alfred nel record comune `alfred_record_t`. Non
-appartengono al modulo inotify: devono restare disponibili anche quando in
-futuro arriveranno altri backend.
+`alfred_record_diagnostic.c` traducono tipi core correnti e diagnostica Alfred
+nel record comune `alfred_record_t`. `alfred_record_text.c` formatta il payload
+testuale partendo dallo stesso record. Nessuno di questi file appartiene al
+modulo inotify: devono restare disponibili anche quando in futuro arriveranno
+altri backend.
 
 Se appartiene al modulo inotify:
 
@@ -822,6 +824,7 @@ CORE_SRCS := \
     $(CORE_DIR)/src/alfred_correlator.c \
     $(CORE_DIR)/src/alfred_record_adapter.c \
     $(CORE_DIR)/src/alfred_record_diagnostic.c \
+    $(CORE_DIR)/src/alfred_record_text.c \
     $(CORE_DIR)/src/alfred_tables.c \
     $(CORE_DIR)/src/alfred_utils.c \
     $(CORE_DIR)/src/alfred_new_rule.c
