@@ -397,10 +397,26 @@ backend_log_resync_failure()
 ```
 
 I fallimenti che includono anche `errno=N (...)` restano per ora sul percorso
-testuale diretto. Il motivo e' tecnico: `errno` e la sua descrizione libc non
-sono ancora campi modellati in `alfred_record_t`. Migrarli adesso
-richiederebbe o perdere informazione utile al debug di sistema, o introdurre un
-campo record nuovo senza averlo discusso nel modello eventi.
+testuale diretto. La policy Event Model v0 ora distingue `error` Alfred dai
+campi OS `os_error_code`, `os_error_name` e `os_error_message`, ma questi campi
+non sono ancora presenti nella struttura C `alfred_record_t`. Migrarli adesso
+richiederebbe o perdere informazione utile al debug di sistema, o anticipare il
+codice prima del micro-step dedicato.
+
+Esempio di mapping futuro:
+
+```text
+testo compatibile:
+WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=path-unreachable errno=2 (No such file or directory)
+
+record strutturato:
+type             = WATCH_RESYNC_FAILED
+reason           = IN_MOVE_SELF
+error            = path-unreachable
+os_error_code    = 2
+os_error_name    = ENOENT
+os_error_message = No such file or directory
+```
 
 ### Errori di `WATCH_RESYNC_FAILED`
 

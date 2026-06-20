@@ -149,7 +149,8 @@ record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
 payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e i
 `WATCH_RESYNC_FAILED` logici sono i primi log diagnostici backend che il runtime
 costruisce come record e formatta poi come testo compatibile. Il documento
-include uno schema Mermaid della pipeline C introdotta finora. Resta parziale
-perche' manca ancora un vero `emit(record)` comune, `errno` non e' ancora
-modellato in `alfred_record_t` e gli altri `WATCH_*` runtime non sono ancora
-migrati.
+include uno schema Mermaid della pipeline C introdotta finora. La policy Event
+Model v0 per errori OS ora distingue `error`, `os_error_code`,
+`os_error_name` e `os_error_message`. Resta parziale perche' manca ancora un
+vero `emit(record)` comune, i campi OS error non sono ancora nella struttura C
+`alfred_record_t` e gli altri `WATCH_*` runtime non sono ancora migrati.

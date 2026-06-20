@@ -409,11 +409,35 @@ ma la diagnostica emessa deve spiegare:
 | `source_backend` | `inotify` |
 | `severity` | `error` |
 | `error` | `identity-mismatch`, `scan-failed`, `io-error` |
+| `os_error_code` | `2`, per Linux `errno` |
+| `os_error_name` | `ENOENT` |
+| `os_error_message` | `No such file or directory` |
 | `path` | path coinvolto, se noto |
 | `watch_id` | watch coinvolto, se noto |
 
 Regola: il codice puo' restituire un codice compatto, ma il record diagnostico
 deve spiegare il contesto.
+
+`error` e i campi OS non sono la stessa cosa:
+
+- `error` e' il token Alfred stabile che descrive la scelta della pipeline;
+- `os_error_code` conserva il codice numerico del sistema operativo;
+- `os_error_name` e `os_error_message` sono opzionali e servono per debug o
+  output umano.
+
+Per esempio un resync puo' usare:
+
+```text
+error=path-unreachable
+os_error_code=2
+os_error_name=ENOENT
+os_error_message="No such file or directory"
+```
+
+Il backend non deve comprimere queste informazioni in una sola stringa se sta
+emettendo un record strutturato. Il writer testuale potra' continuare a
+stampare `errno=2 (No such file or directory)` per compatibilita', ma JSONL e
+output binari dovranno esporre campi separati.
 
 ## Ownership e durata memoria
 
@@ -705,6 +729,7 @@ Restano da decidere nella fase codice:
 - layout concreto di `alfred_backend_target_t`;
 - semantica precisa di `timeout_ms` in `poll`;
 - elenco definitivo dei codici errore strutturati;
+- rappresentazione C concreta dei campi OS error in `alfred_record_t`;
 - come collegare piu' backend contemporanei;
 - come gestire backpressure se `emit()` fallisce;
 - quando introdurre `list_targets`;

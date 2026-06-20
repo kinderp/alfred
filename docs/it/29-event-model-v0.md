@@ -203,6 +203,48 @@ Questi campi rappresentano in forma strutturata righe oggi testuali come
 `WATCH_LOST_RECOVERY_END`, `WATCH_LOST_RETRY_SCHEDULED` e
 `WATCH_LOST_RECOVERY_GAVE_UP`.
 
+## Campi errore OS
+
+`error` e' un token Alfred stabile. Deve spiegare il ramo logico della
+pipeline, per esempio:
+
+```text
+path-unreachable
+identity-mismatch
+scan-failed
+reinstall-failed
+```
+
+Questo non basta per descrivere un errore arrivato dal sistema operativo. Una
+stessa categoria Alfred, per esempio `path-unreachable`, puo' dipendere da
+cause diverse a livello OS: path assente, permesso negato, filesystem non
+disponibile, errore I/O. Per questo Event Model v0 deve distinguere gli errori
+logici Alfred dagli errori OS.
+
+Campi previsti:
+
+| Campo | Uso |
+| --- | --- |
+| `error` | token Alfred stabile, usato per policy, test e compatibilita' |
+| `os_error_code` | codice numerico OS, per Linux il valore di `errno` |
+| `os_error_name` | nome simbolico opzionale, per esempio `ENOENT` |
+| `os_error_message` | messaggio leggibile opzionale, per esempio `No such file or directory` |
+
+Regole:
+
+- `error` non deve contenere direttamente `errno`;
+- `os_error_code` deve restare numerico;
+- `os_error_name` e `os_error_message` sono utili per debug e output umano, ma
+  non devono diventare l'unico dato usato da test o policy;
+- il writer testuale puo' continuare a mostrare la forma compatibile
+  `errno=N (message)` anche se internamente il record usa campi separati;
+- JSONL, MessagePack, protobuf e socket binaria dovranno esportare campi
+  separati, non fare parsing del testo `errno=N (...)`.
+
+Decisione operativa: prima documentiamo questa policy, poi estendiamo
+`alfred_record_t`. Fino a quando i campi OS non esistono nel codice C, i log
+che includono `errno=N (...)` restano sul percorso testuale diretto.
+
 ## Campi security futuri
 
 Alfred ha come obiettivo piu' ampio la runtime security per agenti AI. Event

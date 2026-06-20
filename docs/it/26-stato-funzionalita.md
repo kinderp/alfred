@@ -158,7 +158,7 @@ definitivamente una directory osservata rinominata o spostata.
 | --- | --- | --- |
 | JSONL stabile | Rimandato | Ora deve basarsi su Event Model v0: JSONL e' output, non Backend API |
 | Tracepoint logici | Rimandato | Servono per Lab e debug strutturato, ma vanno progettati dopo il modello eventi |
-| Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale e primi log runtime `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_FAILED` logico via record implementati | Specifica in `30-backend-api-v0.md`; manca refactor inotify a `emit(record)`, modellazione `errno` e migrazione completa degli altri `WATCH_*` |
+| Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale e primi log runtime `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_FAILED` logico via record implementati; policy OS error documentata | Specifica in `30-backend-api-v0.md`; manca refactor inotify a `emit(record)`, campi OS error nella struttura C e migrazione completa degli altri `WATCH_*` |
 | Plugin dinamici `.so` | Rimandato | Prima stabilizzare API statica e ownership memoria |
 | fanotify | Rimandato | Non e' "inotify 2": serve Backend API e modello permission/enforcement |
 | audit/eBPF | Rimandato | Richiedono process context, syscall/network model, capabilities e privilegi |

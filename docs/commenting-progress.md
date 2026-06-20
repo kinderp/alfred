@@ -45,6 +45,9 @@ Latest refresh:
   `WATCH_RESYNC_FAILED` diagnostics through the shared record helper. Comments
   now document why the errno-bearing syscall branch remains on the direct text
   path until errno is represented in Event Model v0.
+- documented the Event Model v0 OS-error policy in the Italian docs. The next
+  C comment pass for `alfred_record_t` should describe separate Alfred error
+  and OS error fields once they are added to the record structure.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
