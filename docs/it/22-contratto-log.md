@@ -399,10 +399,10 @@ backend_log_resync_failure()
 I fallimenti che includono anche `errno=N (...)` restano per ora sul percorso
 testuale diretto. La policy Event Model v0 ora distingue `error` Alfred dai
 campi OS `os_error_code`, `os_error_name` e `os_error_message`, ma questi campi
-sono presenti solo nel contratto dati C `alfred_record_t`: builder, formatter e
-runtime non li popolano ancora. Migrarli adesso richiederebbe o perdere
-informazione utile al debug di sistema, o anticipare il codice prima del
-micro-step dedicato.
+sono presenti nel contratto dati C `alfred_record_t` e il builder diagnostico
+puo' gia' popolarli. Formatter e runtime non li usano ancora. Migrarli adesso
+richiederebbe o perdere informazione utile al debug di sistema, o anticipare il
+codice prima del micro-step dedicato.
 
 Esempio di mapping futuro:
 

@@ -51,6 +51,32 @@ int alfred_record_build_watch_diagnostic(alfred_record_type_t type,
                                          const char *error,
                                          alfred_record_t *out)
 {
+    return alfred_record_build_watch_diagnostic_with_os_error(type,
+                                                             backend,
+                                                             watch_id,
+                                                             path,
+                                                             state,
+                                                             reason,
+                                                             error,
+                                                             0,
+                                                             NULL,
+                                                             NULL,
+                                                             out);
+}
+
+int alfred_record_build_watch_diagnostic_with_os_error(
+    alfred_record_type_t type,
+    const char *backend,
+    int watch_id,
+    const char *path,
+    const char *state,
+    const char *reason,
+    const char *error,
+    int os_error_code,
+    const char *os_error_name,
+    const char *os_error_message,
+    alfred_record_t *out)
+{
     alfred_record_category_t category;
 
     if (out == NULL) {
@@ -74,6 +100,9 @@ int alfred_record_build_watch_diagnostic(alfred_record_type_t type,
     out->watch.state = state;
     out->watch.reason = reason;
     out->watch.error = error;
+    out->os_error.code = os_error_code;
+    out->os_error.name = os_error_name;
+    out->os_error.message = os_error_message;
 
     return 0;
 }

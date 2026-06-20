@@ -26,6 +26,7 @@
  * - category=ALFRED_RECORD_CATEGORY_RECOVERY
  * - type=ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED
  * - watch.error=<borrowed error pointer>
+ * - optional os_error fields can preserve errno-style evidence separately
  *
  * Invalid type:
  * - semantic or raw record types are rejected
@@ -102,6 +103,42 @@ static void test_resync_failed_builds_recovery_diagnostic(void)
     assert(record.watch.error == error);
 }
 
+static void test_resync_failed_can_carry_os_error(void)
+{
+    const char *backend = "inotify";
+    const char *path = "/tmp/root/watched";
+    const char *reason = "IN_MOVE_SELF";
+    const char *error = "path-unreachable";
+    const char *os_error_name = "ENOENT";
+    const char *os_error_message = "No such file or directory";
+    alfred_record_t record;
+
+    assert(alfred_record_build_watch_diagnostic_with_os_error(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
+               backend,
+               7,
+               path,
+               "stale",
+               reason,
+               error,
+               2,
+               os_error_name,
+               os_error_message,
+               &record) == 0);
+
+    assert(record.layer == ALFRED_RECORD_LAYER_DIAGNOSTIC);
+    assert(record.category == ALFRED_RECORD_CATEGORY_RECOVERY);
+    assert(record.type == ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED);
+    assert(record.backend == backend);
+    assert(record.path == path);
+    assert(record.watch.watch_id == 7);
+    assert(record.watch.reason == reason);
+    assert(record.watch.error == error);
+    assert(record.os_error.code == 2);
+    assert(record.os_error.name == os_error_name);
+    assert(record.os_error.message == os_error_message);
+}
+
 static void test_invalid_inputs_are_rejected(void)
 {
     alfred_record_t record;
@@ -141,6 +178,7 @@ int main(void)
 {
     test_watch_stale_builds_watch_diagnostic();
     test_resync_failed_builds_recovery_diagnostic();
+    test_resync_failed_can_carry_os_error();
     test_invalid_inputs_are_rejected();
 
     return 0;

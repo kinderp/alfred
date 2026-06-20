@@ -244,8 +244,10 @@ Regole:
 Decisione operativa: prima documentiamo questa policy, poi estendiamo
 `alfred_record_t`. I campi OS error ora esistono nel contratto C come
 `record.os_error.code`, `record.os_error.name` e `record.os_error.message`.
-Finche' builder, formatter e runtime non li popolano, i log che includono
-`errno=N (...)` restano sul percorso testuale diretto.
+Il builder diagnostico puo' gia' popolarli tramite
+`alfred_record_build_watch_diagnostic_with_os_error()`. Finche' formatter e
+runtime non li usano, i log che includono `errno=N (...)` restano sul percorso
+testuale diretto.
 
 ## Campi security futuri
 

@@ -611,9 +611,10 @@ Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
 Per ora e' usato dai percorsi `WATCH_STALE` e `WATCH_RESYNC_FAILED` nella forma
 normalizzata `reason=... error=...`. I `WATCH_RESYNC_FAILED` che aggiungono
 anche `errno=N (...)` restano testuali perche' `errno` non e' ancora un campo
-popolato da builder, formatter e runtime. Il contratto dati C contiene gia'
-`record.os_error.code`, `record.os_error.name` e `record.os_error.message`, ma
-il prossimo micro-step deve ancora collegarli alla diagnostica.
+popolato da formatter e runtime. Il contratto dati C contiene gia'
+`record.os_error.code`, `record.os_error.name` e `record.os_error.message`, e il
+builder diagnostico puo' gia' riempirli con
+`alfred_record_build_watch_diagnostic_with_os_error()`.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
 record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive
@@ -731,7 +732,7 @@ Restano da decidere nella fase codice:
 - layout concreto di `alfred_backend_target_t`;
 - semantica precisa di `timeout_ms` in `poll`;
 - elenco definitivo dei codici errore strutturati;
-- collegamento dei campi OS error ai builder, al formatter e al runtime;
+- collegamento dei campi OS error al formatter e al runtime;
 - come collegare piu' backend contemporanei;
 - come gestire backpressure se `emit()` fallisce;
 - quando introdurre `list_targets`;

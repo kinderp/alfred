@@ -52,6 +52,12 @@ Latest refresh:
   `tests/backend/test_record_diagnostic_builder.c` after adding
   `alfred_record_os_error_t`. Comments now explain why OS error evidence is
   separate from Alfred's stable diagnostic error token.
+- refreshed `core/include/alfred_record_diagnostic.h`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_diagnostic_builder.c` after adding
+  `alfred_record_build_watch_diagnostic_with_os_error()`. Comments now explain
+  how builders preserve OS error evidence separately from Alfred error tokens
+  while keeping borrowed string ownership.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
