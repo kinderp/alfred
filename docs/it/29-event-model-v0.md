@@ -242,8 +242,10 @@ Regole:
   separati, non fare parsing del testo `errno=N (...)`.
 
 Decisione operativa: prima documentiamo questa policy, poi estendiamo
-`alfred_record_t`. Fino a quando i campi OS non esistono nel codice C, i log
-che includono `errno=N (...)` restano sul percorso testuale diretto.
+`alfred_record_t`. I campi OS error ora esistono nel contratto C come
+`record.os_error.code`, `record.os_error.name` e `record.os_error.message`.
+Finche' builder, formatter e runtime non li popolano, i log che includono
+`errno=N (...)` restano sul percorso testuale diretto.
 
 ## Campi security futuri
 

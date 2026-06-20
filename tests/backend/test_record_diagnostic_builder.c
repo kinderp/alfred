@@ -17,6 +17,9 @@
  * - watch.state=<borrowed state pointer>
  * - watch.reason=<borrowed reason pointer>
  * - watch.error=NULL
+ * - os_error.code=0
+ * - os_error.name=NULL
+ * - os_error.message=NULL
  *
  * WATCH_RESYNC_FAILED diagnostic:
  * - layer=ALFRED_RECORD_LAYER_DIAGNOSTIC
@@ -66,6 +69,9 @@ static void test_watch_stale_builds_watch_diagnostic(void)
     assert(record.watch.state == state);
     assert(record.watch.reason == reason);
     assert(record.watch.error == NULL);
+    assert(record.os_error.code == 0);
+    assert(record.os_error.name == NULL);
+    assert(record.os_error.message == NULL);
 }
 
 static void test_resync_failed_builds_recovery_diagnostic(void)

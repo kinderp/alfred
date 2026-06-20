@@ -151,6 +151,7 @@ payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e i
 costruisce come record e formatta poi come testo compatibile. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
 Model v0 per errori OS ora distingue `error`, `os_error_code`,
-`os_error_name` e `os_error_message`. Resta parziale perche' manca ancora un
-vero `emit(record)` comune, i campi OS error non sono ancora nella struttura C
-`alfred_record_t` e gli altri `WATCH_*` runtime non sono ancora migrati.
+`os_error_name` e `os_error_message`, e la struttura C `alfred_record_t`
+contiene il payload `os_error`. Resta parziale perche' manca ancora un vero
+`emit(record)` comune, i campi OS error non sono ancora popolati da builder,
+formatter e runtime, e gli altri `WATCH_*` runtime non sono ancora migrati.

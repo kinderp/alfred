@@ -394,6 +394,28 @@ typedef struct {
 } alfred_record_identity_t;
 
 /*
+ * alfred_record_os_error_t - operating-system error evidence
+ * @code: numeric operating-system error code, or 0 when unavailable
+ * @name: borrowed symbolic OS error name such as "ENOENT", or NULL
+ * @message: borrowed human-readable OS error message, or NULL
+ *
+ * This payload is separate from alfred_record_watch_t.error on purpose.
+ * watch.error is Alfred's stable diagnostic token, for example
+ * "path-unreachable" or "identity-mismatch". The OS error fields preserve the
+ * lower-level cause reported by the platform. On Linux, @code is usually errno,
+ * @name is the errno symbol when the producer knows it, and @message can carry
+ * the strerror-like text used by human-readable logs.
+ *
+ * Writers must not parse "errno=N (...)" text back into a record. Structured
+ * outputs should serialize these fields directly when they are present.
+ */
+typedef struct {
+    int code;
+    const char *name;
+    const char *message;
+} alfred_record_os_error_t;
+
+/*
  * alfred_record_watch_t - watch/recovery diagnostic payload
  * @watch_id: backend watch descriptor/id, or -1 when not applicable
  * @state: borrowed state string such as "valid", "stale", or "removed"
@@ -433,6 +455,7 @@ typedef struct {
  * @old_path: borrowed previous path for move/rename/recovery records, or NULL
  * @new_path: borrowed new path for move/rename/recovery records, or NULL
  * @identity: optional filesystem identity evidence
+ * @os_error: optional operating-system error evidence
  * @watch: optional watch/recovery diagnostic payload
  *
  * This struct is deliberately flat and conservative. It can represent today's
@@ -461,6 +484,7 @@ typedef struct alfred_record {
     const char *new_path;
 
     alfred_record_identity_t identity;
+    alfred_record_os_error_t os_error;
     alfred_record_watch_t watch;
 } alfred_record_t;
 

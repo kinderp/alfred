@@ -48,6 +48,10 @@ Latest refresh:
 - documented the Event Model v0 OS-error policy in the Italian docs. The next
   C comment pass for `alfred_record_t` should describe separate Alfred error
   and OS error fields once they are added to the record structure.
+- refreshed `core/include/alfred_record.h` and
+  `tests/backend/test_record_diagnostic_builder.c` after adding
+  `alfred_record_os_error_t`. Comments now explain why OS error evidence is
+  separate from Alfred's stable diagnostic error token.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
