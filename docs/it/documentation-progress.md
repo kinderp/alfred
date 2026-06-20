@@ -157,7 +157,8 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' manca ancora un vero `emit(record)` comune e i
-diagnostici `WATCH_LOST_*` runtime non sono ancora migrati. Il modello dati e
-il formatter testuale ora coprono pero' l'intero contratto `WATCH_LOST_*`, in
-preparazione alla migrazione runtime del prossimo micro-step.
+Resta parziale perche' manca ancora un vero `emit(record)` comune e la maggior
+parte dei diagnostici `WATCH_LOST_*` runtime non e' ancora migrata. Il modello
+dati e il formatter testuale coprono pero' l'intero contratto `WATCH_LOST_*`;
+il runtime ha iniziato a usarli per `WATCH_LOST_QUEUED` e
+`WATCH_LOST_SCAN_BEGIN`.

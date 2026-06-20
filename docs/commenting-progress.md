@@ -79,6 +79,11 @@ Latest refresh:
   `WATCH_LOST_*` records. Comments now explain the recovery payload fields used
   for pending queue size, child prefix updates, watch counts, retry counters,
   and retry delays before the runtime lost-scope migration.
+- refreshed `modules/inotify/src/inotify_backend.c` after adding
+  `backend_log_lost_scope_record()` and routing `WATCH_LOST_QUEUED` plus
+  `WATCH_LOST_SCAN_BEGIN` through Event Model v0 records. Comments now explain
+  how the helper preserves the historical text contract while later call sites
+  are migrated incrementally.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
