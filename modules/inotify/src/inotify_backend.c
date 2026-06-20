@@ -13,6 +13,8 @@
 
 #include "inotify_backend.h"
 
+#include "alfred_record_diagnostic.h"
+#include "alfred_record_text.h"
 #include "errors.h"
 #include "fs_scanner.h"
 #include "inotify_adapter.h"
@@ -172,6 +174,51 @@ typedef struct backend_lost_scope_scan_context {
     size_t found_path_size;
     int found;
 } backend_lost_scope_scan_context_t;
+
+/*
+ * backend_log_watch_stale - emit WATCH_STALE through Event Model records
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: inotify watch descriptor whose path is no longer reliable
+ * @path: borrowed path from the watcher table, or NULL when unavailable
+ * @reason: stable kernel/backend reason string, such as IN_MOVE_SELF
+ *
+ * WATCH_STALE is a backend diagnostic about watch-table reliability. It is not
+ * a FILE_* or DIR_* semantic event. The runtime now builds the same
+ * diagnostic as an alfred_record_t before formatting it back to the historical
+ * text payload. That keeps current logs and tests stable while moving the
+ * backend toward the Backend API v0 record boundary.
+ */
+static void backend_log_watch_stale(inotify_backend_context_t *ctx,
+                                    int wd,
+                                    const char *path,
+                                    const char *reason)
+{
+    alfred_record_t record;
+    char payload[PATH_MAX + 96u];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return;
+
+    if (alfred_record_build_watch_diagnostic(
+            ALFRED_RECORD_TYPE_WATCH_STALE,
+            "inotify",
+            wd,
+            path,
+            "stale",
+            reason,
+            NULL,
+            &record) == 0 &&
+        alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+        logger_event(ctx->logger, "%s", payload);
+        return;
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE wd=%d path=%s reason=%s",
+                 wd,
+                 path != NULL ? path : "",
+                 reason != NULL ? reason : "");
+}
 
 /*
  * backend_resync_probe_result - internal outcomes of stale-watch recovery
@@ -2031,10 +2078,10 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_MOVE_SELF",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_MOVE_SELF");
 
     backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF");
 }
@@ -2077,10 +2124,10 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_DELETE_SELF");
 }
 
 /*
@@ -2122,10 +2169,10 @@ static void backend_handle_unmount(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_UNMOUNT",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_UNMOUNT");
 }
 
 /*

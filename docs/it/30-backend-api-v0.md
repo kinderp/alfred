@@ -96,13 +96,14 @@ struct inotify_event
 La diagnostica segue lo stesso principio:
 
 ```text
-WATCH_STALE testuale oggi
--> diagnostic + watch + WATCH_STALE record domani
+WATCH_STALE testuale legacy
+-> diagnostic + watch + WATCH_STALE record
 -> writer testuale / JSONL / Lab
 ```
 
 Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED` e
-`WATCH_REMOVED`:
+`WATCH_REMOVED`; `WATCH_STALE` e' il primo diagnostico migrato con
+`reason=...`:
 
 ```text
 watch_manager_add() / watch_manager_remove()
@@ -110,13 +111,19 @@ watch_manager_add() / watch_manager_remove()
 -> alfred_record_format_text()
 -> logger_event("WATCH_ADDED wd=N path=P")
 -> logger_event("WATCH_REMOVED wd=N path=P")
+
+backend_handle_move_self/delete_self/unmount()
+-> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
+-> alfred_record_format_text()
+-> logger_event("WATCH_STALE wd=N path=P reason=R")
 ```
 
 Non e' ancora la Backend API completa, perche' `watch_manager_add()` non chiama
-un sink generico `emit(record)` e `watch_manager_remove()` segue ancora lo
-stesso confine locale. Pero' il dato diagnostico non nasce piu' solo come
-stringa: nasce come `alfred_record_t` e solo dopo viene formattato nel payload
-testuale compatibile.
+un sink generico `emit(record)`, `watch_manager_remove()` segue ancora lo
+stesso confine locale e `inotify_backend.c` scrive ancora sul logger esistente.
+Pero' il dato diagnostico non nasce piu' solo come stringa: nasce come
+`alfred_record_t` e solo dopo viene formattato nel payload testuale
+compatibile.
 
 ## Tipi concettuali
 
@@ -457,8 +464,8 @@ inotify_backend_poll()
 Per la diagnostica:
 
 ```text
-logger_event("WATCH_STALE ...") oggi
-WATCH_ADDED/WATCH_REMOVED -> diagnostic record -> text formatter gia' migrati
+WATCH_ADDED/WATCH_REMOVED/WATCH_STALE -> diagnostic record -> text formatter
+gia' migrati
 -> backend_emit_diagnostic_record(WATCH_*) domani
 -> text writer produce la stessa riga leggibile
 ```
@@ -532,9 +539,9 @@ Non va anticipata nella prima implementazione.
    Fatto come formatter di payload in `core/include/alfred_record_text.h` e
    `core/src/alfred_record_text.c`.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
-   Primi micro-step fatti per `WATCH_ADDED` e `WATCH_REMOVED`: il runtime usa
-   il builder diagnostico e il formatter testuale, poi passa il payload a
-   `logger_event()`.
+   Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE`:
+   il runtime usa il builder diagnostico e il formatter testuale, poi passa il
+   payload a `logger_event()`.
 7. Solo dopo progettare JSONL writer.
 8. Solo dopo progettare backend statici ulteriori.
 9. Solo dopo valutare plugin dinamici.
@@ -559,10 +566,11 @@ L'adapter `alfred_record_from_raw()` produce record
 Il builder `alfred_record_build_watch_diagnostic()` produce record
 `diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
 gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
-`WATCH_ADDED` e `WATCH_REMOVED`: `watch_manager_add()` e
-`watch_manager_remove()` costruiscono il record, lo formattano come payload
-testuale e lo passano al logger esistente. Gli altri `WATCH_*` non sono ancora
-migrati e continuano a usare `logger_event()` diretto.
+`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE`: `watch_manager_add()`,
+`watch_manager_remove()` e gli handler `_SELF`/`IN_UNMOUNT` costruiscono il
+record, lo formattano come payload testuale e lo passano al logger esistente.
+Gli altri `WATCH_*` non sono ancora migrati e continuano a usare
+`logger_event()` diretto.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
 record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive
@@ -653,9 +661,9 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED` e `WATCH_REMOVED` usano gia' builder diagnostico e formatter
-testuale, ma non esiste ancora un sink comune `emit(record)`. Raw event e altri
-log diagnostici usano ancora il percorso runtime corrente.
+`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` usano gia' builder diagnostico e
+formatter testuale, ma non esiste ancora un sink comune `emit(record)`. Raw
+event e altri log diagnostici usano ancora il percorso runtime corrente.
 
 ## Test futuri
 

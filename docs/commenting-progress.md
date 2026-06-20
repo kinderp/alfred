@@ -32,6 +32,11 @@ Latest refresh:
   Event Model v0 records and the text formatter. Comments now explain why this
   is a behavior-neutral migration step toward Backend API v0 and why the
   fallback keeps the old payload stable.
+- refreshed `modules/inotify/src/inotify_backend.c` after routing
+  `WATCH_STALE` through Event Model v0 records and the text formatter. Comments
+  now explain that WATCH_STALE remains backend watch-table reliability state,
+  carries a reason such as IN_MOVE_SELF, and still preserves the old text
+  payload for tests and users.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

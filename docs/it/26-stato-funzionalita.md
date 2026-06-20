@@ -36,7 +36,7 @@ ragionamenti completi leggere:
 | Backend inotify raw log | `IN_CREATE`, `IN_DELETE`, `IN_MODIFY`, `IN_ATTRIB`, `IN_CLOSE_WRITE`, `IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_ISDIR`, `IN_DELETE_SELF`, `IN_MOVE_SELF`, `IN_IGNORED`, `IN_UNMOUNT`, `IN_Q_OVERFLOW`; audit opt-in: `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | audit con contesto processo, policy guardrail multi-backend, recovery completa post-unmount |
 | Alfred raw | `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_ATTRIB`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`, `ALFRED_RAW_MOVED_TO`, `ALFRED_RAW_OVERFLOW`, `ALFRED_RAW_ISDIR`; adapter iniziale verso record `RAW_*`; formatter testuale da record | raw audit dedicati, raw self-event dedicati, uso runtime dei record v0 |
 | Core semantico | `FILE_CREATED`, `DIR_CREATED`, `FILE_DELETED`, `DIR_DELETED`, `FILE_MODIFIED`, `FILE_READY`, move/rename/relocated file e directory, `OVERFLOW`; adapter `alfred_event_t -> alfred_record_t`; output `core_logger` via record formatter | metadata changed, file read/open audit, close-nowrite, delete/move self semantici, risk/session/policy |
-| Backend state | watch ricorsivi, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, resync locale, lost-scope queue, recovery delayed sincrona, retry/backoff, benchmark manuale lost-scope; builder iniziale verso record diagnostici `WATCH_*`; `WATCH_ADDED` e `WATCH_REMOVED` runtime via record + formatter | worker thread, configurazione pubblica recovery, performance suite stabile, backpressure, migrazione degli altri record diagnostici runtime |
+| Backend state | watch ricorsivi, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, resync locale, lost-scope queue, recovery delayed sincrona, retry/backoff, benchmark manuale lost-scope; builder iniziale verso record diagnostici `WATCH_*`; `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` runtime via record + formatter | worker thread, configurazione pubblica recovery, performance suite stabile, backpressure, migrazione degli altri record diagnostici runtime |
 
 ## Funzionalita' end-to-end core
 
@@ -158,7 +158,7 @@ definitivamente una directory osservata rinominata o spostata.
 | --- | --- | --- |
 | JSONL stabile | Rimandato | Ora deve basarsi su Event Model v0: JSONL e' output, non Backend API |
 | Tracepoint logici | Rimandato | Servono per Lab e debug strutturato, ma vanno progettati dopo il modello eventi |
-| Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale e primi log runtime `WATCH_ADDED`/`WATCH_REMOVED` via record implementati | Specifica in `30-backend-api-v0.md`; manca refactor inotify a `emit(record)` e migrazione completa degli altri `WATCH_*` |
+| Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale e primi log runtime `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE` via record implementati | Specifica in `30-backend-api-v0.md`; manca refactor inotify a `emit(record)` e migrazione completa degli altri `WATCH_*` |
 | Plugin dinamici `.so` | Rimandato | Prima stabilizzare API statica e ownership memoria |
 | fanotify | Rimandato | Non e' "inotify 2": serve Backend API e modello permission/enforcement |
 | audit/eBPF | Rimandato | Richiedono process context, syscall/network model, capabilities e privilegi |

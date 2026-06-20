@@ -317,12 +317,18 @@ sono eventi semantici del core.
 passato come root non deve produrre `WATCH_ADDED`; deve fallire con diagnostica
 di errore backend, come verificato da `test_onlydir_rejects_file_root.sh`.
 
-Dal primo passo di Backend API v0, `WATCH_ADDED` e `WATCH_REMOVED` sono i
-primi log diagnostici backend scritti tramite il percorso strutturato:
+Dal primo passo di Backend API v0, `WATCH_ADDED`, `WATCH_REMOVED` e
+`WATCH_STALE` sono i primi log diagnostici backend scritti tramite il percorso
+strutturato:
 
 ```text
 watch_manager_add() / watch_manager_remove()
 -> alfred_record_build_watch_diagnostic(WATCH_ADDED | WATCH_REMOVED)
+-> alfred_record_format_text()
+-> logger_event()
+
+backend_handle_move_self/delete_self/unmount()
+-> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
 -> alfred_record_format_text()
 -> logger_event()
 ```
@@ -332,14 +338,15 @@ Il payload testuale resta volutamente identico:
 ```text
 WATCH_ADDED wd=N path=P
 WATCH_REMOVED wd=N path=P
+WATCH_STALE wd=N path=P reason=R
 ```
 
 Questa compatibilita' e' importante per due motivi. Primo, i test e gli utenti
 continuano a leggere lo stesso contratto. Secondo, il codice inizia a produrre
 il dato come record Event Model v0 prima di scriverlo come testo. Quando
 arriveranno JSONL, MessagePack, protobuf o socket binaria, non dovremo fare
-parsing delle stringhe `WATCH_ADDED` o `WATCH_REMOVED`: il record strutturato
-sara' gia' il dato primario.
+parsing delle stringhe `WATCH_ADDED`, `WATCH_REMOVED` o `WATCH_STALE`: il
+record strutturato sara' gia' il dato primario.
 
 ## Diagnostica backend del resync
 
