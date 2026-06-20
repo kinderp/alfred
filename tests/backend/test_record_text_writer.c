@@ -16,6 +16,7 @@
  *
  * diagnostic watch event:
  * - WATCH_ADDED wd=7 path=/tmp/root/watched
+ * - WATCH_REMOVED wd=7 path=/tmp/root/watched
  * - WATCH_STALE wd=7 path=/tmp/root/watched reason=IN_MOVE_SELF
  *
  * diagnostic recovery event:
@@ -94,6 +95,20 @@ static void test_diagnostic_watch_payload(void)
     assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
     assert(strcmp(text,
                   "WATCH_ADDED wd=7 path=/tmp/root/watched") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_REMOVED,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               NULL,
+               NULL,
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_REMOVED wd=7 path=/tmp/root/watched") == 0);
 
     assert(alfred_record_build_watch_diagnostic(
                ALFRED_RECORD_TYPE_WATCH_STALE,

@@ -38,30 +38,56 @@ typedef struct watch_manager_scan_context {
 } watch_manager_scan_context_t;
 
 /*
- * watch_manager_log_watch_added - emit WATCH_ADDED through Event Model records
+ * watch_manager_watch_record_name - return fallback text for simple WATCH logs
+ * @type: simple watch diagnostic type
+ *
+ * Return: stable WATCH_* token, or NULL when @type is not handled here.
+ */
+static const char *watch_manager_watch_record_name(alfred_record_type_t type)
+{
+    switch (type) {
+    case ALFRED_RECORD_TYPE_WATCH_ADDED:
+        return "WATCH_ADDED";
+    case ALFRED_RECORD_TYPE_WATCH_REMOVED:
+        return "WATCH_REMOVED";
+    default:
+        return NULL;
+    }
+}
+
+/*
+ * watch_manager_log_simple_watch_diagnostic - emit simple WATCH_* diagnostics
  * @ctx: borrowed backend context that owns the event logger
+ * @type: diagnostic record type, currently WATCH_ADDED or WATCH_REMOVED
  * @wd: inotify watch descriptor returned by the kernel
  * @path: borrowed watched directory path
  *
- * WATCH_ADDED is still a backend diagnostic, not a semantic filesystem event.
- * This helper is the first runtime step toward the Backend API v0 output path:
- * build a structured diagnostic record, format it with the shared text writer,
- * then let the existing logger add timestamp/level/newline details. The
- * fallback preserves the old payload if record creation or formatting fails.
+ * WATCH_ADDED and WATCH_REMOVED are backend diagnostics, not semantic
+ * filesystem events. This helper is the first runtime step toward the Backend
+ * API v0 output path for watch-table state changes: build a structured
+ * diagnostic record, format it with the shared text writer, then let the
+ * existing logger add timestamp/level/newline details. The fallback preserves
+ * the old payload if record creation or formatting fails.
  */
-static void watch_manager_log_watch_added(
+static void watch_manager_log_simple_watch_diagnostic(
     const inotify_backend_context_t *ctx,
+    alfred_record_type_t type,
     int wd,
     const char *path)
 {
     alfred_record_t record;
+    const char *name;
     char payload[PATH_MAX + 64u];
 
     if (ctx == NULL || ctx->logger == NULL)
         return;
 
+    name = watch_manager_watch_record_name(type);
+    if (name == NULL)
+        return;
+
     if (alfred_record_build_watch_diagnostic(
-            ALFRED_RECORD_TYPE_WATCH_ADDED,
+            type,
             "inotify",
             wd,
             path,
@@ -75,7 +101,8 @@ static void watch_manager_log_watch_added(
     }
 
     logger_event(ctx->logger,
-                 "WATCH_ADDED wd=%d path=%s",
+                 "%s wd=%d path=%s",
+                 name,
                  wd,
                  path != NULL ? path : "");
 }
@@ -293,9 +320,11 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    watch_manager_log_watch_added(ctx,
-                                  wd,
-                                  path);
+    watch_manager_log_simple_watch_diagnostic(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_ADDED,
+        wd,
+        path);
 
     return wd;
 }
@@ -344,10 +373,11 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
     watcher_remove(&ctx->runtime->watchers,
                    wd);
 
-    logger_event(ctx->logger,
-                 "WATCH_REMOVED wd=%d path=%s",
-                 wd,
-                 removed_path);
+    watch_manager_log_simple_watch_diagnostic(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_REMOVED,
+        wd,
+        removed_path);
 
     return 0;
 }

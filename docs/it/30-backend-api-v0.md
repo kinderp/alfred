@@ -101,19 +101,22 @@ WATCH_STALE testuale oggi
 -> writer testuale / JSONL / Lab
 ```
 
-Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED`:
+Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED` e
+`WATCH_REMOVED`:
 
 ```text
-watch_manager_add()
--> alfred_record_build_watch_diagnostic(WATCH_ADDED)
+watch_manager_add() / watch_manager_remove()
+-> alfred_record_build_watch_diagnostic(WATCH_ADDED | WATCH_REMOVED)
 -> alfred_record_format_text()
 -> logger_event("WATCH_ADDED wd=N path=P")
+-> logger_event("WATCH_REMOVED wd=N path=P")
 ```
 
 Non e' ancora la Backend API completa, perche' `watch_manager_add()` non chiama
-un sink generico `emit(record)`. Pero' il dato diagnostico non nasce piu' solo
-come stringa: nasce come `alfred_record_t` e solo dopo viene formattato nel
-payload testuale compatibile.
+un sink generico `emit(record)` e `watch_manager_remove()` segue ancora lo
+stesso confine locale. Pero' il dato diagnostico non nasce piu' solo come
+stringa: nasce come `alfred_record_t` e solo dopo viene formattato nel payload
+testuale compatibile.
 
 ## Tipi concettuali
 
@@ -455,7 +458,7 @@ Per la diagnostica:
 
 ```text
 logger_event("WATCH_STALE ...") oggi
-WATCH_ADDED -> diagnostic record -> text formatter gia' migrato
+WATCH_ADDED/WATCH_REMOVED -> diagnostic record -> text formatter gia' migrati
 -> backend_emit_diagnostic_record(WATCH_*) domani
 -> text writer produce la stessa riga leggibile
 ```
@@ -529,8 +532,9 @@ Non va anticipata nella prima implementazione.
    Fatto come formatter di payload in `core/include/alfred_record_text.h` e
    `core/src/alfred_record_text.c`.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
-   Primo micro-step fatto per `WATCH_ADDED`: il runtime usa il builder
-   diagnostico e il formatter testuale, poi passa il payload a `logger_event()`.
+   Primi micro-step fatti per `WATCH_ADDED` e `WATCH_REMOVED`: il runtime usa
+   il builder diagnostico e il formatter testuale, poi passa il payload a
+   `logger_event()`.
 7. Solo dopo progettare JSONL writer.
 8. Solo dopo progettare backend statici ulteriori.
 9. Solo dopo valutare plugin dinamici.
@@ -554,10 +558,11 @@ L'adapter `alfred_record_from_raw()` produce record
 
 Il builder `alfred_record_build_watch_diagnostic()` produce record
 `diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
-gia' presenti in `alfred_record_type_t`. Il primo uso runtime e'
-`WATCH_ADDED`: `watch_manager_add()` costruisce il record, lo formatta come
-payload testuale e lo passa al logger esistente. Gli altri `WATCH_*` non sono
-ancora migrati e continuano a usare `logger_event()` diretto.
+gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
+`WATCH_ADDED` e `WATCH_REMOVED`: `watch_manager_add()` e
+`watch_manager_remove()` costruiscono il record, lo formattano come payload
+testuale e lo passano al logger esistente. Gli altri `WATCH_*` non sono ancora
+migrati e continuano a usare `logger_event()` diretto.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
 record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive
@@ -648,9 +653,9 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED` usa gia' builder diagnostico e formatter testuale, ma non esiste
-ancora un sink comune `emit(record)`. Raw event e altri log diagnostici usano
-ancora il percorso runtime corrente.
+`WATCH_ADDED` e `WATCH_REMOVED` usano gia' builder diagnostico e formatter
+testuale, ma non esiste ancora un sink comune `emit(record)`. Raw event e altri
+log diagnostici usano ancora il percorso runtime corrente.
 
 ## Test futuri
 
