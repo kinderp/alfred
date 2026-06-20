@@ -584,9 +584,10 @@ campi diagnostici runtime
 
 Questo helper non e' la Backend API pubblica e non sostituisce `emit(record)`.
 Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
-Per ora e' usato solo dal percorso `WATCH_STALE`; il prossimo candidato naturale
-e' `WATCH_RESYNC_FAILED`, perche' usa gia' la forma supportata
-`reason=... error=...`.
+Per ora e' usato dai percorsi `WATCH_STALE` e `WATCH_RESYNC_FAILED` nella forma
+normalizzata `reason=... error=...`. I `WATCH_RESYNC_FAILED` che aggiungono
+anche `errno=N (...)` restano testuali perche' `errno` non e' ancora un campo
+di `alfred_record_t`.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
 record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive

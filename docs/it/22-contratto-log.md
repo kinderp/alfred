@@ -380,6 +380,28 @@ diventato `STALE`.
 | `WATCH_LOST_RECOVERY_END wd=N path=P reason=R result=valid watches=W` | identita', prefissi, scan strict e reinstallazione sono riusciti | la subtree recuperata torna affidabile e `W` watch sotto il prefisso sono stati marcati `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 | `WATCH_RESYNC_END wd=N path=P reason=R result=valid` | recovery riuscita | tutti i controlli necessari sono passati e il watch torna `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 
+I `WATCH_RESYNC_FAILED` logici, cioe' quelli nella forma:
+
+```text
+WATCH_RESYNC_FAILED wd=N path=P reason=R error=E
+```
+
+sono prodotti dal percorso strutturato Event Model v0:
+
+```text
+backend_log_resync_failure()
+-> backend_log_watch_diagnostic_record(WATCH_RESYNC_FAILED)
+-> alfred_record_build_watch_diagnostic(reason=R, error=E)
+-> alfred_record_format_text()
+-> logger_event()
+```
+
+I fallimenti che includono anche `errno=N (...)` restano per ora sul percorso
+testuale diretto. Il motivo e' tecnico: `errno` e la sua descrizione libc non
+sono ancora campi modellati in `alfred_record_t`. Migrarli adesso
+richiederebbe o perdere informazione utile al debug di sistema, o introdurre un
+campo record nuovo senza averlo discusso nel modello eventi.
+
 ### Errori di `WATCH_RESYNC_FAILED`
 
 | `error=` | Significato | Quando accade | Enqueue lost scope? |

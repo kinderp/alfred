@@ -3244,7 +3244,9 @@ static const char *backend_resync_probe_result_name(
  *
  * A single formatter keeps WATCH_RESYNC_FAILED readable while the internal
  * decision tree grows. Syscall failures include errno because they usually
- * need operating-system context; logical failures use only an error token.
+ * need operating-system context and errno is not modeled in alfred_record_t
+ * yet. Logical failures use the Event Model v0 diagnostic record path because
+ * they fit the stable reason+error payload shape.
  */
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
@@ -3265,12 +3267,15 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s",
-                 wd,
-                 path,
-                 reason,
-                 backend_resync_probe_result_name(result));
+    (void)backend_log_watch_diagnostic_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
+        wd,
+        path,
+        NULL,
+        reason,
+        backend_resync_probe_result_name(result),
+        "WATCH_RESYNC_FAILED");
 }
 
 /* ============================================================================

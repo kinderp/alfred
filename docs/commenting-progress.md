@@ -41,6 +41,10 @@ Latest refresh:
   `backend_log_watch_diagnostic_record()`. Comments now explain why the helper
   is a local bridge for record/formatter/fallback behavior, not the public
   Backend API v0 emit(record) boundary.
+- refreshed `modules/inotify/src/inotify_backend.c` after routing logical
+  `WATCH_RESYNC_FAILED` diagnostics through the shared record helper. Comments
+  now document why the errno-bearing syscall branch remains on the direct text
+  path until errno is represented in Event Model v0.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

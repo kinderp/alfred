@@ -146,8 +146,10 @@ anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
 `normalized_raw + filesystem + RAW_*`, l'adapter semantico
 `alfred_event_t -> alfred_record_t` e il builder diagnostico per i principali
 record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
-payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` sono
-i primi log diagnostici backend che il runtime costruisce come record e
-formatta poi come testo compatibile. Il documento include uno schema Mermaid
-della pipeline C introdotta finora. Resta parziale perche' manca ancora un vero
-`emit(record)` comune e gli altri `WATCH_*` runtime non sono ancora migrati.
+payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e i
+`WATCH_RESYNC_FAILED` logici sono i primi log diagnostici backend che il runtime
+costruisce come record e formatta poi come testo compatibile. Il documento
+include uno schema Mermaid della pipeline C introdotta finora. Resta parziale
+perche' manca ancora un vero `emit(record)` comune, `errno` non e' ancora
+modellato in `alfred_record_t` e gli altri `WATCH_*` runtime non sono ancora
+migrati.
