@@ -593,8 +593,9 @@ gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
 `WATCH_RESYNC_*`: `watch_manager_add()`, `watch_manager_remove()`, gli handler
 `_SELF`/`IN_UNMOUNT` e il resync locale costruiscono il record, lo formattano
-come payload testuale e lo passano al logger esistente. I `WATCH_LOST_*` non
-sono ancora migrati e continuano a usare `logger_event()` diretto.
+come payload testuale e lo passano al logger esistente. I `WATCH_LOST_*` hanno
+ora tipi record e formatter compatibile, ma il runtime non e' ancora migrato e
+continua a usare `logger_event()` diretto.
 
 Nel backend inotify esiste ora un helper locale,
 `backend_log_watch_diagnostic_record()`, che centralizza il ponte provvisorio:
@@ -708,8 +709,9 @@ Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
 `WATCH_RESYNC_*` usano gia' builder diagnostico e formatter testuale, ma non
-esiste ancora un sink comune `emit(record)`. Raw event e diagnostici
-`WATCH_LOST_*` usano ancora il percorso runtime corrente.
+esiste ancora un sink comune `emit(record)`. I record `WATCH_LOST_*` sono
+modellati e formattabili, ma il runtime lost-scope usa ancora il percorso
+corrente con `logger_event()`. Raw event resta sul percorso corrente.
 
 ## Test futuri
 

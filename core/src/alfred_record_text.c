@@ -67,7 +67,27 @@ static const char *record_type_name(alfred_record_type_t type)
         return "WATCH_RESYNC_FAILED";
     case ALFRED_RECORD_TYPE_WATCH_RESYNC_END: return "WATCH_RESYNC_END";
     case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED: return "WATCH_LOST_QUEUED";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN:
+        return "WATCH_LOST_SCAN_BEGIN";
     case ALFRED_RECORD_TYPE_WATCH_LOST_FOUND: return "WATCH_LOST_FOUND";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED:
+        return "WATCH_LOST_PREFIX_UPDATED";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE:
+        return "WATCH_LOST_COVERAGE_DONE";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING:
+        return "WATCH_LOST_COVERAGE_MISSING";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS:
+        return "WATCH_LOST_COVERAGE_CLASS";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED:
+        return "WATCH_LOST_REINSTALLED";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED:
+        return "WATCH_LOST_REINSTALL_FAILED";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK:
+        return "WATCH_LOST_ROLLBACK";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND:
+        return "WATCH_LOST_NOT_FOUND";
+    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED:
+        return "WATCH_LOST_RECOVERY_FAILED";
     case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END:
         return "WATCH_LOST_RECOVERY_END";
     case ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED:
@@ -191,6 +211,196 @@ static int format_diagnostic_text(const alfred_record_t *record,
     const char *reason = record->watch.reason;
     const char *error = record->watch.error;
     const char *state = record->watch.state;
+
+    if (record->type == ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s root=%s pending=%zu",
+                                name,
+                                path,
+                                record->recovery.pending_count);
+    }
+
+    if (reason != NULL &&
+        error != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s error=%s "
+                                "pending=%zu",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                error,
+                                record->recovery.pending_count);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_FOUND &&
+        record->old_path != NULL &&
+        record->new_path != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d old_path=%s new_path=%s reason=%s",
+                                name,
+                                record->watch.watch_id,
+                                record->old_path,
+                                record->new_path,
+                                reason);
+    }
+
+    if (record->type == ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED &&
+        record->old_path != NULL &&
+        record->new_path != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d old_prefix=%s new_prefix=%s "
+                                "children=%zu",
+                                name,
+                                record->watch.watch_id,
+                                record->old_path,
+                                record->new_path,
+                                record->recovery.children_count);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s "
+                                "dirs=%zu watched=%zu missing=%zu",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->recovery.directories_seen,
+                                record->recovery.directories_watched,
+                                record->recovery.directories_missing);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING &&
+        record->recovery.detail_path != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s missing_path=%s",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->recovery.detail_path);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS &&
+        state != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s result=%s",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                state);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED &&
+        record->recovery.detail_path != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s installed_path=%s",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->recovery.detail_path);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED &&
+        record->recovery.detail_path != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s missing_path=%s",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->recovery.detail_path);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s removed_wd=%d",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->recovery.related_watch_id);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s retry=%u",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                record->watch.retry_count);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED &&
+        state != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s result=%s "
+                                "retry=%u delay_ms=%llu pending=%zu",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                state,
+                                record->watch.retry_count,
+                                (unsigned long long)record->recovery.delay_ms,
+                                record->recovery.pending_count);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP &&
+        state != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s result=%s "
+                                "retries=%u",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                state,
+                                record->watch.retry_count);
+    }
+
+    if (reason != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END &&
+        state != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s reason=%s result=%s "
+                                "watches=%zu",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                reason,
+                                state,
+                                record->recovery.watches_count);
+    }
 
     if (reason != NULL &&
         record->type == ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED) {

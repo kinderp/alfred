@@ -392,9 +392,59 @@ typedef enum {
     ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
 
     /*
+     * Lost-scope recovery started scanning one configured root.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN,
+
+    /*
      * Lost-scope recovery found the watched identity at a new path.
      */
     ALFRED_RECORD_TYPE_WATCH_LOST_FOUND,
+
+    /*
+     * Lost-scope recovery updated the root path and known child prefixes.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED,
+
+    /*
+     * Lost-scope recovery completed a coverage scan of the recovered subtree.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+
+    /*
+     * Lost-scope recovery found one directory missing a watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING,
+
+    /*
+     * Lost-scope recovery classified coverage scan counters.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS,
+
+    /*
+     * Lost-scope recovery successfully reinstalled one missing watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED,
+
+    /*
+     * Lost-scope recovery failed to reinstall one missing watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED,
+
+    /*
+     * Lost-scope recovery removed a watch installed by a failed attempt.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK,
+
+    /*
+     * Lost-scope recovery did not find the saved identity in one root.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND,
+
+    /*
+     * Lost-scope recovery failed before reaching a successful end state.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
 
     /*
      * Lost-scope recovery completed successfully.
@@ -482,9 +532,13 @@ typedef struct {
  * @detail_path: borrowed secondary path for missing/reinstalled watch records
  * @related_watch_id: related backend watch descriptor, such as rollback wd
  * @result_code: backend-local numeric result, such as a scan rc value
+ * @pending_count: number of lost-scope entries pending after this diagnostic
+ * @children_count: number of known child watch prefixes updated by recovery
+ * @watches_count: number of watches repaired or marked valid by recovery
+ * @delay_ms: retry/backoff delay in milliseconds, or 0 when not applicable
  *
- * These fields carry the technical payload of WATCH_RESYNC_* and future
- * WATCH_LOST_* records. They are separate from alfred_record_watch_t because
+ * These fields carry the technical payload of WATCH_RESYNC_* and WATCH_LOST_*
+ * records. They are separate from alfred_record_watch_t because
  * watch.reason/error/state describe the high-level recovery decision, while
  * this payload describes scan counters, one affected child path, or one
  * related watch descriptor used by a concrete recovery step.
@@ -496,6 +550,10 @@ typedef struct {
     const char *detail_path;
     int related_watch_id;
     int result_code;
+    size_t pending_count;
+    size_t children_count;
+    size_t watches_count;
+    uint64_t delay_ms;
 } alfred_record_recovery_t;
 
 /*

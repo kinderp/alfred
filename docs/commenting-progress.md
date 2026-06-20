@@ -73,6 +73,12 @@ Latest refresh:
   `WATCH_RESYNC_*` diagnostics to Event Model v0 records. Comments now explain
   the recovery payload fields used for scan counters, detail paths, rollback
   watch descriptors, and scan result codes.
+- refreshed `core/include/alfred_record.h`, `core/src/alfred_record_text.c`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_text_writer.c` after modeling all documented
+  `WATCH_LOST_*` records. Comments now explain the recovery payload fields used
+  for pending queue size, child prefix updates, watch counts, retry counters,
+  and retry delays before the runtime lost-scope migration.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

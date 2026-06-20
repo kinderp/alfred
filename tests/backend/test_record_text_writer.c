@@ -41,6 +41,35 @@
  *   reason=IN_MOVE_SELF removed_wd=101
  * - WATCH_RESYNC_END wd=7 path=/tmp/root/watched
  *   reason=IN_MOVE_SELF result=valid
+ * - WATCH_LOST_QUEUED wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF error=path-unreachable pending=1
+ * - WATCH_LOST_SCAN_BEGIN root=/tmp/root pending=0
+ * - WATCH_LOST_FOUND wd=7 old_path=/tmp/root/lost
+ *   new_path=/tmp/other/lost reason=IN_MOVE_SELF
+ * - WATCH_LOST_PREFIX_UPDATED wd=7 old_prefix=/tmp/root/lost
+ *   new_prefix=/tmp/other/lost children=2
+ * - WATCH_LOST_COVERAGE_DONE wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF dirs=3 watched=2 missing=1
+ * - WATCH_LOST_COVERAGE_MISSING wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF missing_path=/tmp/other/lost/a
+ * - WATCH_LOST_COVERAGE_CLASS wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF result=needs-reinstall
+ * - WATCH_LOST_REINSTALLED wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF installed_path=/tmp/other/lost/a
+ * - WATCH_LOST_REINSTALL_FAILED wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF missing_path=/tmp/other/lost/b
+ * - WATCH_LOST_ROLLBACK wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF removed_wd=101
+ * - WATCH_LOST_NOT_FOUND wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF retry=0
+ * - WATCH_LOST_RETRY_SCHEDULED wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF result=not-found retry=1 delay_ms=100 pending=1
+ * - WATCH_LOST_RECOVERY_GAVE_UP wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF result=not-found retries=8
+ * - WATCH_LOST_RECOVERY_FAILED wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF error=scan-failed
+ * - WATCH_LOST_RECOVERY_END wd=7 path=/tmp/other/lost
+ *   reason=IN_MOVE_SELF result=valid watches=3
  *
  * normalized raw event:
  * - RAW_CREATE path=/tmp/root/dir mask=<ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR>
@@ -321,6 +350,256 @@ static void test_diagnostic_resync_detail_payload(void)
                   "reason=IN_MOVE_SELF result=valid") == 0);
 }
 
+static void test_diagnostic_lost_scope_payload(void)
+{
+    alfred_record_t record;
+    char text[384];
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               "path-unreachable",
+               &record) == 0);
+    record.recovery.pending_count = 1u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_QUEUED wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF error=path-unreachable pending=1") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN,
+               "inotify",
+               -1,
+               "/tmp/root",
+               NULL,
+               NULL,
+               NULL,
+               &record) == 0);
+    record.recovery.pending_count = 0u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text, "WATCH_LOST_SCAN_BEGIN root=/tmp/root pending=0") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_FOUND,
+               "inotify",
+               7,
+               NULL,
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.old_path = "/tmp/root/lost";
+    record.new_path = "/tmp/other/lost";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_FOUND wd=7 old_path=/tmp/root/lost "
+                  "new_path=/tmp/other/lost reason=IN_MOVE_SELF") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED,
+               "inotify",
+               7,
+               NULL,
+               NULL,
+               NULL,
+               NULL,
+               &record) == 0);
+    record.old_path = "/tmp/root/lost";
+    record.new_path = "/tmp/other/lost";
+    record.recovery.children_count = 2u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_PREFIX_UPDATED wd=7 old_prefix=/tmp/root/lost "
+                  "new_prefix=/tmp/other/lost children=2") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.directories_seen = 3u;
+    record.recovery.directories_watched = 2u;
+    record.recovery.directories_missing = 1u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_COVERAGE_DONE wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF dirs=3 watched=2 missing=1") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/other/lost/a";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_COVERAGE_MISSING wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF missing_path=/tmp/other/lost/a") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               "needs-reinstall",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_COVERAGE_CLASS wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF result=needs-reinstall") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/other/lost/a";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_REINSTALLED wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF installed_path=/tmp/other/lost/a") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/other/lost/b";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_REINSTALL_FAILED wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF missing_path=/tmp/other/lost/b") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.related_watch_id = 101;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_ROLLBACK wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF removed_wd=101") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.watch.retry_count = 0u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_NOT_FOUND wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF retry=0") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               "not-found",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.watch.retry_count = 1u;
+    record.recovery.delay_ms = 100u;
+    record.recovery.pending_count = 1u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_RETRY_SCHEDULED wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF result=not-found retry=1 "
+                  "delay_ms=100 pending=1") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               "not-found",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.watch.retry_count = 8u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_RECOVERY_GAVE_UP wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF result=not-found retries=8") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               "scan-failed",
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_RECOVERY_FAILED wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF error=scan-failed") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END,
+               "inotify",
+               7,
+               "/tmp/other/lost",
+               "valid",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.watches_count = 3u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_RECOVERY_END wd=7 path=/tmp/other/lost "
+                  "reason=IN_MOVE_SELF result=valid watches=3") == 0);
+}
+
 static void test_normalized_raw_payload(void)
 {
     alfred_raw_event_t raw;
@@ -371,6 +650,7 @@ int main(void)
     test_diagnostic_watch_payload();
     test_diagnostic_recovery_payload();
     test_diagnostic_resync_detail_payload();
+    test_diagnostic_lost_scope_payload();
     test_normalized_raw_payload();
     test_invalid_or_truncated_output_fails();
 
