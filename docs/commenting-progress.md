@@ -58,6 +58,10 @@ Latest refresh:
   `alfred_record_build_watch_diagnostic_with_os_error()`. Comments now explain
   how builders preserve OS error evidence separately from Alfred error tokens
   while keeping borrowed string ownership.
+- refreshed `core/src/alfred_record_text.c` and
+  `tests/backend/test_record_text_writer.c` after teaching the compatibility
+  text formatter to render structured OS error fields as historical
+  `errno=N` or `errno=N (message)` suffixes.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

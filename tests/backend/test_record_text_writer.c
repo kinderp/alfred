@@ -22,6 +22,11 @@
  * diagnostic recovery event:
  * - WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched
  *   reason=IN_MOVE_SELF error=identity-mismatch
+ * - WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF error=path-unreachable
+ *   errno=2 (No such file or directory)
+ * - WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF error=path-unreachable errno=13
  *
  * normalized raw event:
  * - RAW_CREATE path=/tmp/root/dir mask=<ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR>
@@ -129,7 +134,7 @@ static void test_diagnostic_watch_payload(void)
 static void test_diagnostic_recovery_payload(void)
 {
     alfred_record_t record;
-    char text[192];
+    char text[256];
 
     assert(alfred_record_build_watch_diagnostic(
                ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
@@ -145,6 +150,43 @@ static void test_diagnostic_recovery_payload(void)
     assert(strcmp(text,
                   "WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched "
                   "reason=IN_MOVE_SELF error=identity-mismatch") == 0);
+
+    assert(alfred_record_build_watch_diagnostic_with_os_error(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               "stale",
+               "IN_MOVE_SELF",
+               "path-unreachable",
+               2,
+               "ENOENT",
+               "No such file or directory",
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF error=path-unreachable "
+                  "errno=2 (No such file or directory)") == 0);
+
+    assert(alfred_record_build_watch_diagnostic_with_os_error(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               "stale",
+               "IN_MOVE_SELF",
+               "path-unreachable",
+               13,
+               "EACCES",
+               NULL,
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF error=path-unreachable errno=13") == 0);
 }
 
 static void test_normalized_raw_payload(void)

@@ -162,7 +162,9 @@ static int format_filesystem_text(const alfred_record_t *record,
  * @dst_size: size of @dst in bytes
  *
  * The output intentionally mirrors the compact WATCH_* text contract where the
- * fields present in the record are appended in stable order.
+ * fields present in the record are appended in stable order. OS errors remain
+ * structured in alfred_record_t, but the compatibility text writer renders them
+ * as the historical errno=N or errno=N (message) suffix.
  *
  * Return: bytes written on success, -1 on invalid input or truncation.
  */
@@ -177,6 +179,33 @@ static int format_diagnostic_text(const alfred_record_t *record,
     const char *state = record->watch.state;
 
     if (reason != NULL && error != NULL) {
+        if (record->os_error.code != 0) {
+            if (record->os_error.message != NULL) {
+                return checked_snprintf(dst,
+                                        dst_size,
+                                        "%s wd=%d path=%s reason=%s error=%s "
+                                        "errno=%d (%s)",
+                                        name,
+                                        record->watch.watch_id,
+                                        path,
+                                        reason,
+                                        error,
+                                        record->os_error.code,
+                                        record->os_error.message);
+            }
+
+            return checked_snprintf(dst,
+                                    dst_size,
+                                    "%s wd=%d path=%s reason=%s error=%s "
+                                    "errno=%d",
+                                    name,
+                                    record->watch.watch_id,
+                                    path,
+                                    reason,
+                                    error,
+                                    record->os_error.code);
+        }
+
         return checked_snprintf(dst,
                                 dst_size,
                                 "%s wd=%d path=%s reason=%s error=%s",

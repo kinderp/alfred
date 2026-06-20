@@ -161,6 +161,12 @@ Il primo formatter testuale e' `alfred_record_format_text()`, dichiarato in
 WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-mismatch
 ```
 
+Quando il record diagnostico contiene anche un errore OS, il formatter mantiene
+la compatibilita' con i log storici aggiungendo il suffisso testuale
+`errno=N` oppure `errno=N (messaggio)`. Internamente pero' il record resta
+strutturato: il codice numerico, il nome simbolico e il messaggio non sono
+estratti facendo parsing della stringa.
+
 Non produce timestamp, livello log o newline. Questi dettagli restano nel
 logger, cosi' lo stesso payload puo' essere usato da test, file log, socket o
 altri output device.
@@ -396,15 +402,15 @@ backend_log_resync_failure()
 -> logger_event()
 ```
 
-I fallimenti che includono anche `errno=N (...)` restano per ora sul percorso
-testuale diretto. La policy Event Model v0 ora distingue `error` Alfred dai
-campi OS `os_error_code`, `os_error_name` e `os_error_message`, ma questi campi
-sono presenti nel contratto dati C `alfred_record_t` e il builder diagnostico
-puo' gia' popolarli. Formatter e runtime non li usano ancora. Migrarli adesso
-richiederebbe o perdere informazione utile al debug di sistema, o anticipare il
-codice prima del micro-step dedicato.
+I fallimenti che includono anche `errno=N (...)` hanno ora un contratto dati
+strutturato e un formatter compatibile. La policy Event Model v0 distingue
+`error` Alfred dai campi OS `os_error_code`, `os_error_name` e
+`os_error_message`. Questi campi sono presenti in `alfred_record_t`, il builder
+diagnostico puo' popolarli e `alfred_record_format_text()` li rende come
+`errno=N` o `errno=N (messaggio)`. Resta da migrare il percorso runtime che
+oggi scrive ancora direttamente alcune righe testuali con `errno`.
 
-Esempio di mapping futuro:
+Esempio di mapping:
 
 ```text
 testo compatibile:
