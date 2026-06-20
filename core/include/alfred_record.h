@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -341,6 +342,41 @@ typedef enum {
     ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
 
     /*
+     * Local resync could not complete the subtree coverage scan.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED,
+
+    /*
+     * Local resync completed a subtree coverage scan.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
+
+    /*
+     * Local resync classified the coverage scan counters.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
+
+    /*
+     * Local resync found one directory missing a watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
+
+    /*
+     * Local resync successfully reinstalled one missing watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
+
+    /*
+     * Local resync failed to reinstall one missing watch.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
+
+    /*
+     * Local resync removed a watch installed by the same failed attempt.
+     */
+    ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+
+    /*
      * Local resync failed for a stale watch.
      */
     ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
@@ -439,6 +475,30 @@ typedef struct {
 } alfred_record_watch_t;
 
 /*
+ * alfred_record_recovery_t - resync/recovery diagnostic details
+ * @directories_seen: number of directories discovered by a coverage scan
+ * @directories_watched: number of scanned directories already covered
+ * @directories_missing: number of scanned directories missing a watch
+ * @detail_path: borrowed secondary path for missing/reinstalled watch records
+ * @related_watch_id: related backend watch descriptor, such as rollback wd
+ * @result_code: backend-local numeric result, such as a scan rc value
+ *
+ * These fields carry the technical payload of WATCH_RESYNC_* and future
+ * WATCH_LOST_* records. They are separate from alfred_record_watch_t because
+ * watch.reason/error/state describe the high-level recovery decision, while
+ * this payload describes scan counters, one affected child path, or one
+ * related watch descriptor used by a concrete recovery step.
+ */
+typedef struct {
+    size_t directories_seen;
+    size_t directories_watched;
+    size_t directories_missing;
+    const char *detail_path;
+    int related_watch_id;
+    int result_code;
+} alfred_record_recovery_t;
+
+/*
  * alfred_record_t - common structured Event Model v0 record
  * @schema_version: record schema version, initially ALFRED_RECORD_SCHEMA_VERSION
  * @seq: optional monotonic sequence number assigned by the producer/writer
@@ -457,6 +517,7 @@ typedef struct {
  * @identity: optional filesystem identity evidence
  * @os_error: optional operating-system error evidence
  * @watch: optional watch/recovery diagnostic payload
+ * @recovery: optional resync/recovery diagnostic payload
  *
  * This struct is deliberately flat and conservative. It can represent today's
  * alfred_raw_event_t and alfred_event_t streams, plus WATCH_* diagnostics,
@@ -486,6 +547,7 @@ typedef struct alfred_record {
     alfred_record_identity_t identity;
     alfred_record_os_error_t os_error;
     alfred_record_watch_t watch;
+    alfred_record_recovery_t recovery;
 } alfred_record_t;
 
 #ifdef __cplusplus

@@ -641,6 +641,19 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        backend_resync_probe_result_t result,
                                        int saved_errno);
 
+static int backend_log_resync_record(inotify_backend_context_t *ctx,
+                                     alfred_record_type_t type,
+                                     int wd,
+                                     const char *path,
+                                     const char *reason,
+                                     const char *state,
+                                     const char *detail_path,
+                                     int related_watch_id,
+                                     int result_code,
+                                     size_t directories_seen,
+                                     size_t directories_watched,
+                                     size_t directories_missing);
+
 static int backend_build_overflow_raw(const struct inotify_event *ev,
                                       alfred_raw_event_t *out);
 
@@ -2363,11 +2376,19 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
         return BACKEND_RESYNC_PROBE_NOT_STALE;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
-                 wd,
-                 path,
-                 reason);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
+        wd,
+        path,
+        reason,
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     if (watcher_set_state(&ctx->runtime->watchers,
                           wd,
@@ -2541,11 +2562,19 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
         return BACKEND_RESYNC_PROBE_SET_VALID_FAILED;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_END wd=%d path=%s reason=%s result=valid",
-                 wd,
-                 path,
-                 reason);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_END,
+        wd,
+        path,
+        reason,
+        "valid",
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     return BACKEND_RESYNC_PROBE_VALID;
 }
@@ -2737,34 +2766,53 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                          &scan_context);
 
     if (rc != ERR_OK) {
-        logger_error(ctx->logger,
-                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
-                     wd,
-                     path,
-                     reason,
-                     rc);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED,
+            wd,
+            path,
+            reason,
+            NULL,
+            NULL,
+            0,
+            rc,
+            0,
+            0,
+            0);
         backend_resync_scan_context_destroy(&scan_context);
         return rc;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
-                 wd,
-                 path,
-                 reason,
-                 scan_context.directories_seen,
-                 scan_context.directories_watched,
-                 scan_context.directories_missing_watch);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
+        wd,
+        path,
+        reason,
+        NULL,
+        NULL,
+        0,
+        0,
+        scan_context.directories_seen,
+        scan_context.directories_watched,
+        scan_context.directories_missing_watch);
 
     backend_resync_scan_class_t scan_class =
         backend_classify_resync_scan(&scan_context);
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
-                 wd,
-                 path,
-                 reason,
-                 backend_resync_scan_class_name(scan_class));
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
+        wd,
+        path,
+        reason,
+        backend_resync_scan_class_name(scan_class),
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     /*
      * Runtime recovery must mutate the real watcher table and kernel watches.
@@ -2894,12 +2942,19 @@ static error_t backend_resync_reinstall_missing_watches(
          * Log the candidate before mutation. If the following add fails, the
          * diagnostic still shows exactly which missing path broke the repair.
          */
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
+            wd,
+            path,
+            reason,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         int new_wd = ops->add(ctx, missing_path);
 
@@ -2909,20 +2964,34 @@ static error_t backend_resync_reinstall_missing_watches(
              * Roll back every watch installed in this attempt and report a
              * backend error so the caller leaves the parent watch STALE.
              */
-            logger_event(ctx->logger,
-                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
+            (void)backend_log_resync_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
+                wd,
+                path,
+                reason,
+                NULL,
+                missing_path,
+                0,
+                0,
+                0,
+                0,
+                0);
 
             for (size_t j = 0; j < installed_count; j++) {
-                logger_event(ctx->logger,
-                             "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
-                             wd,
-                             path,
-                             reason,
-                             installed_wds[j]);
+                (void)backend_log_resync_record(
+                    ctx,
+                    ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+                    wd,
+                    path,
+                    reason,
+                    NULL,
+                    NULL,
+                    installed_wds[j],
+                    0,
+                    0,
+                    0,
+                    0);
 
                 (void)ops->remove(ctx, installed_wds[j]);
             }
@@ -2934,12 +3003,19 @@ static error_t backend_resync_reinstall_missing_watches(
         installed_wds[installed_count] = new_wd;
         installed_count++;
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
+            wd,
+            path,
+            reason,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0);
     }
 
     free(installed_wds);
@@ -3270,6 +3346,170 @@ static const char *backend_resync_probe_result_name(
     }
 
     return "unknown";
+}
+
+/*
+ * backend_log_resync_record - emit one local WATCH_RESYNC_* diagnostic record
+ * @ctx: narrowed backend context used by resync code
+ * @type: concrete WATCH_RESYNC_* record type
+ * @wd: stale/recovered parent watch descriptor
+ * @path: trusted or last-known parent path for the recovery attempt
+ * @reason: kernel/backend reason that triggered the resync
+ * @state: optional result/classification token, such as "valid"
+ * @detail_path: optional child path for missing/reinstalled watch records
+ * @related_watch_id: optional related watch descriptor, such as rollback wd
+ * @result_code: optional backend-local numeric result, such as scan rc
+ * @directories_seen: number of directories found by a coverage scan
+ * @directories_watched: number of scanned directories already watched
+ * @directories_missing: number of scanned directories missing a watch
+ *
+ * Local resync diagnostics have richer payloads than plain WATCH_STALE but are
+ * still backend diagnostics, not semantic filesystem events. This bridge builds
+ * the Event Model v0 record, fills the recovery payload used by the text
+ * formatter, and keeps a compatibility fallback with the historical text shape.
+ * WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel; the other
+ * local resync diagnostics remain event-log records.
+ *
+ * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
+ */
+static int backend_log_resync_record(inotify_backend_context_t *ctx,
+                                     alfred_record_type_t type,
+                                     int wd,
+                                     const char *path,
+                                     const char *reason,
+                                     const char *state,
+                                     const char *detail_path,
+                                     int related_watch_id,
+                                     int result_code,
+                                     size_t directories_seen,
+                                     size_t directories_watched,
+                                     size_t directories_missing)
+{
+    alfred_record_t record;
+    char payload[PATH_MAX + 128u];
+    const char *safe_path = path != NULL ? path : "";
+
+    if (ctx == NULL || ctx->logger == NULL || reason == NULL)
+        return -1;
+
+    if (alfred_record_build_watch_diagnostic_with_os_error(type,
+                                                           "inotify",
+                                                           wd,
+                                                           path,
+                                                           state,
+                                                           reason,
+                                                           NULL,
+                                                           0,
+                                                           NULL,
+                                                           NULL,
+                                                           &record) == 0) {
+        record.recovery.directories_seen = directories_seen;
+        record.recovery.directories_watched = directories_watched;
+        record.recovery.directories_missing = directories_missing;
+        record.recovery.detail_path = detail_path;
+        record.recovery.related_watch_id = related_watch_id;
+        record.recovery.result_code = result_code;
+
+        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+            if (type == ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED)
+                logger_error(ctx->logger, "%s", payload);
+            else
+                logger_event(ctx->logger, "%s", payload);
+            return 0;
+        }
+    }
+
+    switch (type) {
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
+                     wd,
+                     safe_path,
+                     reason);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED:
+        logger_error(ctx->logger,
+                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
+                     wd,
+                     safe_path,
+                     reason,
+                     result_code);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s "
+                     "dirs=%zu watched=%zu missing=%zu",
+                     wd,
+                     safe_path,
+                     reason,
+                     directories_seen,
+                     directories_watched,
+                     directories_missing);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     state != NULL ? state : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s "
+                     "removed_wd=%d",
+                     wd,
+                     safe_path,
+                     reason,
+                     related_watch_id);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s "
+                     "installed_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_END:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_END wd=%d path=%s reason=%s result=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     state != NULL ? state : "");
+        return 0;
+
+    default:
+        return -1;
+    }
 }
 
 /*

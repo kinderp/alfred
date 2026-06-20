@@ -66,6 +66,13 @@ Latest refresh:
   errno-bearing `WATCH_RESYNC_FAILED` runtime diagnostics through the shared
   Event Model v0 diagnostic record bridge. Comments now explain why errno is
   OS evidence stored separately from Alfred's stable resync failure token.
+- refreshed `core/include/alfred_record.h`, `core/src/alfred_record_text.c`,
+  `core/src/alfred_record_diagnostic.c`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/backend/test_record_text_writer.c` after migrating local
+  `WATCH_RESYNC_*` diagnostics to Event Model v0 records. Comments now explain
+  the recovery payload fields used for scan counters, detail paths, rollback
+  watch descriptors, and scan result codes.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

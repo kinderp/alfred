@@ -27,6 +27,20 @@
  *   errno=2 (No such file or directory)
  * - WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched
  *   reason=IN_MOVE_SELF error=path-unreachable errno=13
+ * - WATCH_RESYNC_SCAN_DONE wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF dirs=3 watched=1 missing=2
+ * - WATCH_RESYNC_SCAN_CLASS wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF result=needs-reinstall
+ * - WATCH_RESYNC_SCAN_MISSING wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF missing_path=/tmp/root/watched/a
+ * - WATCH_RESYNC_REINSTALLED wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF installed_path=/tmp/root/watched/a
+ * - WATCH_RESYNC_REINSTALL_FAILED wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF missing_path=/tmp/root/watched/b
+ * - WATCH_RESYNC_ROLLBACK wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF removed_wd=101
+ * - WATCH_RESYNC_END wd=7 path=/tmp/root/watched
+ *   reason=IN_MOVE_SELF result=valid
  *
  * normalized raw event:
  * - RAW_CREATE path=/tmp/root/dir mask=<ALFRED_RAW_CREATE|ALFRED_RAW_ISDIR>
@@ -189,6 +203,124 @@ static void test_diagnostic_recovery_payload(void)
                   "reason=IN_MOVE_SELF error=path-unreachable errno=13") == 0);
 }
 
+static void test_diagnostic_resync_detail_payload(void)
+{
+    alfred_record_t record;
+    char text[256];
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.directories_seen = 3u;
+    record.recovery.directories_watched = 1u;
+    record.recovery.directories_missing = 2u;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_SCAN_DONE wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF dirs=3 watched=1 missing=2") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               "needs-reinstall",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_SCAN_CLASS wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF result=needs-reinstall") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/root/watched/a";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_SCAN_MISSING wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF missing_path=/tmp/root/watched/a") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/root/watched/a";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_REINSTALLED wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF installed_path=/tmp/root/watched/a") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.detail_path = "/tmp/root/watched/b";
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_REINSTALL_FAILED wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF missing_path=/tmp/root/watched/b") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+    record.recovery.related_watch_id = 101;
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_ROLLBACK wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF removed_wd=101") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_RESYNC_END,
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               "valid",
+               "IN_MOVE_SELF",
+               NULL,
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_RESYNC_END wd=7 path=/tmp/root/watched "
+                  "reason=IN_MOVE_SELF result=valid") == 0);
+}
+
 static void test_normalized_raw_payload(void)
 {
     alfred_raw_event_t raw;
@@ -238,6 +370,7 @@ int main(void)
     test_semantic_from_to_payload();
     test_diagnostic_watch_payload();
     test_diagnostic_recovery_payload();
+    test_diagnostic_resync_detail_payload();
     test_normalized_raw_payload();
     test_invalid_or_truncated_output_fails();
 

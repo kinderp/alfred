@@ -563,9 +563,9 @@ Non va anticipata nella prima implementazione.
    Fatto come formatter di payload in `core/include/alfred_record_text.h` e
    `core/src/alfred_record_text.c`.
 6. Migrare gradualmente il backend inotify a `emit(record)`.
-   Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE`:
-   il runtime usa il builder diagnostico e il formatter testuale, poi passa il
-   payload a `logger_event()`.
+   Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+   per tutta la famiglia locale `WATCH_RESYNC_*`: il runtime usa record
+   diagnostici e formatter testuale, poi passa il payload a `logger_event()`.
 7. Solo dopo progettare JSONL writer.
 8. Solo dopo progettare backend statici ulteriori.
 9. Solo dopo valutare plugin dinamici.
@@ -590,11 +590,11 @@ L'adapter `alfred_record_from_raw()` produce record
 Il builder `alfred_record_build_watch_diagnostic()` produce record
 `diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
 gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
-`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE`: `watch_manager_add()`,
-`watch_manager_remove()` e gli handler `_SELF`/`IN_UNMOUNT` costruiscono il
-record, lo formattano come payload testuale e lo passano al logger esistente.
-Gli altri `WATCH_*` non sono ancora migrati e continuano a usare
-`logger_event()` diretto.
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
+`WATCH_RESYNC_*`: `watch_manager_add()`, `watch_manager_remove()`, gli handler
+`_SELF`/`IN_UNMOUNT` e il resync locale costruiscono il record, lo formattano
+come payload testuale e lo passano al logger esistente. I `WATCH_LOST_*` non
+sono ancora migrati e continuano a usare `logger_event()` diretto.
 
 Nel backend inotify esiste ora un helper locale,
 `backend_log_watch_diagnostic_record()`, che centralizza il ponte provvisorio:
@@ -608,12 +608,13 @@ campi diagnostici runtime
 
 Questo helper non e' la Backend API pubblica e non sostituisce `emit(record)`.
 Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
-Per ora e' usato dai percorsi `WATCH_STALE` e `WATCH_RESYNC_FAILED` nella forma
-normalizzata `reason=... error=...`. I `WATCH_RESYNC_FAILED` che aggiungono
-anche `errno=N (...)` passano dallo stesso ponte strutturato: il runtime chiama
-`alfred_record_build_watch_diagnostic_with_os_error()`, il record conserva
-`record.os_error.code` e `record.os_error.message`, e il formatter testuale li
-rende nella forma compatibile `errno=N` o `errno=N (messaggio)`.
+Per ora e' usato dai percorsi `WATCH_STALE`, `WATCH_RESYNC_FAILED` e dai record
+di dettaglio del resync locale (`WATCH_RESYNC_SCAN_*`,
+`WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_ROLLBACK`). I `WATCH_RESYNC_FAILED`
+che aggiungono anche `errno=N (...)` passano dallo stesso ponte strutturato: il
+runtime chiama `alfred_record_build_watch_diagnostic_with_os_error()`, il record
+conserva `record.os_error.code` e `record.os_error.message`, e il formatter
+testuale li rende nella forma compatibile `errno=N` o `errno=N (messaggio)`.
 `record.os_error.name` resta opzionale e puo' essere `NULL`.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
@@ -705,9 +706,10 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` usano gia' builder diagnostico e
-formatter testuale, ma non esiste ancora un sink comune `emit(record)`. Raw
-event e altri log diagnostici usano ancora il percorso runtime corrente.
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
+`WATCH_RESYNC_*` usano gia' builder diagnostico e formatter testuale, ma non
+esiste ancora un sink comune `emit(record)`. Raw event e diagnostici
+`WATCH_LOST_*` usano ancora il percorso runtime corrente.
 
 ## Test futuri
 

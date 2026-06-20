@@ -146,9 +146,9 @@ anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
 `normalized_raw + filesystem + RAW_*`, l'adapter semantico
 `alfred_event_t -> alfred_record_t` e il builder diagnostico per i principali
 record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
-payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e i
-`WATCH_RESYNC_FAILED` logici sono i primi log diagnostici backend che il runtime
-costruisce come record e formatta poi come testo compatibile. Il documento
+payload testuale da record. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la
+famiglia locale `WATCH_RESYNC_*` sono i primi log diagnostici backend che il
+runtime costruisce come record e formatta poi come testo compatibile. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
 Model v0 per errori OS ora distingue `error`, `os_error_code`,
 `os_error_name` e `os_error_message`, e la struttura C `alfred_record_t`
@@ -157,5 +157,5 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' manca ancora un vero `emit(record)` comune e gli altri
-`WATCH_*` runtime non sono ancora migrati.
+Resta parziale perche' manca ancora un vero `emit(record)` comune e i
+diagnostici `WATCH_LOST_*` runtime non sono ancora migrati.
