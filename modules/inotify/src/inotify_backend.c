@@ -176,48 +176,112 @@ typedef struct backend_lost_scope_scan_context {
 } backend_lost_scope_scan_context_t;
 
 /*
+ * backend_log_watch_diagnostic_record - emit one WATCH_* diagnostic record
+ * @ctx: narrowed backend context used by the poll path
+ * @type: WATCH_* diagnostic type to build
+ * @wd: inotify watch descriptor involved in the diagnostic
+ * @path: borrowed primary diagnostic path, or NULL when unavailable
+ * @state: optional watch/recovery state or result string
+ * @reason: optional stable reason string, such as IN_MOVE_SELF
+ * @error: optional normalized failure string
+ * @fallback_name: textual WATCH_* token used if record formatting fails
+ *
+ * Backend API v0 moves diagnostics toward structured records, but the current
+ * runtime still writes text logs through logger_event(). This helper centralizes
+ * the behavior-neutral bridge: build alfred_record_t, format the historical
+ * text payload, and fall back to the same compact WATCH_* shape if the bridge
+ * cannot be used. It intentionally covers only field shapes already supported
+ * by alfred_record_format_text(): plain wd/path, reason, reason+error, and the
+ * limited reason+result cases handled by the formatter.
+ */
+static int backend_log_watch_diagnostic_record(
+    inotify_backend_context_t *ctx,
+    alfred_record_type_t type,
+    int wd,
+    const char *path,
+    const char *state,
+    const char *reason,
+    const char *error,
+    const char *fallback_name)
+{
+    alfred_record_t record;
+    char payload[PATH_MAX + 96u];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return -1;
+
+    if (alfred_record_build_watch_diagnostic(
+            type,
+            "inotify",
+            wd,
+            path,
+            state,
+            reason,
+            error,
+            &record) == 0 &&
+        alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+        logger_event(ctx->logger, "%s", payload);
+        return 0;
+    }
+
+    if (fallback_name == NULL)
+        return -1;
+
+    if (reason != NULL && error != NULL) {
+        logger_event(ctx->logger,
+                     "%s wd=%d path=%s reason=%s error=%s",
+                     fallback_name,
+                     wd,
+                     path != NULL ? path : "",
+                     reason,
+                     error);
+        return 0;
+    }
+
+    if (reason != NULL) {
+        logger_event(ctx->logger,
+                     "%s wd=%d path=%s reason=%s",
+                     fallback_name,
+                     wd,
+                     path != NULL ? path : "",
+                     reason);
+        return 0;
+    }
+
+    logger_event(ctx->logger,
+                 "%s wd=%d path=%s",
+                 fallback_name,
+                 wd,
+                 path != NULL ? path : "");
+
+    return 0;
+}
+
+/*
  * backend_log_watch_stale - emit WATCH_STALE through Event Model records
  * @ctx: narrowed backend context used by the poll path
  * @wd: inotify watch descriptor whose path is no longer reliable
  * @path: borrowed path from the watcher table, or NULL when unavailable
  * @reason: stable kernel/backend reason string, such as IN_MOVE_SELF
  *
- * WATCH_STALE is a backend diagnostic about watch-table reliability. It is not
- * a FILE_* or DIR_* semantic event. The runtime now builds the same
- * diagnostic as an alfred_record_t before formatting it back to the historical
- * text payload. That keeps current logs and tests stable while moving the
- * backend toward the Backend API v0 record boundary.
+ * WATCH_STALE is backend watch-table reliability state, not a semantic
+ * filesystem event. The helper keeps that decision local while delegating the
+ * shared record/formatter/fallback work to backend_log_watch_diagnostic_record().
  */
 static void backend_log_watch_stale(inotify_backend_context_t *ctx,
                                     int wd,
                                     const char *path,
                                     const char *reason)
 {
-    alfred_record_t record;
-    char payload[PATH_MAX + 96u];
-
-    if (ctx == NULL || ctx->logger == NULL)
-        return;
-
-    if (alfred_record_build_watch_diagnostic(
-            ALFRED_RECORD_TYPE_WATCH_STALE,
-            "inotify",
-            wd,
-            path,
-            "stale",
-            reason,
-            NULL,
-            &record) == 0 &&
-        alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-        logger_event(ctx->logger, "%s", payload);
-        return;
-    }
-
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=%s",
-                 wd,
-                 path != NULL ? path : "",
-                 reason != NULL ? reason : "");
+    (void)backend_log_watch_diagnostic_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_STALE,
+        wd,
+        path,
+        "stale",
+        reason,
+        NULL,
+        "WATCH_STALE");
 }
 
 /*

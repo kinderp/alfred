@@ -572,6 +572,22 @@ record, lo formattano come payload testuale e lo passano al logger esistente.
 Gli altri `WATCH_*` non sono ancora migrati e continuano a usare
 `logger_event()` diretto.
 
+Nel backend inotify esiste ora un helper locale,
+`backend_log_watch_diagnostic_record()`, che centralizza il ponte provvisorio:
+
+```text
+campi diagnostici runtime
+-> alfred_record_build_watch_diagnostic()
+-> alfred_record_format_text()
+-> logger_event()
+```
+
+Questo helper non e' la Backend API pubblica e non sostituisce `emit(record)`.
+Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
+Per ora e' usato solo dal percorso `WATCH_STALE`; il prossimo candidato naturale
+e' `WATCH_RESYNC_FAILED`, perche' usa gia' la forma supportata
+`reason=... error=...`.
+
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
 record, per esempio `FILE_CREATED path=...` o `WATCH_STALE wd=...`. Non scrive
 timestamp, livello log, newline o file: queste responsabilita' restano del

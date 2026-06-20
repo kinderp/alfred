@@ -37,6 +37,10 @@ Latest refresh:
   now explain that WATCH_STALE remains backend watch-table reliability state,
   carries a reason such as IN_MOVE_SELF, and still preserves the old text
   payload for tests and users.
+- refreshed `modules/inotify/src/inotify_backend.c` again after extracting
+  `backend_log_watch_diagnostic_record()`. Comments now explain why the helper
+  is a local bridge for record/formatter/fallback behavior, not the public
+  Backend API v0 emit(record) boundary.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
