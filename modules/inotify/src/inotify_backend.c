@@ -1139,11 +1139,26 @@ backend_lost_scope_recover_entry_with_ops(
                      &scan_context);
 
     if (rc != ERR_OK) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=scan-failed",
-                     entry->wd,
-                     entry->old_path,
-                     entry->reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+            entry->wd,
+            entry->old_path,
+            NULL,
+            NULL,
+            entry->reason,
+            NULL,
+            "scan-failed",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
 
@@ -1151,11 +1166,26 @@ backend_lost_scope_recover_entry_with_ops(
         size_t updated_count = 0;
 
         if (!watcher_exists(&ctx->runtime->watchers, entry->wd)) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
-                         entry->wd,
-                         entry->old_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                entry->old_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "update-path-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
@@ -1170,26 +1200,69 @@ backend_lost_scope_recover_entry_with_ops(
                                        found_path,
                                        &updated_count) != 0 ||
             updated_count == 0) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-prefix-failed",
-                         entry->wd,
-                         entry->old_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                entry->old_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "update-prefix-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
-                     entry->wd,
-                     entry->old_path,
-                     found_path,
-                     entry->reason);
-        logger_event(ctx->logger,
-                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s new_prefix=%s children=%zu",
-                     entry->wd,
-                     entry->old_path,
-                     found_path,
-                     updated_count - 1);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_FOUND,
+            entry->wd,
+            NULL,
+            entry->old_path,
+            found_path,
+            entry->reason,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED,
+            entry->wd,
+            NULL,
+            entry->old_path,
+            found_path,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            updated_count - 1,
+            0,
+            0,
+            0);
 
         backend_resync_scan_context_t coverage_context;
 
@@ -1200,42 +1273,97 @@ backend_lost_scope_recover_entry_with_ops(
                                              &coverage_context);
 
         if (coverage_rc != ERR_OK) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=coverage-scan-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "coverage-scan-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     coverage_context.directories_seen,
-                     coverage_context.directories_watched,
-                     coverage_context.directories_missing_watch);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            coverage_context.directories_seen,
+            coverage_context.directories_watched,
+            coverage_context.directories_missing_watch,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         for (size_t i = 0; i < coverage_context.missing_paths_count; i++) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                         entry->wd,
-                         found_path,
-                         entry->reason,
-                         coverage_context.missing_paths[i]);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                NULL,
+                coverage_context.missing_paths[i],
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
         }
 
         backend_resync_scan_class_t coverage_class =
             backend_classify_resync_scan(&coverage_context);
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s result=%s",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     backend_resync_scan_class_name(coverage_class));
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            backend_resync_scan_class_name(coverage_class),
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         error_t reinstall_rc =
             backend_lost_scope_reinstall_missing_watches(ctx,
@@ -1246,11 +1374,26 @@ backend_lost_scope_recover_entry_with_ops(
                                                          watch_ops);
 
         if (reinstall_rc != ERR_OK) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=reinstall-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "reinstall-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
@@ -1262,32 +1405,75 @@ backend_lost_scope_recover_entry_with_ops(
                                      WATCHER_STATE_VALID,
                                      &valid_count) != 0 ||
             valid_count == 0) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=set-valid-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "set-valid-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s result=valid watches=%zu",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     valid_count);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            "valid",
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            valid_count,
+            0,
+            0);
 
         backend_resync_scan_context_destroy(&coverage_context);
         return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
-                 entry->wd,
-                 entry->old_path,
-                 entry->reason,
-                 entry->retry_count);
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND,
+        entry->wd,
+        entry->old_path,
+        NULL,
+        NULL,
+        entry->reason,
+        NULL,
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        entry->retry_count,
+        0);
     return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
 }
 
@@ -1567,13 +1753,26 @@ static int backend_lost_scope_schedule_retry(
     failed_attempts = attempted->retry_count + 1;
 
     if (failed_attempts >= BACKEND_LOST_SCOPE_MAX_ATTEMPTS) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s result=%s retries=%u",
-                     attempted->wd,
-                     retry_path,
-                     attempted->reason,
-                     backend_lost_scope_recovery_result_name(result),
-                     failed_attempts);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP,
+            attempted->wd,
+            retry_path,
+            NULL,
+            NULL,
+            attempted->reason,
+            backend_lost_scope_recovery_result_name(result),
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            failed_attempts,
+            0);
         return -1;
     }
 
@@ -1589,23 +1788,49 @@ static int backend_lost_scope_schedule_retry(
 
     if (backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
                                                &retry_entry) != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=requeue-failed",
-                     attempted->wd,
-                     retry_path,
-                     attempted->reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+            attempted->wd,
+            retry_path,
+            NULL,
+            NULL,
+            attempted->reason,
+            NULL,
+            "requeue-failed",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return -1;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s result=%s retry=%u delay_ms=%llu pending=%zu",
-                 retry_entry.wd,
-                 retry_entry.old_path,
-                 retry_entry.reason,
-                 backend_lost_scope_recovery_result_name(result),
-                 retry_entry.retry_count,
-                 (unsigned long long)(delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS),
-                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED,
+        retry_entry.wd,
+        retry_entry.old_path,
+        NULL,
+        NULL,
+        retry_entry.reason,
+        backend_lost_scope_recovery_result_name(result),
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
+        0,
+        0,
+        retry_entry.retry_count,
+        delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS);
 
     return 0;
 }
@@ -2670,11 +2895,26 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                              wd,
                              &device_id,
                              &inode_id) != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s error=missing-identity",
-                     wd,
-                     path,
-                     reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            "missing-identity",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return;
     }
 
@@ -2694,12 +2934,26 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                          reason,
                                          now_ns,
                                          now_ns) != 0) {
-        logger_error(ctx->logger,
-                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s error=%s",
-                     wd,
-                     path,
-                     reason,
-                     backend_resync_probe_result_name(result));
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            backend_resync_probe_result_name(result),
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return;
     }
 
@@ -3150,20 +3404,48 @@ static error_t backend_lost_scope_reinstall_missing_watches(
              * be only partially covered. Roll back all watches installed in
              * this attempt and let the caller keep the recovered subtree stale.
              */
-            logger_event(ctx->logger,
-                         "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED,
+                wd,
+                path,
+                NULL,
+                NULL,
+                reason,
+                NULL,
+                NULL,
+                missing_path,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
 
             for (size_t j = 0; j < installed_count; j++) {
-                logger_event(ctx->logger,
-                             "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
-                             wd,
-                             path,
-                             reason,
-                             installed_wds[j]);
+                (void)backend_log_lost_scope_record(
+                    ctx,
+                    ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK,
+                    wd,
+                    path,
+                    NULL,
+                    NULL,
+                    reason,
+                    NULL,
+                    NULL,
+                    NULL,
+                    installed_wds[j],
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0);
 
                 (void)ops->remove(ctx, installed_wds[j]);
             }
@@ -3175,12 +3457,26 @@ static error_t backend_lost_scope_reinstall_missing_watches(
         installed_wds[installed_count] = new_wd;
         installed_count++;
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
     }
 
     free(installed_wds);
@@ -3649,7 +3945,10 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
         record.recovery.delay_ms = delay_ms;
 
         if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-            logger_event(ctx->logger, "%s", payload);
+            if (type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED)
+                logger_error(ctx->logger, "%s", payload);
+            else
+                logger_event(ctx->logger, "%s", payload);
             return 0;
         }
     }
@@ -3664,6 +3963,26 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
                      safe_reason,
                      safe_error,
                      pending_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s "
+                     "error=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED:
+        logger_error(ctx->logger,
+                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s "
+                     "error=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error);
         return 0;
 
     case ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN:

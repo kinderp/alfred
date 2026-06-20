@@ -593,10 +593,9 @@ gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
 `WATCH_RESYNC_*`: `watch_manager_add()`, `watch_manager_remove()`, gli handler
 `_SELF`/`IN_UNMOUNT` e il resync locale costruiscono il record, lo formattano
-come payload testuale e lo passano al logger esistente. I `WATCH_LOST_*` hanno
-ora tipi record e formatter compatibile. Il runtime ha iniziato la migrazione
-con `WATCH_LOST_QUEUED` e `WATCH_LOST_SCAN_BEGIN`; gli altri diagnostici
-lost-scope continuano temporaneamente a usare `logger_event()` diretto.
+come payload testuale e lo passano al logger esistente. Anche i `WATCH_LOST_*`
+runtime usano lo stesso schema: il backend costruisce record diagnostici,
+riempie il payload recovery e poi produce il payload testuale compatibile.
 
 Nel backend inotify esiste ora un helper locale,
 `backend_log_watch_diagnostic_record()`, che centralizza il ponte provvisorio:
@@ -709,12 +708,9 @@ Lettura passo per passo:
 Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
-`WATCH_RESYNC_*` usano gia' builder diagnostico e formatter testuale, ma non
-esiste ancora un sink comune `emit(record)`. I record `WATCH_LOST_*` sono
-modellati e formattabili; il runtime lost-scope usa gia' il ponte record per
-`WATCH_LOST_QUEUED` e `WATCH_LOST_SCAN_BEGIN`, mentre gli altri `WATCH_LOST_*`
-restano sul percorso corrente con `logger_event()`. Raw event resta sul
-percorso corrente.
+`WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder diagnostico e formatter
+testuale, ma non esiste ancora un sink comune `emit(record)`. Raw event resta
+sul percorso corrente.
 
 ## Test futuri
 
@@ -739,7 +735,7 @@ Restano da decidere nella fase codice:
 - layout concreto di `alfred_backend_target_t`;
 - semantica precisa di `timeout_ms` in `poll`;
 - elenco definitivo dei codici errore strutturati;
-- migrazione degli altri diagnostici runtime `WATCH_LOST_*`;
+- migrazione del raw path runtime verso record e sink comune;
 - come collegare piu' backend contemporanei;
 - come gestire backpressure se `emit()` fallisce;
 - quando introdurre `list_targets`;

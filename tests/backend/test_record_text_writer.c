@@ -43,6 +43,10 @@
  *   reason=IN_MOVE_SELF result=valid
  * - WATCH_LOST_QUEUED wd=7 path=/tmp/root/lost
  *   reason=IN_MOVE_SELF error=path-unreachable pending=1
+ * - WATCH_LOST_QUEUE_SKIPPED wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF error=missing-identity
+ * - WATCH_LOST_QUEUE_FAILED wd=7 path=/tmp/root/lost
+ *   reason=IN_MOVE_SELF error=path-unreachable
  * - WATCH_LOST_SCAN_BEGIN root=/tmp/root pending=0
  * - WATCH_LOST_FOUND wd=7 old_path=/tmp/root/lost
  *   new_path=/tmp/other/lost reason=IN_MOVE_SELF
@@ -370,6 +374,36 @@ static void test_diagnostic_lost_scope_payload(void)
     assert(strcmp(text,
                   "WATCH_LOST_QUEUED wd=7 path=/tmp/root/lost "
                   "reason=IN_MOVE_SELF error=path-unreachable pending=1") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               "missing-identity",
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_QUEUE_SKIPPED wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF error=missing-identity") == 0);
+
+    assert(alfred_record_build_watch_diagnostic(
+               ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+               "inotify",
+               7,
+               "/tmp/root/lost",
+               NULL,
+               "IN_MOVE_SELF",
+               "path-unreachable",
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_LOST_QUEUE_FAILED wd=7 path=/tmp/root/lost "
+                  "reason=IN_MOVE_SELF error=path-unreachable") == 0);
 
     assert(alfred_record_build_watch_diagnostic(
                ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN,

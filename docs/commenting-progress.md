@@ -84,6 +84,13 @@ Latest refresh:
   `WATCH_LOST_SCAN_BEGIN` through Event Model v0 records. Comments now explain
   how the helper preserves the historical text contract while later call sites
   are migrated incrementally.
+- refreshed `core/include/alfred_record.h`,
+  `core/src/alfred_record_text.c`, `core/src/alfred_record_diagnostic.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_record_text_writer.c`, and Italian docs after routing
+  the remaining runtime `WATCH_LOST_*` diagnostics through Event Model v0
+  records. Comments now explain queue skipped/failed records and the
+  lost-scope logging bridge fallback behavior.
 - refreshed `core/include/alfred_record_adapter.h`,
   `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
   `tests/backend/test_record_semantic_adapter.c` after wiring semantic core

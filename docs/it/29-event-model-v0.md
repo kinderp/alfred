@@ -345,15 +345,17 @@ flowchart TD
         DG13["recovery<br/>WATCH_RESYNC_REINSTALL_FAILED"]
         DG14["recovery<br/>WATCH_RESYNC_ROLLBACK"]
         DG15["recovery<br/>WATCH_LOST_QUEUED"]
-        DG16["recovery<br/>WATCH_LOST_SCAN_BEGIN"]
-        DG17["recovery<br/>WATCH_LOST_FOUND"]
-        DG18["recovery<br/>WATCH_LOST_PREFIX_UPDATED"]
-        DG19["recovery<br/>WATCH_LOST_COVERAGE_DONE"]
-        DG20["recovery<br/>WATCH_LOST_COVERAGE_CLASS"]
-        DG21["recovery<br/>WATCH_LOST_REINSTALLED"]
-        DG22["recovery<br/>WATCH_LOST_RECOVERY_END"]
-        DG23["recovery<br/>WATCH_LOST_RETRY_SCHEDULED"]
-        DG24["recovery<br/>WATCH_LOST_RECOVERY_GAVE_UP"]
+        DG16["recovery<br/>WATCH_LOST_QUEUE_SKIPPED"]
+        DG17["recovery<br/>WATCH_LOST_QUEUE_FAILED"]
+        DG18["recovery<br/>WATCH_LOST_SCAN_BEGIN"]
+        DG19["recovery<br/>WATCH_LOST_FOUND"]
+        DG20["recovery<br/>WATCH_LOST_PREFIX_UPDATED"]
+        DG21["recovery<br/>WATCH_LOST_COVERAGE_DONE"]
+        DG22["recovery<br/>WATCH_LOST_COVERAGE_CLASS"]
+        DG23["recovery<br/>WATCH_LOST_REINSTALLED"]
+        DG24["recovery<br/>WATCH_LOST_RECOVERY_END"]
+        DG25["recovery<br/>WATCH_LOST_RETRY_SCHEDULED"]
+        DG26["recovery<br/>WATCH_LOST_RECOVERY_GAVE_UP"]
     end
 
     BO1 --> NR1 --> SE1
@@ -399,15 +401,17 @@ flowchart TD
     DG5 --> DG6
     DG5 --> DG7
     DG6 --> DG15
-    DG15 --> DG16
-    DG16 --> DG17
-    DG17 --> DG18
+    DG6 --> DG16
+    DG6 --> DG17
+    DG15 --> DG18
     DG18 --> DG19
     DG19 --> DG20
     DG20 --> DG21
     DG21 --> DG22
-    DG15 --> DG23
+    DG22 --> DG23
     DG23 --> DG24
+    DG15 --> DG25
+    DG25 --> DG26
 ```
 
 Note di lettura:
@@ -475,6 +479,8 @@ gli eventi semantici `FILE_*` e `DIR_*`.
 | `diagnostic` | `recovery` | `WATCH_RESYNC_FAILED` | resync locale | recovery locale fallita | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_RESYNC_END` | resync locale | watch tornato affidabile | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_QUEUED` | lost-scope enqueue | scope perso accodato per recovery ampia | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_QUEUE_SKIPPED` | lost-scope enqueue | accodamento saltato per dati mancanti | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_QUEUE_FAILED` | lost-scope enqueue | accodamento fallito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_SCAN_BEGIN` | lost-scope scan | inizia scansione di una root candidata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_FOUND` | lost-scope scan | trovata identita' in una root monitorata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_PREFIX_UPDATED` | lost-scope recovery | prefisso del watch e dei figli riallineato | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |

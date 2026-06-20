@@ -392,6 +392,16 @@ typedef enum {
     ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
 
     /*
+     * A stale scope could not be queued because required identity was missing.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
+
+    /*
+     * A stale scope could not be queued because queue insertion failed.
+     */
+    ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+
+    /*
      * Lost-scope recovery started scanning one configured root.
      */
     ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN,
