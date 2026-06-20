@@ -18,6 +18,39 @@ altro momento, leggere questo file prima di continuare.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
 
+## Bootstrap di una nuova sessione agente
+
+Quando una nuova sessione viene aperta con Codex o con un altro agente AI, non
+bisogna leggere tutta la documentazione indiscriminatamente. La documentazione
+di Alfred e' ormai abbastanza ampia: leggere tutto gonfia il contesto e puo'
+mescolare contratti correnti, roadmap futura e note storiche.
+
+Il bootstrap minimo e' invece:
+
+1. leggere `AGENTS.md` nella root del repository;
+2. leggere questo file;
+3. leggere `27-guida-lettura-documentazione.md`;
+4. leggere `documentation-progress.md`;
+5. leggere `31-milestone-inotify-reference-backend.md`;
+6. scegliere gli altri documenti in base al task corrente.
+
+Per il lavoro corrente su Backend API v0, Event Model v0, adapter, record,
+writer, output strutturato e backend inotify leggere almeno:
+
+- `29-event-model-v0.md`
+- `30-backend-api-v0.md`
+- `05-modulo-inotify.md`
+- `07-flusso-eventi.md`
+- `20-matrice-eventi-inotify.md`
+- `22-contratto-log.md`
+- `26-stato-funzionalita.md`
+
+`24-roadmap-ai-agent-guardrail.md` descrive la direzione strategica futura:
+Alfred come runtime security layer per agenti AI. Va letta per non perdere la
+visione, ma non autorizza a implementare Agent Guard completo, fanotify, eBPF,
+Windows, macOS, dashboard o policy engine durante la milestone inotify, salvo
+richiesta esplicita.
+
 ## Principi di ragionamento dell'agente
 
 Queste regole valgono quando un agente AI aiuta a modificare o documentare il

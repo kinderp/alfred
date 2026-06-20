@@ -47,6 +47,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `28-audit-documentazione-e-debiti.md` |
 | Parziale | `29-event-model-v0.md` |
 | Parziale | `30-backend-api-v0.md` |
+| Completo | `31-milestone-inotify-reference-backend.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -66,6 +67,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `docs/man/man1/alfred.1` |
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |
+| Completo | `AGENTS.md` |
 
 ## Aggiornamento recente
 
@@ -161,3 +163,26 @@ Resta parziale perche' manca ancora un vero `emit(record)` comune e il raw path
 runtime non e' ancora migrato. I diagnostici runtime `WATCH_RESYNC_*` e
 `WATCH_LOST_*` usano pero' gia' record Event Model v0 e formatter testuale
 compatibile.
+
+## Aggiornamento bootstrap agenti e milestone corrente
+
+Sono stati aggiunti:
+
+- `AGENTS.md` nella root del repository come entrypoint breve per Codex e altri
+  agenti AI;
+- `31-milestone-inotify-reference-backend.md` per definire il perimetro
+  corrente: chiudere inotify come backend di riferimento senza rendere inotify
+  il centro concettuale del prodotto;
+- una sezione di bootstrap in `00-regole-operative.md`;
+- un percorso dedicato alle sessioni agente in
+  `27-guida-lettura-documentazione.md`;
+- nuovi concetti strategici in `24-roadmap-ai-agent-guardrail.md`, tra cui
+  Agent Session, Agent Action Ledger, Intent-to-Action Verification,
+  would-block mode e Workspace Boundary.
+
+La regola architetturale da conservare e':
+
+```text
+inotify deve validare il contratto di Alfred,
+non definire il confine finale del prodotto.
+```
