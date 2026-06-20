@@ -246,10 +246,11 @@ Decisione operativa: prima documentiamo questa policy, poi estendiamo
 `record.os_error.code`, `record.os_error.name` e `record.os_error.message`.
 Il builder diagnostico puo' gia' popolarli tramite
 `alfred_record_build_watch_diagnostic_with_os_error()`. Il formatter testuale
-`alfred_record_format_text()` puo' gia' renderli nella forma compatibile
-`errno=N` o `errno=N (message)`. Finche' il runtime non usa quel builder nei
-punti che oggi stampano direttamente `errno`, quei log restano sul percorso
-testuale diretto.
+`alfred_record_format_text()` puo' renderli nella forma compatibile `errno=N`
+o `errno=N (message)`. Il runtime inotify usa gia' questo percorso per i
+`WATCH_RESYNC_FAILED` che hanno `errno`: il record conserva `os_error.code` e
+`os_error.message`, mentre `os_error.name` resta opzionale e puo' essere `NULL`
+quando Alfred non dispone di un mapping simbolico affidabile.
 
 ## Campi security futuri
 

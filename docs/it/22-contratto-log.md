@@ -397,7 +397,7 @@ sono prodotti dal percorso strutturato Event Model v0:
 ```text
 backend_log_resync_failure()
 -> backend_log_watch_diagnostic_record(WATCH_RESYNC_FAILED)
--> alfred_record_build_watch_diagnostic(reason=R, error=E)
+-> alfred_record_build_watch_diagnostic_with_os_error(...)
 -> alfred_record_format_text()
 -> logger_event()
 ```
@@ -406,9 +406,13 @@ I fallimenti che includono anche `errno=N (...)` hanno ora un contratto dati
 strutturato e un formatter compatibile. La policy Event Model v0 distingue
 `error` Alfred dai campi OS `os_error_code`, `os_error_name` e
 `os_error_message`. Questi campi sono presenti in `alfred_record_t`, il builder
-diagnostico puo' popolarli e `alfred_record_format_text()` li rende come
-`errno=N` o `errno=N (messaggio)`. Resta da migrare il percorso runtime che
-oggi scrive ancora direttamente alcune righe testuali con `errno`.
+diagnostico li popola nei `WATCH_RESYNC_FAILED` del runtime inotify e
+`alfred_record_format_text()` li rende come `errno=N` o
+`errno=N (messaggio)`.
+
+`os_error_name` resta opzionale. Nel runtime corrente Alfred conserva il codice
+numerico e il messaggio prodotto da `strerror(3)`; non inventa un nome simbolico
+quando non ha una funzione affidabile per mapparlo.
 
 Esempio di mapping:
 

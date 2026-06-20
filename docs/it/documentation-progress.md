@@ -155,6 +155,7 @@ Model v0 per errori OS ora distingue `error`, `os_error_code`,
 contiene il payload `os_error`. Il builder diagnostico puo' gia' popolare
 questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
-`errno=N (...)`. Resta parziale perche' manca ancora un vero `emit(record)`
-comune, i campi OS error non sono ancora usati dal runtime inotify, e gli altri
+`errno=N (...)`. Il runtime inotify usa gia' questo percorso per
+`WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
+Resta parziale perche' manca ancora un vero `emit(record)` comune e gli altri
 `WATCH_*` runtime non sono ancora migrati.

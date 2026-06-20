@@ -184,6 +184,9 @@ typedef struct backend_lost_scope_scan_context {
  * @state: optional watch/recovery state or result string
  * @reason: optional stable reason string, such as IN_MOVE_SELF
  * @error: optional normalized failure string
+ * @os_error_code: optional errno-like OS error code, or 0 when absent
+ * @os_error_name: optional symbolic OS error name, or NULL when unavailable
+ * @os_error_message: optional human-readable OS error message, or NULL
  * @fallback_name: textual WATCH_* token used if record formatting fails
  *
  * Backend API v0 moves diagnostics toward structured records, but the current
@@ -192,7 +195,9 @@ typedef struct backend_lost_scope_scan_context {
  * text payload, and fall back to the same compact WATCH_* shape if the bridge
  * cannot be used. It intentionally covers only field shapes already supported
  * by alfred_record_format_text(): plain wd/path, reason, reason+error, and the
- * limited reason+result cases handled by the formatter.
+ * limited reason+result cases handled by the formatter. OS error fields remain
+ * optional: callers pass them only for diagnostics that need to preserve
+ * syscall evidence while keeping Alfred's stable @error token separate.
  */
 static int backend_log_watch_diagnostic_record(
     inotify_backend_context_t *ctx,
@@ -202,6 +207,9 @@ static int backend_log_watch_diagnostic_record(
     const char *state,
     const char *reason,
     const char *error,
+    int os_error_code,
+    const char *os_error_name,
+    const char *os_error_message,
     const char *fallback_name)
 {
     alfred_record_t record;
@@ -210,7 +218,7 @@ static int backend_log_watch_diagnostic_record(
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
 
-    if (alfred_record_build_watch_diagnostic(
+    if (alfred_record_build_watch_diagnostic_with_os_error(
             type,
             "inotify",
             wd,
@@ -218,6 +226,9 @@ static int backend_log_watch_diagnostic_record(
             state,
             reason,
             error,
+            os_error_code,
+            os_error_name,
+            os_error_message,
             &record) == 0 &&
         alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
         logger_event(ctx->logger, "%s", payload);
@@ -228,6 +239,31 @@ static int backend_log_watch_diagnostic_record(
         return -1;
 
     if (reason != NULL && error != NULL) {
+        if (os_error_code != 0) {
+            if (os_error_message != NULL) {
+                logger_event(ctx->logger,
+                             "%s wd=%d path=%s reason=%s error=%s errno=%d (%s)",
+                             fallback_name,
+                             wd,
+                             path != NULL ? path : "",
+                             reason,
+                             error,
+                             os_error_code,
+                             os_error_message);
+                return 0;
+            }
+
+            logger_event(ctx->logger,
+                         "%s wd=%d path=%s reason=%s error=%s errno=%d",
+                         fallback_name,
+                         wd,
+                         path != NULL ? path : "",
+                         reason,
+                         error,
+                         os_error_code);
+            return 0;
+        }
+
         logger_event(ctx->logger,
                      "%s wd=%d path=%s reason=%s error=%s",
                      fallback_name,
@@ -280,6 +316,9 @@ static void backend_log_watch_stale(inotify_backend_context_t *ctx,
         path,
         "stale",
         reason,
+        NULL,
+        0,
+        NULL,
         NULL,
         "WATCH_STALE");
 }
@@ -3244,9 +3283,9 @@ static const char *backend_resync_probe_result_name(
  *
  * A single formatter keeps WATCH_RESYNC_FAILED readable while the internal
  * decision tree grows. Syscall failures include errno because they usually
- * need operating-system context and errno is not modeled in alfred_record_t
- * yet. Logical failures use the Event Model v0 diagnostic record path because
- * they fit the stable reason+error payload shape.
+ * need operating-system context. The Event Model v0 record keeps that OS
+ * evidence in record.os_error while preserving @result as Alfred's stable
+ * diagnostic error token.
  */
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
@@ -3255,18 +3294,6 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        backend_resync_probe_result_t result,
                                        int saved_errno)
 {
-    if (saved_errno != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s errno=%d (%s)",
-                     wd,
-                     path,
-                     reason,
-                     backend_resync_probe_result_name(result),
-                     saved_errno,
-                     strerror(saved_errno));
-        return;
-    }
-
     (void)backend_log_watch_diagnostic_record(
         ctx,
         ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
@@ -3275,6 +3302,9 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
         NULL,
         reason,
         backend_resync_probe_result_name(result),
+        saved_errno,
+        NULL,
+        saved_errno != 0 ? strerror(saved_errno) : NULL,
         "WATCH_RESYNC_FAILED");
 }
 
