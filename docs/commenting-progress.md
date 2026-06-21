@@ -612,3 +612,13 @@ Completed in the RAW_ATTRIB sink integration pass:
 - expanded `tests/backend/test_attrib_raw_log.sh` comments so chmod is
   described as metadata-only raw/backend evidence, with expected `IN_ATTRIB`
   and normalized `RAW_ATTRIB path=... mask=...` output
+
+Completed in the RAW_MODIFY sink integration pass:
+
+- extended the raw path+mask helper comments in `app/src/app.c` so
+  create/delete/attrib/modify facts are documented as the currently migrated
+  normalized raw records
+- added `tests/backend/test_raw_modify_record_sink.sh` with a header explaining
+  that `IN_MODIFY`/`RAW_MODIFY` is tested separately from
+  `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` because modify feeds `FILE_MODIFIED` while
+  close-write feeds `FILE_READY`

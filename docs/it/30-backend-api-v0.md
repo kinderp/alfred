@@ -634,8 +634,8 @@ Non va anticipata nella prima implementazione.
    Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
    per tutta la famiglia locale `WATCH_RESYNC_*` e per i diagnostici
    `WATCH_LOST_*`: il runtime usa record diagnostici, sink comune e text sink.
-   Primi micro-step raw fatti per `RAW_CREATE`, `RAW_DELETE` e `RAW_ATTRIB`:
-   `app.c` riceve `alfred_raw_event_t`, lo converte con
+   Primi micro-step raw fatti per `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB` e
+   `RAW_MODIFY`: `app.c` riceve `alfred_raw_event_t`, lo converte con
    `alfred_record_from_raw()`, lo emette al sink comune e scrive il payload
    compatibile su `raw.log`, poi consegna comunque il raw originale ad
    `alfred_process()`.
@@ -660,14 +660,16 @@ L'adapter `alfred_record_from_raw()` produce record
 `DIR_*`, perche' la semantica resta responsabilita' del core. Per esempio un
 `ALFRED_RAW_MOVED_FROM` diventa `RAW_MOVED_FROM`, non `FILE_MOVED`.
 Il primo uso runtime e' volutamente limitato a `ALFRED_RAW_CREATE`,
-`ALFRED_RAW_DELETE` e `ALFRED_RAW_ATTRIB`: `handle_backend_event()` in `app.c`
-costruisce record `RAW_CREATE`, `RAW_DELETE` o `RAW_ATTRIB`, li passa al sink
-comune e lascia al text sink produrre righe come:
+`ALFRED_RAW_DELETE`, `ALFRED_RAW_ATTRIB` e `ALFRED_RAW_MODIFY`:
+`handle_backend_event()` in `app.c` costruisce record `RAW_CREATE`,
+`RAW_DELETE`, `RAW_ATTRIB` o `RAW_MODIFY`, li passa al sink comune e lascia al
+text sink produrre righe come:
 
 ```text
 RAW_CREATE path=/tmp/root/a.txt mask=1
 RAW_DELETE path=/tmp/root/a.txt mask=2
 RAW_ATTRIB path=/tmp/root/a.txt mask=8
+RAW_MODIFY path=/tmp/root/a.txt mask=4
 ```
 
 Dopo il log normalizzato, lo stesso `alfred_raw_event_t` continua a essere
@@ -832,9 +834,9 @@ sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_LOST_*` usano gia' builder diagnostico, sink comune e text sink.
 `WATCH_RESYNC_SCAN_FAILED` e `WATCH_LOST_QUEUE_FAILED` conservano il canale
 error tramite un bridge di sink con routing event/error. Il raw path runtime e'
-iniziato con `RAW_CREATE`, `RAW_DELETE` e `RAW_ATTRIB`: il raw originale resta
-consegnato al core, mentre il log raw normalizzato passa da record + sink + text
-sink. Gli altri raw `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`,
+iniziato con `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB` e `RAW_MODIFY`: il raw
+originale resta consegnato al core, mentre il log raw normalizzato passa da
+record + sink + text sink. Gli altri raw `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`,
 `RAW_MOVED_TO` e `RAW_OVERFLOW` restano da migrare.
 
 ## Test futuri
