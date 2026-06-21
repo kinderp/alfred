@@ -178,6 +178,21 @@ typedef struct backend_lost_scope_scan_context {
 } backend_lost_scope_scan_context_t;
 
 /*
+ * backend_text_sink_context_t - route one formatted payload to the right log
+ * @logger: destination logger owned by the application/backend context
+ * @use_error_channel: nonzero to write through logger_error(), zero for events
+ *
+ * The record text sink only formats payloads. This tiny context gives the
+ * backend bridge enough information to preserve the historical log channel for
+ * diagnostics such as WATCH_RESYNC_SCAN_FAILED without teaching the core sink
+ * anything about Alfred's logger_t.
+ */
+typedef struct backend_text_sink_context {
+    logger_t *logger;
+    int use_error_channel;
+} backend_text_sink_context_t;
+
+/*
  * backend_write_event_payload - bridge text-sink payloads to logger_event
  * @userdata: logger_t destination
  * @payload: formatted diagnostic payload
@@ -198,6 +213,37 @@ static int backend_write_event_payload(void *userdata, const char *payload)
     }
 
     logger_event(logger, "%s", payload);
+    return 0;
+}
+
+/*
+ * backend_write_routed_payload - bridge text-sink payloads to event/error logs
+ * @userdata: backend_text_sink_context_t route description
+ * @payload: formatted diagnostic payload
+ *
+ * Some backend diagnostics intentionally live in the error log, while most are
+ * event-log diagnostics. The record text sink only knows how to produce a
+ * payload. This bridge keeps the channel decision local to the backend helper
+ * that knows the diagnostic type.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int backend_write_routed_payload(void *userdata, const char *payload)
+{
+    backend_text_sink_context_t *sink_context = userdata;
+
+    if (sink_context == NULL ||
+        sink_context->logger == NULL ||
+        payload == NULL) {
+        return -1;
+    }
+
+    if (sink_context->use_error_channel) {
+        logger_error(sink_context->logger, "%s", payload);
+    } else {
+        logger_event(sink_context->logger, "%s", payload);
+    }
+
     return 0;
 }
 
@@ -3752,10 +3798,11 @@ static const char *backend_resync_probe_result_name(
  *
  * Local resync diagnostics have richer payloads than plain WATCH_STALE but are
  * still backend diagnostics, not semantic filesystem events. This bridge builds
- * the Event Model v0 record, fills the recovery payload used by the text
- * formatter, and keeps a compatibility fallback with the historical text shape.
- * WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel; the other
- * local resync diagnostics remain event-log records.
+ * the Event Model v0 record, fills the recovery payload used by the text sink,
+ * and keeps a compatibility fallback with the historical text shape.
+ * WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel through a
+ * routed sink callback; the other local resync diagnostics remain event-log
+ * records.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -3773,6 +3820,9 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
                                      size_t directories_missing)
 {
     alfred_record_t record;
+    backend_text_sink_context_t sink_context;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
     char payload[PATH_MAX + 128u];
     const char *safe_path = path != NULL ? path : "";
 
@@ -3797,11 +3847,16 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
         record.recovery.related_watch_id = related_watch_id;
         record.recovery.result_code = result_code;
 
-        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-            if (type == ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED)
-                logger_error(ctx->logger, "%s", payload);
-            else
-                logger_event(ctx->logger, "%s", payload);
+        sink_context.logger = ctx->logger;
+        sink_context.use_error_channel =
+            type == ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED;
+        text_sink.write = backend_write_routed_payload;
+        text_sink.userdata = &sink_context;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
             return 0;
         }
     }

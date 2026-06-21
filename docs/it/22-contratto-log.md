@@ -363,6 +363,21 @@ record strutturato sara' gia' il dato primario.
 Questi log descrivono il tentativo di recuperare fiducia dopo che un watch e'
 diventato `STALE`.
 
+Anche i diagnostici `WATCH_RESYNC_*` passano ora dal percorso strutturato:
+
+```text
+backend local resync
+-> alfred_record_build_watch_diagnostic(...)
+-> fill record.recovery.*
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event() oppure logger_error()
+```
+
+`WATCH_RESYNC_SCAN_FAILED` conserva il canale `error.log`; gli altri record
+`WATCH_RESYNC_*` restano diagnostici di `events.log`.
+
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |
 | `WATCH_RESYNC_BEGIN wd=N path=P reason=R` | Alfred entra nella procedura di recovery per un watch stale | da questo punto il backend sta verificando se `P` puo' tornare affidabile | non significa che il resync riuscira' |

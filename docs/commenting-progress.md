@@ -566,3 +566,13 @@ Completed in the WATCH_STALE sink integration pass:
   as backend reliability state routed through the shared sink boundary
 - documented that the backend-local bridge is transitional until the inotify
   backend context owns a first-class record sink
+
+Completed in the local resync sink integration pass:
+
+- added comments for `backend_text_sink_context_t` and
+  `backend_write_routed_payload()` in `modules/inotify/src/inotify_backend.c`
+  so the event/error routing decision remains explicit
+- updated `backend_log_resync_record()` comments to explain that
+  `WATCH_RESYNC_SCAN_FAILED` keeps the historical error-log channel while other
+  `WATCH_RESYNC_*` diagnostics use the event-log channel through the same text
+  sink boundary

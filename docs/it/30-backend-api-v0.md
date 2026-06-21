@@ -810,10 +810,11 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + sink + text
 sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` usano gia' builder diagnostico,
-sink comune e text sink. `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder
-diagnostico e formatter testuale, ma non sono ancora collegati al sink comune.
-Raw event resta sul percorso corrente.
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e `WATCH_RESYNC_*` usano gia'
+builder diagnostico, sink comune e text sink. `WATCH_RESYNC_SCAN_FAILED`
+conserva il canale error tramite un bridge di sink con routing event/error.
+`WATCH_LOST_*` usa gia' builder diagnostico e formatter testuale, ma non e'
+ancora collegato al sink comune. Raw event resta sul percorso corrente.
 
 ## Test futuri
 
