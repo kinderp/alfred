@@ -49,6 +49,29 @@ Esempi:
   produce `ALFRED_RAW_MOVED_*` e non produce `DIR_MOVED`
 - `WATCH_ADDED` descrive un nuovo watch inotify, non una directory creata
 
+Durante la migrazione a Event Model v0 il `raw.log` puo' contenere sia righe
+kernel inotify, sia righe raw Alfred normalizzate prodotte dal confine:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> logger_raw()
+```
+
+Il primo caso runtime migrato e' `RAW_CREATE`:
+
+```text
+RAW_CREATE path=/tmp/root/a.txt mask=1
+RAW_CREATE path=/tmp/root/dir mask=257
+```
+
+Queste righe non sostituiscono ancora le righe kernel `IN_CREATE`: le affiancano
+per fissare il contratto del record normalizzato. `mask=1` corrisponde a
+`ALFRED_RAW_CREATE`; `mask=257` corrisponde a
+`ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`.
+
 ## Raw log audit inotify
 
 Quando `inotify_audit_events` e' configurato, Alfred puo' chiedere al kernel

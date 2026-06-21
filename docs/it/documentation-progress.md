@@ -165,10 +165,12 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' il raw path runtime non e' ancora migrato. I diagnostici
-runtime `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/
-`WATCH_LOST_*` usano gia' record Event Model v0, sink comune e formatter
-testuale compatibile.
+Resta parziale perche' il raw path runtime e' migrato solo per `RAW_CREATE`.
+`app.c` converte `ALFRED_RAW_CREATE` con `alfred_record_from_raw()`, lo invia al
+sink comune, scrive il payload normalizzato su `raw.log` e poi passa comunque il
+raw originale ad `alfred_process()`. I diagnostici runtime
+`WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*`
+usano gia' record Event Model v0, sink comune e formatter testuale compatibile.
 
 ## Aggiornamento bootstrap agenti e milestone corrente
 

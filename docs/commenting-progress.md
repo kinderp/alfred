@@ -583,3 +583,13 @@ Completed in the lost-scope sink integration pass:
   diagnostics are described as record -> sink -> text sink output, with
   `WATCH_LOST_QUEUE_FAILED` preserving the historical error-log channel through
   the routed sink bridge
+
+Completed in the RAW_CREATE sink integration pass:
+
+- added `app/src/app.c` comments around the raw payload bridge and
+  `log_raw_create_record()` so the first normalized raw runtime migration is
+  documented as `alfred_raw_event_t` -> record -> sink -> text sink -> raw log,
+  while the original raw event still flows to `alfred_process()`
+- added a backend test header documenting the expected kernel `IN_CREATE` lines
+  and the normalized `RAW_CREATE path=... mask=...` lines asserted in
+  `tests/backend/test_raw_create_record_sink.sh`

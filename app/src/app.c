@@ -12,10 +12,14 @@
  */
 
 #include "app.h"
+#include "alfred_record_adapter.h"
+#include "alfred_record_sink.h"
+#include "alfred_record_text_sink.h"
 #include "core_logger.h"
 #include "errors.h"
 #include "inotify_backend.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +35,8 @@ static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 );
+static int log_raw_create_record(logger_t *logger,
+                                 const alfred_raw_event_t *raw);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -109,13 +115,116 @@ static void setup_signals(void)
  * ========================================================================== */
 
 /*
+ * write_raw_payload - bridge a text-sink payload to the raw application log
+ * @userdata: logger_t destination
+ * @payload: formatted Event Model v0 raw payload
+ *
+ * The text sink owns only record formatting. The application keeps ownership
+ * of raw.log routing, timestamps, levels, and file handles through logger_raw().
+ * This mirrors core_logger.c and is the first small runtime bridge for
+ * normalized raw records.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int write_raw_payload(void *userdata, const char *payload)
+{
+    logger_t *logger = userdata;
+
+    if (logger == NULL || payload == NULL) {
+        return -1;
+    }
+
+    logger_raw(logger, "%s", payload);
+    return 0;
+}
+
+/*
+ * is_raw_create_record_candidate - choose the first raw event migrated to sink
+ * @raw: borrowed raw event from the backend callback
+ *
+ * This micro-step intentionally migrates only ALFRED_RAW_CREATE. ALFRED_RAW_ISDIR
+ * is accepted as a modifier because directory creation is still the same raw
+ * CREATE fact with extra type information. Other action bits stay on the
+ * existing raw/core path until they are migrated one by one.
+ *
+ * Return: 1 when @raw should be logged through the record sink, 0 otherwise.
+ */
+static int is_raw_create_record_candidate(const alfred_raw_event_t *raw)
+{
+    const uint32_t allowed_mask = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR;
+
+    if (raw == NULL) {
+        return 0;
+    }
+
+    if ((raw->mask & ALFRED_RAW_CREATE) == 0u) {
+        return 0;
+    }
+
+    return (raw->mask & ~allowed_mask) == 0u;
+}
+
+/*
+ * log_raw_create_record - emit one raw CREATE through Event Model v0 sinks
+ * @logger: application logger that owns raw.log
+ * @raw: backend raw event to adapt
+ *
+ * The backend still delivers alfred_raw_event_t to app.c and the core still
+ * consumes that value through alfred_process(). This helper only migrates the
+ * compatibility raw log for CREATE facts to the same record -> sink -> text
+ * sink shape used by semantic and watch diagnostics. It is deliberately narrow
+ * so move cookies, overflow, modify, delete, and close-write can be validated
+ * in separate micro-steps.
+ *
+ * Return: 0 on success or when @raw is not part of this micro-step, -1 when
+ * conversion, sink setup, formatting, or logger bridging fails.
+ */
+static int log_raw_create_record(logger_t *logger,
+                                 const alfred_raw_event_t *raw)
+{
+    alfred_record_t record;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    char payload[PATH_MAX + 64u];
+
+    if (logger == NULL) {
+        return -1;
+    }
+
+    if (!is_raw_create_record_candidate(raw)) {
+        return 0;
+    }
+
+    if (alfred_record_from_raw(raw, &record) != 0) {
+        return -1;
+    }
+
+    text_sink.write = write_raw_payload;
+    text_sink.userdata = logger;
+    text_sink.buffer = payload;
+    text_sink.buffer_size = sizeof(payload);
+
+    if (alfred_record_text_sink_init(&text_sink, &sink) != 0) {
+        return -1;
+    }
+
+    if (alfred_record_sink_emit(&sink, &record) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
  * handle_backend_event - consume one backend event
  * @raw: optional raw event for the core
  * @userdata: application context supplied by app_run()
  *
  * The backend owns inotify parsing, raw conversion, and recursive watch repair.
  * The app callback remains deliberately small: it bridges "backend raw fact"
- * to "core semantic processing".
+ * to "core semantic processing". During Backend API v0 migration it also
+ * routes selected normalized raw diagnostics through record sinks before
+ * passing the original raw event to the core.
  */
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata)
@@ -124,6 +233,13 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
 
     if (app == NULL)
         return ERR_INVALID_ARG;
+
+    if (raw != NULL) {
+        if (log_raw_create_record(&app->logger, raw) != 0) {
+            logger_error(&app->logger,
+                         "failed to log raw create record");
+        }
+    }
 
     if (raw != NULL && app->core != NULL) {
         if (alfred_process(app->core, raw) != 0) {
