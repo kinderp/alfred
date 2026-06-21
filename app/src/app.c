@@ -144,10 +144,9 @@ static int write_raw_payload(void *userdata, const char *payload)
  *
  * This helper is intentionally limited to raw facts whose record payload is only
  * path + mask. ALFRED_RAW_ISDIR is accepted as a modifier because file and
- * directory create/delete/attrib/modify facts use the same action bit plus
- * optional directory type information. Move cookies, overflow, and close-write
- * stay on the existing raw/core path until they are migrated in separate
- * micro-steps.
+ * directory create/delete/attrib/modify/close-write facts use the same action
+ * bit plus optional directory type information. Move cookies and overflow stay
+ * on the existing raw/core path until they are migrated in separate micro-steps.
  *
  * Return: 1 when @raw should be logged through the record sink, 0 otherwise.
  */
@@ -157,6 +156,8 @@ static int is_raw_path_mask_record_candidate(const alfred_raw_event_t *raw)
     const uint32_t delete_mask = ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR;
     const uint32_t attrib_mask = ALFRED_RAW_ATTRIB | ALFRED_RAW_ISDIR;
     const uint32_t modify_mask = ALFRED_RAW_MODIFY | ALFRED_RAW_ISDIR;
+    const uint32_t close_write_mask =
+        ALFRED_RAW_CLOSE_WRITE | ALFRED_RAW_ISDIR;
 
     if (raw == NULL) {
         return 0;
@@ -178,6 +179,10 @@ static int is_raw_path_mask_record_candidate(const alfred_raw_event_t *raw)
         return (raw->mask & ~modify_mask) == 0u;
     }
 
+    if ((raw->mask & ALFRED_RAW_CLOSE_WRITE) != 0u) {
+        return (raw->mask & ~close_write_mask) == 0u;
+    }
+
     return 0;
 }
 
@@ -188,10 +193,10 @@ static int is_raw_path_mask_record_candidate(const alfred_raw_event_t *raw)
  *
  * The backend still delivers alfred_raw_event_t to app.c and the core still
  * consumes that value through alfred_process(). This helper migrates the
- * compatibility raw log for path+mask create/delete/attrib/modify facts to the
- * same record -> sink -> text sink shape used by semantic and watch
- * diagnostics. It stays deliberately narrow so move cookies, overflow, and
- * close-write can be validated in separate micro-steps.
+ * compatibility raw log for path+mask create/delete/attrib/modify/close-write
+ * facts to the same record -> sink -> text sink shape used by semantic and
+ * watch diagnostics. It stays deliberately narrow so move cookies and overflow
+ * can be validated in separate micro-steps.
  *
  * Return: 0 on success or when @raw is not part of this micro-step, -1 when
  * conversion, sink setup, formatting, or logger bridging fails.

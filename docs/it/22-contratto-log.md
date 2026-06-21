@@ -60,8 +60,8 @@ alfred_raw_event_t
 -> logger_raw()
 ```
 
-I primi casi runtime migrati sono `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB` e
-`RAW_MODIFY`:
+I primi casi runtime migrati sono `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`,
+`RAW_MODIFY` e `RAW_CLOSE_WRITE`:
 
 ```text
 RAW_CREATE path=/tmp/root/a.txt mask=1
@@ -70,6 +70,7 @@ RAW_DELETE path=/tmp/root/a.txt mask=2
 RAW_DELETE path=/tmp/root/dir mask=258
 RAW_ATTRIB path=/tmp/root/a.txt mask=8
 RAW_MODIFY path=/tmp/root/a.txt mask=4
+RAW_CLOSE_WRITE path=/tmp/root/a.txt mask=16
 ```
 
 Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
@@ -77,11 +78,14 @@ Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
 `RAW_ATTRIB` affianca `IN_ATTRIB`, ma non produce ancora un evento semantico.
 `RAW_MODIFY` affianca `IN_MODIFY` e continua a essere il raw fact da cui il
 core produce `FILE_MODIFIED`.
+`RAW_CLOSE_WRITE` affianca `IN_CLOSE_WRITE` e continua a essere il raw fact da
+cui il core produce `FILE_READY`.
 `mask=1` corrisponde a `ALFRED_RAW_CREATE`; `mask=257` corrisponde a
 `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`; `mask=2` corrisponde a
 `ALFRED_RAW_DELETE`; `mask=258` corrisponde a
 `ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR`; `mask=8` corrisponde a
-`ALFRED_RAW_ATTRIB`; `mask=4` corrisponde a `ALFRED_RAW_MODIFY`.
+`ALFRED_RAW_ATTRIB`; `mask=4` corrisponde a `ALFRED_RAW_MODIFY`; `mask=16`
+corrisponde a `ALFRED_RAW_CLOSE_WRITE`.
 
 ## Raw log audit inotify
 

@@ -622,3 +622,12 @@ Completed in the RAW_MODIFY sink integration pass:
   that `IN_MODIFY`/`RAW_MODIFY` is tested separately from
   `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` because modify feeds `FILE_MODIFIED` while
   close-write feeds `FILE_READY`
+
+Completed in the RAW_CLOSE_WRITE sink integration pass:
+
+- extended the raw path+mask helper comments in `app/src/app.c` so
+  create/delete/attrib/modify/close-write facts are documented as the currently
+  migrated normalized raw records
+- added `tests/backend/test_raw_close_write_record_sink.sh` with a header
+  explaining that `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` feeds `FILE_READY` and is
+  tested separately from `RAW_MODIFY`
