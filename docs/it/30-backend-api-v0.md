@@ -226,6 +226,31 @@ logger esistente. In questo modo:
 - JSONL potra' essere aggiunto dopo come secondo writer, non come sostituto del
   modello interno.
 
+Nel codice corrente questo concetto e' stato introdotto in forma minima e
+indipendente dal runtime backend:
+
+```text
+core/include/alfred_record_sink.h
+core/src/alfred_record_sink.c
+```
+
+`alfred_record_sink_t` espone una callback `emit(record)` generica e
+`alfred_record_sink_emit()` ne fa un wrapper difensivo. Il sink non possiede il
+record: riceve un `alfred_record_t` borrowed valido solo durante la chiamata.
+
+Il primo writer compatibile e':
+
+```text
+core/include/alfred_record_text_sink.h
+core/src/alfred_record_text_sink.c
+```
+
+Il text sink non dipende da `logger_t`. Riceve un buffer caller-owned, formatta
+il record con `alfred_record_format_text()` e chiama una callback
+`write(payload)`. Nel runtime questa callback potra' essere un ponte verso
+`logger_event()`; nei test e in output futuri puo' essere un collector, un file,
+un socket o altro. Questa scelta evita di portare il logger app dentro il core.
+
 ## Operazioni Backend API v0
 
 ```c
@@ -597,13 +622,18 @@ Non va anticipata nella prima implementazione.
 5. Aggiungere un text writer che produca le righe correnti da record.
    Fatto come formatter di payload in `core/include/alfred_record_text.h` e
    `core/src/alfred_record_text.c`.
-6. Migrare gradualmente il backend inotify a `emit(record)`.
+6. Introdurre un sink comune `emit(record)` e un text sink compatibile.
+   Fatto in `core/include/alfred_record_sink.h`,
+   `core/src/alfred_record_sink.c`,
+   `core/include/alfred_record_text_sink.h` e
+   `core/src/alfred_record_text_sink.c`.
+7. Migrare gradualmente il backend inotify a `emit(record)`.
    Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
    per tutta la famiglia locale `WATCH_RESYNC_*`: il runtime usa record
    diagnostici e formatter testuale, poi passa il payload a `logger_event()`.
-7. Solo dopo progettare JSONL writer.
-8. Solo dopo progettare backend statici ulteriori.
-9. Solo dopo valutare plugin dinamici.
+8. Solo dopo progettare JSONL writer.
+9. Solo dopo progettare backend statici ulteriori.
+10. Solo dopo valutare plugin dinamici.
 
 `core/include/alfred_record.h` e' volutamente un header di contratto. Non
 contiene logica runtime e non cambia ancora il comportamento di Alfred. Ogni
@@ -669,6 +699,8 @@ runtime. Per ora abbiamo costruito i pezzi che permetteranno la migrazione:
 - un builder per diagnostica watch/recovery:
   `alfred_record_build_watch_diagnostic()`
 - un formatter testuale di payload: `alfred_record_format_text()`
+- un sink generico: `alfred_record_sink_t`
+- un text sink compatibile: `alfred_record_text_sink_t`
 
 Non esiste una struttura separata chiamata `alfred_record_diagnostic_t`.
 La diagnostica usa sempre `alfred_record_t`, con:
@@ -701,6 +733,12 @@ flowchart TD
 
     TW --> TXT[text payload<br/>senza timestamp o newline]
     TXT --> LG[logger / events.log]
+
+    RR -. prossimo .-> SINK[alfred_record_sink_t<br/>emit(record)]
+    DR -. prossimo .-> SINK
+    SR -. prossimo .-> SINK
+    SINK --> TS[alfred_record_text_sink_t]
+    TS --> TW
 
     RR -. futuro .-> JSON[JSONL writer]
     DR -. futuro .-> JSON
@@ -770,8 +808,9 @@ Stato attuale: il lato output semantico del core usa gia' record + formatter
 per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
 `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder diagnostico e formatter
-testuale, ma non esiste ancora un sink comune `emit(record)`. Raw event resta
-sul percorso corrente.
+testuale. Esiste anche il sink comune `alfred_record_sink_t` e il text sink
+compatibile `alfred_record_text_sink_t`, ma non sono ancora collegati al
+runtime inotify. Raw event resta sul percorso corrente.
 
 ## Test futuri
 
@@ -783,6 +822,7 @@ Quando la API verra' implementata, servira' coprire:
 - mapping `alfred_raw_event_t -> alfred_record_t`;
 - mapping `WATCH_* -> diagnostic record`;
 - writer testuale che preserva le righe log correnti;
+- text sink che chiama un writer callback senza cambiare payload;
 - nessun cambiamento nella semantica core;
 - nessuna emissione diretta di eventi `FILE_*` / `DIR_*` dal backend.
 

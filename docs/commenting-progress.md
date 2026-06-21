@@ -527,3 +527,17 @@ Completed in the first performance benchmark pass:
   manual lost-scope recovery benchmark
 - updated Italian docs to describe `make perf-lost-scope` and the future
   performance-suite requirements for Alfred
+
+Completed in the record text sink pass:
+
+- added `core/include/alfred_record_sink.h` with comments for the generic
+  `emit(record)` callback, borrowed-record ownership, and sink handle fields
+- added `core/include/alfred_record_text_sink.h` with comments that explain the
+  compatibility text sink, caller-owned buffer, write callback, and why the
+  sink does not own `logger_t`
+- added `core/src/alfred_record_sink.c` and
+  `core/src/alfred_record_text_sink.c` with small, self-explanatory
+  implementations that keep validation at the sink boundary
+- added `tests/backend/test_record_text_sink.c` with an expected payload
+  contract and scenario comments for successful emission, invalid sink setup,
+  writer failure propagation, and truncation rejection

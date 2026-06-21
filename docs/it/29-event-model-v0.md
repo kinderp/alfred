@@ -73,8 +73,23 @@ Il codice corrente resta valido. Event Model v0 documenta la direzione:
 alfred_raw_event_t        -> adapter -> alfred_record_t
 alfred_event_t            -> adapter -> alfred_record_t
 backend diagnostic string -> builder -> alfred_record_t
-alfred_record_t           -> text writer / JSONL writer / binary writer
+alfred_record_t           -> sink -> text writer / JSONL writer / binary writer
 ```
+
+Il primo confine `sink` esiste nel codice:
+
+- `core/include/alfred_record_sink.h` definisce `alfred_record_sink_t`, cioe'
+  una callback comune `emit(record)`;
+- `core/include/alfred_record_text_sink.h` definisce un text sink compatibile
+  che formatta il record con `alfred_record_format_text()` e passa il payload a
+  una callback di scrittura;
+- `tests/backend/test_record_text_sink.c` verifica che il sink conservi il
+  payload testuale corrente e propaghi errori di configurazione, truncation e
+  fallimenti del writer.
+
+Questo non cambia ancora il runtime inotify. E' il pezzo isolato che permette
+al prossimo micro-step di sostituire ponti locali `record -> format -> logger`
+con `record -> emit(record) -> text sink`.
 
 ## Layer
 
@@ -615,11 +630,15 @@ Nel codice C questo passaggio e' iniziato con due helper:
   `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
 - `alfred_record_format_text()` formatta il payload testuale di un record,
   senza timestamp, livello log o newline
+- `alfred_record_sink_emit()` chiama un sink generico `emit(record)`
+- `alfred_record_text_sink_emit()` formatta un record e consegna il payload a
+  una callback di scrittura
 
 Il lato output semantico usa gia' questi helper: `core_logger_on_event()`
 converte `alfred_event_t` in `alfred_record_t`, formatta il payload e poi lo
 scrive con `logger_event()`. Il backend inotify non e' ancora migrato a
-`emit(record)`.
+`emit(record)`, ma il tipo di sink e il primo text sink sono disponibili e
+testati.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in
@@ -650,5 +669,5 @@ Restano da decidere:
 - tracepoint minimi per Alfred Lab.
 
 Il passo successivo e' usare [Backend API v0](30-backend-api-v0.md) come guida
-per iniziare la migrazione runtime verso `emit(record)` prima di progettare
-JSONL.
+per collegare gradualmente i ponti runtime esistenti al sink `emit(record)`
+prima di progettare JSONL.
