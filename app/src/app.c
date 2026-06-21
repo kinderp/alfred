@@ -35,8 +35,8 @@ static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 );
-static int log_raw_simple_record(logger_t *logger,
-                                 const alfred_raw_event_t *raw);
+static int log_raw_path_mask_record(logger_t *logger,
+                                    const alfred_raw_event_t *raw);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -139,21 +139,23 @@ static int write_raw_payload(void *userdata, const char *payload)
 }
 
 /*
- * is_raw_simple_record_candidate - choose raw events migrated to the sink
+ * is_raw_path_mask_record_candidate - choose raw events migrated to the sink
  * @raw: borrowed raw event from the backend callback
  *
  * This helper is intentionally limited to raw facts whose record payload is only
  * path + mask. ALFRED_RAW_ISDIR is accepted as a modifier because file and
- * directory create/delete facts use the same action bit plus optional directory
- * type information. Move cookies, overflow, modify, and close-write stay on the
- * existing raw/core path until they are migrated in separate micro-steps.
+ * directory create/delete/attrib facts use the same action bit plus optional
+ * directory type information. Move cookies, overflow, modify, and close-write
+ * stay on the existing raw/core path until they are migrated in separate
+ * micro-steps.
  *
  * Return: 1 when @raw should be logged through the record sink, 0 otherwise.
  */
-static int is_raw_simple_record_candidate(const alfred_raw_event_t *raw)
+static int is_raw_path_mask_record_candidate(const alfred_raw_event_t *raw)
 {
     const uint32_t create_mask = ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR;
     const uint32_t delete_mask = ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR;
+    const uint32_t attrib_mask = ALFRED_RAW_ATTRIB | ALFRED_RAW_ISDIR;
 
     if (raw == NULL) {
         return 0;
@@ -167,25 +169,29 @@ static int is_raw_simple_record_candidate(const alfred_raw_event_t *raw)
         return (raw->mask & ~delete_mask) == 0u;
     }
 
+    if ((raw->mask & ALFRED_RAW_ATTRIB) != 0u) {
+        return (raw->mask & ~attrib_mask) == 0u;
+    }
+
     return 0;
 }
 
 /*
- * log_raw_simple_record - emit selected raw facts through Event Model v0 sinks
+ * log_raw_path_mask_record - emit selected raw facts through Event Model v0 sinks
  * @logger: application logger that owns raw.log
  * @raw: backend raw event to adapt
  *
  * The backend still delivers alfred_raw_event_t to app.c and the core still
  * consumes that value through alfred_process(). This helper migrates the
- * compatibility raw log for simple create/delete facts to the same record ->
- * sink -> text sink shape used by semantic and watch diagnostics. It stays
- * deliberately narrow so move cookies, overflow, modify, and close-write can be
- * validated in separate micro-steps.
+ * compatibility raw log for path+mask create/delete/attrib facts to the same
+ * record -> sink -> text sink shape used by semantic and watch diagnostics. It
+ * stays deliberately narrow so move cookies, overflow, modify, and close-write
+ * can be validated in separate micro-steps.
  *
  * Return: 0 on success or when @raw is not part of this micro-step, -1 when
  * conversion, sink setup, formatting, or logger bridging fails.
  */
-static int log_raw_simple_record(logger_t *logger,
+static int log_raw_path_mask_record(logger_t *logger,
                                  const alfred_raw_event_t *raw)
 {
     alfred_record_t record;
@@ -197,7 +203,7 @@ static int log_raw_simple_record(logger_t *logger,
         return -1;
     }
 
-    if (!is_raw_simple_record_candidate(raw)) {
+    if (!is_raw_path_mask_record_candidate(raw)) {
         return 0;
     }
 
@@ -241,9 +247,9 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
         return ERR_INVALID_ARG;
 
     if (raw != NULL) {
-        if (log_raw_simple_record(&app->logger, raw) != 0) {
+        if (log_raw_path_mask_record(&app->logger, raw) != 0) {
             logger_error(&app->logger,
-                         "failed to log raw simple record");
+                         "failed to log raw path-mask record");
         }
     }
 

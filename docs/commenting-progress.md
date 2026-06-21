@@ -603,3 +603,12 @@ Completed in the RAW_DELETE sink integration pass:
 - added a backend test header documenting the expected kernel `IN_DELETE` lines
   and the normalized `RAW_DELETE path=... mask=...` lines asserted in
   `tests/backend/test_raw_delete_record_sink.sh`
+
+Completed in the RAW_ATTRIB sink integration pass:
+
+- renamed the raw runtime bridge comments in `app/src/app.c` around the
+  path+mask record helper so create/delete/attrib facts are documented as the
+  currently migrated normalized raw records
+- expanded `tests/backend/test_attrib_raw_log.sh` comments so chmod is
+  described as metadata-only raw/backend evidence, with expected `IN_ATTRIB`
+  and normalized `RAW_ATTRIB path=... mask=...` output

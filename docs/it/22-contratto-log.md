@@ -60,21 +60,24 @@ alfred_raw_event_t
 -> logger_raw()
 ```
 
-I primi casi runtime migrati sono `RAW_CREATE` e `RAW_DELETE`:
+I primi casi runtime migrati sono `RAW_CREATE`, `RAW_DELETE` e `RAW_ATTRIB`:
 
 ```text
 RAW_CREATE path=/tmp/root/a.txt mask=1
 RAW_CREATE path=/tmp/root/dir mask=257
 RAW_DELETE path=/tmp/root/a.txt mask=2
 RAW_DELETE path=/tmp/root/dir mask=258
+RAW_ATTRIB path=/tmp/root/a.txt mask=8
 ```
 
 Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
 `IN_DELETE`: le affiancano per fissare il contratto del record normalizzato.
+`RAW_ATTRIB` affianca `IN_ATTRIB`, ma non produce ancora un evento semantico.
 `mask=1` corrisponde a `ALFRED_RAW_CREATE`; `mask=257` corrisponde a
 `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`; `mask=2` corrisponde a
 `ALFRED_RAW_DELETE`; `mask=258` corrisponde a
-`ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR`.
+`ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR`; `mask=8` corrisponde a
+`ALFRED_RAW_ATTRIB`.
 
 ## Raw log audit inotify
 
