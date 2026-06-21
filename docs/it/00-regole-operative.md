@@ -43,6 +43,7 @@ writer, output strutturato e backend inotify leggere almeno:
 
 - `29-event-model-v0.md`
 - `30-backend-api-v0.md`
+- `32-writer-api-v0.md`
 - `05-modulo-inotify.md`
 - `07-flusso-eventi.md`
 - `20-matrice-eventi-inotify.md`
@@ -93,6 +94,37 @@ lavoro e alla documentazione didattica di Alfred.
 Questi principi non devono rallentare correzioni ovvie o modifiche puramente
 documentali. Servono soprattutto nei passaggi non banali: refactor, semantica
 degli eventi, test, architettura, interfacce pubbliche e strumenti di sviluppo.
+
+## Regola del percorso caldo
+
+Il percorso caldo di Alfred deve restare cortissimo:
+
+```text
+evento OS
+-> collector/backend
+-> normalizzazione minima
+-> alfred_record_t
+-> enqueue su coda/ring buffer
+```
+
+Nel percorso caldo non devono entrare writer, serializzazione costosa, file I/O,
+socket I/O, `fprintf()`, `fflush()`, lock pesanti, allocazioni non necessarie,
+dashboard, Lab, report o policy pesante.
+
+I bridge sincroni correnti verso `logger_raw()`, `logger_event()` e
+`logger_error()` sono accettati solo come passaggi temporanei di migrazione
+verso `alfred_record_t` e output compatibile. Non rappresentano
+l'architettura finale ad alte prestazioni.
+
+La regola contrattuale e':
+
+```text
+Il backend non aspetta il writer.
+```
+
+Quando una modifica introduce o tocca output, writer, sink, logger, JSONL,
+socket o formati binari, leggere anche `32-writer-api-v0.md` e verificare che
+la serializzazione resti fuori dal percorso caldo target.
 
 ## Uso di indici semantici e grafi del codice
 

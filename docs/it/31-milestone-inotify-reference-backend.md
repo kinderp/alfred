@@ -17,6 +17,7 @@ L'obiettivo e' usare `inotify` per validare l'architettura comune di Alfred:
 - record strutturati comuni;
 - adapter da eventi backend/core a record;
 - dispatcher o sink di output;
+- Writer API v0 come confine per output e serializzazioni;
 - writer testuale compatibile con i log correnti;
 - primo writer JSONL;
 - test golden e test diagnostici;
@@ -122,6 +123,9 @@ La milestone puo' considerarsi chiusa quando:
 - il backend inotify usa il confine Backend API v0 stabilito;
 - gli eventi principali passano attraverso record comuni;
 - i log testuali compatibili vengono prodotti da record, non da stringhe sparse;
+- il percorso caldo non aspetta writer, serializzazione o I/O lento;
+- la Writer API v0 e' documentata come roadmap per text, JSONL, protobuf,
+  MessagePack, socket e futuri plugin writer;
 - il writer JSONL minimo esiste ed e' testato;
 - i test core/backend/golden coprono il contratto osservabile;
 - i limiti di inotify sono documentati;
@@ -137,11 +141,12 @@ Per lavorare su questa milestone leggere almeno:
 2. [Guida alla lettura della documentazione](27-guida-lettura-documentazione.md)
 3. [Event Model v0](29-event-model-v0.md)
 4. [Backend API v0](30-backend-api-v0.md)
-5. [Modulo inotify](05-modulo-inotify.md)
-6. [Flusso eventi](07-flusso-eventi.md)
-7. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
-8. [Contratto dei log](22-contratto-log.md)
-9. [Stato funzionalita' supportate](26-stato-funzionalita.md)
+5. [Writer API v0](32-writer-api-v0.md)
+6. [Modulo inotify](05-modulo-inotify.md)
+7. [Flusso eventi](07-flusso-eventi.md)
+8. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
+9. [Contratto dei log](22-contratto-log.md)
+10. [Stato funzionalita' supportate](26-stato-funzionalita.md)
 
 La [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md) va letta per
 capire la direzione, ma non autorizza da sola a implementare policy, blocco o

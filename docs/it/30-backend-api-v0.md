@@ -13,6 +13,7 @@ La decisione principale e':
 Backend API v0 produce record compatibili con Event Model v0.
 I backend restano linkati staticamente nella prima fase.
 I plugin dinamici .so sono rimandati a una fase successiva.
+I backend non aspettano writer o I/O lento nel percorso caldo target.
 ```
 
 ## Perche' serve
@@ -84,6 +85,10 @@ Questa tabella e' una checklist architetturale. Ogni volta che una modifica
 sembra comoda ma attraversa una colonna "Non deve fare", bisogna fermarsi e
 discutere se serve un ponte temporaneo documentato o una diversa divisione del
 codice.
+
+Per la parte output leggere anche [Writer API v0](32-writer-api-v0.md). Backend
+API v0 definisce come i backend producono record; Writer API v0 definisce come
+quei record vengono serializzati o trasportati fuori dal percorso caldo.
 
 ## Architettura a livelli
 
@@ -204,6 +209,50 @@ Regole:
 - il backend non decide quale writer ricevera' il record;
 - l'app dispatcher decide se inviare il record al core, al log testuale, a JSONL
   o ad altri consumer.
+
+## Percorso caldo e I/O
+
+Il percorso caldo target non e':
+
+```text
+backend
+-> writer JSONL/text/protobuf/socket
+-> I/O
+```
+
+Il percorso caldo target e':
+
+```text
+evento OS
+-> backend
+-> normalizzazione minima
+-> alfred_record_t
+-> enqueue su coda/ring buffer
+```
+
+Tutto il resto deve stare fuori dal percorso caldo:
+
+- formatter testuale;
+- JSONL;
+- protobuf;
+- MessagePack;
+- socket TCP o Unix socket;
+- file flush;
+- dashboard e Alfred Lab;
+- report;
+- policy pesante;
+- plugin writer lenti.
+
+I bridge sincroni correnti verso `logger_raw()`, `logger_event()` e
+`logger_error()` sono ponti di migrazione per conservare compatibilita' e test
+mentre spostiamo il contratto su `alfred_record_t`. Non sono il disegno finale
+ad alte prestazioni.
+
+La regola architetturale da mantenere e':
+
+```text
+Il backend non aspetta il writer.
+```
 
 Questa scelta sostituisce progressivamente due confini correnti:
 
@@ -639,9 +688,11 @@ Non va anticipata nella prima implementazione.
    converte con `alfred_record_from_raw()`, lo emette al sink comune e scrive
    il payload compatibile su `raw.log`, poi consegna comunque il raw originale
    ad `alfred_process()`.
-8. Solo dopo progettare JSONL writer.
-9. Solo dopo progettare backend statici ulteriori.
-10. Solo dopo valutare plugin dinamici.
+8. Progettare Writer API v0, coda/ring buffer e backpressure.
+   Specifica documentale in [Writer API v0](32-writer-api-v0.md).
+9. Solo dopo implementare JSONL come writer, non come API primaria.
+10. Solo dopo progettare backend statici ulteriori.
+11. Solo dopo valutare plugin dinamici backend o writer.
 
 `core/include/alfred_record.h` e' volutamente un header di contratto. Non
 contiene logica runtime e non cambia ancora il comportamento di Alfred. Ogni

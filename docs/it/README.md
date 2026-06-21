@@ -36,7 +36,8 @@ piu' dettaglio.
 27. [Event Model v0](29-event-model-v0.md)
 28. [Backend API v0](30-backend-api-v0.md)
 29. [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
-30. [Glossario](glossario.md)
+30. [Writer API v0](32-writer-api-v0.md)
+31. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

@@ -48,6 +48,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `29-event-model-v0.md` |
 | Parziale | `30-backend-api-v0.md` |
 | Completo | `31-milestone-inotify-reference-backend.md` |
+| Parziale | `32-writer-api-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -173,6 +174,27 @@ li invia al sink comune, scrive il payload normalizzato su `raw.log` e poi
 passa comunque il raw originale ad `alfred_process()`. I diagnostici runtime
 `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*`
 usano gia' record Event Model v0, sink comune e formatter testuale compatibile.
+
+## Aggiornamento Writer API v0
+
+`32-writer-api-v0.md` definisce la proposta documentale della Writer API v0. Il
+documento chiarisce che text, JSONL, protobuf, MessagePack, socket, Unix socket
+e futuri formati binari sono writer/serializzazioni di `alfred_record_t`, non
+il contratto interno primario. La regola architetturale centrale e' che il
+percorso caldo deve restare:
+
+```text
+evento OS
+-> collector/backend
+-> normalizzazione minima
+-> alfred_record_t
+-> enqueue su coda/ring buffer
+```
+
+Writer, serializzazione, I/O, flush, dashboard, Lab, report e policy pesante
+devono stare fuori dal percorso caldo. Il documento marca i bridge sincroni
+correnti verso i logger come passaggi temporanei di migrazione, non come
+architettura finale ad alte prestazioni.
 
 ## Aggiornamento bootstrap agenti e milestone corrente
 

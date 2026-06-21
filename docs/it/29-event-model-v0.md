@@ -43,6 +43,7 @@ Rimandi principali:
 - [Stato funzionalita' supportate](26-stato-funzionalita.md)
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+- [Writer API v0](32-writer-api-v0.md)
 - [Backend API v0](30-backend-api-v0.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 
@@ -73,7 +74,7 @@ Il codice corrente resta valido. Event Model v0 documenta la direzione:
 alfred_raw_event_t        -> adapter -> alfred_record_t
 alfred_event_t            -> adapter -> alfred_record_t
 backend diagnostic string -> builder -> alfred_record_t
-alfred_record_t           -> sink -> text writer / JSONL writer / binary writer
+alfred_record_t           -> sink -> writer API -> text / JSONL / binary
 ```
 
 Il primo confine `sink` esiste nel codice:

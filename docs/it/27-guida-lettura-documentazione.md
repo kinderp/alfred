@@ -217,7 +217,10 @@ minimo e poi scegliere i documenti pertinenti al task.
    strutturati.
 7. [Backend API v0](30-backend-api-v0.md)
    va letto se il task tocca backend, lifecycle, capabilities, target o sink.
-8. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+8. [Writer API v0](32-writer-api-v0.md)
+   va letto se il task tocca writer, JSONL, protobuf, MessagePack, socket,
+   output strutturato, logger o percorso caldo.
+9. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    e' visione futura: va usata per orientare le scelte, non come autorizzazione
    automatica a implementare Agent Guard completo.
 
@@ -256,9 +259,10 @@ queste domande:
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
-| Output strutturato futuro | [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
-| Performance | [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
+| Output strutturato futuro | [32](32-writer-api-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
+| Performance | [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |
 | Regex nei test shell | [10](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell) |
 | Scanner filesystem | [21](21-roadmap-scanner-resync.md) |
