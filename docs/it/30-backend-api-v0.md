@@ -61,6 +61,30 @@ Un backend non deve:
 - usare stringhe testuali come contratto primario;
 - obbligare il core a conoscere `wd`, file descriptor, handle o API kernel.
 
+## Responsabilita' dei moduli
+
+La regola piu' importante della Backend API v0 non e' solo "quale funzione
+chiamare", ma "dove puo' vivere una responsabilita'". Senza questo confine,
+Alfred rischia di diventare un insieme di scorciatoie: backend che decidono
+semantica, writer che interpretano eventi, core che conosce dettagli kernel o
+JSONL usato come API interna.
+
+| Modulo | Puo' fare | Non deve fare |
+| --- | --- | --- |
+| Backend | leggere eventi OS, gestire stato sorgente, preservare dettagli nativi, emettere record ammessi | decidere semantica finale, generare JSONL, applicare policy Agent Guard |
+| Adapter | convertire strutture esistenti in `alfred_record_t`, mappare campi senza perdere evidenza | interpretare comportamenti complessi o modificare il significato degli eventi |
+| Core | correlare raw event, produrre semantica stabile, restare backend-agnostic | scrivere output specifici o dipendere da `wd`, `mask`, file descriptor o API kernel |
+| Dispatcher/sink | ricevere record e indirizzarli ai consumer configurati | cambiare il significato del record o nascondere errori di emissione |
+| Writer testuale | serializzare record in payload leggibile compatibile con i log correnti | decidere policy, ricostruire dati facendo parsing di stringhe o possedere stato backend |
+| Writer JSONL/binario | serializzare record strutturati per integrazioni e performance | diventare il modello dati primario o sostituire `alfred_record_t` |
+| Policy/security futuro | decidere allow, warn, approval, would-block, block | vivere dentro backend, adapter o writer |
+| Lab/tooling | osservare record, visualizzare pipeline, aiutare debug e didattica | diventare dipendenza necessaria del core runtime |
+
+Questa tabella e' una checklist architetturale. Ogni volta che una modifica
+sembra comoda ma attraversa una colonna "Non deve fare", bisogna fermarsi e
+discutere se serve un ponte temporaneo documentato o una diversa divisione del
+codice.
+
 ## Architettura a livelli
 
 ```text
@@ -190,6 +214,17 @@ con un confine unico:
 ```text
 emit(const alfred_record_t *record)
 ```
+
+Il prossimo micro-step tecnico e' introdurre questo sink comune senza cambiare
+ancora il comportamento osservabile. Il primo sink puo' essere un writer
+testuale compatibile che chiama `alfred_record_format_text()` e poi usa il
+logger esistente. In questo modo:
+
+- i log restano uguali;
+- i test correnti possono continuare a confrontare lo stesso testo;
+- il backend non sceglie piu' direttamente il dispositivo di output;
+- JSONL potra' essere aggiunto dopo come secondo writer, non come sostituto del
+  modello interno.
 
 ## Operazioni Backend API v0
 
@@ -675,6 +710,32 @@ flowchart TD
     DR -. futuro .-> BIN
     SR -. futuro .-> BIN
 ```
+
+Schema del prossimo confine `emit(record)`:
+
+```mermaid
+flowchart LR
+    B[Backend inotify<br/>diagnostic/raw records] --> E[emit(record)]
+    C[Core semantic path<br/>semantic records] --> E
+    E --> D[app dispatcher<br/>or record sink]
+    D --> T[text writer<br/>compatibile]
+    D -. futuro .-> J[JSONL writer]
+    D -. futuro .-> P[policy/security<br/>pipeline]
+    D -. futuro .-> X[binary/socket<br/>writer]
+
+    T --> L[logger corrente<br/>events.log/raw.log]
+    J -.-> JL[records.jsonl]
+    X -.-> S[socket o file<br/>binario]
+```
+
+Lettura del diagramma:
+
+1. backend e core producono entrambi `alfred_record_t`;
+2. `emit(record)` e' il confine comune;
+3. l'app dispatcher o record sink decide quali writer ricevono il record;
+4. il text writer conserva il comportamento visibile corrente;
+5. JSONL, policy e output binari restano consumer successivi dello stesso
+   record, non sorgenti alternative del modello.
 
 Lettura passo per passo:
 

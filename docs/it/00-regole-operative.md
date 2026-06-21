@@ -17,6 +17,10 @@ altro momento, leggere questo file prima di continuare.
   quella spiegazione anche negli `.md` o nei commenti del codice.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
+- Una modifica non banale deve lasciare una traccia di orientamento: aggiornare
+  almeno uno tra documentazione architetturale, contratto API, scenario/test,
+  diagramma, ADR o checklist di review. Se non aggiorna nulla, chiedersi se la
+  modifica sta aggiungendo complessita' non tracciata.
 
 ## Bootstrap di una nuova sessione agente
 
@@ -81,6 +85,10 @@ lavoro e alla documentazione didattica di Alfred.
   - compatibilita' storica rimasta solo nella documentazione
 - Se una modifica serve solo a ridurre complessita' interna, documentare perche'
   non cambia la semantica osservabile.
+- Prima di chiudere un blocco di 5-7 commit o prima di aprire una PR importante,
+  fare una review architetturale: controllare responsabilita' cambiate, nuove
+  dipendenze, API toccate, rischio sul path caldo, test golden necessari e
+  documentazione da riallineare.
 
 Questi principi non devono rallentare correzioni ovvie o modifiche puramente
 documentali. Servono soprattutto nei passaggi non banali: refactor, semantica

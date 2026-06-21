@@ -186,6 +186,73 @@ prestazioni. JSONL non dovrebbe pero' nascere prima del modello eventi.
 
 Priorita' consigliata: media-alta, dopo Event Model v0.
 
+### ADR e review architetturale periodica
+
+Stato: da introdurre con cautela.
+
+Documenti collegati:
+
+- [Regole operative](00-regole-operative.md)
+- [Backend API v0](30-backend-api-v0.md)
+- [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
+
+Motivo: Alfred sta crescendo su piu' assi contemporaneamente: backend, adapter,
+record, formatter, writer, resync, JSONL, plugin e Agent Guard futuro. Le
+decisioni strutturali non devono restare solo nella memoria della chat o nei
+commit. Per le scelte che cambiano il confine del progetto conviene introdurre
+ADR brevi in `docs/adr/`.
+
+Primi ADR candidati:
+
+- Event Model v0 come contratto interno;
+- Backend API v0 basata su record;
+- JSONL come writer, non come API primaria;
+- inotify come backend di riferimento, non come confine finale del prodotto.
+
+La review architetturale periodica non deve diventare burocrazia. Va fatta
+prima di PR importanti o dopo un gruppo di commit che tocca piu' moduli. Le
+domande minime sono: quali responsabilita' sono cambiate, quali API sono state
+toccate, quali dipendenze nuove sono apparse, quali test golden servono e se un
+modulo sta facendo troppo.
+
+Priorita' consigliata: media-alta. Va introdotta prima che JSONL, dispatcher e
+plugin aumentino ancora il numero di confini da controllare.
+
+### Golden test JSONL e scenari leggibili
+
+Stato: futuro prossimo.
+
+Documenti collegati:
+
+- [Scenari di test](14-scenari-test.md)
+- [Contratto dei log](22-contratto-log.md)
+- [Event Model v0](29-event-model-v0.md)
+
+Motivo: i test attuali documentano bene il contratto testuale e diversi file di
+test includono gia' un blocco `Expected log contract`. Quando arrivera' il
+writer JSONL, lo stesso approccio dovra' diventare golden test strutturato:
+scenario, comandi shell, output JSONL atteso e README breve che spiega il
+significato del caso.
+
+Priorita' consigliata: alta appena esiste il primo writer JSONL.
+
+### Tag architetturali nel codice
+
+Stato: idea futura da usare con moderazione.
+
+Documenti collegati:
+
+- [Stile dei commenti](../commenting-style.md)
+- [Regole operative](00-regole-operative.md)
+
+Motivo: tag cercabili come `ALFRED_CONTRACT`, `ALFRED_HOT_PATH`,
+`ALFRED_ADAPTER` o `ALFRED_DIAGNOSTIC` possono aiutare a trovare rapidamente
+confini critici nel codice. Non vanno pero' usati come decorazione. Hanno senso
+solo dove chiariscono un vincolo reale: hot path senza allocazioni, confine
+backend/core, adapter puro, diagnostica non pubblica o TODO prima del freeze API.
+
+Priorita' consigliata: bassa ora, utile durante il freeze di Backend API v0.
+
 ### Performance suite
 
 Stato: rimandata.

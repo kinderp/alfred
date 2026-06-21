@@ -186,3 +186,17 @@ La regola architetturale da conservare e':
 inotify deve validare il contratto di Alfred,
 non definire il confine finale del prodotto.
 ```
+
+## Aggiornamento controllo complessita' architetturale
+
+Le regole operative ora esplicitano che una modifica non banale deve aggiornare
+almeno uno tra documentazione architetturale, contratto API, scenario/test,
+diagramma, ADR o checklist di review. `30-backend-api-v0.md` contiene una
+tabella `modulo -> puo' fare -> non deve fare` per backend, adapter, core,
+dispatcher/sink, writer, policy futura e Lab/tooling. Lo stesso documento
+contiene anche il diagramma del prossimo confine `emit(record)`, che prepara il
+passaggio tecnico successivo senza anticipare JSONL.
+
+`28-audit-documentazione-e-debiti.md` registra come debiti dichiarati gli ADR
+brevi, la review architetturale periodica, i golden test JSONL e i tag
+architetturali cercabili nel codice.
