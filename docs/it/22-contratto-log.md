@@ -389,6 +389,25 @@ backend local resync
 | `WATCH_RESYNC_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante il resync | la riparazione completa non e' riuscita | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
 | `WATCH_RESYNC_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato; indica cleanup interno del tentativo di resync |
 | `WATCH_RESYNC_FAILED wd=N path=P reason=R error=E` | recovery interrotta o non affidabile | il watch resta `STALE`; `E` spiega il ramo fallito | non e' evento utente; e' diagnostica backend |
+
+I diagnostici `WATCH_LOST_*` usano lo stesso confine strutturato dei
+diagnostici watch/resync:
+
+```text
+lost-scope recovery
+-> alfred_record_build_watch_diagnostic(...)
+-> fill record.recovery.*
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event() oppure logger_error()
+```
+
+`WATCH_LOST_QUEUE_FAILED` conserva il canale `error.log`; gli altri record
+`WATCH_LOST_*` restano diagnostici di `events.log`.
+
+| Log | Quando appare | Significato | Cosa non significa |
+| --- | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |
 | `WATCH_LOST_QUEUE_SKIPPED wd=N path=P reason=R error=E` | Alfred vorrebbe accodare uno scope perso ma manca un dato necessario | la recovery ampia non parte per quello scope; `E` spiega il motivo, per esempio `missing-identity` | non significa che la directory sia stata cancellata; indica che manca la prova necessaria per cercarla |
 | `WATCH_LOST_QUEUE_FAILED wd=N path=P reason=R error=E` | l'inserimento nella queue lost-scope fallisce | Alfred non ha registrato lavoro di recovery posticipata per quello scope | non e' evento utente; e' un errore tecnico del backend |

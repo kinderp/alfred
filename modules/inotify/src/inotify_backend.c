@@ -3977,10 +3977,10 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
  * @delay_ms: retry delay in milliseconds, or 0 when not applicable
  *
  * This is the lost-scope counterpart of backend_log_resync_record(). It builds
- * an Event Model v0 record, fills the recovery payload, formats the historical
- * text line, and falls back to the same text shape if record formatting fails.
- * The helper is introduced before all call sites are migrated so each later
- * replacement can stay small and behavior-neutral.
+ * an Event Model v0 record, fills the recovery payload, emits the record
+ * through the text sink, and falls back to the same text shape if the sink path
+ * fails. WATCH_LOST_QUEUE_FAILED keeps the historical error-log channel through
+ * the same routed sink callback used by local resync failures.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -4005,6 +4005,9 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
                                          uint64_t delay_ms)
 {
     alfred_record_t record;
+    backend_text_sink_context_t sink_context;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
     char payload[PATH_MAX + 160u];
     const char *safe_path = path != NULL ? path : "";
     const char *safe_old_path = old_path != NULL ? old_path : "";
@@ -4041,11 +4044,16 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
         record.recovery.watches_count = watches_count;
         record.recovery.delay_ms = delay_ms;
 
-        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-            if (type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED)
-                logger_error(ctx->logger, "%s", payload);
-            else
-                logger_event(ctx->logger, "%s", payload);
+        sink_context.logger = ctx->logger;
+        sink_context.use_error_channel =
+            type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED;
+        text_sink.write = backend_write_routed_payload;
+        text_sink.userdata = &sink_context;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
             return 0;
         }
     }

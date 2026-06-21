@@ -576,3 +576,10 @@ Completed in the local resync sink integration pass:
   `WATCH_RESYNC_SCAN_FAILED` keeps the historical error-log channel while other
   `WATCH_RESYNC_*` diagnostics use the event-log channel through the same text
   sink boundary
+
+Completed in the lost-scope sink integration pass:
+
+- updated `backend_log_lost_scope_record()` comments so `WATCH_LOST_*`
+  diagnostics are described as record -> sink -> text sink output, with
+  `WATCH_LOST_QUEUE_FAILED` preserving the historical error-log channel through
+  the routed sink bridge

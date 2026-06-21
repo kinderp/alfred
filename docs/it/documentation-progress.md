@@ -154,8 +154,9 @@ ponte `record -> emit(record) -> payload callback` e sono ora usati dal percorso
 semantico ufficiale `core_logger_on_event()`. Non sono ancora collegati al
 runtime inotify per tutti i diagnostici, ma `WATCH_ADDED`, `WATCH_REMOVED` e
 `WATCH_STALE` passano gia' dal sink comune. Anche i record della famiglia locale
-`WATCH_RESYNC_*` passano ora dal sink comune; `WATCH_RESYNC_SCAN_FAILED`
-conserva il canale error tramite un bridge event/error. Il documento
+`WATCH_RESYNC_*` e i diagnostici lost-scope `WATCH_LOST_*` passano ora dal sink
+comune; `WATCH_RESYNC_SCAN_FAILED` e `WATCH_LOST_QUEUE_FAILED` conservano il
+canale error tramite un bridge event/error. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
 Model v0 per errori OS ora distingue `error`, `os_error_code`,
 `os_error_name` e `os_error_message`, e la struttura C `alfred_record_t`
@@ -164,10 +165,10 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' il raw path runtime non e' ancora migrato e solo
-`WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*` usano il sink
-comune nel backend. I diagnostici runtime `WATCH_LOST_*` usano pero' gia'
-record Event Model v0 e formatter testuale compatibile.
+Resta parziale perche' il raw path runtime non e' ancora migrato. I diagnostici
+runtime `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/
+`WATCH_LOST_*` usano gia' record Event Model v0, sink comune e formatter
+testuale compatibile.
 
 ## Aggiornamento bootstrap agenti e milestone corrente
 

@@ -631,9 +631,9 @@ Non va anticipata nella prima implementazione.
    `core/include/alfred_record_text_sink.h` e
    `core/src/alfred_record_text_sink.c`.
 7. Migrare gradualmente il backend inotify a `emit(record)`.
-   Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
-   per tutta la famiglia locale `WATCH_RESYNC_*`: il runtime usa record
-   diagnostici e formatter testuale, poi passa il payload a `logger_event()`.
+   Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
+   per tutta la famiglia locale `WATCH_RESYNC_*` e per i diagnostici
+   `WATCH_LOST_*`: il runtime usa record diagnostici, sink comune e text sink.
 8. Solo dopo progettare JSONL writer.
 9. Solo dopo progettare backend statici ulteriori.
 10. Solo dopo valutare plugin dinamici.
@@ -658,12 +658,11 @@ L'adapter `alfred_record_from_raw()` produce record
 Il builder `alfred_record_build_watch_diagnostic()` produce record
 `diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
 gia' presenti in `alfred_record_type_t`. I primi usi runtime sono
-`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
-`WATCH_RESYNC_*`: `watch_manager_add()`, `watch_manager_remove()`, gli handler
-`_SELF`/`IN_UNMOUNT` e il resync locale costruiscono il record, lo formattano
-come payload testuale e lo passano al logger esistente. Anche i `WATCH_LOST_*`
-runtime usano lo stesso schema: il backend costruisce record diagnostici,
-riempie il payload recovery e poi produce il payload testuale compatibile.
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, la famiglia locale
+`WATCH_RESYNC_*` e i diagnostici `WATCH_LOST_*`: il backend costruisce record
+diagnostici, riempie gli eventuali campi recovery, passa il record al sink
+comune e il text sink produce il payload testuale compatibile per il logger
+esistente.
 
 Nel backend inotify esiste ora un helper locale,
 `backend_log_watch_diagnostic_record()`, che centralizza il ponte provvisorio:
@@ -677,13 +676,14 @@ campi diagnostici runtime
 
 Questo helper non e' la Backend API pubblica e non sostituisce `emit(record)`.
 Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
-Per ora e' usato dai percorsi `WATCH_STALE`, `WATCH_RESYNC_FAILED` e dai record
+Per ora e' usato dai percorsi `WATCH_STALE`, `WATCH_RESYNC_FAILED`, dai record
 di dettaglio del resync locale (`WATCH_RESYNC_SCAN_*`,
-`WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_ROLLBACK`). I `WATCH_RESYNC_FAILED`
-che aggiungono anche `errno=N (...)` passano dallo stesso ponte strutturato: il
-runtime chiama `alfred_record_build_watch_diagnostic_with_os_error()`, il record
-conserva `record.os_error.code` e `record.os_error.message`, e il formatter
-testuale li rende nella forma compatibile `errno=N` o `errno=N (messaggio)`.
+`WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_ROLLBACK`) e dai diagnostici
+lost-scope `WATCH_LOST_*`. I `WATCH_RESYNC_FAILED` che aggiungono anche
+`errno=N (...)` passano dallo stesso ponte strutturato: il runtime chiama
+`alfred_record_build_watch_diagnostic_with_os_error()`, il record conserva
+`record.os_error.code` e `record.os_error.message`, e il formatter testuale li
+rende nella forma compatibile `errno=N` o `errno=N (messaggio)`.
 `record.os_error.name` resta opzionale e puo' essere `NULL`.
 
 Il formatter `alfred_record_format_text()` produce solo il payload testuale del
@@ -810,11 +810,11 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + sink + text
 sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e `WATCH_RESYNC_*` usano gia'
-builder diagnostico, sink comune e text sink. `WATCH_RESYNC_SCAN_FAILED`
-conserva il canale error tramite un bridge di sink con routing event/error.
-`WATCH_LOST_*` usa gia' builder diagnostico e formatter testuale, ma non e'
-ancora collegato al sink comune. Raw event resta sul percorso corrente.
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_RESYNC_*` e
+`WATCH_LOST_*` usano gia' builder diagnostico, sink comune e text sink.
+`WATCH_RESYNC_SCAN_FAILED` e `WATCH_LOST_QUEUE_FAILED` conservano il canale
+error tramite un bridge di sink con routing event/error. Raw event resta sul
+percorso corrente.
 
 ## Test futuri
 
