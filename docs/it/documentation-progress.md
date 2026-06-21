@@ -194,7 +194,11 @@ evento OS
 Writer, serializzazione, I/O, flush, dashboard, Lab, report e policy pesante
 devono stare fuori dal percorso caldo. Il documento marca i bridge sincroni
 correnti verso i logger come passaggi temporanei di migrazione, non come
-architettura finale ad alte prestazioni.
+architettura finale ad alte prestazioni. Il documento ora include anche la
+roadmap per coda/ring buffer, possibile coda per sink, classi sink
+`critical`/`best-effort`/`debug`, profili operativi, no-op benchmark, plugin
+statici plugin-like e rinvio dei plugin `.so` o out-of-process a fasi
+successive.
 
 ## Aggiornamento bootstrap agenti e milestone corrente
 
