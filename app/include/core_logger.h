@@ -30,8 +30,8 @@ typedef struct {
  * @ev: semantic event emitted by the core
  * @userdata: core_logger_context_t pointer supplied when the core is created
  *
- * Converts @ev to an Event Model v0 record, formats the record as the same
- * plain-text payload used by the existing event log, and writes it through the
+ * Converts @ev to an Event Model v0 record, emits it through the compatibility
+ * text sink, and writes the resulting plain-text payload through the
  * application logger. The callback does not take ownership of @ev or of the
  * path strings inside it; those values are valid only for the duration of the
  * callback.

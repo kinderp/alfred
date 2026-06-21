@@ -787,7 +787,8 @@ Lettura passo per passo:
    con layer `diagnostic`. La category distingue diagnostica di watch da
    diagnostica di recovery.
 4. Il core continua a emettere `alfred_event_t`, ma `core_logger_on_event()`
-   ora lo converte con `alfred_record_from_event()` prima di formattare il
+   ora lo converte con `alfred_record_from_event()`, lo invia al sink generico
+   con `alfred_record_sink_emit()` e lascia al text sink la formattazione del
    payload testuale.
 5. `alfred_record_format_text()` prende un record e produce solo la parte
    testuale leggibile, per esempio:
@@ -804,13 +805,13 @@ Lettura passo per passo:
    MessagePack, protobuf o socket binaria. Il punto chiave e' non fare parsing
    del testo per ottenere dati strutturati.
 
-Stato attuale: il lato output semantico del core usa gia' record + formatter
-per produrre lo stesso payload testuale di prima. Nel backend inotify,
+Stato attuale: il lato output semantico del core usa gia' record + sink + text
+sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
 `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder diagnostico e formatter
 testuale. Esiste anche il sink comune `alfred_record_sink_t` e il text sink
-compatibile `alfred_record_text_sink_t`, ma non sono ancora collegati al
-runtime inotify. Raw event resta sul percorso corrente.
+compatibile `alfred_record_text_sink_t`, ma non sono ancora collegati al runtime
+inotify. Raw event resta sul percorso corrente.
 
 ## Test futuri
 

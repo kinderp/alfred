@@ -169,7 +169,12 @@ Questi file stanno in `app/` perche' non appartengono al core puro. Sono un
 adattatore applicativo:
 
 ```text
-alfred_event_t -> alfred_record_t -> payload testuale -> logger_event()
+alfred_event_t
+-> alfred_record_t
+-> alfred_record_sink_t
+-> alfred_record_text_sink_t
+-> payload testuale
+-> logger_event()
 ```
 
 La funzione principale e':
@@ -179,8 +184,10 @@ void core_logger_on_event(const alfred_event_t *ev, void *userdata);
 ```
 
 Quando il core emette un evento, questa callback lo converte in
-`alfred_record_t` con `alfred_record_from_event()`, formatta il payload con
-`alfred_record_format_text()` e lo scrive nel log degli eventi.
+`alfred_record_t` con `alfred_record_from_event()`, lo passa al sink generico
+con `alfred_record_sink_emit()`, il text sink lo formatta con
+`alfred_record_format_text()` e una piccola callback applicativa scrive il
+payload nel log degli eventi.
 
 Dentro la callback succede questo:
 
@@ -224,6 +231,8 @@ Oggi:
 alfred_event_t
 -> core_logger_on_event
 -> alfred_record_from_event()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event()
 -> events.log
@@ -255,6 +264,8 @@ sequenceDiagram
     Core->>Core: correlation/debounce
     Core->>Callback: alfred_event_t
     Callback->>Callback: alfred_record_from_event()
+    Callback->>Callback: alfred_record_sink_emit()
+    Callback->>Callback: alfred_record_text_sink_emit()
     Callback->>Callback: alfred_record_format_text()
     Callback->>Logger: logger_event()
 ```

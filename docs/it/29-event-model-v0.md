@@ -634,11 +634,12 @@ Nel codice C questo passaggio e' iniziato con due helper:
 - `alfred_record_text_sink_emit()` formatta un record e consegna il payload a
   una callback di scrittura
 
-Il lato output semantico usa gia' questi helper: `core_logger_on_event()`
-converte `alfred_event_t` in `alfred_record_t`, formatta il payload e poi lo
-scrive con `logger_event()`. Il backend inotify non e' ancora migrato a
-`emit(record)`, ma il tipo di sink e il primo text sink sono disponibili e
-testati.
+Il lato output semantico usa gia' il sink: `core_logger_on_event()` converte
+`alfred_event_t` in `alfred_record_t`, chiama `alfred_record_sink_emit()`,
+attraversa `alfred_record_text_sink_emit()` e solo alla fine scrive il payload
+con `logger_event()`. Il backend inotify non e' ancora migrato a `emit(record)`,
+ma il tipo di sink e il primo text sink sono disponibili, testati e usati nel
+percorso semantico ufficiale.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in

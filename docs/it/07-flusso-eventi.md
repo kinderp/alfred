@@ -69,7 +69,10 @@ flowchart TD
     D --> E[app callback]
     E --> F[alfred_process]
     F --> G[core_logger_on_event]
-    G --> H[logger_event plain output]
+    G --> H[alfred_record_from_event]
+    H --> I2[alfred_record_sink_emit]
+    I2 --> L[alfred_record_text_sink_emit]
+    L --> M[logger_event plain output]
     B --> I{IN_CREATE IN_ISDIR?}
     I -->|si| J[backend recursive discovery]
     J --> K[WATCH_ADDED / synthetic raw]

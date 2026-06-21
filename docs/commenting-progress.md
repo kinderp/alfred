@@ -541,3 +541,11 @@ Completed in the record text sink pass:
 - added `tests/backend/test_record_text_sink.c` with an expected payload
   contract and scenario comments for successful emission, invalid sink setup,
   writer failure propagation, and truncation rejection
+
+Completed in the core logger sink integration pass:
+
+- updated `app/src/core_logger.c` comments to explain the application-local
+  `write_event_payload()` bridge from text-sink payloads to `logger_event()`
+- updated `app/include/core_logger.h` so the callback contract describes the
+  current `alfred_event_t -> alfred_record_t -> text sink -> logger_event()`
+  path instead of direct formatter use

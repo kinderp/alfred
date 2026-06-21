@@ -150,8 +150,9 @@ anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
 record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
 payload testuale da record. Il primo sink comune `alfred_record_sink_t` e il
 text sink compatibile `alfred_record_text_sink_t` sono stati aggiunti come
-ponte isolato `record -> emit(record) -> payload callback`; non sono ancora
-collegati al runtime inotify. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la
+ponte `record -> emit(record) -> payload callback` e sono ora usati dal percorso
+semantico ufficiale `core_logger_on_event()`. Non sono ancora collegati al
+runtime inotify. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la
 famiglia locale `WATCH_RESYNC_*` sono i primi log diagnostici backend che il
 runtime costruisce come record e formatta poi come testo compatibile. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
