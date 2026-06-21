@@ -126,12 +126,15 @@ WATCH_STALE testuale legacy
 ```
 
 Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED` e
-`WATCH_REMOVED`; `WATCH_STALE` e' il primo diagnostico migrato con
-`reason=...`:
+`WATCH_REMOVED` attraverso il sink comune; `WATCH_STALE` e' il primo
+diagnostico migrato con `reason=...`, ma usa ancora il ponte locale
+formatter/logger:
 
 ```text
 watch_manager_add() / watch_manager_remove()
 -> alfred_record_build_watch_diagnostic(WATCH_ADDED | WATCH_REMOVED)
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event("WATCH_ADDED wd=N path=P")
 -> logger_event("WATCH_REMOVED wd=N path=P")
@@ -142,11 +145,11 @@ backend_handle_move_self/delete_self/unmount()
 -> logger_event("WATCH_STALE wd=N path=P reason=R")
 ```
 
-Non e' ancora la Backend API completa, perche' `watch_manager_add()` non chiama
-un sink generico `emit(record)`, `watch_manager_remove()` segue ancora lo
-stesso confine locale e `inotify_backend.c` scrive ancora sul logger esistente.
-Pero' il dato diagnostico non nasce piu' solo come stringa: nasce come
-`alfred_record_t` e solo dopo viene formattato nel payload testuale
+Non e' ancora la Backend API completa, perche' `inotify_backend.c` scrive ancora
+molti diagnostici sul logger esistente e il raw path runtime resta basato su
+`alfred_raw_event_t`. Pero' il dato diagnostico non nasce piu' solo come
+stringa: nasce come `alfred_record_t` e, per `WATCH_ADDED`/`WATCH_REMOVED`,
+attraversa gia' il confine `emit(record)` prima del payload testuale
 compatibile.
 
 ## Tipi concettuali
@@ -807,11 +810,10 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + sink + text
 sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la famiglia locale
-`WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder diagnostico e formatter
-testuale. Esiste anche il sink comune `alfred_record_sink_t` e il text sink
-compatibile `alfred_record_text_sink_t`, ma non sono ancora collegati al runtime
-inotify. Raw event resta sul percorso corrente.
+`WATCH_ADDED` e `WATCH_REMOVED` usano gia' builder diagnostico, sink comune e
+text sink. `WATCH_STALE`, `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder
+diagnostico e formatter testuale, ma non sono ancora collegati al sink comune.
+Raw event resta sul percorso corrente.
 
 ## Test futuri
 

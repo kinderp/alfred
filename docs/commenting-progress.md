@@ -549,3 +549,12 @@ Completed in the core logger sink integration pass:
 - updated `app/include/core_logger.h` so the callback contract describes the
   current `alfred_event_t -> alfred_record_t -> text sink -> logger_event()`
   path instead of direct formatter use
+
+Completed in the watch manager sink integration pass:
+
+- updated `modules/inotify/src/watch_manager.c` comments so
+  `WATCH_ADDED`/`WATCH_REMOVED` are described as the first backend diagnostics
+  routed through `alfred_record_sink_t` and `alfred_record_text_sink_t`
+- added a local bridge comment explaining why the watch manager still adapts
+  text-sink payloads to `logger_event()` until the wider backend context owns a
+  sink directly

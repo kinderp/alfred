@@ -152,7 +152,8 @@ payload testuale da record. Il primo sink comune `alfred_record_sink_t` e il
 text sink compatibile `alfred_record_text_sink_t` sono stati aggiunti come
 ponte `record -> emit(record) -> payload callback` e sono ora usati dal percorso
 semantico ufficiale `core_logger_on_event()`. Non sono ancora collegati al
-runtime inotify. `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e la
+runtime inotify per tutti i diagnostici, ma `WATCH_ADDED` e `WATCH_REMOVED`
+passano gia' dal sink comune nel watch manager. `WATCH_STALE` e la
 famiglia locale `WATCH_RESYNC_*` sono i primi log diagnostici backend che il
 runtime costruisce come record e formatta poi come testo compatibile. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
@@ -163,10 +164,10 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' il raw path runtime non e' ancora migrato: il tipo di
-sink esiste, ma il backend non lo usa ancora come confine operativo. I
-diagnostici runtime `WATCH_RESYNC_*` e `WATCH_LOST_*` usano pero' gia' record
-Event Model v0 e formatter testuale compatibile.
+Resta parziale perche' il raw path runtime non e' ancora migrato e solo
+`WATCH_ADDED`/`WATCH_REMOVED` usano il sink comune nel backend. I diagnostici
+runtime `WATCH_STALE`, `WATCH_RESYNC_*` e `WATCH_LOST_*` usano pero' gia'
+record Event Model v0 e formatter testuale compatibile.
 
 ## Aggiornamento bootstrap agenti e milestone corrente
 

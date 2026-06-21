@@ -419,6 +419,23 @@ watch_manager_add_recursive()
     -> watch_manager_add() per ogni FS_SCAN_DIR
 ```
 
+Ogni `watch_manager_add()` riuscito produce il diagnostico backend
+`WATCH_ADDED`. Ogni `watch_manager_remove()` produce `WATCH_REMOVED`. Questi due
+diagnostici sono ora il primo punto backend che attraversa il confine
+`record -> emit(record) -> text sink -> logger_event()`:
+
+```text
+watch_manager_add() / watch_manager_remove()
+    -> alfred_record_build_watch_diagnostic()
+    -> alfred_record_sink_emit()
+    -> alfred_record_text_sink_emit()
+    -> logger_event()
+```
+
+Il payload resta identico a prima, per esempio `WATCH_ADDED wd=N path=P`, ma il
+dato nasce come `alfred_record_t` e passa gia' dal sink comune. Questo non rende
+`WATCH_ADDED` un evento semantico: resta diagnostica sullo stato del backend.
+
 Questo percorso non genera raw sintetici perche' le directory esistono gia'
 prima dell'avvio del polling.
 
