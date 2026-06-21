@@ -324,10 +324,8 @@ passato come root non deve produrre `WATCH_ADDED`; deve fallire con diagnostica
 di errore backend, come verificato da `test_onlydir_rejects_file_root.sh`.
 
 Dal primo passo di Backend API v0, `WATCH_ADDED`, `WATCH_REMOVED` e
-`WATCH_STALE` nascono come record diagnostici strutturati. La differenza
-corrente e' che `WATCH_ADDED` e `WATCH_REMOVED` attraversano gia' il sink
-comune `emit(record)`, mentre `WATCH_STALE` usa ancora il ponte locale
-`record -> formatter -> logger`.
+`WATCH_STALE` nascono come record diagnostici strutturati e attraversano gia' il
+sink comune `emit(record)` prima di essere scritti come testo compatibile.
 
 ```text
 watch_manager_add() / watch_manager_remove()
@@ -339,6 +337,8 @@ watch_manager_add() / watch_manager_remove()
 
 backend_handle_move_self/delete_self/unmount()
 -> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event()
 ```

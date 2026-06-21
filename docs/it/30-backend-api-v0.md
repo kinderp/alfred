@@ -125,10 +125,8 @@ WATCH_STALE testuale legacy
 -> writer testuale / JSONL / Lab
 ```
 
-Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED` e
-`WATCH_REMOVED` attraverso il sink comune; `WATCH_STALE` e' il primo
-diagnostico migrato con `reason=...`, ma usa ancora il ponte locale
-formatter/logger:
+Il primo passo runtime e' gia' stato applicato a `WATCH_ADDED`,
+`WATCH_REMOVED` e `WATCH_STALE` attraverso il sink comune:
 
 ```text
 watch_manager_add() / watch_manager_remove()
@@ -141,6 +139,8 @@ watch_manager_add() / watch_manager_remove()
 
 backend_handle_move_self/delete_self/unmount()
 -> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event("WATCH_STALE wd=N path=P reason=R")
 ```
@@ -148,9 +148,9 @@ backend_handle_move_self/delete_self/unmount()
 Non e' ancora la Backend API completa, perche' `inotify_backend.c` scrive ancora
 molti diagnostici sul logger esistente e il raw path runtime resta basato su
 `alfred_raw_event_t`. Pero' il dato diagnostico non nasce piu' solo come
-stringa: nasce come `alfred_record_t` e, per `WATCH_ADDED`/`WATCH_REMOVED`,
-attraversa gia' il confine `emit(record)` prima del payload testuale
-compatibile.
+stringa: nasce come `alfred_record_t` e, per
+`WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`, attraversa gia' il confine
+`emit(record)` prima del payload testuale compatibile.
 
 ## Tipi concettuali
 
@@ -810,8 +810,8 @@ Lettura passo per passo:
 
 Stato attuale: il lato output semantico del core usa gia' record + sink + text
 sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
-`WATCH_ADDED` e `WATCH_REMOVED` usano gia' builder diagnostico, sink comune e
-text sink. `WATCH_STALE`, `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder
+`WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` usano gia' builder diagnostico,
+sink comune e text sink. `WATCH_RESYNC_*` e `WATCH_LOST_*` usano gia' builder
 diagnostico e formatter testuale, ma non sono ancora collegati al sink comune.
 Raw event resta sul percorso corrente.
 

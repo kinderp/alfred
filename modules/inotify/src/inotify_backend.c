@@ -14,7 +14,9 @@
 #include "inotify_backend.h"
 
 #include "alfred_record_diagnostic.h"
+#include "alfred_record_sink.h"
 #include "alfred_record_text.h"
+#include "alfred_record_text_sink.h"
 #include "errors.h"
 #include "fs_scanner.h"
 #include "inotify_adapter.h"
@@ -176,6 +178,30 @@ typedef struct backend_lost_scope_scan_context {
 } backend_lost_scope_scan_context_t;
 
 /*
+ * backend_write_event_payload - bridge text-sink payloads to logger_event
+ * @userdata: logger_t destination
+ * @payload: formatted diagnostic payload
+ *
+ * The text sink is intentionally logger-agnostic. Until the inotify backend
+ * context owns a first-class record sink, this adapter keeps logger ownership
+ * at the backend boundary while allowing selected diagnostics to flow through
+ * emit(record).
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int backend_write_event_payload(void *userdata, const char *payload)
+{
+    logger_t *logger = userdata;
+
+    if (logger == NULL || payload == NULL) {
+        return -1;
+    }
+
+    logger_event(logger, "%s", payload);
+    return 0;
+}
+
+/*
  * backend_log_watch_diagnostic_record - emit one WATCH_* diagnostic record
  * @ctx: narrowed backend context used by the poll path
  * @type: WATCH_* diagnostic type to build
@@ -213,6 +239,8 @@ static int backend_log_watch_diagnostic_record(
     const char *fallback_name)
 {
     alfred_record_t record;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
     char payload[PATH_MAX + 96u];
 
     if (ctx == NULL || ctx->logger == NULL)
@@ -229,10 +257,23 @@ static int backend_log_watch_diagnostic_record(
             os_error_code,
             os_error_name,
             os_error_message,
-            &record) == 0 &&
-        alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-        logger_event(ctx->logger, "%s", payload);
-        return 0;
+            &record) == 0) {
+        if (type == ALFRED_RECORD_TYPE_WATCH_STALE) {
+            text_sink.write = backend_write_event_payload;
+            text_sink.userdata = ctx->logger;
+            text_sink.buffer = payload;
+            text_sink.buffer_size = sizeof(payload);
+
+            if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+                alfred_record_sink_emit(&sink, &record) == 0) {
+                return 0;
+            }
+        }
+
+        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+            logger_event(ctx->logger, "%s", payload);
+            return 0;
+        }
     }
 
     if (fallback_name == NULL)
@@ -302,7 +343,8 @@ static int backend_log_watch_diagnostic_record(
  *
  * WATCH_STALE is backend watch-table reliability state, not a semantic
  * filesystem event. The helper keeps that decision local while delegating the
- * shared record/formatter/fallback work to backend_log_watch_diagnostic_record().
+ * shared record/sink/formatter/fallback work to
+ * backend_log_watch_diagnostic_record().
  */
 static void backend_log_watch_stale(inotify_backend_context_t *ctx,
                                     int wd,

@@ -558,3 +558,11 @@ Completed in the watch manager sink integration pass:
 - added a local bridge comment explaining why the watch manager still adapts
   text-sink payloads to `logger_event()` until the wider backend context owns a
   sink directly
+
+Completed in the WATCH_STALE sink integration pass:
+
+- updated `modules/inotify/src/inotify_backend.c` comments around the backend
+  text-sink bridge and `backend_log_watch_stale()` so WATCH_STALE is described
+  as backend reliability state routed through the shared sink boundary
+- documented that the backend-local bridge is transitional until the inotify
+  backend context owns a first-class record sink
