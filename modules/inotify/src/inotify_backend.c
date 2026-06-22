@@ -48,6 +48,14 @@
 #define BACKEND_MAYBE_UNUSED
 #endif
 
+/*
+ * Diagnostic records may render more than one path-like field, for example
+ * old_path/new_path in lost-scope recovery. Keep the compatibility text-sink
+ * buffer large enough for two maximum-size paths plus stable field labels so
+ * valid long paths do not silently bypass the record/sink bridge.
+ */
+#define BACKEND_RECORD_TEXT_BUFFER_SIZE ((PATH_MAX * 2u) + 512u)
+
 /* ============================================================================
  * Local Types
  * ========================================================================== */
@@ -287,7 +295,7 @@ static int backend_log_watch_diagnostic_record(
     alfred_record_t record;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
-    char payload[PATH_MAX + 96u];
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
 
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
@@ -3823,7 +3831,7 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
     backend_text_sink_context_t sink_context;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
-    char payload[PATH_MAX + 128u];
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
     const char *safe_path = path != NULL ? path : "";
 
     if (ctx == NULL || ctx->logger == NULL || reason == NULL)
@@ -4008,7 +4016,7 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
     backend_text_sink_context_t sink_context;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
-    char payload[PATH_MAX + 160u];
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
     const char *safe_path = path != NULL ? path : "";
     const char *safe_old_path = old_path != NULL ? old_path : "";
     const char *safe_new_path = new_path != NULL ? new_path : "";
