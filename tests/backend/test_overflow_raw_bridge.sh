@@ -12,6 +12,7 @@ cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
     ../../app/src/logger.c \
     ../../app/src/utils.c \
     ../../core/src/alfred_correlator.c \
+    ../../core/src/alfred_record_adapter.c \
     ../../core/src/alfred_record_diagnostic.c \
     ../../core/src/alfred_record_sink.c \
     ../../core/src/alfred_record_text.c \

@@ -166,14 +166,14 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-Resta parziale perche' il raw path runtime e' migrato per `RAW_CREATE`,
-`RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
-`RAW_MOVED_FROM` e `RAW_MOVED_TO`, ma non ancora per `RAW_OVERFLOW`. `app.c`
-converte `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_ATTRIB`,
-`ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM` e
-`ALFRED_RAW_MOVED_TO` con `alfred_record_from_raw()`, li invia al sink comune,
-scrive il payload normalizzato su `raw.log` e poi passa comunque il raw
-originale ad `alfred_process()`. I diagnostici runtime
+Il raw runtime bridge e' ora completo per i raw principali di questo branch:
+`RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
+`RAW_MOVED_FROM`, `RAW_MOVED_TO` e `RAW_OVERFLOW`. `app.c` converte
+`ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_ATTRIB`,
+`ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`,
+`ALFRED_RAW_MOVED_TO` e `ALFRED_RAW_OVERFLOW` con `alfred_record_from_raw()`,
+li invia al sink comune, scrive il payload normalizzato su `raw.log` e poi
+passa comunque il raw originale ad `alfred_process()`. I diagnostici runtime
 `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*`
 usano gia' record Event Model v0, sink comune e formatter testuale compatibile.
 

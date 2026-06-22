@@ -689,6 +689,36 @@ static void test_normalized_raw_move_payload(void)
     assert(strcmp(text, expected) == 0);
 }
 
+/*
+ * test_normalized_raw_overflow_payload - document the global raw overflow text
+ *
+ * IN_Q_OVERFLOW is not tied to a watched path. The raw event keeps an empty
+ * path and exposes the ALFRED_RAW_OVERFLOW mask so downstream code can treat
+ * the stream as incomplete without inventing a path-specific filesystem fact.
+ */
+static void test_normalized_raw_overflow_payload(void)
+{
+    alfred_raw_event_t raw;
+    alfred_record_t record;
+    char expected[128];
+    char text[128];
+
+    memset(&raw, 0, sizeof(raw));
+    raw.ts_ns = 42u;
+    raw.source = ALFRED_SRC_INOTIFY;
+    raw.mask = ALFRED_RAW_OVERFLOW;
+    raw.path = "";
+
+    assert(alfred_record_from_raw(&raw, &record) == 0);
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+
+    snprintf(expected,
+             sizeof(expected),
+             "RAW_OVERFLOW path= mask=%u",
+             raw.mask);
+    assert(strcmp(text, expected) == 0);
+}
+
 static void test_invalid_or_truncated_output_fails(void)
 {
     alfred_record_t record;
@@ -719,6 +749,7 @@ int main(void)
     test_diagnostic_lost_scope_payload();
     test_normalized_raw_payload();
     test_normalized_raw_move_payload();
+    test_normalized_raw_overflow_payload();
     test_invalid_or_truncated_output_fails();
 
     return 0;

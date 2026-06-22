@@ -146,7 +146,8 @@ static int write_raw_payload(void *userdata, const char *payload)
  * as a modifier because file and directory facts use the same action bit plus
  * optional directory type information. MOVED_FROM and MOVED_TO also carry the
  * backend move cookie, but they remain normalized raw facts: the core still
- * performs semantic move/rename correlation later.
+ * performs semantic move/rename correlation later. OVERFLOW is accepted as a
+ * global raw fact with no path ownership and no directory modifier.
  *
  * Return: 1 when @raw should be logged through the record sink, 0 otherwise.
  */
@@ -195,6 +196,10 @@ static int is_raw_record_sink_candidate(const alfred_raw_event_t *raw)
         return (raw->mask & ~moved_to_mask) == 0u;
     }
 
+    if ((raw->mask & ALFRED_RAW_OVERFLOW) != 0u) {
+        return raw->mask == ALFRED_RAW_OVERFLOW;
+    }
+
     return 0;
 }
 
@@ -206,8 +211,7 @@ static int is_raw_record_sink_candidate(const alfred_raw_event_t *raw)
  * The backend still delivers alfred_raw_event_t to app.c and the core still
  * consumes that value through alfred_process(). This helper migrates the
  * compatibility raw log for selected normalized raw facts to the same record ->
- * sink -> text sink shape used by semantic and watch diagnostics. It stays
- * deliberately narrow so overflow can be validated in a separate micro-step.
+ * sink -> text sink shape used by semantic and watch diagnostics.
  *
  * Return: 0 on success or when @raw is not part of this micro-step, -1 when
  * conversion, sink setup, formatting, or logger bridging fails.
