@@ -377,6 +377,57 @@ Metriche da raccogliere:
 Il benchmark piu' importante e' il no-op sink: misura il costo del cuore di
 Alfred senza I/O. Solo dopo ha senso confrontare text, JSONL e formati binari.
 
+## Ownership e record accodati
+
+La Writer API v0 non puo' assumere che un `alfred_record_t` borrowed resti
+valido dopo la chiamata che lo ha prodotto. Nel runtime corrente questo e'
+accettabile perche' i bridge sono sincroni e immediati. Nel modello target,
+invece, il record entra in una coda e viene letto piu' tardi da un dispatcher o
+da un worker del writer.
+
+Regola:
+
+```text
+Ogni record che supera il confine della coda deve essere owned oppure deve
+puntare a memoria con lifetime esplicitamente garantito dal runtime.
+```
+
+Per v0 la soluzione piu' chiara e' una copia owned prima dell'enqueue. Anche se
+ha un costo, elimina ambiguita' su stringhe borrowed come path, messaggi di
+errore, nome backend, futuro `agent_session_id`, workspace, command line o
+policy rule. Ottimizzazioni come pool, arena, string table o buffer reference
+counted dovranno arrivare dopo benchmark e non prima del contratto.
+
+## Code per sink
+
+Il primo dispatcher potra' usare una coda comune, ma l'architettura deve
+restare compatibile con una coda per sink:
+
+```text
+record queue
+-> dispatcher
+-> text queue
+-> jsonl queue
+-> msgpack queue
+-> lab queue
+```
+
+Il motivo e' semplice: un writer lento non deve rallentare tutto Alfred. Un
+writer JSONL con disco lento, un socket bloccato o una UI di debug non devono
+fermare il backend che osserva eventi OS.
+
+Le classi di sink previste sono:
+
+| Classe | Uso | Policy possibile |
+| --- | --- | --- |
+| critical | ledger/audit che non deve perdere eventi senza segnalarlo | errore serio, backpressure o shutdown controllato |
+| best-effort | integrazioni utili ma non essenziali | drop controllato con contatore/diagnostica |
+| debug | output umano, Lab, trace verbose | disabilitabile o campionabile |
+
+Questa classificazione non deve vivere nascosta dentro un writer. Deve essere
+visibile nella configurazione o nel registry, cosi' i test e i benchmark
+possono verificare cosa succede quando un sink e' lento.
+
 ## Regola contrattuale
 
 La regola da non violare e':

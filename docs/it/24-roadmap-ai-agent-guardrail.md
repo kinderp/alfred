@@ -99,6 +99,27 @@ Questo concetto non va implementato dentro il backend inotify. Deve restare un
 campo o un contesto di livello superiore, cosi' anche backend futuri come eBPF,
 fanotify, ETW o Endpoint Security possono contribuire alla stessa sessione.
 
+La tassonomia di prodotto a cui tendere e':
+
+```text
+human user
+-> AI agent
+-> tool call o comando shell
+-> process tree
+-> system action
+-> policy decision
+```
+
+Questo cambia il significato dei record futuri. Non basta dire che `python` ha
+letto un file sensibile. Alfred dovra' poter dire che una specifica sessione
+agente, avviata da un utente su un workspace, tramite un certo processo figlio,
+ha tentato un'azione fuori scope e che la policy l'ha osservata, segnalata,
+bloccata o avrebbe dovuto bloccarla.
+
+La fonte di verita' resta il sistema operativo. Prompt, task e intento
+dichiarato servono come contesto, ma Alfred non deve fidarsi ciecamente
+dell'agente.
+
 ### Agent Action Ledger
 
 Un obiettivo pratico di Alfred e' produrre un ledger delle azioni osservate.

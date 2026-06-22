@@ -303,6 +303,104 @@ il record con `alfred_record_format_text()` e chiama una callback
 `logger_event()`; nei test e in output futuri puo' essere un collector, un file,
 un socket o altro. Questa scelta evita di portare il logger app dentro il core.
 
+## Decisioni critiche prima di stabilizzare `emit(record)`
+
+Prima di considerare stabile il contratto Backend API v0, queste decisioni
+devono essere esplicite. Alcune sono gia' implementate in forma transitoria,
+altre sono ancora contratto documentale.
+
+### 1. Ownership memoria
+
+Il backend puo' costruire un `alfred_record_t` leggero con stringhe borrowed
+solo se il record viene consumato subito. Appena `emit(record)` inserira' il
+record in una coda o lo consegnera' a un dispatcher thread, il runtime dovra'
+creare una copia owned.
+
+Regola:
+
+```text
+Il record accodato non puo' dipendere da stack frame, buffer temporanei o
+memoria riusabile del backend.
+```
+
+La forma C precisa e' rimandata: potra' essere un tipo
+`alfred_owned_record_t` o una coppia di funzioni
+`alfred_record_clone_owned()` / `alfred_record_destroy_owned()`.
+
+### 2. Dispatcher e coda
+
+`emit(record)` non deve significare "scrivi log". Deve significare "consegna un
+fatto strutturato al runtime Alfred". Il runtime decidera' poi se inviare quel
+record al core, al writer testuale, al writer JSONL, a un writer binario, ad
+Alfred Lab o a un livello policy futuro.
+
+Schema target:
+
+```text
+backend/adapter -> alfred_record_t -> emit(record) -> queue -> dispatcher
+```
+
+I bridge sincroni attuali sono accettati solo come migrazione controllata.
+
+### 3. Drop, backpressure e record di perdita
+
+Quando esiste una coda, puo' riempirsi. Quando esistono writer, possono essere
+lenti. Alfred non deve perdere eventi in silenzio.
+
+Categorie diagnostiche da prevedere:
+
+| Caso | Significato |
+| --- | --- |
+| queue overflow | il runtime non riesce ad accodare tutti i record |
+| sink drop | un writer best-effort scarta record |
+| backend overflow | la sorgente OS segnala perdita, per esempio inotify `IN_Q_OVERFLOW` |
+| sink disabled | un writer viene disattivato per errore o lentezza |
+| dispatcher backpressure | il dispatcher non consuma abbastanza velocemente |
+
+La policy concreta puo' cambiare per sink critici, best-effort e debug, ma la
+perdita deve diventare osservabile tramite record diagnostico o contatore
+esposto.
+
+### 4. Writer lifecycle e registry statico
+
+I writer dovranno essere plugin-like, ma inizialmente statici. Il backend non
+deve chiamare `jsonl_writer_write()`, `fprintf()`, `fflush()` o `socket_send()`
+nel percorso caldo. Il dispatcher inviera' record a writer registrati.
+
+Il lifecycle minimo di un writer e':
+
+```text
+init/open -> write o write_batch -> flush -> close -> destroy
+```
+
+La API dettagliata e' descritta in [Writer API v0](32-writer-api-v0.md).
+
+### 5. Backend lifecycle e capabilities
+
+Il core non deve assumere che ogni backend sappia fare le stesse cose. Inotify
+puo' osservare eventi filesystem e cookie di move, ma non identifica
+nativamente l'agente e non blocca accessi. Fanotify potra' supportare alcune
+forme di enforcement filesystem. eBPF potra' contribuire con processo, rete e
+syscall.
+
+Per questo ogni backend deve dichiarare capabilities invece di lasciare che il
+core deduca il comportamento dal nome del backend.
+
+### 6. Contesto futuro agente/processo/policy
+
+Backend API v0 resta system-event-first, ma non deve impedire Agent Guard. Il
+record potra' essere arricchito in futuro con `agent_session_id`, workspace,
+process tree, decisione policy e sensitivity. Questi campi non sono
+responsabilita' del backend inotify se il backend non ha fonti affidabili.
+
+Regola:
+
+```text
+Il backend osserva fatti OS.
+Un livello superiore collega quei fatti ad agente, processo, workspace e
+policy.
+```
+
 ## Operazioni Backend API v0
 
 ```c

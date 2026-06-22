@@ -200,6 +200,23 @@ roadmap per coda/ring buffer, possibile coda per sink, classi sink
 statici plugin-like e rinvio dei plugin `.so` o out-of-process a fasi
 successive.
 
+Aggiornamento successivo: `29-event-model-v0.md`, `30-backend-api-v0.md`,
+`32-writer-api-v0.md` e `24-roadmap-ai-agent-guardrail.md` ora esplicitano i
+primi punti critici da chiudere prima di stabilizzare il confine
+`emit(record)`:
+
+- ownership memoria fra record borrowed e record owned accodabile;
+- dispatcher/coda come confine fra hot path e writer;
+- drop, backpressure e record diagnostici di perdita;
+- lifecycle writer e registry statico plugin-like;
+- lifecycle/capabilities dei backend;
+- contesto futuro agente/processo/workspace/policy senza implementare ancora
+  Agent Guard.
+
+Queste sezioni sono contratto architetturale, non stato runtime completo. Il
+codice usa ancora bridge sincroni compatibili verso i logger mentre migriamo
+gradualmente i raw log e i diagnostici verso record e sink.
+
 ## Aggiornamento bootstrap agenti e milestone corrente
 
 Sono stati aggiunti:

@@ -172,6 +172,39 @@ Ogni record v0 dovrebbe poter avere questi campi comuni.
 `seq` non e' semantica filesystem. Serve per debug, confronto stream e output
 verbose. Cambiare `seq` non cambia il significato di create, move o rename.
 
+## Ownership dei campi
+
+Nel codice C corrente molti campi del record sono `const char *`. Questa scelta
+descrive un record leggero e facile da costruire dagli adapter esistenti: il
+record punta a stringhe gia' possedute dal raw event, dall'evento semantico o
+dal codice che costruisce una diagnostica.
+
+Questo modello e' corretto solo finche' il record viene consumato subito nello
+stesso stack di chiamate. Non e' sufficiente quando il record attraversa una
+coda, un ring buffer, un dispatcher thread o un writer asincrono.
+
+La regola contrattuale per Event Model v0 e':
+
+```text
+Un record accodato deve possedere tutta la memoria necessaria per essere letto
+in seguito senza dipendere dallo stack del backend, da buffer temporanei o da
+strutture riusate dal producer.
+```
+
+Per questo distinguiamo due concetti:
+
+| Concetto | Uso | Ownership |
+| --- | --- | --- |
+| `alfred_record_t` | vista logica del record, usata da adapter e formatter | puo' contenere stringhe borrowed |
+| record owned futuro | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
+
+Il nome C definitivo del record owned e' rimandato. Le opzioni naturali sono un
+tipo dedicato, per esempio `alfred_owned_record_t`, oppure funzioni di clone e
+destroy come `alfred_record_clone_owned()` e `alfred_record_destroy_owned()`.
+Per v0 la priorita' non e' ottimizzare subito, ma evitare ambiguita': prima
+dell'enqueue il record deve diventare sicuro. Pool, arena, string table e
+strategie zero-copy potranno arrivare dopo benchmark reali.
+
 ## Campi filesystem
 
 I record legati al filesystem possono usare questi campi.
@@ -267,25 +300,61 @@ o `errno=N (message)`. Il runtime inotify usa gia' questo percorso per i
 `os_error.message`, mentre `os_error.name` resta opzionale e puo' essere `NULL`
 quando Alfred non dispone di un mapping simbolico affidabile.
 
-## Campi security futuri
+## Campi agent/security futuri
 
 Alfred ha come obiettivo piu' ampio la runtime security per agenti AI. Event
 Model v0 non implementa ancora guardrail, ma riserva campi opzionali per non
 nascere incompatibile con quel percorso.
 
+Il modello futuro deve poter descrivere questa catena:
+
+```text
+human user -> agent session -> process tree -> system action -> policy decision
+```
+
+Il backend inotify non deve conoscere l'agente. Il backend osserva fatti del
+sistema operativo. Un livello superiore potra' correlare quei fatti con una
+sessione agente, un workspace, un albero di processi e una policy.
+
 | Campo | Uso futuro |
 | --- | --- |
+| `human_user` | utente umano che ha avviato o autorizzato la sessione |
+| `agent_session_id` | sessione agente osservata da Alfred |
+| `agent_name` | runtime agente, per esempio `codex` o altro tool |
+| `task_id` | identificatore del task dichiarato |
+| `declared_intent` | sintesi dell'intento dichiarato dall'agente o dall'utente |
+| `workspace` | directory o scope operativo autorizzato |
+| `allowed_scope` | confine applicabile dalla policy |
 | `actor` | soggetto che ha agito o a cui viene attribuita l'azione |
 | `actor_type` | `process`, `user`, `agent`, `tool`, `service` |
-| `session_id` | sessione agente o sessione runtime |
+| `session_id` | sessione runtime generica quando non e' ancora una agent session |
 | `prompt_context_id` | contesto prompt collegato all'azione |
 | `tool_call_id` | tool call o comando agente |
+| `process_tree_root` | radice dell'albero processi attribuito alla sessione |
+| `subject_pid` | processo che ha prodotto l'azione osservata |
+| `subject_exe` | eseguibile del processo, quando noto |
+| `object_resource` | risorsa toccata, per esempio path o endpoint rete |
 | `policy_id` | policy che ha valutato il record |
-| `decision` | `observe`, `allow`, `warn`, `block` |
+| `policy_rule_id` | regola specifica che ha prodotto la decisione |
+| `decision` | `observed`, `allowed`, `would_block`, `requires_approval`, `blocked` |
+| `sensitivity` | `normal`, `secret`, `system`, `network`, `persistence` |
 | `risk_score` | punteggio numerico o categorico |
 | `explanation` | spiegazione sintetica della decisione |
 
-Regola: questi campi sono opzionali e non bloccano il filesystem v0.
+Regole:
+
+- questi campi sono opzionali e non bloccano il filesystem v0;
+- il backend non deve produrli se non ha una fonte affidabile;
+- il writer non deve interpretarli;
+- un livello policy/security futuro potra' aggiungerli o arricchirli;
+- l'intento dichiarato dall'agente e' contesto utile, ma l'evento osservato dal
+  sistema operativo resta la fonte di verita'.
+
+Esempio concettuale: un agente puo' dichiarare di voler correggere un bug nel
+logger, ma Alfred deve poter registrare separatamente che un processo della
+stessa sessione ha tentato di leggere `~/.ssh/config`. Il confronto fra intento
+e azione reale appartiene al livello security/policy futuro, non al backend e
+non al writer.
 
 ## Diagramma dei record implementati oggi
 
