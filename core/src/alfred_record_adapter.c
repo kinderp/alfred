@@ -10,36 +10,64 @@
  * raw_mask_to_record_type - choose the normalized raw record type
  * @mask: ALFRED_RAW_* bitmask from alfred_raw_event_t
  *
- * The order is intentional. MOVED_FROM, MOVED_TO, and OVERFLOW identify
- * distinct raw facts that should not be collapsed into create/delete/modify
- * semantics. Directory information stays in raw_mask through ALFRED_RAW_ISDIR.
+ * A normalized raw record describes exactly one backend action. ALFRED_RAW_ISDIR
+ * is only a qualifier and may travel with the primary action bit, but two
+ * primary action bits in the same record would make the record contract
+ * ambiguous. The app layer already filters raw masks before logging; this
+ * adapter repeats the validation because alfred_record_from_raw() is a reusable
+ * boundary for tests and future backend producers.
  *
  * Return: ALFRED_RECORD_TYPE_RAW_* on supported input, UNKNOWN otherwise.
  */
 static alfred_record_type_t raw_mask_to_record_type(uint32_t mask)
 {
-    if ((mask & ALFRED_RAW_MOVED_FROM) != 0u) {
+    const uint32_t primary_mask =
+        ALFRED_RAW_CREATE |
+        ALFRED_RAW_DELETE |
+        ALFRED_RAW_MODIFY |
+        ALFRED_RAW_CLOSE_WRITE |
+        ALFRED_RAW_ATTRIB |
+        ALFRED_RAW_MOVED_FROM |
+        ALFRED_RAW_MOVED_TO |
+        ALFRED_RAW_OVERFLOW;
+    const uint32_t allowed_qualifiers = ALFRED_RAW_ISDIR;
+    const uint32_t action = mask & primary_mask;
+    const uint32_t qualifiers = mask & ~primary_mask;
+
+    if (action == 0u || (action & (action - 1u)) != 0u) {
+        return ALFRED_RECORD_TYPE_UNKNOWN;
+    }
+
+    if ((qualifiers & ~allowed_qualifiers) != 0u) {
+        return ALFRED_RECORD_TYPE_UNKNOWN;
+    }
+
+    if (action == ALFRED_RAW_OVERFLOW && qualifiers != 0u) {
+        return ALFRED_RECORD_TYPE_UNKNOWN;
+    }
+
+    if (action == ALFRED_RAW_MOVED_FROM) {
         return ALFRED_RECORD_TYPE_RAW_MOVED_FROM;
     }
-    if ((mask & ALFRED_RAW_MOVED_TO) != 0u) {
+    if (action == ALFRED_RAW_MOVED_TO) {
         return ALFRED_RECORD_TYPE_RAW_MOVED_TO;
     }
-    if ((mask & ALFRED_RAW_OVERFLOW) != 0u) {
+    if (action == ALFRED_RAW_OVERFLOW) {
         return ALFRED_RECORD_TYPE_RAW_OVERFLOW;
     }
-    if ((mask & ALFRED_RAW_CLOSE_WRITE) != 0u) {
+    if (action == ALFRED_RAW_CLOSE_WRITE) {
         return ALFRED_RECORD_TYPE_RAW_CLOSE_WRITE;
     }
-    if ((mask & ALFRED_RAW_ATTRIB) != 0u) {
+    if (action == ALFRED_RAW_ATTRIB) {
         return ALFRED_RECORD_TYPE_RAW_ATTRIB;
     }
-    if ((mask & ALFRED_RAW_MODIFY) != 0u) {
+    if (action == ALFRED_RAW_MODIFY) {
         return ALFRED_RECORD_TYPE_RAW_MODIFY;
     }
-    if ((mask & ALFRED_RAW_CREATE) != 0u) {
+    if (action == ALFRED_RAW_CREATE) {
         return ALFRED_RECORD_TYPE_RAW_CREATE;
     }
-    if ((mask & ALFRED_RAW_DELETE) != 0u) {
+    if (action == ALFRED_RAW_DELETE) {
         return ALFRED_RECORD_TYPE_RAW_DELETE;
     }
 

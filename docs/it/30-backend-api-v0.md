@@ -1001,6 +1001,11 @@ Lettura passo per passo:
 2. `alfred_record_from_raw()` prende quel raw event e produce un
    `alfred_record_t` con layer `normalized_raw`. Questo record conserva
    `source`, `raw_mask`, `cookie`, `pid`, timestamp e path borrowed.
+   L'adapter non fa semantica, non deduplica e non correla eventi: valida pero'
+   il contratto della raw mask. Una raw mask valida contiene una sola azione
+   primaria; `ALFRED_RAW_ISDIR` e' solo un qualificatore ammesso. Se una mask
+   contiene due azioni primarie, l'adapter fallisce invece di scegliere una
+   priorita' implicita.
 3. Quando Alfred produce una diagnostica `WATCH_*`, il builder
    `alfred_record_build_watch_diagnostic()` costruisce un `alfred_record_t`
    con layer `diagnostic`. La category distingue diagnostica di watch da

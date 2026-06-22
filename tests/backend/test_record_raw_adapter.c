@@ -30,6 +30,8 @@
  *
  * invalid raw event:
  * - adapter returns failure
+ * - masks with more than one primary action bit return failure
+ * - overflow with a directory qualifier returns failure
  *
  * Meaning:
  * RAW_* record types are deliberately separate from FILE_* and DIR_* semantic
@@ -128,12 +130,36 @@ static void test_invalid_input_fails(void)
     assert(alfred_record_from_raw(&raw, &record) != 0);
 }
 
+static void test_ambiguous_raw_masks_fail(void)
+{
+    alfred_raw_event_t raw;
+    alfred_record_t record;
+
+    /*
+     * The adapter is a contract boundary, not just an app helper. It must reject
+     * masks that contain multiple primary actions instead of selecting one by
+     * priority, otherwise future producers could emit records whose meaning
+     * depends on formatter order.
+     */
+    raw = make_raw(ALFRED_RAW_MOVED_FROM | ALFRED_RAW_CLOSE_WRITE,
+                   "/tmp/root/ambiguous");
+    assert(alfred_record_from_raw(&raw, &record) != 0);
+
+    raw = make_raw(ALFRED_RAW_CREATE | ALFRED_RAW_DELETE,
+                   "/tmp/root/ambiguous");
+    assert(alfred_record_from_raw(&raw, &record) != 0);
+
+    raw = make_raw(ALFRED_RAW_OVERFLOW | ALFRED_RAW_ISDIR, "");
+    assert(alfred_record_from_raw(&raw, &record) != 0);
+}
+
 int main(void)
 {
     test_create_dir_keeps_raw_type_and_dir_bit();
     test_moved_from_does_not_become_semantic_move();
     test_other_raw_masks_map_to_raw_record_types();
     test_invalid_input_fails();
+    test_ambiguous_raw_masks_fail();
 
     return 0;
 }

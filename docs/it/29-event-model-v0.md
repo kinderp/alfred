@@ -228,6 +228,34 @@ I record legati al filesystem possono usare questi campi.
 `object_kind` e' il campo principale per il futuro. `is_dir` resta utile per
 compatibilita' e per rendere semplice il mapping da `ALFRED_RAW_ISDIR`.
 
+### Contratto delle raw mask
+
+Nel ponte corrente `alfred_record_from_raw()` accetta una raw mask solo se
+contiene una singola azione primaria:
+
+- `ALFRED_RAW_CREATE`
+- `ALFRED_RAW_DELETE`
+- `ALFRED_RAW_MODIFY`
+- `ALFRED_RAW_CLOSE_WRITE`
+- `ALFRED_RAW_ATTRIB`
+- `ALFRED_RAW_MOVED_FROM`
+- `ALFRED_RAW_MOVED_TO`
+- `ALFRED_RAW_OVERFLOW`
+
+`ALFRED_RAW_ISDIR` non e' una seconda azione: e' un qualificatore. Per esempio
+`ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` significa "create osservata su una
+directory", non due eventi diversi. Il record resta `RAW_CREATE` e conserva il
+bit `ALFRED_RAW_ISDIR` in `raw_mask`.
+
+Maschere ambigue come `ALFRED_RAW_MOVED_FROM | ALFRED_RAW_CLOSE_WRITE` sono
+rifiutate dall'adapter. Questa regola evita che il significato di un record
+dipenda dall'ordine degli `if` nel formatter o nell'adapter. Se il backend
+osserva piu' fatti distinti, deve produrre piu' record distinti.
+
+`ALFRED_RAW_OVERFLOW` e' trattato come diagnostica di integrita' dello stream:
+non rappresenta un file o una directory e non accetta il qualificatore
+`ALFRED_RAW_ISDIR`.
+
 ## Campi watch e recovery
 
 I record diagnostici di watch e recovery possono usare questi campi.

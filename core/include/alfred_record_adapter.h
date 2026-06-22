@@ -31,6 +31,12 @@ extern "C" {
  * semantic outcomes. For example ALFRED_RAW_MOVED_FROM becomes
  * ALFRED_RECORD_TYPE_RAW_MOVED_FROM, not FILE_MOVED or DIR_RENAMED.
  *
+ * A valid raw record contains exactly one primary ALFRED_RAW_* action bit.
+ * ALFRED_RAW_ISDIR is the only accepted qualifier and is preserved in raw_mask
+ * instead of changing the record type. Ambiguous masks with multiple action bits
+ * are rejected so future producers cannot accidentally depend on priority-based
+ * interpretation.
+ *
  * Return: 0 on success, -1 on invalid input or unsupported raw mask.
  */
 int alfred_record_from_raw(const alfred_raw_event_t *raw,
