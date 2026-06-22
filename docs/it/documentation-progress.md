@@ -152,12 +152,11 @@ record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
 payload testuale da record. Il primo sink comune `alfred_record_sink_t` e il
 text sink compatibile `alfred_record_text_sink_t` sono stati aggiunti come
 ponte `record -> emit(record) -> payload callback` e sono ora usati dal percorso
-semantico ufficiale `core_logger_on_event()`. Non sono ancora collegati al
-runtime inotify per tutti i diagnostici, ma `WATCH_ADDED`, `WATCH_REMOVED` e
-`WATCH_STALE` passano gia' dal sink comune. Anche i record della famiglia locale
-`WATCH_RESYNC_*` e i diagnostici lost-scope `WATCH_LOST_*` passano ora dal sink
-comune; `WATCH_RESYNC_SCAN_FAILED` e `WATCH_LOST_QUEUE_FAILED` conservano il
-canale error tramite un bridge event/error. Il documento
+semantico ufficiale `core_logger_on_event()`. I diagnostici runtime inotify
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_RESYNC_*` e
+`WATCH_LOST_*` passano ora dal sink comune; `WATCH_RESYNC_SCAN_FAILED` e
+`WATCH_LOST_QUEUE_FAILED` conservano il canale error tramite un bridge
+event/error. Il documento
 include uno schema Mermaid della pipeline C introdotta finora. La policy Event
 Model v0 per errori OS ora distingue `error`, `os_error_code`,
 `os_error_name` e `os_error_message`, e la struttura C `alfred_record_t`
@@ -176,6 +175,10 @@ li invia al sink comune, scrive il payload normalizzato su `raw.log` e poi
 passa comunque il raw originale ad `alfred_process()`. I diagnostici runtime
 `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*`
 usano gia' record Event Model v0, sink comune e formatter testuale compatibile.
+Il contratto di `alfred_record_from_raw()` e' stato reso esplicito: ogni raw
+record deve contenere una sola azione primaria, mentre `ALFRED_RAW_ISDIR` resta
+un qualificatore. Le mask ambigue vengono rifiutate dall'adapter e sono coperte
+da test dedicati.
 
 ## Aggiornamento Writer API v0
 
