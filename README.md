@@ -136,6 +136,7 @@ ALFRED_KEEP_TEST_LOGS=1 make test-backend-diagnostics
 Detailed documentation is currently maintained in Italian:
 
 - [Italian documentation index](docs/it/README.md)
+- [AI coding agent instructions](AGENTS.md)
 - [Guided documentation reading order](docs/it/27-guida-lettura-documentazione.md)
 - [Operational rules](docs/it/00-regole-operative.md)
 - [Project overview](docs/it/01-panoramica-progetto.md)
@@ -165,6 +166,7 @@ Detailed documentation is currently maintained in Italian:
 - [Documentation audit and declared debt](docs/it/28-audit-documentazione-e-debiti.md)
 - [Event Model v0](docs/it/29-event-model-v0.md)
 - [Backend API v0](docs/it/30-backend-api-v0.md)
+- [Inotify reference backend milestone](docs/it/31-milestone-inotify-reference-backend.md)
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 

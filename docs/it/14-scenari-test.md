@@ -1212,6 +1212,12 @@ veloce per capire dove nasce ogni evento e quale livello del sistema lo deve
 interpretare. I dettagli di path, cookie e watch descriptor restano nei log
 osservati con `--keep-logs`.
 
+Il test backend `test_record_raw_adapter.sh` controlla un passaggio piu'
+interno della stessa mappa: da `alfred_raw_event_t` a `alfred_record_t`. In quel
+passaggio i tipi restano raw (`RAW_CREATE`, `RAW_MOVED_FROM`,
+`RAW_CLOSE_WRITE`, `RAW_ATTRIB`, `RAW_OVERFLOW`) perche' l'adapter non deve
+anticipare le decisioni semantiche del core.
+
 ### create_file
 
 Operazioni:

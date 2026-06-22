@@ -14,6 +14,9 @@
  * ========================================================================== */
 
 #include "watch_manager.h"
+#include "alfred_record_diagnostic.h"
+#include "alfred_record_sink.h"
+#include "alfred_record_text_sink.h"
 #include "fs_scanner.h"
 #include "watcher.h"
 #include "logger.h"
@@ -34,6 +37,110 @@ typedef struct watch_manager_scan_context {
     inotify_backend_context_t *ctx;
     int failed;
 } watch_manager_scan_context_t;
+
+/*
+ * watch_manager_watch_record_name - return fallback text for simple WATCH logs
+ * @type: simple watch diagnostic type
+ *
+ * Return: stable WATCH_* token, or NULL when @type is not handled here.
+ */
+static const char *watch_manager_watch_record_name(alfred_record_type_t type)
+{
+    switch (type) {
+    case ALFRED_RECORD_TYPE_WATCH_ADDED:
+        return "WATCH_ADDED";
+    case ALFRED_RECORD_TYPE_WATCH_REMOVED:
+        return "WATCH_REMOVED";
+    default:
+        return NULL;
+    }
+}
+
+/*
+ * watch_manager_write_event_payload - bridge text-sink payloads to logger_event
+ * @userdata: logger_t destination
+ * @payload: formatted WATCH_* diagnostic payload
+ *
+ * The record text sink belongs to the core output boundary and deliberately
+ * does not know logger_t. The inotify watch manager still owns only a logger
+ * in this transitional step, so this adapter keeps logger ownership local while
+ * allowing WATCH_ADDED/WATCH_REMOVED to flow through emit(record).
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int watch_manager_write_event_payload(void *userdata,
+                                             const char *payload)
+{
+    logger_t *logger = userdata;
+
+    if (logger == NULL || payload == NULL) {
+        return -1;
+    }
+
+    logger_event(logger, "%s", payload);
+    return 0;
+}
+
+/*
+ * watch_manager_log_simple_watch_diagnostic - emit simple WATCH_* diagnostics
+ * @ctx: borrowed backend context that owns the event logger
+ * @type: diagnostic record type, currently WATCH_ADDED or WATCH_REMOVED
+ * @wd: inotify watch descriptor returned by the kernel
+ * @path: borrowed watched directory path
+ *
+ * WATCH_ADDED and WATCH_REMOVED are backend diagnostics, not semantic
+ * filesystem events. This helper is the first backend runtime step that uses
+ * the Event Model v0 sink boundary for watch-table state changes: build a
+ * structured diagnostic record, emit it through the generic sink, let the text
+ * sink format the compatibility payload, then let the existing logger add
+ * timestamp/level/newline details. The fallback preserves the old payload if
+ * record creation, sink setup, formatting, or logging fails.
+ */
+static void watch_manager_log_simple_watch_diagnostic(
+    const inotify_backend_context_t *ctx,
+    alfred_record_type_t type,
+    int wd,
+    const char *path)
+{
+    alfred_record_t record;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    const char *name;
+    char payload[PATH_MAX + 64u];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return;
+
+    name = watch_manager_watch_record_name(type);
+    if (name == NULL)
+        return;
+
+    if (alfred_record_build_watch_diagnostic(
+            type,
+            "inotify",
+            wd,
+            path,
+            NULL,
+            NULL,
+            NULL,
+            &record) == 0) {
+        text_sink.write = watch_manager_write_event_payload;
+        text_sink.userdata = ctx->logger;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            return;
+        }
+    }
+
+    logger_event(ctx->logger,
+                 "%s wd=%d path=%s",
+                 name,
+                 wd,
+                 path != NULL ? path : "");
+}
 
 /*
  * watch_manager_context_is_valid - validate borrowed backend dependencies
@@ -248,10 +355,11 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_ADDED wd=%d path=%s",
-                 wd,
-                 path);
+    watch_manager_log_simple_watch_diagnostic(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_ADDED,
+        wd,
+        path);
 
     return wd;
 }
@@ -300,10 +408,11 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
     watcher_remove(&ctx->runtime->watchers,
                    wd);
 
-    logger_event(ctx->logger,
-                 "WATCH_REMOVED wd=%d path=%s",
-                 wd,
-                 removed_path);
+    watch_manager_log_simple_watch_diagnostic(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_REMOVED,
+        wd,
+        removed_path);
 
     return 0;
 }

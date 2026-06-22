@@ -1,9 +1,10 @@
 # Event Model v0
 
 Questo documento definisce la prima versione del modello eventi di Alfred.
-L'obiettivo non e' cambiare subito il codice C, ma stabilire il contratto
-concettuale che guidera' JSONL, Backend API v0, plugin, tracepoint, Alfred Lab e
-futuri guardrail per agenti AI.
+L'obiettivo e' stabilire il contratto che guidera' JSONL, Backend API v0,
+plugin, tracepoint, Alfred Lab e futuri guardrail per agenti AI. Il primo ponte
+verso il codice C e' `core/include/alfred_record.h`, che definisce il tipo
+comune `alfred_record_t`.
 
 La decisione approvata e':
 
@@ -42,16 +43,26 @@ Rimandi principali:
 - [Stato funzionalita' supportate](26-stato-funzionalita.md)
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+- [Writer API v0](32-writer-api-v0.md)
 - [Backend API v0](30-backend-api-v0.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
 
-## Cosa non cambia adesso
+## Stato nel codice C
 
-Questo documento non implementa ancora:
+Il codice ora contiene una prima rappresentazione C minima del record comune:
+`core/include/alfred_record.h`. Questo header definisce:
 
-- una nuova `struct alfred_record_t`;
+- `alfred_record_layer_t`
+- `alfred_record_category_t`
+- `alfred_record_type_t`
+- `alfred_record_identity_t`
+- `alfred_record_watch_t`
+- `alfred_record_t`
+
+Il tipo esiste come contratto dati, ma non cambia ancora il flusso runtime.
+Quindi non sono ancora implementati:
+
 - un writer JSONL;
-- una Backend API v0;
 - una policy security;
 - modifiche a `alfred_raw_event_t`;
 - modifiche a `alfred_event_t`;
@@ -63,8 +74,23 @@ Il codice corrente resta valido. Event Model v0 documenta la direzione:
 alfred_raw_event_t        -> adapter -> alfred_record_t
 alfred_event_t            -> adapter -> alfred_record_t
 backend diagnostic string -> builder -> alfred_record_t
-alfred_record_t           -> text writer / JSONL writer / binary writer
+alfred_record_t           -> sink -> writer API -> text / JSONL / binary
 ```
+
+Il primo confine `sink` esiste nel codice:
+
+- `core/include/alfred_record_sink.h` definisce `alfred_record_sink_t`, cioe'
+  una callback comune `emit(record)`;
+- `core/include/alfred_record_text_sink.h` definisce un text sink compatibile
+  che formatta il record con `alfred_record_format_text()` e passa il payload a
+  una callback di scrittura;
+- `tests/backend/test_record_text_sink.c` verifica che il sink conservi il
+  payload testuale corrente e propaghi errori di configurazione, truncation e
+  fallimenti del writer.
+
+Questo non cambia ancora il runtime inotify. E' il pezzo isolato che permette
+al prossimo micro-step di sostituire ponti locali `record -> format -> logger`
+con `record -> emit(record) -> text sink`.
 
 ## Layer
 
@@ -113,16 +139,16 @@ Esempi:
 semantic + filesystem + FILE_CREATED
 diagnostic + watch + WATCH_STALE
 diagnostic + recovery + WATCH_LOST_RECOVERY_END
-normalized_raw + filesystem + MOVED_FROM
+normalized_raw + filesystem + RAW_MOVED_FROM
 backend_observed + filesystem + IN_CREATE
 backend_observed + audit + IN_ACCESS
 security + policy + POLICY_BLOCKED
 trace + pipeline + RAW_EVENT_DISPATCHED
 ```
 
-Il nome `type` non basta da solo. `CREATE` in `normalized_raw` non e' la stessa
-cosa di `FILE_CREATED` in `semantic`, e `IN_CREATE` in `backend_observed` resta
-un fatto del backend Linux.
+Il nome `type` non basta da solo. `RAW_CREATE` in `normalized_raw` non e' la
+stessa cosa di `FILE_CREATED` in `semantic`, e `IN_CREATE` in
+`backend_observed` resta un fatto del backend Linux.
 
 ## Campi comuni
 
@@ -145,6 +171,39 @@ Ogni record v0 dovrebbe poter avere questi campi comuni.
 
 `seq` non e' semantica filesystem. Serve per debug, confronto stream e output
 verbose. Cambiare `seq` non cambia il significato di create, move o rename.
+
+## Ownership dei campi
+
+Nel codice C corrente molti campi del record sono `const char *`. Questa scelta
+descrive un record leggero e facile da costruire dagli adapter esistenti: il
+record punta a stringhe gia' possedute dal raw event, dall'evento semantico o
+dal codice che costruisce una diagnostica.
+
+Questo modello e' corretto solo finche' il record viene consumato subito nello
+stesso stack di chiamate. Non e' sufficiente quando il record attraversa una
+coda, un ring buffer, un dispatcher thread o un writer asincrono.
+
+La regola contrattuale per Event Model v0 e':
+
+```text
+Un record accodato deve possedere tutta la memoria necessaria per essere letto
+in seguito senza dipendere dallo stack del backend, da buffer temporanei o da
+strutture riusate dal producer.
+```
+
+Per questo distinguiamo due concetti:
+
+| Concetto | Uso | Ownership |
+| --- | --- | --- |
+| `alfred_record_t` | vista logica del record, usata da adapter e formatter | puo' contenere stringhe borrowed |
+| record owned futuro | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
+
+Il nome C definitivo del record owned e' rimandato. Le opzioni naturali sono un
+tipo dedicato, per esempio `alfred_owned_record_t`, oppure funzioni di clone e
+destroy come `alfred_record_clone_owned()` e `alfred_record_destroy_owned()`.
+Per v0 la priorita' non e' ottimizzare subito, ma evitare ambiguita': prima
+dell'enqueue il record deve diventare sicuro. Pool, arena, string table e
+strategie zero-copy potranno arrivare dopo benchmark reali.
 
 ## Campi filesystem
 
@@ -169,6 +228,34 @@ I record legati al filesystem possono usare questi campi.
 `object_kind` e' il campo principale per il futuro. `is_dir` resta utile per
 compatibilita' e per rendere semplice il mapping da `ALFRED_RAW_ISDIR`.
 
+### Contratto delle raw mask
+
+Nel ponte corrente `alfred_record_from_raw()` accetta una raw mask solo se
+contiene una singola azione primaria:
+
+- `ALFRED_RAW_CREATE`
+- `ALFRED_RAW_DELETE`
+- `ALFRED_RAW_MODIFY`
+- `ALFRED_RAW_CLOSE_WRITE`
+- `ALFRED_RAW_ATTRIB`
+- `ALFRED_RAW_MOVED_FROM`
+- `ALFRED_RAW_MOVED_TO`
+- `ALFRED_RAW_OVERFLOW`
+
+`ALFRED_RAW_ISDIR` non e' una seconda azione: e' un qualificatore. Per esempio
+`ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` significa "create osservata su una
+directory", non due eventi diversi. Il record resta `RAW_CREATE` e conserva il
+bit `ALFRED_RAW_ISDIR` in `raw_mask`.
+
+Maschere ambigue come `ALFRED_RAW_MOVED_FROM | ALFRED_RAW_CLOSE_WRITE` sono
+rifiutate dall'adapter. Questa regola evita che il significato di un record
+dipenda dall'ordine degli `if` nel formatter o nell'adapter. Se il backend
+osserva piu' fatti distinti, deve produrre piu' record distinti.
+
+`ALFRED_RAW_OVERFLOW` e' trattato come diagnostica di integrita' dello stream:
+non rappresenta un file o una directory e non accetta il qualificatore
+`ALFRED_RAW_ISDIR`.
+
 ## Campi watch e recovery
 
 I record diagnostici di watch e recovery possono usare questi campi.
@@ -189,34 +276,160 @@ I record diagnostici di watch e recovery possono usare questi campi.
 | `pending_count` | numero di recovery pendenti |
 
 Questi campi rappresentano in forma strutturata righe oggi testuali come
-`WATCH_STALE`, `WATCH_RESYNC_FAILED`, `WATCH_LOST_QUEUED`,
-`WATCH_LOST_RECOVERY_END`, `WATCH_LOST_RETRY_SCHEDULED` e
-`WATCH_LOST_RECOVERY_GAVE_UP`.
+`WATCH_STALE`, `WATCH_RESYNC_FAILED` e la famiglia `WATCH_LOST_*`. La tabella
+dei record implementati sotto elenca i tipi concreti oggi modellati.
 
-## Campi security futuri
+## Campi errore OS
+
+`error` e' un token Alfred stabile. Deve spiegare il ramo logico della
+pipeline, per esempio:
+
+```text
+path-unreachable
+identity-mismatch
+scan-failed
+reinstall-failed
+```
+
+Questo non basta per descrivere un errore arrivato dal sistema operativo. Una
+stessa categoria Alfred, per esempio `path-unreachable`, puo' dipendere da
+cause diverse a livello OS: path assente, permesso negato, filesystem non
+disponibile, errore I/O. Per questo Event Model v0 deve distinguere gli errori
+logici Alfred dagli errori OS.
+
+Campi previsti:
+
+| Campo | Uso |
+| --- | --- |
+| `error` | token Alfred stabile, usato per policy, test e compatibilita' |
+| `os_error_code` | codice numerico OS, per Linux il valore di `errno` |
+| `os_error_name` | nome simbolico opzionale, per esempio `ENOENT` |
+| `os_error_message` | messaggio leggibile opzionale, per esempio `No such file or directory` |
+
+Regole:
+
+- `error` non deve contenere direttamente `errno`;
+- `os_error_code` deve restare numerico;
+- `os_error_name` e `os_error_message` sono utili per debug e output umano, ma
+  non devono diventare l'unico dato usato da test o policy;
+- il writer testuale puo' continuare a mostrare la forma compatibile
+  `errno=N (message)` anche se internamente il record usa campi separati;
+- JSONL, MessagePack, protobuf e socket binaria dovranno esportare campi
+  separati, non fare parsing del testo `errno=N (...)`.
+
+Decisione operativa: prima documentiamo questa policy, poi estendiamo
+`alfred_record_t`. I campi OS error ora esistono nel contratto C come
+`record.os_error.code`, `record.os_error.name` e `record.os_error.message`.
+Il builder diagnostico puo' gia' popolarli tramite
+`alfred_record_build_watch_diagnostic_with_os_error()`. Il formatter testuale
+`alfred_record_format_text()` puo' renderli nella forma compatibile `errno=N`
+o `errno=N (message)`. Il runtime inotify usa gia' questo percorso per i
+`WATCH_RESYNC_FAILED` che hanno `errno`: il record conserva `os_error.code` e
+`os_error.message`, mentre `os_error.name` resta opzionale e puo' essere `NULL`
+quando Alfred non dispone di un mapping simbolico affidabile.
+
+## Campi agent/security futuri
 
 Alfred ha come obiettivo piu' ampio la runtime security per agenti AI. Event
 Model v0 non implementa ancora guardrail, ma riserva campi opzionali per non
 nascere incompatibile con quel percorso.
 
+Il modello futuro deve poter descrivere questa catena:
+
+```text
+human user -> agent session -> process tree -> system action -> policy decision
+```
+
+Il backend inotify non deve conoscere l'agente. Il backend osserva fatti del
+sistema operativo. Un livello superiore potra' correlare quei fatti con una
+sessione agente, un workspace, un albero di processi e una policy.
+
 | Campo | Uso futuro |
 | --- | --- |
+| `human_user` | utente umano che ha avviato o autorizzato la sessione |
+| `agent_session_id` | sessione agente osservata da Alfred |
+| `agent_name` | runtime agente, per esempio `codex` o altro tool |
+| `task_id` | identificatore del task dichiarato |
+| `declared_intent` | sintesi dell'intento dichiarato dall'agente o dall'utente |
+| `workspace` | directory o scope operativo autorizzato |
+| `allowed_scope` | confine applicabile dalla policy |
 | `actor` | soggetto che ha agito o a cui viene attribuita l'azione |
 | `actor_type` | `process`, `user`, `agent`, `tool`, `service` |
-| `session_id` | sessione agente o sessione runtime |
+| `session_id` | sessione runtime generica quando non e' ancora una agent session |
 | `prompt_context_id` | contesto prompt collegato all'azione |
 | `tool_call_id` | tool call o comando agente |
+| `process_tree_root` | radice dell'albero processi attribuito alla sessione |
+| `subject_pid` | processo che ha prodotto l'azione osservata |
+| `subject_exe` | eseguibile del processo, quando noto |
+| `object_resource` | risorsa toccata, per esempio path o endpoint rete |
 | `policy_id` | policy che ha valutato il record |
-| `decision` | `observe`, `allow`, `warn`, `block` |
+| `policy_rule_id` | regola specifica che ha prodotto la decisione |
+| `decision` | `observed`, `allowed`, `would_block`, `requires_approval`, `blocked` |
+| `sensitivity` | `normal`, `secret`, `system`, `network`, `persistence` |
 | `risk_score` | punteggio numerico o categorico |
 | `explanation` | spiegazione sintetica della decisione |
 
-Regola: questi campi sono opzionali e non bloccano il filesystem v0.
+Regole:
+
+- questi campi sono opzionali e non bloccano il filesystem v0;
+- il backend non deve produrli se non ha una fonte affidabile;
+- il writer non deve interpretarli;
+- un livello policy/security futuro potra' aggiungerli o arricchirli;
+- l'intento dichiarato dall'agente e' contesto utile, ma l'evento osservato dal
+  sistema operativo resta la fonte di verita'.
+
+Esempio concettuale: un agente puo' dichiarare di voler correggere un bug nel
+logger, ma Alfred deve poter registrare separatamente che un processo della
+stessa sessione ha tentato di leggere `~/.ssh/config`. Il confronto fra intento
+e azione reale appartiene al livello security/policy futuro, non al backend e
+non al writer.
+
+## Correlazione multi-backend futura
+
+Il core filesystem corrente interpreta raw facts prodotti da inotify. La
+direzione futura e' piu' ampia: Alfred dovra' correlare record provenienti da
+backend diversi, per esempio inotify, fanotify, eBPF, audit, ETW o Endpoint
+Security.
+
+Esempio concettuale:
+
+```text
+inotify: RAW_MODIFY path=/repo/src/app.c
+fanotify: FILE_OPEN_WRITE path=/repo/src/app.c pid=1234
+eBPF: PROCESS_EXEC pid=1234 exe=/usr/bin/python3 parent=1200
+agent context: agent_session_id=codex-001 workspace=/repo
+```
+
+Questi record parlano di aspetti diversi dello stesso comportamento. Un livello
+centrale dovra' poterli raggruppare e arricchire:
+
+```text
+sessione Codex
+-> processo python pid=1234
+-> modifica /repo/src/app.c
+-> dentro workspace
+-> decisione allowed
+```
+
+Per evitare confusione, distinguiamo tre livelli futuri:
+
+| Livello | Cosa fa | Cosa non deve fare |
+| --- | --- | --- |
+| core semantico di dominio | trasforma raw filesystem in eventi semantic filesystem | applicare policy Agent Guard |
+| correlation/enrichment engine | collega filesystem, processo, rete, sessione agente e workspace | serializzare output o decidere formato |
+| policy engine | produce `allowed`, `blocked`, `would_block`, `requires_approval` | osservare direttamente eventi OS |
+
+Questa separazione serve a non sovraccaricare il backend e a non rendere il
+writer un punto di logica. I backend osservano e normalizzano. Il core
+semantico interpreta per dominio. Il correlation engine collega fonti diverse.
+Il policy engine decide. I writer serializzano.
 
 ## Diagramma dei record implementati oggi
 
-Questo diagramma mostra i record che Alfred sa rappresentare oggi, anche se non
-esiste ancora una `struct alfred_record_t`. Ogni nodo usa la forma:
+Questo diagramma mostra i record che Alfred sa rappresentare oggi. Il tipo C
+`alfred_record_t` esiste in `core/include/alfred_record.h`, ma il runtime usa
+ancora `alfred_raw_event_t`, `alfred_event_t` e log testuali. Ogni nodo usa la
+forma:
 
 ```text
 layer / category / type
@@ -243,14 +456,14 @@ flowchart TD
     end
 
     subgraph NR[normalized_raw]
-        NR1["filesystem<br/>CREATE"]
-        NR2["filesystem<br/>DELETE"]
-        NR3["filesystem<br/>MODIFY"]
-        NR4["filesystem<br/>ATTRIB"]
-        NR5["filesystem<br/>CLOSE_WRITE"]
-        NR6["filesystem<br/>MOVED_FROM"]
-        NR7["filesystem<br/>MOVED_TO"]
-        NR8["filesystem<br/>OVERFLOW"]
+        NR1["filesystem<br/>RAW_CREATE"]
+        NR2["filesystem<br/>RAW_DELETE"]
+        NR3["filesystem<br/>RAW_MODIFY"]
+        NR4["filesystem<br/>RAW_ATTRIB"]
+        NR5["filesystem<br/>RAW_CLOSE_WRITE"]
+        NR6["filesystem<br/>RAW_MOVED_FROM"]
+        NR7["filesystem<br/>RAW_MOVED_TO"]
+        NR8["filesystem<br/>RAW_OVERFLOW"]
     end
 
     subgraph SE[semantic]
@@ -277,13 +490,25 @@ flowchart TD
         DG5["recovery<br/>WATCH_RESYNC_BEGIN"]
         DG6["recovery<br/>WATCH_RESYNC_FAILED"]
         DG7["recovery<br/>WATCH_RESYNC_END"]
-        DG8["recovery<br/>WATCH_RESYNC_SCAN_DONE"]
-        DG9["recovery<br/>WATCH_RESYNC_REINSTALLED"]
-        DG10["recovery<br/>WATCH_LOST_QUEUED"]
-        DG11["recovery<br/>WATCH_LOST_FOUND"]
-        DG12["recovery<br/>WATCH_LOST_RECOVERY_END"]
-        DG13["recovery<br/>WATCH_LOST_RETRY_SCHEDULED"]
-        DG14["recovery<br/>WATCH_LOST_RECOVERY_GAVE_UP"]
+        DG8["recovery<br/>WATCH_RESYNC_SCAN_FAILED"]
+        DG9["recovery<br/>WATCH_RESYNC_SCAN_DONE"]
+        DG10["recovery<br/>WATCH_RESYNC_SCAN_CLASS"]
+        DG11["recovery<br/>WATCH_RESYNC_SCAN_MISSING"]
+        DG12["recovery<br/>WATCH_RESYNC_REINSTALLED"]
+        DG13["recovery<br/>WATCH_RESYNC_REINSTALL_FAILED"]
+        DG14["recovery<br/>WATCH_RESYNC_ROLLBACK"]
+        DG15["recovery<br/>WATCH_LOST_QUEUED"]
+        DG16["recovery<br/>WATCH_LOST_QUEUE_SKIPPED"]
+        DG17["recovery<br/>WATCH_LOST_QUEUE_FAILED"]
+        DG18["recovery<br/>WATCH_LOST_SCAN_BEGIN"]
+        DG19["recovery<br/>WATCH_LOST_FOUND"]
+        DG20["recovery<br/>WATCH_LOST_PREFIX_UPDATED"]
+        DG21["recovery<br/>WATCH_LOST_COVERAGE_DONE"]
+        DG22["recovery<br/>WATCH_LOST_COVERAGE_CLASS"]
+        DG23["recovery<br/>WATCH_LOST_REINSTALLED"]
+        DG24["recovery<br/>WATCH_LOST_RECOVERY_END"]
+        DG25["recovery<br/>WATCH_LOST_RETRY_SCHEDULED"]
+        DG26["recovery<br/>WATCH_LOST_RECOVERY_GAVE_UP"]
     end
 
     BO1 --> NR1 --> SE1
@@ -318,19 +543,34 @@ flowchart TD
     BO15 -. "raw log only" .-> BO15
 
     DG3 --> DG5
-    DG5 --> DG6
-    DG5 --> DG7
-    DG6 --> DG10
+    DG5 --> DG8
+    DG5 --> DG9
+    DG9 --> DG10
     DG10 --> DG11
     DG11 --> DG12
-    DG10 --> DG13
+    DG12 --> DG7
+    DG12 --> DG13
     DG13 --> DG14
+    DG5 --> DG6
+    DG5 --> DG7
+    DG6 --> DG15
+    DG6 --> DG16
+    DG6 --> DG17
+    DG15 --> DG18
+    DG18 --> DG19
+    DG19 --> DG20
+    DG20 --> DG21
+    DG21 --> DG22
+    DG22 --> DG23
+    DG23 --> DG24
+    DG15 --> DG25
+    DG25 --> DG26
 ```
 
 Note di lettura:
 
-- `IN_ATTRIB` arriva fino a `normalized_raw + filesystem + ATTRIB`, ma oggi non
-  produce semantica core.
+- `IN_ATTRIB` arriva fino a `normalized_raw + filesystem + RAW_ATTRIB`, ma oggi
+  non produce semantica core.
 - gli eventi audit `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` restano raw log
   opt-in, non diventano `normalized_raw`.
 - `IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT` e `IN_IGNORED` sono eventi sul
@@ -340,7 +580,8 @@ Note di lettura:
 ## Tabella dei record implementati oggi
 
 Questa tabella elenca i record che Alfred puo' rappresentare oggi secondo Event
-Model v0, anche se il codice non ha ancora una struct comune.
+Model v0. I record `normalized_raw` hanno tipi `RAW_*` per non confonderli con
+gli eventi semantici `FILE_*` e `DIR_*`.
 
 | Layer | Category | Type | Generato da | Significato | Rimandi |
 | --- | --- | --- | --- | --- | --- |
@@ -355,14 +596,14 @@ Model v0, anche se il codice non ha ancora una struct comune.
 | `backend_observed` | `audit` | `IN_OPEN` | audit opt-in inotify | apertura osservata | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
 | `backend_observed` | `audit` | `IN_ACCESS` | audit opt-in inotify | lettura/accesso osservato | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
 | `backend_observed` | `audit` | `IN_CLOSE_NOWRITE` | audit opt-in inotify | close senza scrittura | [22](22-contratto-log.md#raw-log-audit-inotify), [20](20-matrice-eventi-inotify.md#eventi-audit-opt-in) |
-| `normalized_raw` | `filesystem` | `CREATE` | `ALFRED_RAW_CREATE` | fatto raw normalizzato di creazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
-| `normalized_raw` | `filesystem` | `DELETE` | `ALFRED_RAW_DELETE` | fatto raw normalizzato di cancellazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
-| `normalized_raw` | `filesystem` | `MODIFY` | `ALFRED_RAW_MODIFY` | fatto raw normalizzato di modifica | [06](06-core-engine.md), [13](13-semantica-eventi.md) |
-| `normalized_raw` | `filesystem` | `ATTRIB` | `ALFRED_RAW_ATTRIB` | metadati normalizzati, senza semantica core oggi | [13](13-semantica-eventi.md#attributi-e-metadati), [26](26-stato-funzionalita.md#attributi-e-metadati) |
-| `normalized_raw` | `filesystem` | `CLOSE_WRITE` | `ALFRED_RAW_CLOSE_WRITE` | close dopo scrittura | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [22](22-contratto-log.md) |
-| `normalized_raw` | `filesystem` | `MOVED_FROM` | `ALFRED_RAW_MOVED_FROM` | sorgente raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
-| `normalized_raw` | `filesystem` | `MOVED_TO` | `ALFRED_RAW_MOVED_TO` | destinazione raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
-| `normalized_raw` | `filesystem` | `OVERFLOW` | `ALFRED_RAW_OVERFLOW` | stream non affidabile per overflow | [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
+| `normalized_raw` | `filesystem` | `RAW_CREATE` | `ALFRED_RAW_CREATE` | fatto raw normalizzato di creazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
+| `normalized_raw` | `filesystem` | `RAW_DELETE` | `ALFRED_RAW_DELETE` | fatto raw normalizzato di cancellazione | [06](06-core-engine.md), [22](22-contratto-log.md#raw-alfred) |
+| `normalized_raw` | `filesystem` | `RAW_MODIFY` | `ALFRED_RAW_MODIFY` | fatto raw normalizzato di modifica | [06](06-core-engine.md), [13](13-semantica-eventi.md) |
+| `normalized_raw` | `filesystem` | `RAW_ATTRIB` | `ALFRED_RAW_ATTRIB` | metadati normalizzati, senza semantica core oggi | [13](13-semantica-eventi.md#attributi-e-metadati), [26](26-stato-funzionalita.md#attributi-e-metadati) |
+| `normalized_raw` | `filesystem` | `RAW_CLOSE_WRITE` | `ALFRED_RAW_CLOSE_WRITE` | close dopo scrittura | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [22](22-contratto-log.md) |
+| `normalized_raw` | `filesystem` | `RAW_MOVED_FROM` | `ALFRED_RAW_MOVED_FROM` | sorgente raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
+| `normalized_raw` | `filesystem` | `RAW_MOVED_TO` | `ALFRED_RAW_MOVED_TO` | destinazione raw da correlare con cookie | [13](13-semantica-eventi.md#rename-move-e-relocate), [16](16-mappa-codice-e-strutture.md) |
+| `normalized_raw` | `filesystem` | `RAW_OVERFLOW` | `ALFRED_RAW_OVERFLOW` | stream non affidabile per overflow | [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | `semantic` | `filesystem` | `FILE_CREATED` | core da raw create file | file creato | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
 | `semantic` | `filesystem` | `DIR_CREATED` | core da raw create dir | directory creata | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
 | `semantic` | `filesystem` | `FILE_DELETED` | core da raw delete file | file cancellato | [13](13-semantica-eventi.md), [14](14-scenari-test.md) |
@@ -381,10 +622,29 @@ Model v0, anche se il codice non ha ancora una struct comune.
 | `diagnostic` | `watch` | `WATCH_STALE` | `IN_MOVE_SELF`, `IN_DELETE_SELF`, `IN_UNMOUNT` | mapping watch non piu' pienamente affidabile | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md) |
 | `diagnostic` | `watch` | `WATCH_STALE_EVENT_DROPPED` | evento arrivato su watch stale | evento figlio scartato per evitare semantica falsa | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md) |
 | `diagnostic` | `recovery` | `WATCH_RESYNC_BEGIN` | resync locale | inizia verifica di uno scope stale | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_SCAN_FAILED` | resync locale | scan di copertura non completato | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_SCAN_DONE` | resync locale | scan di copertura completato | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_SCAN_CLASS` | resync locale | classificazione dei contatori di scan | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_SCAN_MISSING` | resync locale | directory reale senza watch | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_REINSTALLED` | resync locale | watch reinstallato su directory mancante | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_REINSTALL_FAILED` | resync locale | reinstallazione watch fallita | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_RESYNC_ROLLBACK` | resync locale | rimozione di watch installato in tentativo fallito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_RESYNC_FAILED` | resync locale | recovery locale fallita | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_RESYNC_END` | resync locale | watch tornato affidabile | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_QUEUED` | lost-scope enqueue | scope perso accodato per recovery ampia | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_QUEUE_SKIPPED` | lost-scope enqueue | accodamento saltato per dati mancanti | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_QUEUE_FAILED` | lost-scope enqueue | accodamento fallito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_SCAN_BEGIN` | lost-scope scan | inizia scansione di una root candidata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_FOUND` | lost-scope scan | trovata identita' in una root monitorata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_PREFIX_UPDATED` | lost-scope recovery | prefisso del watch e dei figli riallineato | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_COVERAGE_DONE` | lost-scope recovery | scan copertura subtree completato | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_COVERAGE_MISSING` | lost-scope recovery | directory reale senza watch | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_COVERAGE_CLASS` | lost-scope recovery | classificazione dei contatori di copertura | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_REINSTALLED` | lost-scope recovery | watch reinstallato su directory mancante | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_REINSTALL_FAILED` | lost-scope recovery | reinstallazione watch fallita | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_ROLLBACK` | lost-scope recovery | rimozione di watch installato in tentativo fallito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_NOT_FOUND` | lost-scope scan | identita' non trovata in una root | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_FAILED` | lost-scope recovery | recovery ampia fallita | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_END` | lost-scope recovery | recovery ampia completata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RETRY_SCHEDULED` | lost-scope retry | recovery non riuscita ma rischedulata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_GAVE_UP` | lost-scope retry budget | budget tentativi esaurito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
@@ -405,7 +665,7 @@ source_backend=inotify
 ```
 
 ```text
-normalized_raw + filesystem + CREATE
+normalized_raw + filesystem + RAW_CREATE
 path=/tmp/root/a.txt
 object_kind=file
 ```
@@ -419,14 +679,14 @@ object_kind=file
 ### Rename directory
 
 ```text
-normalized_raw + filesystem + MOVED_FROM
+normalized_raw + filesystem + RAW_MOVED_FROM
 path=/tmp/root/old
 cookie=42
 object_kind=dir
 ```
 
 ```text
-normalized_raw + filesystem + MOVED_TO
+normalized_raw + filesystem + RAW_MOVED_TO
 path=/tmp/root/new
 cookie=42
 object_kind=dir
@@ -498,14 +758,44 @@ Esempio diagnostico:
 Il writer testuale corrente e il futuro writer JSONL dovranno ricevere lo
 stesso record strutturato. Non dovremo convertire testo in JSON.
 
+Nel codice C questo passaggio e' iniziato con due helper:
+
+- `alfred_record_from_raw()` converte `alfred_raw_event_t` in record
+  `normalized_raw + filesystem + RAW_*`
+- `alfred_record_from_event()` converte `alfred_event_t` in record
+  `semantic + filesystem + FILE_*|DIR_*`
+- `alfred_record_build_watch_diagnostic()` costruisce record
+  `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
+- `alfred_record_format_text()` formatta il payload testuale di un record,
+  senza timestamp, livello log o newline
+- `alfred_record_sink_emit()` chiama un sink generico `emit(record)`
+- `alfred_record_text_sink_emit()` formatta un record e consegna il payload a
+  una callback di scrittura
+
+Il lato output semantico usa gia' il sink: `core_logger_on_event()` converte
+`alfred_event_t` in `alfred_record_t`, chiama `alfred_record_sink_emit()`,
+attraversa `alfred_record_text_sink_emit()` e solo alla fine scrive il payload
+con `logger_event()`.
+
+Anche il backend inotify usa gia' questo ponte per gli stream migrati in questa
+fase: raw principali, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
+`WATCH_RESYNC_*` e `WATCH_LOST_*`. Non e' ancora la Backend API finale, perche'
+il dispatcher asincrono, le code, i record owned e la Writer API completa sono
+rimandati; pero' il confine `record -> emit(record) -> text sink` e' gia' il
+percorso di compatibilita' per questi stream runtime.
+
+Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
+testuale, e' documentato in
+[Backend API v0 - Pipeline C introdotta finora](30-backend-api-v0.md#pipeline-c-introdotta-finora).
+
 ## Regole di compatibilita'
 
 1. `alfred_raw_event_t` resta il tipo C corrente per l'ingresso del core.
 2. `alfred_event_t` resta il tipo C corrente per l'uscita semantica del core.
 3. I log testuali restano il contratto pratico dei test correnti.
-4. Event Model v0 diventa il contratto concettuale per i nuovi output.
-5. Un futuro `alfred_record_t` dovra' poter rappresentare almeno tutti i record
-   della tabella sopra.
+4. Event Model v0 diventa il contratto dati per i nuovi output.
+5. `alfred_record_t` deve poter rappresentare almeno tutti i record della
+   tabella sopra.
 6. Backend API v0 dovra' produrre record o fatti convertibili in record.
 7. Security e trace sono previsti ma non obbligatori nel filesystem v0.
 
@@ -513,7 +803,6 @@ stesso record strutturato. Non dovremo convertire testo in JSON.
 
 Restano da decidere:
 
-- forma C concreta di `alfred_record_t`;
 - se `event_id` sara' numerico, UUID-like o composto da `source + seq`;
 - se `ts_wall_ns` verra' generato sempre o solo dai writer;
 - formato esatto di JSONL;
@@ -523,7 +812,6 @@ Restano da decidere:
 - stream audit strutturato separato dallo stream filesystem;
 - tracepoint minimi per Alfred Lab.
 
-Il passo successivo documentale e' stato aggiunto in
-[Backend API v0](30-backend-api-v0.md). Il prossimo lavoro di codice dovrebbe
-partire da quel documento: introdurre il record C minimo, adapter e diagnostica
-strutturata prima di progettare JSONL.
+Il passo successivo e' usare [Backend API v0](30-backend-api-v0.md) come guida
+per collegare gradualmente i ponti runtime esistenti al sink `emit(record)`
+prima di progettare JSONL.

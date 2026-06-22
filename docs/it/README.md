@@ -35,7 +35,9 @@ piu' dettaglio.
 26. [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md)
 27. [Event Model v0](29-event-model-v0.md)
 28. [Backend API v0](30-backend-api-v0.md)
-29. [Glossario](glossario.md)
+29. [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
+30. [Writer API v0](32-writer-api-v0.md)
+31. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 
@@ -47,6 +49,13 @@ Per un percorso piu' guidato usa
 Quel documento divide la lettura per obiettivi: capire il progetto da zero,
 usare Alfred, contribuire al codice, studiare gli eventi, leggere i test,
 seguire scanner/resync e orientarsi nella roadmap futura.
+
+Per una nuova sessione con un agente AI o per riprendere il lavoro dopo una
+pausa lunga, partire da [AGENTS.md](../../AGENTS.md), dalle
+[Regole operative](00-regole-operative.md) e dalla
+[Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md).
+La milestone chiarisce che inotify e' il backend di riferimento corrente, ma non
+il confine finale del prodotto.
 
 Per capire il codice in modo guidato, dopo aver letto architettura, app, modulo
 inotify e core, passa a [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md).

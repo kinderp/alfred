@@ -1727,6 +1727,27 @@ La copertura iniziale include:
   pubblica. Il test usa fake `add/remove` per simulare un fallimento dopo una
   reinstallazione riuscita, legge il `tmpfile()` usato dal logger e verifica il
   rollback all-or-stale con diagnostica `WATCH_RESYNC_ROLLBACK`
+- `test_record_raw_adapter.sh`: compila `test_record_raw_adapter.c` e verifica
+  il primo adapter verso Event Model v0. Il test controlla che
+  `alfred_raw_event_t` diventi `alfred_record_t` con layer
+  `normalized_raw`, category `filesystem` e tipi `RAW_*`, senza promuovere
+  `MOVED_FROM` o `MOVED_TO` a eventi semantici `FILE_MOVED`,
+  `FILE_RENAMED` o `FILE_RELOCATED`
+- `test_record_semantic_adapter.sh`: compila
+  `test_record_semantic_adapter.c` e verifica che `alfred_event_t` diventi un
+  record `semantic + filesystem`, preservando i path borrowed e usando tipi
+  semantici `FILE_*` / `DIR_*`
+- `test_record_diagnostic_builder.sh`: compila
+  `test_record_diagnostic_builder.c` e verifica il builder strutturato per
+  diagnostica `WATCH_*`. Il test controlla che `WATCH_STALE` diventi
+  `diagnostic + watch`, che `WATCH_RESYNC_FAILED` diventi
+  `diagnostic + recovery`, che le stringhe restino borrowed e che tipi raw o
+  semantici vengano rifiutati
+- `test_record_text_writer.sh`: compila `test_record_text_writer.c` e verifica
+  il formatter testuale da `alfred_record_t`. Il test controlla payload
+  semantici (`FILE_CREATED path=...`, `FILE_RENAMED from=... to=...`),
+  diagnostici (`WATCH_STALE`, `WATCH_RESYNC_FAILED`), raw normalizzati
+  (`RAW_CREATE ... mask=...`) e gestione della truncation
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

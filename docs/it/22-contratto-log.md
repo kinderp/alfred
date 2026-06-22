@@ -49,6 +49,55 @@ Esempi:
   produce `ALFRED_RAW_MOVED_*` e non produce `DIR_MOVED`
 - `WATCH_ADDED` descrive un nuovo watch inotify, non una directory creata
 
+Durante la migrazione a Event Model v0 il `raw.log` puo' contenere sia righe
+kernel inotify, sia righe raw Alfred normalizzate prodotte dal confine:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> logger_raw()
+```
+
+I primi casi runtime migrati sono `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`,
+`RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM` e `RAW_MOVED_TO`:
+
+```text
+RAW_CREATE path=/tmp/root/a.txt mask=1
+RAW_CREATE path=/tmp/root/dir mask=257
+RAW_DELETE path=/tmp/root/a.txt mask=2
+RAW_DELETE path=/tmp/root/dir mask=258
+RAW_ATTRIB path=/tmp/root/a.txt mask=8
+RAW_MODIFY path=/tmp/root/a.txt mask=4
+RAW_CLOSE_WRITE path=/tmp/root/a.txt mask=16
+RAW_MOVED_FROM path=/tmp/root/old.txt mask=32 cookie=42
+RAW_MOVED_TO path=/tmp/root/new.txt mask=64 cookie=42
+RAW_OVERFLOW path= mask=128
+```
+
+Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
+`IN_DELETE`: le affiancano per fissare il contratto del record normalizzato.
+`RAW_ATTRIB` affianca `IN_ATTRIB`, ma non produce ancora un evento semantico.
+`RAW_MODIFY` affianca `IN_MODIFY` e continua a essere il raw fact da cui il
+core produce `FILE_MODIFIED`.
+`RAW_CLOSE_WRITE` affianca `IN_CLOSE_WRITE` e continua a essere il raw fact da
+cui il core produce `FILE_READY`.
+`RAW_MOVED_FROM` e `RAW_MOVED_TO` affiancano `IN_MOVED_FROM` e `IN_MOVED_TO`.
+Restano fatti raw separati: espongono il `cookie` del backend per permettere al
+core di correlare la coppia prima di scegliere `FILE_RENAMED`, `DIR_RENAMED`,
+`FILE_RELOCATED`, `DIR_RELOCATED` o altro esito semantico.
+`RAW_OVERFLOW` affianca `IN_Q_OVERFLOW`: non e' legato a un path, perche'
+l'overflow riguarda l'istanza inotify e indica che lo stream ha perso eventi.
+`mask=1` corrisponde a `ALFRED_RAW_CREATE`; `mask=257` corrisponde a
+`ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`; `mask=2` corrisponde a
+`ALFRED_RAW_DELETE`; `mask=258` corrisponde a
+`ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR`; `mask=8` corrisponde a
+`ALFRED_RAW_ATTRIB`; `mask=4` corrisponde a `ALFRED_RAW_MODIFY`; `mask=16`
+corrisponde a `ALFRED_RAW_CLOSE_WRITE`; `mask=32` corrisponde a
+`ALFRED_RAW_MOVED_FROM`; `mask=64` corrisponde a `ALFRED_RAW_MOVED_TO`;
+`mask=128` corrisponde a `ALFRED_RAW_OVERFLOW`.
+
 ## Raw log audit inotify
 
 Quando `inotify_audit_events` e' configurato, Alfred puo' chiedere al kernel
@@ -145,6 +194,31 @@ WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-misma
 ```
 
 e' solo una serializzazione leggibile di quel fatto.
+
+Il primo builder C per questa direzione e'
+`alfred_record_build_watch_diagnostic()`, dichiarato in
+`core/include/alfred_record_diagnostic.h`. Il builder costruisce record
+`diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
+senza fare parsing della riga testuale. Le stringhe (`backend`, `path`,
+`state`, `reason`, `error`) restano borrowed come nel resto di
+`alfred_record_t`: chi vuole conservarle deve copiarle.
+
+Il primo formatter testuale e' `alfred_record_format_text()`, dichiarato in
+`core/include/alfred_record_text.h`. Questo formatter produce solo il payload:
+
+```text
+WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=identity-mismatch
+```
+
+Quando il record diagnostico contiene anche un errore OS, il formatter mantiene
+la compatibilita' con i log storici aggiungendo il suffisso testuale
+`errno=N` oppure `errno=N (messaggio)`. Internamente pero' il record resta
+strutturato: il codice numerico, il nome simbolico e il messaggio non sono
+estratti facendo parsing della stringa.
+
+Non produce timestamp, livello log o newline. Questi dettagli restano nel
+logger, cosi' lo stesso payload puo' essere usato da test, file log, socket o
+altri output device.
 
 Questa distinzione sara' importante quando introdurremo output performanti. Il
 backend e il core dovranno produrre eventi strutturati; poi un writer potra'
@@ -298,14 +372,65 @@ sono eventi semantici del core.
 passato come root non deve produrre `WATCH_ADDED`; deve fallire con diagnostica
 di errore backend, come verificato da `test_onlydir_rejects_file_root.sh`.
 
+Dal primo passo di Backend API v0, `WATCH_ADDED`, `WATCH_REMOVED` e
+`WATCH_STALE` nascono come record diagnostici strutturati e attraversano gia' il
+sink comune `emit(record)` prima di essere scritti come testo compatibile.
+
+```text
+watch_manager_add() / watch_manager_remove()
+-> alfred_record_build_watch_diagnostic(WATCH_ADDED | WATCH_REMOVED)
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event()
+
+backend_handle_move_self/delete_self/unmount()
+-> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event()
+```
+
+Il payload testuale resta volutamente identico:
+
+```text
+WATCH_ADDED wd=N path=P
+WATCH_REMOVED wd=N path=P
+WATCH_STALE wd=N path=P reason=R
+```
+
+Questa compatibilita' e' importante per due motivi. Primo, i test e gli utenti
+continuano a leggere lo stesso contratto. Secondo, il codice inizia a produrre
+il dato come record Event Model v0 prima di scriverlo come testo. Quando
+arriveranno JSONL, MessagePack, protobuf o socket binaria, non dovremo fare
+parsing delle stringhe `WATCH_ADDED`, `WATCH_REMOVED` o `WATCH_STALE`: il
+record strutturato sara' gia' il dato primario.
+
 ## Diagnostica backend del resync
 
 Questi log descrivono il tentativo di recuperare fiducia dopo che un watch e'
 diventato `STALE`.
 
+Anche i diagnostici `WATCH_RESYNC_*` passano ora dal percorso strutturato:
+
+```text
+backend local resync
+-> alfred_record_build_watch_diagnostic(...)
+-> fill record.recovery.*
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event() oppure logger_error()
+```
+
+`WATCH_RESYNC_SCAN_FAILED` conserva il canale `error.log`; gli altri record
+`WATCH_RESYNC_*` restano diagnostici di `events.log`.
+
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |
 | `WATCH_RESYNC_BEGIN wd=N path=P reason=R` | Alfred entra nella procedura di recovery per un watch stale | da questo punto il backend sta verificando se `P` puo' tornare affidabile | non significa che il resync riuscira' |
+| `WATCH_RESYNC_SCAN_FAILED wd=N path=P reason=R rc=C` | lo scanner directory-only del resync non completa la scansione | `C` e' il codice di errore interno restituito dallo scanner | non e' evento filesystem; indica che il backend non puo' provare la copertura |
 | `WATCH_RESYNC_SCAN_DONE wd=N path=P reason=R dirs=D watched=W missing=M` | il path e' stato provato affidabile e lo scanner directory-only ha finito | `D` directory viste, `W` gia' coperte da watch, `M` mancanti | non e' evento core e non indica ancora che i watch siano stati reinstallati |
 | `WATCH_RESYNC_SCAN_CLASS wd=N path=P reason=R result=X` | dopo `WATCH_RESYNC_SCAN_DONE` | classificazione leggibile dei contatori: `scan-empty`, `scan-covered`, `needs-reinstall` | non modifica da sola la watcher table |
 | `WATCH_RESYNC_SCAN_MISSING wd=N path=P reason=R missing_path=Q` | per ogni directory vista dallo scan ma non coperta da watch | `Q` e' candidata a ricevere un nuovo watch | non e' `DIR_CREATED`; descrive un buco di copertura watch |
@@ -313,7 +438,28 @@ diventato `STALE`.
 | `WATCH_RESYNC_REINSTALL_FAILED wd=N path=P reason=R missing_path=Q` | `watch_manager_add()` fallisce durante il resync | la riparazione completa non e' riuscita | non significa che `Q` sia stato cancellato; indica fallimento tecnico del watch |
 | `WATCH_RESYNC_ROLLBACK wd=N path=P reason=R removed_wd=M` | dopo un fallimento di reinstallazione, prima di rimuovere un watch installato nello stesso tentativo | Alfred sta annullando una riparazione parziale per mantenere la policy all-or-stale | non significa che il path osservato da `M` sia stato cancellato; indica cleanup interno del tentativo di resync |
 | `WATCH_RESYNC_FAILED wd=N path=P reason=R error=E` | recovery interrotta o non affidabile | il watch resta `STALE`; `E` spiega il ramo fallito | non e' evento utente; e' diagnostica backend |
+
+I diagnostici `WATCH_LOST_*` usano lo stesso confine strutturato dei
+diagnostici watch/resync:
+
+```text
+lost-scope recovery
+-> alfred_record_build_watch_diagnostic(...)
+-> fill record.recovery.*
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> alfred_record_format_text()
+-> logger_event() oppure logger_error()
+```
+
+`WATCH_LOST_QUEUE_FAILED` conserva il canale `error.log`; gli altri record
+`WATCH_LOST_*` restano diagnostici di `events.log`.
+
+| Log | Quando appare | Significato | Cosa non significa |
+| --- | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |
+| `WATCH_LOST_QUEUE_SKIPPED wd=N path=P reason=R error=E` | Alfred vorrebbe accodare uno scope perso ma manca un dato necessario | la recovery ampia non parte per quello scope; `E` spiega il motivo, per esempio `missing-identity` | non significa che la directory sia stata cancellata; indica che manca la prova necessaria per cercarla |
+| `WATCH_LOST_QUEUE_FAILED wd=N path=P reason=R error=E` | l'inserimento nella queue lost-scope fallisce | Alfred non ha registrato lavoro di recovery posticipata per quello scope | non e' evento utente; e' un errore tecnico del backend |
 | `WATCH_LOST_SCAN_BEGIN root=R pending=K` | una recovery sincrona consuma una entry lost-scope e scansiona la `scan_root` salvata nella entry | Alfred sta cercando una identita' persa dentro `R`; `K` e' il numero di entry rimaste in coda | non significa che la directory sara' trovata; non installa watch |
 | `WATCH_LOST_FOUND wd=N old_path=P new_path=Q reason=R` | lo scan trova una directory con la stessa identita' salvata | Alfred ha ritrovato l'oggetto a `Q`; il path trovato diventa il nuovo prefisso candidato | non significa ancora che watch mancanti o stato `VALID` siano stati aggiornati |
 | `WATCH_LOST_PREFIX_UPDATED wd=N old_prefix=P new_prefix=Q children=C` | dopo `WATCH_LOST_FOUND`, la watcher table riscrive il vecchio prefisso con quello nuovo | Alfred ha riallineato il path del watch principale e di `C` watch figli gia' noti | non significa che la copertura della subtree sia completa; non installa watch mancanti e non torna a `VALID` |
@@ -329,6 +475,49 @@ diventato `STALE`.
 | `WATCH_LOST_RECOVERY_FAILED wd=N path=P reason=R error=scan-failed` | lo scanner fallisce durante la recovery ampia | la passata non e' affidabile e non produce recupero | non e' evento utente; indica fallimento tecnico della scansione |
 | `WATCH_LOST_RECOVERY_END wd=N path=P reason=R result=valid watches=W` | identita', prefissi, scan strict e reinstallazione sono riusciti | la subtree recuperata torna affidabile e `W` watch sotto il prefisso sono stati marcati `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
 | `WATCH_RESYNC_END wd=N path=P reason=R result=valid` | recovery riuscita | tutti i controlli necessari sono passati e il watch torna `VALID` | non implica create/move/delete; indica solo affidabilita' ripristinata |
+
+I `WATCH_RESYNC_FAILED` logici, cioe' quelli nella forma:
+
+```text
+WATCH_RESYNC_FAILED wd=N path=P reason=R error=E
+```
+
+sono prodotti dal percorso strutturato Event Model v0:
+
+```text
+backend_log_resync_failure()
+-> backend_log_watch_diagnostic_record(WATCH_RESYNC_FAILED)
+-> alfred_record_build_watch_diagnostic_with_os_error(...)
+-> alfred_record_format_text()
+-> logger_event()
+```
+
+I fallimenti che includono anche `errno=N (...)` hanno ora un contratto dati
+strutturato e un formatter compatibile. La policy Event Model v0 distingue
+`error` Alfred dai campi OS `os_error_code`, `os_error_name` e
+`os_error_message`. Questi campi sono presenti in `alfred_record_t`, il builder
+diagnostico li popola nei `WATCH_RESYNC_FAILED` del runtime inotify e
+`alfred_record_format_text()` li rende come `errno=N` o
+`errno=N (messaggio)`.
+
+`os_error_name` resta opzionale. Nel runtime corrente Alfred conserva il codice
+numerico e il messaggio prodotto da `strerror(3)`; non inventa un nome simbolico
+quando non ha una funzione affidabile per mapparlo.
+
+Esempio di mapping:
+
+```text
+testo compatibile:
+WATCH_RESYNC_FAILED wd=7 path=/tmp/root reason=IN_MOVE_SELF error=path-unreachable errno=2 (No such file or directory)
+
+record strutturato:
+type             = WATCH_RESYNC_FAILED
+reason           = IN_MOVE_SELF
+error            = path-unreachable
+os_error_code    = 2
+os_error_name    = ENOENT
+os_error_message = No such file or directory
+```
 
 ### Errori di `WATCH_RESYNC_FAILED`
 

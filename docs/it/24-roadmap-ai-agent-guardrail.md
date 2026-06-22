@@ -72,6 +72,131 @@ Questa pipeline distingue tre livelli:
 
 Un guardrail utile deve confrontare tutti e tre.
 
+## Concetti strategici
+
+Questa sezione raccoglie concetti che devono orientare il design di Alfred, ma
+che non sono tutti implementazione corrente. Servono a evitare che il modello
+comune venga progettato solo intorno a inotify.
+
+### Agent Session
+
+Alfred non deve ragionare solo per processo o per evento filesystem isolato. In
+prospettiva deve poter ragionare per sessione agente.
+
+Una agent session collega:
+
+- agente o runtime che sta lavorando;
+- prompt, task o richiesta utente;
+- workspace di riferimento;
+- tool call richieste;
+- comandi o API effettivamente invocati;
+- process tree generato;
+- file letti, creati, modificati o cancellati;
+- connessioni di rete;
+- decisioni policy e motivazioni.
+
+Questo concetto non va implementato dentro il backend inotify. Deve restare un
+campo o un contesto di livello superiore, cosi' anche backend futuri come eBPF,
+fanotify, ETW o Endpoint Security possono contribuire alla stessa sessione.
+
+La tassonomia di prodotto a cui tendere e':
+
+```text
+human user
+-> AI agent
+-> tool call o comando shell
+-> process tree
+-> system action
+-> policy decision
+```
+
+Questo cambia il significato dei record futuri. Non basta dire che `python` ha
+letto un file sensibile. Alfred dovra' poter dire che una specifica sessione
+agente, avviata da un utente su un workspace, tramite un certo processo figlio,
+ha tentato un'azione fuori scope e che la policy l'ha osservata, segnalata,
+bloccata o avrebbe dovuto bloccarla.
+
+La fonte di verita' resta il sistema operativo. Prompt, task e intento
+dichiarato servono come contesto, ma Alfred non deve fidarsi ciecamente
+dell'agente.
+
+### Agent Action Ledger
+
+Un obiettivo pratico di Alfred e' produrre un ledger delle azioni osservate.
+
+Il ledger dovrebbe poter contenere:
+
+- file letti;
+- file modificati;
+- directory create o rimosse;
+- comandi eseguiti;
+- processi figli;
+- connessioni di rete;
+- accessi a segreti;
+- azioni consentite;
+- azioni bloccate;
+- azioni che avrebbero richiesto approvazione.
+
+Il formato testuale resta utile per debugging umano. Per integrazioni con agent
+runtime e strumenti esterni serve invece un output strutturato, inizialmente
+JSONL e in futuro eventualmente MessagePack, Protobuf o protocollo binario.
+
+### Intent-to-Action Verification
+
+Il punto centrale di un guardrail per agenti non e' solo "quale file e' stato
+toccato", ma se l'azione reale e' coerente con il task dichiarato.
+
+Esempio:
+
+```text
+Intento: aggiorna README.md
+Azione: comando shell
+Effetto: modifica README.md
+Decisione: coerente
+```
+
+Controesempio:
+
+```text
+Intento: aggiorna README.md
+Azione: comando shell
+Effetto: lettura di ~/.ssh/id_rsa
+Decisione: sospetto o vietato
+```
+
+Questa verifica richiede di collegare prompt, tool call, processo ed effetti OS.
+`inotify` puo' contribuire sugli effetti filesystem, ma non basta da solo.
+
+### Would-block mode
+
+Prima del blocco reale Alfred dovrebbe supportare una modalita' `would-block`.
+In questa modalita' Alfred non impedisce l'azione, ma registra che l'avrebbe
+bloccata.
+
+Serve per:
+
+- studiare falsi positivi;
+- testare policy senza rompere workflow reali;
+- raccogliere esempi per migliorare il modello;
+- introdurre Alfred gradualmente in ambienti di sviluppo.
+
+### Workspace Boundary
+
+Il primo guardrail concreto potrebbe essere il confine del workspace.
+
+Esempi:
+
+- consentire scritture dentro il repository corrente;
+- segnalare scritture fuori dal repository;
+- proteggere `.git`;
+- proteggere `.env`, token e file di credenziali;
+- richiedere approvazione per `sudo`;
+- richiedere approvazione per installazioni o modifiche persistenti.
+
+Questa policy non deve vivere nel backend inotify. Il backend osserva e produce
+record; il livello policy decide se consentire, avvisare, chiedere approvazione
+o bloccare.
+
 ## Threat model iniziale
 
 Alfred dovrebbe aiutare a riconoscere e fermare almeno questi rischi:
@@ -312,6 +437,8 @@ Decisioni da tenere:
 
 - Alfred punta a diventare AI agent runtime security, non solo event engine
 - il filesystem event engine e' il primo livello osservabile
+- inotify e' il primo backend di riferimento, non il centro concettuale del
+  prodotto
 - il guardrail richiede prompt context + action context + OS effects
 - `inotify` e' utile per observe, ma non basta per enforcement completo
 - i backend futuri devono essere plugin con contratto comune
@@ -320,11 +447,12 @@ Decisioni da tenere:
 
 ## Prossimi passi
 
-1. completare la fase resync inotify corrente
-2. stabilizzare il contratto log/record strutturato
-3. progettare `alfred_log_record_t` e un primo sink JSONL
-4. progettare una prima API di agent adapter
-5. definire un threat model piu' preciso per agenti AI
+1. completare il backend inotify di riferimento senza renderlo il centro del
+   modello comune
+2. stabilizzare Backend API v0, Event Model v0 e contratto log/record
+3. completare un primo sink o writer JSONL
+4. definire un threat model piu' preciso per agenti AI
+5. progettare una prima API di agent adapter
 6. scegliere un primo caso di guardrail semplice, per esempio blocco o warning
    su scritture fuori workspace
 
@@ -334,3 +462,4 @@ Decisioni da tenere:
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 - [Matrice eventi inotify](20-matrice-eventi-inotify.md)
 - [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
+- [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)

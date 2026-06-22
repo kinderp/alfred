@@ -35,6 +35,10 @@ gcc \
     "$ROOT_DIR/app/src/fs_scanner.c" \
     "$ROOT_DIR/app/src/logger.c" \
     "$ROOT_DIR/app/src/utils.c" \
+    "$ROOT_DIR/core/src/alfred_record_diagnostic.c" \
+    "$ROOT_DIR/core/src/alfred_record_sink.c" \
+    "$ROOT_DIR/core/src/alfred_record_text.c" \
+    "$ROOT_DIR/core/src/alfred_record_text_sink.c" \
     "$ROOT_DIR/modules/inotify/src/inotify_adapter.c" \
     "$ROOT_DIR/modules/inotify/src/inotify_config.c" \
     "$ROOT_DIR/modules/inotify/src/watch_manager.c" \

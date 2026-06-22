@@ -13,6 +13,10 @@
 
 #include "inotify_backend.h"
 
+#include "alfred_record_diagnostic.h"
+#include "alfred_record_sink.h"
+#include "alfred_record_text.h"
+#include "alfred_record_text_sink.h"
 #include "errors.h"
 #include "fs_scanner.h"
 #include "inotify_adapter.h"
@@ -43,6 +47,14 @@
 #else
 #define BACKEND_MAYBE_UNUSED
 #endif
+
+/*
+ * Diagnostic records may render more than one path-like field, for example
+ * old_path/new_path in lost-scope recovery. Keep the compatibility text-sink
+ * buffer large enough for two maximum-size paths plus stable field labels so
+ * valid long paths do not silently bypass the record/sink bridge.
+ */
+#define BACKEND_RECORD_TEXT_BUFFER_SIZE ((PATH_MAX * 2u) + 512u)
 
 /* ============================================================================
  * Local Types
@@ -172,6 +184,238 @@ typedef struct backend_lost_scope_scan_context {
     size_t found_path_size;
     int found;
 } backend_lost_scope_scan_context_t;
+
+/*
+ * backend_text_sink_context_t - route one formatted payload to the right log
+ * @logger: destination logger owned by the application/backend context
+ * @use_error_channel: nonzero to write through logger_error(), zero for events
+ *
+ * The record text sink only formats payloads. This tiny context gives the
+ * backend bridge enough information to preserve the historical log channel for
+ * diagnostics such as WATCH_RESYNC_SCAN_FAILED without teaching the core sink
+ * anything about Alfred's logger_t.
+ */
+typedef struct backend_text_sink_context {
+    logger_t *logger;
+    int use_error_channel;
+} backend_text_sink_context_t;
+
+/*
+ * backend_write_event_payload - bridge text-sink payloads to logger_event
+ * @userdata: logger_t destination
+ * @payload: formatted diagnostic payload
+ *
+ * The text sink is intentionally logger-agnostic. Until the inotify backend
+ * context owns a first-class record sink, this adapter keeps logger ownership
+ * at the backend boundary while allowing selected diagnostics to flow through
+ * emit(record).
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int backend_write_event_payload(void *userdata, const char *payload)
+{
+    logger_t *logger = userdata;
+
+    if (logger == NULL || payload == NULL) {
+        return -1;
+    }
+
+    logger_event(logger, "%s", payload);
+    return 0;
+}
+
+/*
+ * backend_write_routed_payload - bridge text-sink payloads to event/error logs
+ * @userdata: backend_text_sink_context_t route description
+ * @payload: formatted diagnostic payload
+ *
+ * Some backend diagnostics intentionally live in the error log, while most are
+ * event-log diagnostics. The record text sink only knows how to produce a
+ * payload. This bridge keeps the channel decision local to the backend helper
+ * that knows the diagnostic type.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int backend_write_routed_payload(void *userdata, const char *payload)
+{
+    backend_text_sink_context_t *sink_context = userdata;
+
+    if (sink_context == NULL ||
+        sink_context->logger == NULL ||
+        payload == NULL) {
+        return -1;
+    }
+
+    if (sink_context->use_error_channel) {
+        logger_error(sink_context->logger, "%s", payload);
+    } else {
+        logger_event(sink_context->logger, "%s", payload);
+    }
+
+    return 0;
+}
+
+/*
+ * backend_log_watch_diagnostic_record - emit one WATCH_* diagnostic record
+ * @ctx: narrowed backend context used by the poll path
+ * @type: WATCH_* diagnostic type to build
+ * @wd: inotify watch descriptor involved in the diagnostic
+ * @path: borrowed primary diagnostic path, or NULL when unavailable
+ * @state: optional watch/recovery state or result string
+ * @reason: optional stable reason string, such as IN_MOVE_SELF
+ * @error: optional normalized failure string
+ * @os_error_code: optional errno-like OS error code, or 0 when absent
+ * @os_error_name: optional symbolic OS error name, or NULL when unavailable
+ * @os_error_message: optional human-readable OS error message, or NULL
+ * @fallback_name: textual WATCH_* token used if record formatting fails
+ *
+ * Backend API v0 moves diagnostics toward structured records, but the current
+ * runtime still writes text logs through logger_event(). This helper centralizes
+ * the behavior-neutral bridge: build alfred_record_t, format the historical
+ * text payload, and fall back to the same compact WATCH_* shape if the bridge
+ * cannot be used. It intentionally covers only field shapes already supported
+ * by alfred_record_format_text(): plain wd/path, reason, reason+error, and the
+ * limited reason+result cases handled by the formatter. OS error fields remain
+ * optional: callers pass them only for diagnostics that need to preserve
+ * syscall evidence while keeping Alfred's stable @error token separate.
+ */
+static int backend_log_watch_diagnostic_record(
+    inotify_backend_context_t *ctx,
+    alfred_record_type_t type,
+    int wd,
+    const char *path,
+    const char *state,
+    const char *reason,
+    const char *error,
+    int os_error_code,
+    const char *os_error_name,
+    const char *os_error_message,
+    const char *fallback_name)
+{
+    alfred_record_t record;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return -1;
+
+    if (alfred_record_build_watch_diagnostic_with_os_error(
+            type,
+            "inotify",
+            wd,
+            path,
+            state,
+            reason,
+            error,
+            os_error_code,
+            os_error_name,
+            os_error_message,
+            &record) == 0) {
+        text_sink.write = backend_write_event_payload;
+        text_sink.userdata = ctx->logger;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            return 0;
+        }
+
+        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+            logger_event(ctx->logger, "%s", payload);
+            return 0;
+        }
+    }
+
+    if (fallback_name == NULL)
+        return -1;
+
+    if (reason != NULL && error != NULL) {
+        if (os_error_code != 0) {
+            if (os_error_message != NULL) {
+                logger_event(ctx->logger,
+                             "%s wd=%d path=%s reason=%s error=%s errno=%d (%s)",
+                             fallback_name,
+                             wd,
+                             path != NULL ? path : "",
+                             reason,
+                             error,
+                             os_error_code,
+                             os_error_message);
+                return 0;
+            }
+
+            logger_event(ctx->logger,
+                         "%s wd=%d path=%s reason=%s error=%s errno=%d",
+                         fallback_name,
+                         wd,
+                         path != NULL ? path : "",
+                         reason,
+                         error,
+                         os_error_code);
+            return 0;
+        }
+
+        logger_event(ctx->logger,
+                     "%s wd=%d path=%s reason=%s error=%s",
+                     fallback_name,
+                     wd,
+                     path != NULL ? path : "",
+                     reason,
+                     error);
+        return 0;
+    }
+
+    if (reason != NULL) {
+        logger_event(ctx->logger,
+                     "%s wd=%d path=%s reason=%s",
+                     fallback_name,
+                     wd,
+                     path != NULL ? path : "",
+                     reason);
+        return 0;
+    }
+
+    logger_event(ctx->logger,
+                 "%s wd=%d path=%s",
+                 fallback_name,
+                 wd,
+                 path != NULL ? path : "");
+
+    return 0;
+}
+
+/*
+ * backend_log_watch_stale - emit WATCH_STALE through Event Model records
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: inotify watch descriptor whose path is no longer reliable
+ * @path: borrowed path from the watcher table, or NULL when unavailable
+ * @reason: stable kernel/backend reason string, such as IN_MOVE_SELF
+ *
+ * WATCH_STALE is backend watch-table reliability state, not a semantic
+ * filesystem event. The helper keeps that decision local while delegating the
+ * shared record/sink/formatter/fallback work to
+ * backend_log_watch_diagnostic_record().
+ */
+static void backend_log_watch_stale(inotify_backend_context_t *ctx,
+                                    int wd,
+                                    const char *path,
+                                    const char *reason)
+{
+    (void)backend_log_watch_diagnostic_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_STALE,
+        wd,
+        path,
+        "stale",
+        reason,
+        NULL,
+        0,
+        NULL,
+        NULL,
+        "WATCH_STALE");
+}
 
 /*
  * backend_resync_probe_result - internal outcomes of stale-watch recovery
@@ -490,6 +734,39 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        const char *reason,
                                        backend_resync_probe_result_t result,
                                        int saved_errno);
+
+static int backend_log_resync_record(inotify_backend_context_t *ctx,
+                                     alfred_record_type_t type,
+                                     int wd,
+                                     const char *path,
+                                     const char *reason,
+                                     const char *state,
+                                     const char *detail_path,
+                                     int related_watch_id,
+                                     int result_code,
+                                     size_t directories_seen,
+                                     size_t directories_watched,
+                                     size_t directories_missing);
+
+static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
+                                         alfred_record_type_t type,
+                                         int wd,
+                                         const char *path,
+                                         const char *old_path,
+                                         const char *new_path,
+                                         const char *reason,
+                                         const char *state,
+                                         const char *error,
+                                         const char *detail_path,
+                                         int related_watch_id,
+                                         size_t directories_seen,
+                                         size_t directories_watched,
+                                         size_t directories_missing,
+                                         size_t pending_count,
+                                         size_t children_count,
+                                         size_t watches_count,
+                                         unsigned retry_count,
+                                         uint64_t delay_ms);
 
 static int backend_build_overflow_raw(const struct inotify_event *ev,
                                       alfred_raw_event_t *out);
@@ -910,10 +1187,26 @@ backend_lost_scope_recover_entry_with_ops(
 
     found_path[0] = '\0';
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
-                 root,
-                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN,
+        -1,
+        root,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
+        0,
+        0,
+        0,
+        0);
 
     backend_lost_scope_scan_context_t scan_context;
 
@@ -940,11 +1233,26 @@ backend_lost_scope_recover_entry_with_ops(
                      &scan_context);
 
     if (rc != ERR_OK) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=scan-failed",
-                     entry->wd,
-                     entry->old_path,
-                     entry->reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+            entry->wd,
+            entry->old_path,
+            NULL,
+            NULL,
+            entry->reason,
+            NULL,
+            "scan-failed",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
     }
 
@@ -952,11 +1260,26 @@ backend_lost_scope_recover_entry_with_ops(
         size_t updated_count = 0;
 
         if (!watcher_exists(&ctx->runtime->watchers, entry->wd)) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-path-failed",
-                         entry->wd,
-                         entry->old_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                entry->old_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "update-path-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
@@ -971,26 +1294,69 @@ backend_lost_scope_recover_entry_with_ops(
                                        found_path,
                                        &updated_count) != 0 ||
             updated_count == 0) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=update-prefix-failed",
-                         entry->wd,
-                         entry->old_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                entry->old_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "update-prefix-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
-                     entry->wd,
-                     entry->old_path,
-                     found_path,
-                     entry->reason);
-        logger_event(ctx->logger,
-                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s new_prefix=%s children=%zu",
-                     entry->wd,
-                     entry->old_path,
-                     found_path,
-                     updated_count - 1);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_FOUND,
+            entry->wd,
+            NULL,
+            entry->old_path,
+            found_path,
+            entry->reason,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED,
+            entry->wd,
+            NULL,
+            entry->old_path,
+            found_path,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            updated_count - 1,
+            0,
+            0,
+            0);
 
         backend_resync_scan_context_t coverage_context;
 
@@ -1001,42 +1367,97 @@ backend_lost_scope_recover_entry_with_ops(
                                              &coverage_context);
 
         if (coverage_rc != ERR_OK) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=coverage-scan-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "coverage-scan-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     coverage_context.directories_seen,
-                     coverage_context.directories_watched,
-                     coverage_context.directories_missing_watch);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            coverage_context.directories_seen,
+            coverage_context.directories_watched,
+            coverage_context.directories_missing_watch,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         for (size_t i = 0; i < coverage_context.missing_paths_count; i++) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                         entry->wd,
-                         found_path,
-                         entry->reason,
-                         coverage_context.missing_paths[i]);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                NULL,
+                coverage_context.missing_paths[i],
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
         }
 
         backend_resync_scan_class_t coverage_class =
             backend_classify_resync_scan(&coverage_context);
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s result=%s",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     backend_resync_scan_class_name(coverage_class));
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            backend_resync_scan_class_name(coverage_class),
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         error_t reinstall_rc =
             backend_lost_scope_reinstall_missing_watches(ctx,
@@ -1047,11 +1468,26 @@ backend_lost_scope_recover_entry_with_ops(
                                                          watch_ops);
 
         if (reinstall_rc != ERR_OK) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=reinstall-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "reinstall-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
@@ -1063,32 +1499,75 @@ backend_lost_scope_recover_entry_with_ops(
                                      WATCHER_STATE_VALID,
                                      &valid_count) != 0 ||
             valid_count == 0) {
-            logger_event(ctx->logger,
-                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=set-valid-failed",
-                         entry->wd,
-                         found_path,
-                         entry->reason);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+                entry->wd,
+                found_path,
+                NULL,
+                NULL,
+                entry->reason,
+                NULL,
+                "set-valid-failed",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
             backend_resync_scan_context_destroy(&coverage_context);
             return BACKEND_LOST_SCOPE_RECOVERY_SCAN_FAILED;
         }
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s result=valid watches=%zu",
-                     entry->wd,
-                     found_path,
-                     entry->reason,
-                     valid_count);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END,
+            entry->wd,
+            found_path,
+            NULL,
+            NULL,
+            entry->reason,
+            "valid",
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            valid_count,
+            0,
+            0);
 
         backend_resync_scan_context_destroy(&coverage_context);
         return BACKEND_LOST_SCOPE_RECOVERY_FOUND;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
-                 entry->wd,
-                 entry->old_path,
-                 entry->reason,
-                 entry->retry_count);
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND,
+        entry->wd,
+        entry->old_path,
+        NULL,
+        NULL,
+        entry->reason,
+        NULL,
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        entry->retry_count,
+        0);
     return BACKEND_LOST_SCOPE_RECOVERY_NOT_FOUND;
 }
 
@@ -1368,13 +1847,26 @@ static int backend_lost_scope_schedule_retry(
     failed_attempts = attempted->retry_count + 1;
 
     if (failed_attempts >= BACKEND_LOST_SCOPE_MAX_ATTEMPTS) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s result=%s retries=%u",
-                     attempted->wd,
-                     retry_path,
-                     attempted->reason,
-                     backend_lost_scope_recovery_result_name(result),
-                     failed_attempts);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP,
+            attempted->wd,
+            retry_path,
+            NULL,
+            NULL,
+            attempted->reason,
+            backend_lost_scope_recovery_result_name(result),
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            failed_attempts,
+            0);
         return -1;
     }
 
@@ -1390,23 +1882,49 @@ static int backend_lost_scope_schedule_retry(
 
     if (backend_lost_scope_queue_enqueue_entry(&ctx->runtime->lost_scopes,
                                                &retry_entry) != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s error=requeue-failed",
-                     attempted->wd,
-                     retry_path,
-                     attempted->reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED,
+            attempted->wd,
+            retry_path,
+            NULL,
+            NULL,
+            attempted->reason,
+            NULL,
+            "requeue-failed",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return -1;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s result=%s retry=%u delay_ms=%llu pending=%zu",
-                 retry_entry.wd,
-                 retry_entry.old_path,
-                 retry_entry.reason,
-                 backend_lost_scope_recovery_result_name(result),
-                 retry_entry.retry_count,
-                 (unsigned long long)(delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS),
-                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED,
+        retry_entry.wd,
+        retry_entry.old_path,
+        NULL,
+        NULL,
+        retry_entry.reason,
+        backend_lost_scope_recovery_result_name(result),
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
+        0,
+        0,
+        retry_entry.retry_count,
+        delay_ns / BACKEND_LOST_SCOPE_NS_PER_MS);
 
     return 0;
 }
@@ -2031,10 +2549,10 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_MOVE_SELF",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_MOVE_SELF");
 
     backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF");
 }
@@ -2077,10 +2595,10 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_DELETE_SELF",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_DELETE_SELF");
 }
 
 /*
@@ -2122,10 +2640,10 @@ static void backend_handle_unmount(inotify_backend_context_t *ctx,
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE wd=%d path=%s reason=IN_UNMOUNT",
-                 ev->wd,
-                 path ? path : "");
+    backend_log_watch_stale(ctx,
+                            ev->wd,
+                            path,
+                            "IN_UNMOUNT");
 }
 
 /*
@@ -2213,11 +2731,19 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
         return BACKEND_RESYNC_PROBE_NOT_STALE;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
-                 wd,
-                 path,
-                 reason);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
+        wd,
+        path,
+        reason,
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     if (watcher_set_state(&ctx->runtime->watchers,
                           wd,
@@ -2391,11 +2917,19 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
         return BACKEND_RESYNC_PROBE_SET_VALID_FAILED;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_END wd=%d path=%s reason=%s result=valid",
-                 wd,
-                 path,
-                 reason);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_END,
+        wd,
+        path,
+        reason,
+        "valid",
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     return BACKEND_RESYNC_PROBE_VALID;
 }
@@ -2455,11 +2989,26 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                              wd,
                              &device_id,
                              &inode_id) != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s error=missing-identity",
-                     wd,
-                     path,
-                     reason);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            "missing-identity",
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return;
     }
 
@@ -2479,22 +3028,49 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                          reason,
                                          now_ns,
                                          now_ns) != 0) {
-        logger_error(ctx->logger,
-                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s error=%s",
-                     wd,
-                     path,
-                     reason,
-                     backend_resync_probe_result_name(result));
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            backend_resync_probe_result_name(result),
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
         return;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s pending=%zu",
-                 wd,
-                 path,
-                 reason,
-                 backend_resync_probe_result_name(result),
-                 backend_lost_scope_queue_count(&ctx->runtime->lost_scopes));
+    (void)backend_log_lost_scope_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
+        wd,
+        path,
+        NULL,
+        NULL,
+        reason,
+        NULL,
+        backend_resync_probe_result_name(result),
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
+        0,
+        0,
+        0,
+        0);
 }
 
 /*
@@ -2587,34 +3163,53 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                          &scan_context);
 
     if (rc != ERR_OK) {
-        logger_error(ctx->logger,
-                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
-                     wd,
-                     path,
-                     reason,
-                     rc);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED,
+            wd,
+            path,
+            reason,
+            NULL,
+            NULL,
+            0,
+            rc,
+            0,
+            0,
+            0);
         backend_resync_scan_context_destroy(&scan_context);
         return rc;
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s dirs=%zu watched=%zu missing=%zu",
-                 wd,
-                 path,
-                 reason,
-                 scan_context.directories_seen,
-                 scan_context.directories_watched,
-                 scan_context.directories_missing_watch);
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
+        wd,
+        path,
+        reason,
+        NULL,
+        NULL,
+        0,
+        0,
+        scan_context.directories_seen,
+        scan_context.directories_watched,
+        scan_context.directories_missing_watch);
 
     backend_resync_scan_class_t scan_class =
         backend_classify_resync_scan(&scan_context);
 
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
-                 wd,
-                 path,
-                 reason,
-                 backend_resync_scan_class_name(scan_class));
+    (void)backend_log_resync_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
+        wd,
+        path,
+        reason,
+        backend_resync_scan_class_name(scan_class),
+        NULL,
+        0,
+        0,
+        0,
+        0,
+        0);
 
     /*
      * Runtime recovery must mutate the real watcher table and kernel watches.
@@ -2744,12 +3339,19 @@ static error_t backend_resync_reinstall_missing_watches(
          * Log the candidate before mutation. If the following add fails, the
          * diagnostic still shows exactly which missing path broke the repair.
          */
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s missing_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
+            wd,
+            path,
+            reason,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         int new_wd = ops->add(ctx, missing_path);
 
@@ -2759,20 +3361,34 @@ static error_t backend_resync_reinstall_missing_watches(
              * Roll back every watch installed in this attempt and report a
              * backend error so the caller leaves the parent watch STALE.
              */
-            logger_event(ctx->logger,
-                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
+            (void)backend_log_resync_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
+                wd,
+                path,
+                reason,
+                NULL,
+                missing_path,
+                0,
+                0,
+                0,
+                0,
+                0);
 
             for (size_t j = 0; j < installed_count; j++) {
-                logger_event(ctx->logger,
-                             "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
-                             wd,
-                             path,
-                             reason,
-                             installed_wds[j]);
+                (void)backend_log_resync_record(
+                    ctx,
+                    ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+                    wd,
+                    path,
+                    reason,
+                    NULL,
+                    NULL,
+                    installed_wds[j],
+                    0,
+                    0,
+                    0,
+                    0);
 
                 (void)ops->remove(ctx, installed_wds[j]);
             }
@@ -2784,12 +3400,19 @@ static error_t backend_resync_reinstall_missing_watches(
         installed_wds[installed_count] = new_wd;
         installed_count++;
 
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
+            wd,
+            path,
+            reason,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0);
     }
 
     free(installed_wds);
@@ -2875,20 +3498,48 @@ static error_t backend_lost_scope_reinstall_missing_watches(
              * be only partially covered. Roll back all watches installed in
              * this attempt and let the caller keep the recovered subtree stale.
              */
-            logger_event(ctx->logger,
-                         "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s missing_path=%s",
-                         wd,
-                         path,
-                         reason,
-                         missing_path);
+            (void)backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED,
+                wd,
+                path,
+                NULL,
+                NULL,
+                reason,
+                NULL,
+                NULL,
+                missing_path,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
 
             for (size_t j = 0; j < installed_count; j++) {
-                logger_event(ctx->logger,
-                             "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
-                             wd,
-                             path,
-                             reason,
-                             installed_wds[j]);
+                (void)backend_log_lost_scope_record(
+                    ctx,
+                    ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK,
+                    wd,
+                    path,
+                    NULL,
+                    NULL,
+                    reason,
+                    NULL,
+                    NULL,
+                    NULL,
+                    installed_wds[j],
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0);
 
                 (void)ops->remove(ctx, installed_wds[j]);
             }
@@ -2900,12 +3551,26 @@ static error_t backend_lost_scope_reinstall_missing_watches(
         installed_wds[installed_count] = new_wd;
         installed_count++;
 
-        logger_event(ctx->logger,
-                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s installed_path=%s",
-                     wd,
-                     path,
-                     reason,
-                     missing_path);
+        (void)backend_log_lost_scope_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED,
+            wd,
+            path,
+            NULL,
+            NULL,
+            reason,
+            NULL,
+            NULL,
+            missing_path,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
     }
 
     free(installed_wds);
@@ -3123,6 +3788,461 @@ static const char *backend_resync_probe_result_name(
 }
 
 /*
+ * backend_log_resync_record - emit one local WATCH_RESYNC_* diagnostic record
+ * @ctx: narrowed backend context used by resync code
+ * @type: concrete WATCH_RESYNC_* record type
+ * @wd: stale/recovered parent watch descriptor
+ * @path: trusted or last-known parent path for the recovery attempt
+ * @reason: kernel/backend reason that triggered the resync
+ * @state: optional result/classification token, such as "valid"
+ * @detail_path: optional child path for missing/reinstalled watch records
+ * @related_watch_id: optional related watch descriptor, such as rollback wd
+ * @result_code: optional backend-local numeric result, such as scan rc
+ * @directories_seen: number of directories found by a coverage scan
+ * @directories_watched: number of scanned directories already watched
+ * @directories_missing: number of scanned directories missing a watch
+ *
+ * Local resync diagnostics have richer payloads than plain WATCH_STALE but are
+ * still backend diagnostics, not semantic filesystem events. This bridge builds
+ * the Event Model v0 record, fills the recovery payload used by the text sink,
+ * and keeps a compatibility fallback with the historical text shape.
+ * WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel through a
+ * routed sink callback; the other local resync diagnostics remain event-log
+ * records.
+ *
+ * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
+ */
+static int backend_log_resync_record(inotify_backend_context_t *ctx,
+                                     alfred_record_type_t type,
+                                     int wd,
+                                     const char *path,
+                                     const char *reason,
+                                     const char *state,
+                                     const char *detail_path,
+                                     int related_watch_id,
+                                     int result_code,
+                                     size_t directories_seen,
+                                     size_t directories_watched,
+                                     size_t directories_missing)
+{
+    alfred_record_t record;
+    backend_text_sink_context_t sink_context;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+    const char *safe_path = path != NULL ? path : "";
+
+    if (ctx == NULL || ctx->logger == NULL || reason == NULL)
+        return -1;
+
+    if (alfred_record_build_watch_diagnostic_with_os_error(type,
+                                                           "inotify",
+                                                           wd,
+                                                           path,
+                                                           state,
+                                                           reason,
+                                                           NULL,
+                                                           0,
+                                                           NULL,
+                                                           NULL,
+                                                           &record) == 0) {
+        record.recovery.directories_seen = directories_seen;
+        record.recovery.directories_watched = directories_watched;
+        record.recovery.directories_missing = directories_missing;
+        record.recovery.detail_path = detail_path;
+        record.recovery.related_watch_id = related_watch_id;
+        record.recovery.result_code = result_code;
+
+        sink_context.logger = ctx->logger;
+        sink_context.use_error_channel =
+            type == ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED;
+        text_sink.write = backend_write_routed_payload;
+        text_sink.userdata = &sink_context;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            return 0;
+        }
+    }
+
+    switch (type) {
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
+                     wd,
+                     safe_path,
+                     reason);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED:
+        logger_error(ctx->logger,
+                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
+                     wd,
+                     safe_path,
+                     reason,
+                     result_code);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s "
+                     "dirs=%zu watched=%zu missing=%zu",
+                     wd,
+                     safe_path,
+                     reason,
+                     directories_seen,
+                     directories_watched,
+                     directories_missing);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     state != NULL ? state : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s "
+                     "removed_wd=%d",
+                     wd,
+                     safe_path,
+                     reason,
+                     related_watch_id);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s "
+                     "installed_path=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     detail_path != NULL ? detail_path : "");
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_RESYNC_END:
+        logger_event(ctx->logger,
+                     "WATCH_RESYNC_END wd=%d path=%s reason=%s result=%s",
+                     wd,
+                     safe_path,
+                     reason,
+                     state != NULL ? state : "");
+        return 0;
+
+    default:
+        return -1;
+    }
+}
+
+/*
+ * backend_log_lost_scope_record - emit one WATCH_LOST_* diagnostic record
+ * @ctx: narrowed backend context used by lost-scope recovery code
+ * @type: concrete WATCH_LOST_* record type
+ * @wd: stale/recovered watch descriptor, or -1 when the record is root-scoped
+ * @path: primary path or scan root for the diagnostic
+ * @old_path: optional old scope/prefix path
+ * @new_path: optional recovered scope/prefix path
+ * @reason: kernel/backend reason that triggered recovery
+ * @state: optional result/classification token, such as "valid" or "not-found"
+ * @error: optional stable Alfred error token
+ * @detail_path: optional missing/reinstalled child path
+ * @related_watch_id: optional related watch descriptor, such as rollback wd
+ * @directories_seen: number of directories found by a coverage scan
+ * @directories_watched: number of scanned directories already watched
+ * @directories_missing: number of scanned directories missing a watch
+ * @pending_count: lost-scope queue size to include in the diagnostic
+ * @children_count: known child prefixes updated by path-prefix recovery
+ * @watches_count: watches repaired or marked valid by recovery
+ * @retry_count: current retry counter to render as retry/retries
+ * @delay_ms: retry delay in milliseconds, or 0 when not applicable
+ *
+ * This is the lost-scope counterpart of backend_log_resync_record(). It builds
+ * an Event Model v0 record, fills the recovery payload, emits the record
+ * through the text sink, and falls back to the same text shape if the sink path
+ * fails. WATCH_LOST_QUEUE_FAILED keeps the historical error-log channel through
+ * the same routed sink callback used by local resync failures.
+ *
+ * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
+ */
+static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
+                                         alfred_record_type_t type,
+                                         int wd,
+                                         const char *path,
+                                         const char *old_path,
+                                         const char *new_path,
+                                         const char *reason,
+                                         const char *state,
+                                         const char *error,
+                                         const char *detail_path,
+                                         int related_watch_id,
+                                         size_t directories_seen,
+                                         size_t directories_watched,
+                                         size_t directories_missing,
+                                         size_t pending_count,
+                                         size_t children_count,
+                                         size_t watches_count,
+                                         unsigned retry_count,
+                                         uint64_t delay_ms)
+{
+    alfred_record_t record;
+    backend_text_sink_context_t sink_context;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+    const char *safe_path = path != NULL ? path : "";
+    const char *safe_old_path = old_path != NULL ? old_path : "";
+    const char *safe_new_path = new_path != NULL ? new_path : "";
+    const char *safe_reason = reason != NULL ? reason : "";
+    const char *safe_state = state != NULL ? state : "";
+    const char *safe_error = error != NULL ? error : "";
+    const char *safe_detail_path = detail_path != NULL ? detail_path : "";
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return -1;
+
+    if (alfred_record_build_watch_diagnostic_with_os_error(type,
+                                                           "inotify",
+                                                           wd,
+                                                           path,
+                                                           state,
+                                                           reason,
+                                                           error,
+                                                           0,
+                                                           NULL,
+                                                           NULL,
+                                                           &record) == 0) {
+        record.old_path = old_path;
+        record.new_path = new_path;
+        record.watch.retry_count = retry_count;
+        record.recovery.directories_seen = directories_seen;
+        record.recovery.directories_watched = directories_watched;
+        record.recovery.directories_missing = directories_missing;
+        record.recovery.detail_path = detail_path;
+        record.recovery.related_watch_id = related_watch_id;
+        record.recovery.pending_count = pending_count;
+        record.recovery.children_count = children_count;
+        record.recovery.watches_count = watches_count;
+        record.recovery.delay_ms = delay_ms;
+
+        sink_context.logger = ctx->logger;
+        sink_context.use_error_channel =
+            type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED;
+        text_sink.write = backend_write_routed_payload;
+        text_sink.userdata = &sink_context;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            return 0;
+        }
+    }
+
+    switch (type) {
+    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s "
+                     "pending=%zu",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error,
+                     pending_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s "
+                     "error=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED:
+        logger_error(ctx->logger,
+                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s "
+                     "error=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
+                     safe_path,
+                     pending_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_FOUND:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
+                     wd,
+                     safe_old_path,
+                     safe_new_path,
+                     safe_reason);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s "
+                     "new_prefix=%s children=%zu",
+                     wd,
+                     safe_old_path,
+                     safe_new_path,
+                     children_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s "
+                     "dirs=%zu watched=%zu missing=%zu",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     directories_seen,
+                     directories_watched,
+                     directories_missing);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_detail_path);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s "
+                     "result=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_state);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s "
+                     "installed_path=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_detail_path);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s "
+                     "missing_path=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_detail_path);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     related_watch_id);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     retry_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s "
+                     "result=%s retry=%u delay_ms=%llu pending=%zu",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_state,
+                     retry_count,
+                     (unsigned long long)delay_ms,
+                     pending_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s "
+                     "result=%s retries=%u",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_state,
+                     retry_count);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s "
+                     "error=%s",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_error);
+        return 0;
+
+    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END:
+        logger_event(ctx->logger,
+                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s "
+                     "result=%s watches=%zu",
+                     wd,
+                     safe_path,
+                     safe_reason,
+                     safe_state,
+                     watches_count);
+        return 0;
+
+    default:
+        return -1;
+    }
+}
+
+/*
  * backend_log_resync_failure - write a normalized resync failure diagnostic
  * @ctx: narrowed backend context used by the poll path
  * @wd: inotify watch descriptor involved in the probe
@@ -3133,7 +4253,9 @@ static const char *backend_resync_probe_result_name(
  *
  * A single formatter keeps WATCH_RESYNC_FAILED readable while the internal
  * decision tree grows. Syscall failures include errno because they usually
- * need operating-system context; logical failures use only an error token.
+ * need operating-system context. The Event Model v0 record keeps that OS
+ * evidence in record.os_error while preserving @result as Alfred's stable
+ * diagnostic error token.
  */
 static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        int wd,
@@ -3142,24 +4264,18 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
                                        backend_resync_probe_result_t result,
                                        int saved_errno)
 {
-    if (saved_errno != 0) {
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s errno=%d (%s)",
-                     wd,
-                     path,
-                     reason,
-                     backend_resync_probe_result_name(result),
-                     saved_errno,
-                     strerror(saved_errno));
-        return;
-    }
-
-    logger_event(ctx->logger,
-                 "WATCH_RESYNC_FAILED wd=%d path=%s reason=%s error=%s",
-                 wd,
-                 path,
-                 reason,
-                 backend_resync_probe_result_name(result));
+    (void)backend_log_watch_diagnostic_record(
+        ctx,
+        ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
+        wd,
+        path,
+        NULL,
+        reason,
+        backend_resync_probe_result_name(result),
+        saved_errno,
+        NULL,
+        saved_errno != 0 ? strerror(saved_errno) : NULL,
+        "WATCH_RESYNC_FAILED");
 }
 
 /* ============================================================================

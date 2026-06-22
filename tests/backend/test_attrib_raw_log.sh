@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# Expected raw.log contract:
+# - IN_ATTRIB ... name=metadata.txt
+# - RAW_ATTRIB path=*/metadata.txt mask=8
+#
+# chmod changes metadata, not file contents. Alfred keeps this as a raw/backend
+# fact and must not emit FILE_MODIFIED, FILE_READY, or any future semantic
+# metadata event until the core explicitly defines one.
+
 TEST_ROOT="${TEST_ROOT:-/tmp/alfred_backend_test_attrib_raw}"
 
 source ../core/test_lib.sh
@@ -19,6 +27,13 @@ if ! grep -Eq "IN_ATTRIB .*path=.*/alfred_backend_test_attrib_raw name=metadata.
     ./raw.log; then
 
     echo "FAIL: missing IN_ATTRIB raw log"
+    echo "----- raw.log -----"
+    cat ./raw.log || true
+    exit 1
+fi
+
+if ! grep -Eq "RAW_ATTRIB path=.*/metadata.txt mask=8" ./raw.log; then
+    echo "FAIL: missing normalized RAW_ATTRIB record"
     echo "----- raw.log -----"
     cat ./raw.log || true
     exit 1

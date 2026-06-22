@@ -47,6 +47,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `28-audit-documentazione-e-debiti.md` |
 | Parziale | `29-event-model-v0.md` |
 | Parziale | `30-backend-api-v0.md` |
+| Completo | `31-milestone-inotify-reference-backend.md` |
+| Parziale | `32-writer-api-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -66,6 +68,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `docs/man/man1/alfred.1` |
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |
+| Completo | `AGENTS.md` |
 
 ## Aggiornamento recente
 
@@ -126,14 +129,144 @@ controllato per ogni coppia layer/category. Il documento include campi comuni,
 campi filesystem, campi watch/recovery, campi security futuri opzionali, un
 diagramma Mermaid dei record implementati oggi e una tabella riassuntiva con
 rimandi a matrice inotify, contratto log, semantica eventi e scenari di test.
-Resta parziale perche' non esistono ancora `alfred_record_t`, writer JSONL o
-Backend API v0.
+Resta parziale perche' `alfred_record_t` esiste come contratto dati in
+`core/include/alfred_record.h` e il primo adapter raw esiste in
+`core/src/alfred_record_adapter.c`. Lo stesso file contiene anche l'adapter
+semantico `alfred_event_t -> alfred_record_t`, usato da `core_logger_on_event()`
+prima del formatter testuale. Esiste anche il builder diagnostico `WATCH_*` in
+`core/src/alfred_record_diagnostic.c` e il formatter testuale in
+`core/src/alfred_record_text.c`, ma mancano ancora writer JSONL e uso runtime
+nel backend inotify.
 
 ## Aggiornamento Backend API v0
 
 `30-backend-api-v0.md` definisce la proposta documentale della Backend API v0.
 Il documento stabilisce lifecycle, target management, emit sink basato su Event
 Model v0, capabilities, error model, ownership, mapping del backend inotify
-corrente e roadmap implementativa. Resta parziale perche' la API non e' ancora
-implementata in C: la prima fase deve restare a link statico, mentre i plugin
-dinamici `.so` sono esplicitamente rimandati.
+corrente e roadmap implementativa. Il primo tipo C comune,
+`core/include/alfred_record.h`, e' stato aggiunto come contratto dati. Esiste
+anche l'adapter `alfred_raw_event_t -> alfred_record_t` per i record
+`normalized_raw + filesystem + RAW_*`, l'adapter semantico
+`alfred_event_t -> alfred_record_t` e il builder diagnostico per i principali
+record `WATCH_*`. Esiste anche `alfred_record_format_text()` per produrre il
+payload testuale da record. Il primo sink comune `alfred_record_sink_t` e il
+text sink compatibile `alfred_record_text_sink_t` sono stati aggiunti come
+ponte `record -> emit(record) -> payload callback` e sono ora usati dal percorso
+semantico ufficiale `core_logger_on_event()`. I diagnostici runtime inotify
+`WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_RESYNC_*` e
+`WATCH_LOST_*` passano ora dal sink comune; `WATCH_RESYNC_SCAN_FAILED` e
+`WATCH_LOST_QUEUE_FAILED` conservano il canale error tramite un bridge
+event/error. Il documento
+include uno schema Mermaid della pipeline C introdotta finora. La policy Event
+Model v0 per errori OS ora distingue `error`, `os_error_code`,
+`os_error_name` e `os_error_message`, e la struttura C `alfred_record_t`
+contiene il payload `os_error`. Il builder diagnostico puo' gia' popolare
+questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
+Il formatter testuale puo' gia' renderli nella forma compatibile
+`errno=N (...)`. Il runtime inotify usa gia' questo percorso per
+`WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
+Il raw runtime bridge e' ora completo per i raw principali di questo branch:
+`RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
+`RAW_MOVED_FROM`, `RAW_MOVED_TO` e `RAW_OVERFLOW`. `app.c` converte
+`ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`, `ALFRED_RAW_ATTRIB`,
+`ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`, `ALFRED_RAW_MOVED_FROM`,
+`ALFRED_RAW_MOVED_TO` e `ALFRED_RAW_OVERFLOW` con `alfred_record_from_raw()`,
+li invia al sink comune, scrive il payload normalizzato su `raw.log` e poi
+passa comunque il raw originale ad `alfred_process()`. I diagnostici runtime
+`WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*`
+usano gia' record Event Model v0, sink comune e formatter testuale compatibile.
+Il contratto di `alfred_record_from_raw()` e' stato reso esplicito: ogni raw
+record deve contenere una sola azione primaria, mentre `ALFRED_RAW_ISDIR` resta
+un qualificatore. Le mask ambigue vengono rifiutate dall'adapter e sono coperte
+da test dedicati.
+
+## Aggiornamento Writer API v0
+
+`32-writer-api-v0.md` definisce la proposta documentale della Writer API v0. Il
+documento chiarisce che text, JSONL, protobuf, MessagePack, socket, Unix socket
+e futuri formati binari sono writer/serializzazioni di `alfred_record_t`, non
+il contratto interno primario. La regola architetturale centrale e' che il
+percorso caldo deve restare:
+
+```text
+evento OS
+-> collector/backend
+-> normalizzazione minima
+-> alfred_record_t
+-> enqueue su coda/ring buffer
+```
+
+Writer, serializzazione, I/O, flush, dashboard, Lab, report e policy pesante
+devono stare fuori dal percorso caldo. Il documento marca i bridge sincroni
+correnti verso i logger come passaggi temporanei di migrazione, non come
+architettura finale ad alte prestazioni. Il documento ora include anche la
+roadmap per coda/ring buffer, possibile coda per sink, classi sink
+`critical`/`best-effort`/`debug`, profili operativi, no-op benchmark, plugin
+statici plugin-like e rinvio dei plugin `.so` o out-of-process a fasi
+successive.
+
+Aggiornamento successivo: `29-event-model-v0.md`, `30-backend-api-v0.md`,
+`32-writer-api-v0.md` e `24-roadmap-ai-agent-guardrail.md` ora esplicitano i
+primi punti critici da chiudere prima di stabilizzare il confine
+`emit(record)`:
+
+- ownership memoria fra record borrowed e record owned accodabile;
+- dispatcher/coda come confine fra hot path e writer;
+- drop, backpressure e record diagnostici di perdita;
+- lifecycle writer e registry statico plugin-like;
+- lifecycle/capabilities dei backend;
+- contesto futuro agente/processo/workspace/policy senza implementare ancora
+  Agent Guard.
+
+Queste sezioni sono contratto architetturale, non stato runtime completo. Il
+codice usa ancora bridge sincroni compatibili verso i logger mentre migriamo
+gradualmente i raw log e i diagnostici verso record e sink.
+
+Le domande successive su `alfred_raw_event_t ->
+alfred_record_from_raw() -> alfred_record_sink_emit() ->
+alfred_record_text_sink_emit() -> raw.log`, sulla normalizzazione e sulla
+correlazione futura multi-backend sono state consolidate in:
+
+- `07-flusso-eventi.md`, che ora spiega normalizzazione, semantica, deduplica,
+  percorso sincrono raw -> record -> text sink e percorso finale asincrono;
+- `29-event-model-v0.md`, che ora descrive la correlazione futura fra
+  inotify, fanotify, eBPF, processo, workspace, agent session e policy;
+- `30-backend-api-v0.md`, che ora ribadisce il confine fra backend,
+  core semantico, correlation engine, policy engine e writer.
+
+## Aggiornamento bootstrap agenti e milestone corrente
+
+Sono stati aggiunti:
+
+- `AGENTS.md` nella root del repository come entrypoint breve per Codex e altri
+  agenti AI;
+- `31-milestone-inotify-reference-backend.md` per definire il perimetro
+  corrente: chiudere inotify come backend di riferimento senza rendere inotify
+  il centro concettuale del prodotto;
+- una sezione di bootstrap in `00-regole-operative.md`;
+- un percorso dedicato alle sessioni agente in
+  `27-guida-lettura-documentazione.md`;
+- nuovi concetti strategici in `24-roadmap-ai-agent-guardrail.md`, tra cui
+  Agent Session, Agent Action Ledger, Intent-to-Action Verification,
+  would-block mode e Workspace Boundary.
+
+La regola architetturale da conservare e':
+
+```text
+inotify deve validare il contratto di Alfred,
+non definire il confine finale del prodotto.
+```
+
+## Aggiornamento controllo complessita' architetturale
+
+Le regole operative ora esplicitano che una modifica non banale deve aggiornare
+almeno uno tra documentazione architetturale, contratto API, scenario/test,
+diagramma, ADR o checklist di review. `30-backend-api-v0.md` contiene una
+tabella `modulo -> puo' fare -> non deve fare` per backend, adapter, core,
+dispatcher/sink, writer, policy futura e Lab/tooling. Lo stesso documento
+contiene anche il diagramma del prossimo confine `emit(record)`, che prepara il
+passaggio tecnico successivo senza anticipare JSONL.
+
+`28-audit-documentazione-e-debiti.md` registra come debiti dichiarati gli ADR
+brevi, la review architetturale periodica, i golden test JSONL e i tag
+architetturali cercabili nel codice.

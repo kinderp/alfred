@@ -15,8 +15,51 @@ altro momento, leggere questo file prima di continuare.
   risultato.
 - Se una spiegazione data in chat riguarda una scelta reale del codice, riportare
   quella spiegazione anche negli `.md` o nei commenti del codice.
+- Se una domanda fatta in chat mostra che architettura, codice o concetto non
+  sono chiari, prima del commit controllare la documentazione collegata. Se la
+  spiegazione manca o e' troppo debole, aggiornarla con una versione didattica
+  della risposta; se invece e' gia' chiara, indicare il file e la sezione cosi'
+  il maintainer puo' decidere se evitare ulteriore peso documentale.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
+- Una modifica non banale deve lasciare una traccia di orientamento: aggiornare
+  almeno uno tra documentazione architetturale, contratto API, scenario/test,
+  diagramma, ADR o checklist di review. Se non aggiorna nulla, chiedersi se la
+  modifica sta aggiungendo complessita' non tracciata.
+
+## Bootstrap di una nuova sessione agente
+
+Quando una nuova sessione viene aperta con Codex o con un altro agente AI, non
+bisogna leggere tutta la documentazione indiscriminatamente. La documentazione
+di Alfred e' ormai abbastanza ampia: leggere tutto gonfia il contesto e puo'
+mescolare contratti correnti, roadmap futura e note storiche.
+
+Il bootstrap minimo e' invece:
+
+1. leggere `AGENTS.md` nella root del repository;
+2. leggere questo file;
+3. leggere `27-guida-lettura-documentazione.md`;
+4. leggere `documentation-progress.md`;
+5. leggere `31-milestone-inotify-reference-backend.md`;
+6. scegliere gli altri documenti in base al task corrente.
+
+Per il lavoro corrente su Backend API v0, Event Model v0, adapter, record,
+writer, output strutturato e backend inotify leggere almeno:
+
+- `29-event-model-v0.md`
+- `30-backend-api-v0.md`
+- `32-writer-api-v0.md`
+- `05-modulo-inotify.md`
+- `07-flusso-eventi.md`
+- `20-matrice-eventi-inotify.md`
+- `22-contratto-log.md`
+- `26-stato-funzionalita.md`
+
+`24-roadmap-ai-agent-guardrail.md` descrive la direzione strategica futura:
+Alfred come runtime security layer per agenti AI. Va letta per non perdere la
+visione, ma non autorizza a implementare Agent Guard completo, fanotify, eBPF,
+Windows, macOS, dashboard o policy engine durante la milestone inotify, salvo
+richiesta esplicita.
 
 ## Principi di ragionamento dell'agente
 
@@ -48,10 +91,45 @@ lavoro e alla documentazione didattica di Alfred.
   - compatibilita' storica rimasta solo nella documentazione
 - Se una modifica serve solo a ridurre complessita' interna, documentare perche'
   non cambia la semantica osservabile.
+- Prima di chiudere un blocco di 5-7 commit o prima di aprire una PR importante,
+  fare una review architetturale: controllare responsabilita' cambiate, nuove
+  dipendenze, API toccate, rischio sul path caldo, test golden necessari e
+  documentazione da riallineare.
 
 Questi principi non devono rallentare correzioni ovvie o modifiche puramente
 documentali. Servono soprattutto nei passaggi non banali: refactor, semantica
 degli eventi, test, architettura, interfacce pubbliche e strumenti di sviluppo.
+
+## Regola del percorso caldo
+
+Il percorso caldo di Alfred deve restare cortissimo:
+
+```text
+evento OS
+-> collector/backend
+-> normalizzazione minima
+-> alfred_record_t
+-> enqueue su coda/ring buffer
+```
+
+Nel percorso caldo non devono entrare writer, serializzazione costosa, file I/O,
+socket I/O, `fprintf()`, `fflush()`, lock pesanti, allocazioni non necessarie,
+dashboard, Lab, report o policy pesante.
+
+I bridge sincroni correnti verso `logger_raw()`, `logger_event()` e
+`logger_error()` sono accettati solo come passaggi temporanei di migrazione
+verso `alfred_record_t` e output compatibile. Non rappresentano
+l'architettura finale ad alte prestazioni.
+
+La regola contrattuale e':
+
+```text
+Il backend non aspetta il writer.
+```
+
+Quando una modifica introduce o tocca output, writer, sink, logger, JSONL,
+socket o formati binari, leggere anche `32-writer-api-v0.md` e verificare che
+la serializzazione resti fuori dal percorso caldo target.
 
 ## Uso di indici semantici e grafi del codice
 

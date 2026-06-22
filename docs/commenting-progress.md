@@ -26,6 +26,98 @@ runtime architecture.
 
 Latest refresh:
 
+- refreshed `modules/inotify/src/watch_manager.c` and
+  `tests/backend/test_record_text_writer.c` after routing the first simple
+  runtime backend diagnostics, `WATCH_ADDED` and `WATCH_REMOVED`, through
+  Event Model v0 records and the text formatter. Comments now explain why this
+  is a behavior-neutral migration step toward Backend API v0 and why the
+  fallback keeps the old payload stable.
+- refreshed `modules/inotify/src/inotify_backend.c` after routing
+  `WATCH_STALE` through Event Model v0 records and the text formatter. Comments
+  now explain that WATCH_STALE remains backend watch-table reliability state,
+  carries a reason such as IN_MOVE_SELF, and still preserves the old text
+  payload for tests and users.
+- refreshed `modules/inotify/src/inotify_backend.c` again after extracting
+  `backend_log_watch_diagnostic_record()`. Comments now explain why the helper
+  is a local bridge for record/formatter/fallback behavior, not the public
+  Backend API v0 emit(record) boundary.
+- refreshed `modules/inotify/src/inotify_backend.c` after routing logical
+  `WATCH_RESYNC_FAILED` diagnostics through the shared record helper. Comments
+  now document why the errno-bearing syscall branch remains on the direct text
+  path until errno is represented in Event Model v0.
+- documented the Event Model v0 OS-error policy in the Italian docs. The next
+  C comment pass for `alfred_record_t` should describe separate Alfred error
+  and OS error fields once they are added to the record structure.
+- refreshed `core/include/alfred_record.h` and
+  `tests/backend/test_record_diagnostic_builder.c` after adding
+  `alfred_record_os_error_t`. Comments now explain why OS error evidence is
+  separate from Alfred's stable diagnostic error token.
+- refreshed `core/include/alfred_record_diagnostic.h`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_diagnostic_builder.c` after adding
+  `alfred_record_build_watch_diagnostic_with_os_error()`. Comments now explain
+  how builders preserve OS error evidence separately from Alfred error tokens
+  while keeping borrowed string ownership.
+- refreshed `core/src/alfred_record_text.c` and
+  `tests/backend/test_record_text_writer.c` after teaching the compatibility
+  text formatter to render structured OS error fields as historical
+  `errno=N` or `errno=N (message)` suffixes.
+- refreshed `modules/inotify/src/inotify_backend.c` after routing
+  errno-bearing `WATCH_RESYNC_FAILED` runtime diagnostics through the shared
+  Event Model v0 diagnostic record bridge. Comments now explain why errno is
+  OS evidence stored separately from Alfred's stable resync failure token.
+- refreshed `core/include/alfred_record.h`, `core/src/alfred_record_text.c`,
+  `core/src/alfred_record_diagnostic.c`,
+  `modules/inotify/src/inotify_backend.c`, and
+  `tests/backend/test_record_text_writer.c` after migrating local
+  `WATCH_RESYNC_*` diagnostics to Event Model v0 records. Comments now explain
+  the recovery payload fields used for scan counters, detail paths, rollback
+  watch descriptors, and scan result codes.
+- refreshed `core/include/alfred_record.h`, `core/src/alfred_record_text.c`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_text_writer.c` after modeling all documented
+  `WATCH_LOST_*` records. Comments now explain the recovery payload fields used
+  for pending queue size, child prefix updates, watch counts, retry counters,
+  and retry delays before the runtime lost-scope migration.
+- refreshed `modules/inotify/src/inotify_backend.c` after adding
+  `backend_log_lost_scope_record()` and routing `WATCH_LOST_QUEUED` plus
+  `WATCH_LOST_SCAN_BEGIN` through Event Model v0 records. Comments now explain
+  how the helper preserves the historical text contract while later call sites
+  are migrated incrementally.
+- refreshed `core/include/alfred_record.h`,
+  `core/src/alfred_record_text.c`, `core/src/alfred_record_diagnostic.c`,
+  `modules/inotify/src/inotify_backend.c`,
+  `tests/backend/test_record_text_writer.c`, and Italian docs after routing
+  the remaining runtime `WATCH_LOST_*` diagnostics through Event Model v0
+  records. Comments now explain queue skipped/failed records and the
+  lost-scope logging bridge fallback behavior.
+- refreshed `core/include/alfred_record_adapter.h`,
+  `core/src/alfred_record_adapter.c`, `app/src/core_logger.c`, and added
+  `tests/backend/test_record_semantic_adapter.c` after wiring semantic core
+  output through Event Model v0 records. Comments now explain why semantic
+  events map to FILE_* / DIR_* record types, why core_logger keeps a fallback
+  to the old formatter, and why output payloads must remain compatible.
+- added `core/include/alfred_record_text.h`, `core/src/alfred_record_text.c`,
+  and `tests/backend/test_record_text_writer.c` after introducing the first
+  Event Model v0 text payload formatter. Comments now explain why the formatter
+  owns only payload text, why timestamps and FILE streams remain logger/output
+  device concerns, and how semantic, diagnostic, and normalized raw records are
+  formatted without changing runtime behavior.
+- added `core/include/alfred_record_diagnostic.h`,
+  `core/src/alfred_record_diagnostic.c`, and
+  `tests/backend/test_record_diagnostic_builder.c` after introducing the first
+  Event Model v0 diagnostic builder. Comments now explain how WATCH_* types are
+  classified as watch or recovery diagnostics, why raw/semantic types are
+  rejected, and why borrowed string ownership is preserved for future hot-path
+  writers.
+- refreshed `core/include/alfred_record.h`, added
+  `core/include/alfred_record_adapter.h`,
+  `core/src/alfred_record_adapter.c`, and
+  `tests/backend/test_record_raw_adapter.c` after introducing the first
+  Event Model v0 raw adapter. Comments now explain why normalized raw record
+  types use explicit `RAW_*` names, why the adapter must not promote
+  `MOVED_FROM`/`MOVED_TO` to semantic move/rename outcomes, and why record
+  string fields remain borrowed.
 - refreshed `modules/inotify/src/inotify_backend.c`,
   `tests/backend/test_lost_scope_queue.c`, and
   `tests/backend/test_lost_scope_recovery.c` after the PR review fixes for
@@ -435,3 +527,107 @@ Completed in the first performance benchmark pass:
   manual lost-scope recovery benchmark
 - updated Italian docs to describe `make perf-lost-scope` and the future
   performance-suite requirements for Alfred
+
+Completed in the record text sink pass:
+
+- added `core/include/alfred_record_sink.h` with comments for the generic
+  `emit(record)` callback, borrowed-record ownership, and sink handle fields
+- added `core/include/alfred_record_text_sink.h` with comments that explain the
+  compatibility text sink, caller-owned buffer, write callback, and why the
+  sink does not own `logger_t`
+- added `core/src/alfred_record_sink.c` and
+  `core/src/alfred_record_text_sink.c` with small, self-explanatory
+  implementations that keep validation at the sink boundary
+- added `tests/backend/test_record_text_sink.c` with an expected payload
+  contract and scenario comments for successful emission, invalid sink setup,
+  writer failure propagation, and truncation rejection
+
+Completed in the core logger sink integration pass:
+
+- updated `app/src/core_logger.c` comments to explain the application-local
+  `write_event_payload()` bridge from text-sink payloads to `logger_event()`
+- updated `app/include/core_logger.h` so the callback contract describes the
+  current `alfred_event_t -> alfred_record_t -> text sink -> logger_event()`
+  path instead of direct formatter use
+
+Completed in the watch manager sink integration pass:
+
+- updated `modules/inotify/src/watch_manager.c` comments so
+  `WATCH_ADDED`/`WATCH_REMOVED` are described as the first backend diagnostics
+  routed through `alfred_record_sink_t` and `alfred_record_text_sink_t`
+- added a local bridge comment explaining why the watch manager still adapts
+  text-sink payloads to `logger_event()` until the wider backend context owns a
+  sink directly
+
+Completed in the WATCH_STALE sink integration pass:
+
+- updated `modules/inotify/src/inotify_backend.c` comments around the backend
+  text-sink bridge and `backend_log_watch_stale()` so WATCH_STALE is described
+  as backend reliability state routed through the shared sink boundary
+- documented that the backend-local bridge is transitional until the inotify
+  backend context owns a first-class record sink
+
+Completed in the local resync sink integration pass:
+
+- added comments for `backend_text_sink_context_t` and
+  `backend_write_routed_payload()` in `modules/inotify/src/inotify_backend.c`
+  so the event/error routing decision remains explicit
+- updated `backend_log_resync_record()` comments to explain that
+  `WATCH_RESYNC_SCAN_FAILED` keeps the historical error-log channel while other
+  `WATCH_RESYNC_*` diagnostics use the event-log channel through the same text
+  sink boundary
+
+Completed in the lost-scope sink integration pass:
+
+- updated `backend_log_lost_scope_record()` comments so `WATCH_LOST_*`
+  diagnostics are described as record -> sink -> text sink output, with
+  `WATCH_LOST_QUEUE_FAILED` preserving the historical error-log channel through
+  the routed sink bridge
+
+Completed in the RAW_CREATE sink integration pass:
+
+- added `app/src/app.c` comments around the raw payload bridge and
+  `log_raw_simple_record()` so the first normalized raw runtime migration is
+  documented as `alfred_raw_event_t` -> record -> sink -> text sink -> raw log,
+  while the original raw event still flows to `alfred_process()`
+- added a backend test header documenting the expected kernel `IN_CREATE` lines
+  and the normalized `RAW_CREATE path=... mask=...` lines asserted in
+  `tests/backend/test_raw_create_record_sink.sh`
+
+Completed in the RAW_DELETE sink integration pass:
+
+- generalized the raw runtime bridge comments in `app/src/app.c` so simple
+  create/delete raw facts are documented as the first path+mask records routed
+  through the shared sink boundary before the original raw event reaches the
+  core
+- added a backend test header documenting the expected kernel `IN_DELETE` lines
+  and the normalized `RAW_DELETE path=... mask=...` lines asserted in
+  `tests/backend/test_raw_delete_record_sink.sh`
+
+Completed in the RAW_ATTRIB sink integration pass:
+
+- renamed the raw runtime bridge comments in `app/src/app.c` around the
+  path+mask record helper so create/delete/attrib facts are documented as the
+  currently migrated normalized raw records
+- expanded `tests/backend/test_attrib_raw_log.sh` comments so chmod is
+  described as metadata-only raw/backend evidence, with expected `IN_ATTRIB`
+  and normalized `RAW_ATTRIB path=... mask=...` output
+
+Completed in the RAW_MODIFY sink integration pass:
+
+- extended the raw path+mask helper comments in `app/src/app.c` so
+  create/delete/attrib/modify facts are documented as the currently migrated
+  normalized raw records
+- added `tests/backend/test_raw_modify_record_sink.sh` with a header explaining
+  that `IN_MODIFY`/`RAW_MODIFY` is tested separately from
+  `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` because modify feeds `FILE_MODIFIED` while
+  close-write feeds `FILE_READY`
+
+Completed in the RAW_CLOSE_WRITE sink integration pass:
+
+- extended the raw path+mask helper comments in `app/src/app.c` so
+  create/delete/attrib/modify/close-write facts are documented as the currently
+  migrated normalized raw records
+- added `tests/backend/test_raw_close_write_record_sink.sh` with a header
+  explaining that `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` feeds `FILE_READY` and is
+  tested separately from `RAW_MODIFY`

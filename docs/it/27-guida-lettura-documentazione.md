@@ -194,6 +194,46 @@ Questi documenti non sono tutti contratti gia' implementati: alcuni sono
 decisioni attuali, altri sono roadmap. Prima di implementare codice nuovo bisogna
 controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 
+## Percorso 9: sessione Codex o agente AI
+
+Questo percorso e' pensato per una nuova sessione di lavoro con un agente AI.
+L'obiettivo non e' leggere tutta la documentazione, ma ricostruire il contesto
+minimo e poi scegliere i documenti pertinenti al task.
+
+1. [AGENTS.md](../../AGENTS.md)
+   e' l'entrypoint breve nella root: spiega priorita' corrente e regole
+   architetturali da non violare.
+2. [Regole operative](00-regole-operative.md)
+   definisce metodo di lavoro, commit, test, documentazione e bootstrap.
+3. [Questa guida](27-guida-lettura-documentazione.md)
+   serve a scegliere il percorso corretto invece di leggere tutto.
+4. [Stato documentazione](documentation-progress.md)
+   indica quali documenti sono completi, parziali o superati.
+5. [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
+   definisce il perimetro corrente: chiudere inotify come backend di
+   riferimento, senza trasformarlo nel confine finale del prodotto.
+6. [Event Model v0](29-event-model-v0.md)
+   va letto se il task tocca record, adapter, formatter, writer o log
+   strutturati.
+7. [Backend API v0](30-backend-api-v0.md)
+   va letto se il task tocca backend, lifecycle, capabilities, target o sink.
+8. [Writer API v0](32-writer-api-v0.md)
+   va letto se il task tocca writer, JSONL, protobuf, MessagePack, socket,
+   output strutturato, logger o percorso caldo.
+9. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+   e' visione futura: va usata per orientare le scelte, non come autorizzazione
+   automatica a implementare Agent Guard completo.
+
+Prima di modificare codice, una sessione agente dovrebbe rispondere almeno a
+queste domande:
+
+1. Quale modulo sto toccando?
+2. Quale contratto puo' cambiare?
+3. Quali documenti sono contrattuali per questo task?
+4. Quali documenti sono solo roadmap?
+5. Quali test vanno eseguiti o aggiornati?
+6. Cosa non va implementato ora?
+
 ## Indice tematico rapido
 
 | Argomento | Dove leggere |
@@ -214,13 +254,15 @@ controllare sempre se il tema e' gia' marcato come futuro o rimandato.
 | File ready / close-write | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [14](14-scenari-test.md) |
 | Fork e pull request | [11](11-come-contribuire.md) |
 | GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr) |
+| Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
 | Log | [22](22-contratto-log.md), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
-| Output strutturato futuro | [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
-| Performance | [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
+| Output strutturato futuro | [32](32-writer-api-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
+| Performance | [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |
 | Regex nei test shell | [10](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell) |
 | Scanner filesystem | [21](21-roadmap-scanner-resync.md) |

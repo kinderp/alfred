@@ -9,7 +9,7 @@
  * Expected log contract:
  *
  * raw.log:
- * - none; this is a focused C test and does not read the kernel inotify queue
+ * - RAW_OVERFLOW path= mask=128
  *
  * events log stream:
  * - none; this test stops at the raw backend/core boundary
@@ -29,12 +29,17 @@
 #include <string.h>
 #include <sys/inotify.h>
 
+#include "../../core/include/alfred_record_adapter.h"
+#include "../../core/include/alfred_record_text.h"
+
 #include "../../modules/inotify/src/inotify_backend.c"
 
 static void test_overflow_event_builds_global_raw(void)
 {
     struct inotify_event ev;
     alfred_raw_event_t raw;
+    alfred_record_t record;
+    char text[128];
 
     memset(&ev, 0, sizeof(ev));
     ev.wd = -1;
@@ -48,6 +53,11 @@ static void test_overflow_event_builds_global_raw(void)
     assert(raw.path != NULL);
     assert(strcmp(raw.path, "") == 0);
     assert(raw.ts_ns != 0);
+
+    assert(alfred_record_from_raw(&raw, &record) == 0);
+    assert(record.type == ALFRED_RECORD_TYPE_RAW_OVERFLOW);
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text, "RAW_OVERFLOW path= mask=128") == 0);
 }
 
 static void test_non_overflow_event_is_ignored(void)
