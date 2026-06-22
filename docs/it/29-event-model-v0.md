@@ -195,15 +195,197 @@ Per questo distinguiamo due concetti:
 
 | Concetto | Uso | Ownership |
 | --- | --- | --- |
-| `alfred_record_t` | vista logica del record, usata da adapter e formatter | puo' contenere stringhe borrowed |
-| record owned futuro | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
+| `alfred_record_t` borrowed | vista logica del record, usata da adapter e formatter sincroni | puo' contenere stringhe borrowed |
+| `alfred_record_t` owned | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
 
-Il nome C definitivo del record owned e' rimandato. Le opzioni naturali sono un
-tipo dedicato, per esempio `alfred_owned_record_t`, oppure funzioni di clone e
-destroy come `alfred_record_clone_owned()` e `alfred_record_destroy_owned()`.
-Per v0 la priorita' non e' ottimizzare subito, ma evitare ambiguita': prima
-dell'enqueue il record deve diventare sicuro. Pool, arena, string table e
-strategie zero-copy potranno arrivare dopo benchmark reali.
+Nel codice la prima API di ownership e':
+
+```c
+int alfred_record_clone_owned(const alfred_record_t *src,
+                              alfred_record_t *dst);
+void alfred_record_destroy_owned(alfred_record_t *record);
+```
+
+Questa API clona in modo profondo i campi stringa oggi presenti nel record:
+`backend`, `path`, `old_path`, `new_path`, `os_error.name`,
+`os_error.message`, `watch.state`, `watch.reason`, `watch.error` e
+`recovery.detail_path`.
+
+Il punto didattico importante e' che `alfred_record_t` resta lo stesso tipo
+logico. La differenza non e' il nome del tipo, ma la responsabilita' sulla
+memoria:
+
+- un record borrowed non deve sopravvivere al produttore;
+- un record owned puo' attraversare una coda, un dispatcher o un writer
+  asincrono;
+- chi crea il clone owned deve chiamare `alfred_record_destroy_owned()`.
+
+Questa API non e' ancora collegata al runtime hot path. Serve a fissare il
+contratto e a preparare il dispatcher senza introdurre allocazioni nel poll loop
+del backend.
+
+### Strategie possibili per l'ownership
+
+Quando un record deve attraversare una coda, Alfred deve scegliere dove mettere
+la memoria dei path e delle altre stringhe. Le alternative principali sono
+quattro.
+
+#### 1. Deep copy per record
+
+Ogni record accodato duplica tutte le stringhe che usa. In C significa chiamare
+funzioni equivalenti a `malloc()` + `memcpy()` per `path`, `old_path`,
+`new_path`, `reason`, `error` e altri campi presenti.
+
+Pro:
+
+- e' la soluzione piu' facile da capire;
+- rende chiaro chi possiede la memoria;
+- evita dangling pointer dopo il ritorno dal backend;
+- e' semplice da testare con assert sui puntatori;
+- e' una buona base didattica per spiegare ownership in C.
+
+Contro:
+
+- puo' essere costosa se eseguita per ogni evento nel path caldo;
+- introduce allocazioni e possibili fallimenti di memoria;
+- aumenta frammentazione e pressione sull'allocator;
+- copia path ripetuti anche quando condividono lunghi prefissi.
+
+Quando ha senso:
+
+- come API v0 preparatoria;
+- nei test;
+- per code a basso volume;
+- per prototipi in cui chiarezza e sicurezza valgono piu' del throughput.
+
+Quando non basta:
+
+- in produzione ad alto volume senza benchmark;
+- se il backend deve sostenere molti eventi al secondo;
+- se i writer sono lenti e la coda cresce molto.
+
+#### 2. Storage inline fisso nel record accodabile
+
+Il record accodabile contiene buffer interni, per esempio `char path[PATH_MAX]`,
+invece di puntatori a stringhe allocate separatamente.
+
+Pro:
+
+- niente `malloc()` per evento;
+- lifetime semplice: il buffer vive dentro lo slot della coda;
+- puo' essere molto prevedibile per un ring buffer;
+- riduce il rischio di frammentazione.
+
+Contro:
+
+- ogni record diventa molto grande, anche quando non usa tutti i campi;
+- copiare sempre buffer grandi puo' sprecare CPU e cache;
+- `PATH_MAX` non e' una soluzione elegante per tutti gli ambienti;
+- se in futuro aggiungiamo command line, workspace, policy id o agent context,
+  il record inline puo' crescere troppo.
+
+Quando ha senso:
+
+- per un primo ring buffer performante;
+- quando vogliamo evitare allocazioni nel path caldo;
+- quando i campi massimi sono pochi e ben delimitati.
+
+Quando non basta:
+
+- se i record diventano molto eterogenei;
+- se molti campi sono opzionali e raramente usati;
+- se serve supportare payload lunghi o dinamici.
+
+#### 3. Pool o arena per batch
+
+Invece di allocare ogni stringa singolarmente, Alfred puo' usare un pool di
+memoria o un'arena associata a un batch di record. Le stringhe vengono copiate
+dentro quell'area e liberate insieme.
+
+Pro:
+
+- riduce il costo di molte allocazioni piccole;
+- migliora localita' di memoria;
+- permette cleanup veloce di un batch;
+- puo' essere un buon compromesso fra sicurezza e prestazioni.
+
+Contro:
+
+- e' piu' complesso da implementare e spiegare;
+- richiede regole chiare sul lifetime dell'arena;
+- bisogna gestire cosa succede se un writer trattiene un record piu' a lungo
+  del batch;
+- rende piu' difficili alcuni test di ownership puntuale.
+
+Quando ha senso:
+
+- dopo benchmark reali;
+- quando il costo della deep copy per record risulta troppo alto;
+- se il dispatcher lavora per batch.
+
+Quando non basta:
+
+- se i record devono vivere tempi molto diversi;
+- se ogni sink ha una coda indipendente con velocita' molto diverse;
+- se serve rimuovere singoli record arbitrari dalla coda.
+
+#### 4. String table, path table o interning
+
+Alfred puo' mantenere una tabella di stringhe condivise. Path uguali o prefissi
+ricorrenti vengono memorizzati una volta sola e i record puntano a una entry con
+lifetime controllato.
+
+Pro:
+
+- evita copie ripetute di path e prefissi comuni;
+- puo' ridurre molta memoria su alberi ricorsivi;
+- puo' aiutare in futuro con workspace, root monitorate e path sensitivity;
+- e' una direzione interessante per prestazioni elevate.
+
+Contro:
+
+- e' la soluzione piu' complessa;
+- richiede reference counting o altra gestione lifetime;
+- puo' introdurre lock o contesa se condivisa fra thread;
+- gli errori di ownership diventano piu' difficili da debug;
+- rischia di anticipare ottimizzazioni prima di conoscere i colli di bottiglia.
+
+Quando ha senso:
+
+- dopo benchmark;
+- quando molti eventi condividono gli stessi path o prefissi;
+- quando il dispatcher e le code hanno gia' un contratto stabile.
+
+Quando non basta:
+
+- come primo passo didattico;
+- prima di avere metriche su eventi al secondo, memoria e latenza;
+- se rischia di aggiungere lock nel path caldo.
+
+### Scelta v0
+
+Per Event Model v0 scegliamo la prima strategia come API preparatoria:
+
+```text
+alfred_record_t borrowed
+-> alfred_record_clone_owned()
+-> alfred_record_t owned
+-> alfred_record_destroy_owned()
+```
+
+La scelta non significa che Alfred usera' per sempre una deep copy per evento
+nel path caldo. Significa che fissiamo subito il contratto di lifetime:
+
+- un record che resta sincrono puo' essere borrowed;
+- un record che supera un confine asincrono deve essere owned o avere una
+  strategia equivalente;
+- la soluzione piu' veloce verra' scelta dopo benchmark, non a intuito.
+
+Questa separazione evita due errori opposti:
+
+- accodare puntatori borrowed e creare bug difficili da riprodurre;
+- ottimizzare troppo presto con pool o interning prima di sapere dove Alfred
+  spende davvero tempo.
 
 ## Campi filesystem
 

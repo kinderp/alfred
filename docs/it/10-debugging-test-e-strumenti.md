@@ -1748,6 +1748,13 @@ La copertura iniziale include:
   semantici (`FILE_CREATED path=...`, `FILE_RENAMED from=... to=...`),
   diagnostici (`WATCH_STALE`, `WATCH_RESYNC_FAILED`), raw normalizzati
   (`RAW_CREATE ... mask=...`) e gestione della truncation
+- `test_record_owned.sh`: compila `test_record_owned.c` e verifica il primo
+  contratto di ownership per `alfred_record_t`. Il test controlla che i record
+  raw, semantici e diagnostici possano essere clonati con stringhe proprie,
+  diverse dai puntatori borrowed di origine, e che
+  `alfred_record_destroy_owned()` rilasci le stringhe e azzeri la struttura. E'
+  un test preparatorio per code, dispatcher asincroni e writer futuri: non
+  significa che il path caldo runtime usi gia' una copia profonda per evento.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

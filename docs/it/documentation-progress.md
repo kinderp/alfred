@@ -179,6 +179,14 @@ Il contratto di `alfred_record_from_raw()` e' stato reso esplicito: ogni raw
 record deve contenere una sola azione primaria, mentre `ALFRED_RAW_ISDIR` resta
 un qualificatore. Le mask ambigue vengono rifiutate dall'adapter e sono coperte
 da test dedicati.
+La prima API di ownership per i record e' stata aggiunta come passo
+preparatorio: `alfred_record_clone_owned()` e
+`alfred_record_destroy_owned()` clonano e liberano le stringhe presenti in
+`alfred_record_t`. La API non e' ancora collegata al runtime hot path; serve a
+fissare il contratto prima di introdurre code, dispatcher e writer asincroni.
+`29-event-model-v0.md` e `32-writer-api-v0.md` documentano in dettaglio le
+quattro strategie discusse: deep copy per record, storage inline fisso,
+pool/arena per batch e string/path table.
 
 ## Aggiornamento Writer API v0
 

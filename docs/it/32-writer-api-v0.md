@@ -395,8 +395,37 @@ puntare a memoria con lifetime esplicitamente garantito dal runtime.
 Per v0 la soluzione piu' chiara e' una copia owned prima dell'enqueue. Anche se
 ha un costo, elimina ambiguita' su stringhe borrowed come path, messaggi di
 errore, nome backend, futuro `agent_session_id`, workspace, command line o
-policy rule. Ottimizzazioni come pool, arena, string table o buffer reference
-counted dovranno arrivare dopo benchmark e non prima del contratto.
+policy rule. Nel codice questa scelta preparatoria e' rappresentata da:
+
+```c
+int alfred_record_clone_owned(const alfred_record_t *src,
+                              alfred_record_t *dst);
+void alfred_record_destroy_owned(alfred_record_t *record);
+```
+
+Queste funzioni non sono ancora collegate al runtime hot path. Servono a
+verificare il contratto di ownership prima di introdurre queue, dispatcher e
+writer asincroni.
+
+### Confronto fra strategie di ownership
+
+| Strategia | Idea | Pro | Contro | Stato |
+| --- | --- | --- | --- | --- |
+| Deep copy per record | duplicare tutte le stringhe usate dal record | semplice, sicura, testabile | `malloc()` e copie nel path caldo se usata prima dell'enqueue | implementata come API preparatoria |
+| Storage inline fisso | buffer dentro lo slot della coda | niente allocazioni per evento, lifetime semplice | record grandi, copie potenzialmente pesanti, limiti fissi | candidata per ring buffer performante |
+| Pool/arena per batch | molte stringhe dentro una regione liberata insieme | meno allocazioni, migliore localita' | lifetime piu' complesso, difficile se i sink hanno tempi diversi | futura, dopo benchmark |
+| String/path table | condividere path e prefissi con lifetime controllato | riduce duplicati, utile su alberi ricorsivi | reference counting, lock, debugging piu' difficile | futura, non per v0 |
+
+La regola pratica e':
+
+```text
+prima sicurezza del lifetime, poi ottimizzazione misurata
+```
+
+Se la deep copy viene messa direttamente nel backend poll loop, puo' rallentare
+Alfred perche' porta nel path caldo `strlen()`, `malloc()`, `memcpy()` e
+gestione degli errori. Per questo la API owned nasce ora, ma il collegamento al
+dispatcher verra' deciso insieme ai benchmark no-op, text e JSONL.
 
 ## Code per sink
 

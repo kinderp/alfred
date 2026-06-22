@@ -26,6 +26,12 @@ runtime architecture.
 
 Latest refresh:
 
+- added `core/include/alfred_record_owned.h`,
+  `core/src/alfred_record_owned.c`, and
+  `tests/backend/test_record_owned.c` after introducing the preparatory owned
+  record clone API. Comments now explain borrowed versus owned record lifetime,
+  why asynchronous queues need an ownership boundary, and why the helper is not
+  wired into the runtime hot path before dispatcher and benchmark decisions.
 - refreshed `modules/inotify/src/watch_manager.c` and
   `tests/backend/test_record_text_writer.c` after routing the first simple
   runtime backend diagnostics, `WATCH_ADDED` and `WATCH_REMOVED`, through
@@ -420,7 +426,9 @@ Completed in the first heavy pass:
 | --- | --- |
 | Done | `core/examples/main_demo.c` |
 | Done | `core/include/alfred_correlator.h` |
+| Done | `core/include/alfred_record_owned.h` |
 | Done | `core/src/alfred_correlator.c` |
+| Done | `core/src/alfred_record_owned.c` |
 | Done | `core/src/alfred_tables.c` |
 | Done | `core/src/alfred_tables.h` |
 | Done | `core/src/alfred_utils.c` |
