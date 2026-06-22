@@ -187,6 +187,11 @@ fissare il contratto prima di introdurre code, dispatcher e writer asincroni.
 `29-event-model-v0.md` e `32-writer-api-v0.md` documentano in dettaglio le
 quattro strategie discusse: deep copy per record, storage inline fisso,
 pool/arena per batch e string/path table.
+La prima `alfred_record_queue_t` e' stata aggiunta come micro-step successivo:
+riceve record borrowed, conserva record owned in una coda bounded
+single-threaded e trasferisce ownership al chiamante durante `pop()`. Anche
+questa API non e' ancora collegata al runtime; serve a fissare FIFO, overflow,
+cleanup e lifetime prima di introdurre dispatcher, backpressure e benchmark.
 
 ## Aggiornamento Writer API v0
 

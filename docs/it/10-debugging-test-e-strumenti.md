@@ -1755,6 +1755,13 @@ La copertura iniziale include:
   `alfred_record_destroy_owned()` rilasci le stringhe e azzeri la struttura. E'
   un test preparatorio per code, dispatcher asincroni e writer futuri: non
   significa che il path caldo runtime usi gia' una copia profonda per evento.
+- `test_record_queue.sh`: compila `test_record_queue.c` e verifica la prima coda
+  bounded di record owned. Il test controlla che `push()` riceva un record
+  borrowed e lo conservi come owned, che `pop()` rispetti l'ordine FIFO, che il
+  wraparound del buffer circolare non cambi l'ordine, che l'overflow venga
+  rifiutato e che `clear()`/`destroy()` rilascino i record ancora accodati. Anche
+  questo e' un test preparatorio: la coda non e' ancora collegata al backend
+  runtime o ai writer.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

@@ -140,6 +140,26 @@ void dispatcher_loop(void)
 }
 ```
 
+Il primo passo implementato verso questo schema e' `alfred_record_queue_t`.
+Questa coda non e' ancora il dispatcher definitivo e non e' ancora collegata al
+runtime. Serve a validare il confine minimo:
+
+```text
+record borrowed in ingresso
+-> record owned dentro la coda
+-> record owned consegnato al consumatore
+```
+
+La coda e' bounded e single-threaded nella versione v0. Questo e' un vincolo
+voluto, non una mancanza casuale:
+
+- bounded significa che l'overflow viene visto subito e non nascosto da crescita
+  illimitata della memoria;
+- single-threaded significa che possiamo testare prima ownership, FIFO,
+  wraparound e cleanup senza confondere il contratto con mutex e scheduling;
+- non collegata al runtime significa che il path caldo non cambia finche' non
+  abbiamo deciso dispatcher, backpressure e benchmark.
+
 In una fase successiva conviene valutare una coda per sink:
 
 ```text
@@ -456,6 +476,47 @@ Le classi di sink previste sono:
 Questa classificazione non deve vivere nascosta dentro un writer. Deve essere
 visibile nella configurazione o nel registry, cosi' i test e i benchmark
 possono verificare cosa succede quando un sink e' lento.
+
+## Record Queue v0
+
+La prima API di coda e':
+
+```c
+int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity);
+void alfred_record_queue_destroy(alfred_record_queue_t *queue);
+void alfred_record_queue_clear(alfred_record_queue_t *queue);
+int alfred_record_queue_push(alfred_record_queue_t *queue,
+                             const alfred_record_t *record);
+int alfred_record_queue_pop(alfred_record_queue_t *queue,
+                            alfred_record_t *record);
+```
+
+`push()` riceve un record borrowed e clona le stringhe con
+`alfred_record_clone_owned()`. Questo permette al produttore di riusare il suo
+buffer subito dopo la chiamata. `pop()` trasferisce al chiamante il record owned:
+da quel momento il chiamante deve chiamare `alfred_record_destroy_owned()`.
+
+Questo modello e' didatticamente importante perche' separa tre concetti che
+spesso vengono confusi:
+
+| Concetto | Significato |
+| --- | --- |
+| record borrowed | vista valida solo durante la chiamata sincrona |
+| record owned | record che possiede le stringhe e puo' vivere piu' a lungo |
+| queue boundary | punto in cui un record puo' sopravvivere al produttore |
+
+In termini di prestazioni questa non e' ancora la soluzione finale. La coda v0
+usa deep copy per rendere il contratto facile da verificare. Prima di usarla nel
+path caldo bisognera' misurare:
+
+- costo di `malloc()` e `free()` per evento;
+- costo della copia dei path;
+- latenza media e p95/p99;
+- throughput con sink no-op, text e JSONL;
+- comportamento quando la coda e' piena.
+
+Solo dopo questi benchmark decideremo se mantenere deep copy, passare a storage
+inline, introdurre pool/arena o usare tabelle path condivise.
 
 ## Regola contrattuale
 

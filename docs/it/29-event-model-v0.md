@@ -387,6 +387,86 @@ Questa separazione evita due errori opposti:
 - ottimizzare troppo presto con pool o interning prima di sapere dove Alfred
   spende davvero tempo.
 
+### Record Queue v0
+
+Dopo avere introdotto la copia owned, Alfred aggiunge anche una prima coda
+bounded per record:
+
+```text
+alfred_record_t borrowed
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+-> record owned dentro alfred_record_queue_t
+-> alfred_record_queue_pop()
+-> record owned consegnato al consumatore
+-> alfred_record_destroy_owned()
+```
+
+Questa coda non e' ancora collegata al backend runtime. Serve a fissare un
+contratto importante prima di introdurre thread, dispatcher o writer asincroni:
+
+- chi produce il record puo' continuare a usare puntatori borrowed;
+- la coda non conserva quei puntatori borrowed;
+- la coda conserva una copia owned del record;
+- quando il record viene estratto, la proprieta' passa al chiamante;
+- il chiamante deve distruggere il record owned con
+  `alfred_record_destroy_owned()`;
+- se la coda viene svuotata o distrutta mentre contiene record, libera lei gli
+  owned record rimasti.
+
+Il tipo introdotto e':
+
+```c
+typedef struct {
+    alfred_record_t *items;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} alfred_record_queue_t;
+```
+
+I campi hanno questo significato:
+
+| Campo | Significato |
+| --- | --- |
+| `items` | buffer circolare di `alfred_record_t` owned |
+| `capacity` | numero massimo di record accodabili |
+| `head` | posizione del prossimo record da estrarre |
+| `tail` | posizione dove verra' scritto il prossimo record |
+| `count` | numero di record attualmente presenti |
+
+La coda e' bounded: quando `count == capacity`, `push()` fallisce. Questa scelta
+e' intenzionale. Una coda infinita nasconderebbe il problema della backpressure:
+se i writer consumano piu' lentamente dei backend, Alfred deve decidere cosa
+fare invece di consumare memoria senza limite.
+
+La versione v0 e' volutamente single-threaded. Non contiene mutex, condition
+variable, worker thread o policy di drop. Il suo scopo e' piu' piccolo:
+
+```text
+dimostrare che il confine di lifetime e' corretto
+```
+
+Il test `tests/backend/test_record_queue.c` verifica:
+
+- push di record borrowed;
+- copia owned del path dentro la coda;
+- pop FIFO;
+- wraparound del buffer circolare;
+- rifiuto dell'overflow;
+- cleanup con `clear()` e `destroy()`.
+
+Questa scelta non decide ancora la struttura definitiva del percorso caldo. In
+futuro la coda potra' essere sostituita o affiancata da ring buffer piu'
+performanti, code per sink, pool/arena o storage inline. Il punto che non deve
+cambiare e':
+
+```text
+un record che supera un confine asincrono non puo' dipendere da memoria borrowed
+del produttore.
+```
+
 ## Campi filesystem
 
 I record legati al filesystem possono usare questi campi.
