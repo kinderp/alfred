@@ -356,6 +356,46 @@ stessa sessione ha tentato di leggere `~/.ssh/config`. Il confronto fra intento
 e azione reale appartiene al livello security/policy futuro, non al backend e
 non al writer.
 
+## Correlazione multi-backend futura
+
+Il core filesystem corrente interpreta raw facts prodotti da inotify. La
+direzione futura e' piu' ampia: Alfred dovra' correlare record provenienti da
+backend diversi, per esempio inotify, fanotify, eBPF, audit, ETW o Endpoint
+Security.
+
+Esempio concettuale:
+
+```text
+inotify: RAW_MODIFY path=/repo/src/app.c
+fanotify: FILE_OPEN_WRITE path=/repo/src/app.c pid=1234
+eBPF: PROCESS_EXEC pid=1234 exe=/usr/bin/python3 parent=1200
+agent context: agent_session_id=codex-001 workspace=/repo
+```
+
+Questi record parlano di aspetti diversi dello stesso comportamento. Un livello
+centrale dovra' poterli raggruppare e arricchire:
+
+```text
+sessione Codex
+-> processo python pid=1234
+-> modifica /repo/src/app.c
+-> dentro workspace
+-> decisione allowed
+```
+
+Per evitare confusione, distinguiamo tre livelli futuri:
+
+| Livello | Cosa fa | Cosa non deve fare |
+| --- | --- | --- |
+| core semantico di dominio | trasforma raw filesystem in eventi semantic filesystem | applicare policy Agent Guard |
+| correlation/enrichment engine | collega filesystem, processo, rete, sessione agente e workspace | serializzare output o decidere formato |
+| policy engine | produce `allowed`, `blocked`, `would_block`, `requires_approval` | osservare direttamente eventi OS |
+
+Questa separazione serve a non sovraccaricare il backend e a non rendere il
+writer un punto di logica. I backend osservano e normalizzano. Il core
+semantico interpreta per dominio. Il correlation engine collega fonti diverse.
+Il policy engine decide. I writer serializzano.
+
 ## Diagramma dei record implementati oggi
 
 Questo diagramma mostra i record che Alfred sa rappresentare oggi. Il tipo C

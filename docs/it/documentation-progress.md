@@ -217,6 +217,18 @@ Queste sezioni sono contratto architetturale, non stato runtime completo. Il
 codice usa ancora bridge sincroni compatibili verso i logger mentre migriamo
 gradualmente i raw log e i diagnostici verso record e sink.
 
+Le domande successive su `alfred_raw_event_t ->
+alfred_record_from_raw() -> alfred_record_sink_emit() ->
+alfred_record_text_sink_emit() -> raw.log`, sulla normalizzazione e sulla
+correlazione futura multi-backend sono state consolidate in:
+
+- `07-flusso-eventi.md`, che ora spiega normalizzazione, semantica, deduplica,
+  percorso sincrono raw -> record -> text sink e percorso finale asincrono;
+- `29-event-model-v0.md`, che ora descrive la correlazione futura fra
+  inotify, fanotify, eBPF, processo, workspace, agent session e policy;
+- `30-backend-api-v0.md`, che ora ribadisce il confine fra backend,
+  core semantico, correlation engine, policy engine e writer.
+
 ## Aggiornamento bootstrap agenti e milestone corrente
 
 Sono stati aggiunti:

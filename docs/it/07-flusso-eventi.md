@@ -19,6 +19,126 @@ flowchart TD
 Il modulo inotify produce eventi raw. Il core produce eventi semantici. Il
 livello app decide cosa farne.
 
+## Normalizzazione e semantica
+
+Nel progetto Alfred bisogna distinguere tre livelli:
+
+```text
+backend_observed = cosa ha detto il kernel o il backend
+normalized_raw   = cosa Alfred conserva in forma raw comune
+semantic         = cosa Alfred espone come significato stabile
+```
+
+La normalizzazione e' responsabilita' del backend o dell'adapter vicino al
+backend. Per inotify significa prendere un evento nativo come
+`struct inotify_event` e costruire un fatto raw Alfred:
+
+```text
+struct inotify_event
+-> inotify_adapter_build_raw()
+-> alfred_raw_event_t
+```
+
+Esempio:
+
+```text
+IN_CREATE | IN_ISDIR, name="subdir", wd=7
+```
+
+diventa:
+
+```text
+ALFRED_RAW_CREATE + ALFRED_RAW_ISDIR
+path=/root/subdir
+```
+
+La normalizzazione quindi:
+
+- traduce maschere native come `IN_CREATE` in tipi raw Alfred;
+- costruisce path completi partendo da `wd + name`;
+- conserva dettagli sorgente utili come `mask`, `cookie`, `wd` e flag
+  directory;
+- evita che il core dipenda direttamente da `struct inotify_event`;
+- non decide ancora la semantica finale.
+
+La semantica e' responsabilita' del core. Il core riceve raw facts Alfred e
+decide quali eventi stabili produrre. Per esempio:
+
+```text
+ALFRED_RAW_CREATE + ALFRED_RAW_ISDIR
+-> DIR_CREATED
+```
+
+oppure:
+
+```text
+ALFRED_RAW_MOVED_FROM cookie=10 path=/root/a
+ALFRED_RAW_MOVED_TO   cookie=10 path=/root/b
+-> FILE_RENAMED oppure DIR_RENAMED / DIR_RELOCATED
+```
+
+La deduplica segue la stessa regola: la deduplica tecnica necessaria al backend
+per non rompere l'osservazione puo' restare nel backend, per esempio evitare un
+doppio watch identico. La deduplica semantica, cioe' decidere quanti eventi
+finali mostrare all'utente per una sequenza rumorosa di raw facts, appartiene
+al core.
+
+## Percorso raw -> record -> sink
+
+Durante la migrazione a Event Model v0, una parte dei raw log passa gia' da
+record e sink compatibile:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> raw.log compatibile
+```
+
+Significato dei passaggi:
+
+| Passaggio | Responsabilita' |
+| --- | --- |
+| `alfred_raw_event_t` | fatto raw normalizzato ancora usato dal core |
+| `alfred_record_from_raw()` | adapter che produce `alfred_record_t` con layer `normalized_raw` |
+| `alfred_record_sink_emit()` | wrapper difensivo verso un sink generico `emit(record)` |
+| `alfred_record_text_sink_emit()` | text sink che formatta il record e chiama una callback di scrittura |
+| `raw.log` | output testuale compatibile usato da test e debug |
+
+Questo percorso e' sincrono nel runtime corrente. La chiamata parte da
+`handle_backend_event()`, attraversa il ponte record/sink/testo e arriva a
+`logger_raw()` prima che il flusso prosegua. E' una scelta transitoria: serve a
+migrare il comportamento senza cambiare il contratto visibile dei log.
+
+Il percorso finale ad alte prestazioni dovra' invece essere:
+
+```text
+evento OS
+-> backend/collector
+-> normalizzazione minima
+-> alfred_record_t
+-> copia owned o lifetime garantito
+-> enqueue su coda/ring buffer
+```
+
+Da quel punto in poi il lavoro deve uscire dal percorso caldo:
+
+```text
+dispatcher thread
+-> writer text
+-> writer JSONL
+-> writer MessagePack/protobuf
+-> writer socket
+-> Alfred Lab / report / policy futura
+```
+
+La regola da ricordare e':
+
+```text
+Il backend non aspetta il writer.
+```
+
 ## Flusso storico shadow mode
 
 Durante l'integrazione lo shadow mode e' stato usato come modalita'

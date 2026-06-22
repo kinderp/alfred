@@ -401,6 +401,42 @@ Un livello superiore collega quei fatti ad agente, processo, workspace e
 policy.
 ```
 
+### Normalizzazione, semantica e correlazione
+
+Il backend deve fermarsi alla normalizzazione minima:
+
+```text
+evento OS/backend nativo
+-> fatto raw Alfred o record normalized_raw
+```
+
+Per inotify questo include tradurre `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`,
+`IN_MOVED_TO` e altri flag in tipi raw Alfred, costruire il path completo e
+preservare dettagli come `mask`, `cookie`, `wd` e `IN_ISDIR`.
+
+Il backend non deve decidere la semantica finale:
+
+```text
+RAW_CREATE + ISDIR -> DIR_CREATED
+RAW_MOVED_FROM + RAW_MOVED_TO -> FILE_RENAMED / DIR_RELOCATED
+```
+
+Queste trasformazioni appartengono al core semantico. Allo stesso modo, la
+correlazione fra backend diversi non deve vivere nel singolo backend. Se in
+futuro inotify segnala una modifica, fanotify fornisce il processo e eBPF
+fornisce l'albero di processi, il merge appartiene a un livello centrale di
+correlazione/enrichment.
+
+Regola sintetica:
+
+```text
+I backend osservano e normalizzano.
+Il core semantico interpreta per dominio.
+Il correlation engine collega fonti diverse.
+Il policy engine decide.
+I writer serializzano.
+```
+
 ## Operazioni Backend API v0
 
 ```c

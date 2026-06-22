@@ -15,6 +15,11 @@ altro momento, leggere questo file prima di continuare.
   risultato.
 - Se una spiegazione data in chat riguarda una scelta reale del codice, riportare
   quella spiegazione anche negli `.md` o nei commenti del codice.
+- Se una domanda fatta in chat mostra che architettura, codice o concetto non
+  sono chiari, prima del commit controllare la documentazione collegata. Se la
+  spiegazione manca o e' troppo debole, aggiornarla con una versione didattica
+  della risposta; se invece e' gia' chiara, indicare il file e la sezione cosi'
+  il maintainer puo' decidere se evitare ulteriore peso documentale.
 - Quando utile, citare il commit che introduce o spiega una scelta, cosi' gli
   studenti possono risalire alla modifica concreta.
 - Una modifica non banale deve lasciare una traccia di orientamento: aggiornare
