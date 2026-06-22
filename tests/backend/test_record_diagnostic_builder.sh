@@ -2,12 +2,16 @@
 
 set -euo pipefail
 
-cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
-    -I../../core/include \
-    test_record_diagnostic_builder.c \
-    ../../core/src/alfred_record_diagnostic.c \
-    -o /tmp/alfred_test_record_diagnostic_builder
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build/tests/backend"
+mkdir -p "$BUILD_DIR"
 
-/tmp/alfred_test_record_diagnostic_builder
+cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
+    -I"$ROOT_DIR/core/include" \
+    "$ROOT_DIR/tests/backend/test_record_diagnostic_builder.c" \
+    "$ROOT_DIR/core/src/alfred_record_diagnostic.c" \
+    -o "$BUILD_DIR/alfred_test_record_diagnostic_builder"
+
+"$BUILD_DIR/alfred_test_record_diagnostic_builder"
 
 echo "PASS backend record diagnostic builder"

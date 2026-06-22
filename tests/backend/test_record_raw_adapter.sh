@@ -2,12 +2,16 @@
 
 set -euo pipefail
 
-cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
-    -I../../core/include \
-    test_record_raw_adapter.c \
-    ../../core/src/alfred_record_adapter.c \
-    -o /tmp/alfred_test_record_raw_adapter
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build/tests/backend"
+mkdir -p "$BUILD_DIR"
 
-/tmp/alfred_test_record_raw_adapter
+cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
+    -I"$ROOT_DIR/core/include" \
+    "$ROOT_DIR/tests/backend/test_record_raw_adapter.c" \
+    "$ROOT_DIR/core/src/alfred_record_adapter.c" \
+    -o "$BUILD_DIR/alfred_test_record_raw_adapter"
+
+"$BUILD_DIR/alfred_test_record_raw_adapter"
 
 echo "PASS backend record raw adapter"
