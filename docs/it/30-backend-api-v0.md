@@ -886,12 +886,17 @@ Nel backend inotify esiste ora un helper locale,
 ```text
 campi diagnostici runtime
 -> alfred_record_build_watch_diagnostic()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event()
 ```
 
 Questo helper non e' la Backend API pubblica e non sostituisce `emit(record)`.
 Serve a evitare duplicazione mentre migriamo gradualmente i diagnostici runtime.
+Il percorso diretto `alfred_record_format_text() -> logger_event()` resta solo
+fallback di compatibilita' se il sink bridge non riesce a inizializzarsi o a
+emettere il record.
 Per ora e' usato dai percorsi `WATCH_STALE`, `WATCH_RESYNC_FAILED`, dai record
 di dettaglio del resync locale (`WATCH_RESYNC_SCAN_*`,
 `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_ROLLBACK`) e dai diagnostici

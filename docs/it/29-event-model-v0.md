@@ -775,9 +775,14 @@ Nel codice C questo passaggio e' iniziato con due helper:
 Il lato output semantico usa gia' il sink: `core_logger_on_event()` converte
 `alfred_event_t` in `alfred_record_t`, chiama `alfred_record_sink_emit()`,
 attraversa `alfred_record_text_sink_emit()` e solo alla fine scrive il payload
-con `logger_event()`. Il backend inotify non e' ancora migrato a `emit(record)`,
-ma il tipo di sink e il primo text sink sono disponibili, testati e usati nel
-percorso semantico ufficiale.
+con `logger_event()`.
+
+Anche il backend inotify usa gia' questo ponte per gli stream migrati in questa
+fase: raw principali, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
+`WATCH_RESYNC_*` e `WATCH_LOST_*`. Non e' ancora la Backend API finale, perche'
+il dispatcher asincrono, le code, i record owned e la Writer API completa sono
+rimandati; pero' il confine `record -> emit(record) -> text sink` e' gia' il
+percorso di compatibilita' per questi stream runtime.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in
