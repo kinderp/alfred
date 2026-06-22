@@ -312,16 +312,14 @@ static int backend_log_watch_diagnostic_record(
             os_error_name,
             os_error_message,
             &record) == 0) {
-        if (type == ALFRED_RECORD_TYPE_WATCH_STALE) {
-            text_sink.write = backend_write_event_payload;
-            text_sink.userdata = ctx->logger;
-            text_sink.buffer = payload;
-            text_sink.buffer_size = sizeof(payload);
+        text_sink.write = backend_write_event_payload;
+        text_sink.userdata = ctx->logger;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
 
-            if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
-                alfred_record_sink_emit(&sink, &record) == 0) {
-                return 0;
-            }
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            return 0;
         }
 
         if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
