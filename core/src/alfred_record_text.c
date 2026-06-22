@@ -148,7 +148,9 @@ static int checked_snprintf(char *dst, size_t dst_size, const char *fmt, ...)
  *   TYPE path=path
  *
  * Normalized raw records include the raw mask because RAW_* type alone does
- * not carry flags such as ALFRED_RAW_ISDIR.
+ * not carry flags such as ALFRED_RAW_ISDIR. Move raw records also expose the
+ * backend cookie because the core needs it to correlate MOVED_FROM and
+ * MOVED_TO before producing a semantic rename/move/relocate event.
  *
  * Return: bytes written on success, -1 on invalid input or truncation.
  */
@@ -163,6 +165,17 @@ static int format_filesystem_text(const alfred_record_t *record,
 
     if (record->layer == ALFRED_RECORD_LAYER_NORMALIZED_RAW) {
         path = record->path != NULL ? record->path : "";
+        if (record->type == ALFRED_RECORD_TYPE_RAW_MOVED_FROM ||
+            record->type == ALFRED_RECORD_TYPE_RAW_MOVED_TO) {
+            return checked_snprintf(dst,
+                                    dst_size,
+                                    "%s path=%s mask=%u cookie=%u",
+                                    name,
+                                    path,
+                                    record->raw_mask,
+                                    record->cookie);
+        }
+
         return checked_snprintf(dst,
                                 dst_size,
                                 "%s path=%s mask=%u",

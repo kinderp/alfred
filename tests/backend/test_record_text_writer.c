@@ -657,6 +657,38 @@ static void test_normalized_raw_payload(void)
     assert(strcmp(text, expected) == 0);
 }
 
+/*
+ * test_normalized_raw_move_payload - document the raw move text contract
+ *
+ * MOVED_FROM and MOVED_TO are not semantic rename events yet. The normalized
+ * raw text must preserve the move cookie so the record stream still exposes
+ * the correlation key that the core uses later.
+ */
+static void test_normalized_raw_move_payload(void)
+{
+    alfred_raw_event_t raw;
+    alfred_record_t record;
+    char expected[128];
+    char text[128];
+
+    memset(&raw, 0, sizeof(raw));
+    raw.ts_ns = 42u;
+    raw.source = ALFRED_SRC_INOTIFY;
+    raw.mask = ALFRED_RAW_MOVED_FROM;
+    raw.cookie = 77u;
+    raw.path = "/tmp/root/old";
+
+    assert(alfred_record_from_raw(&raw, &record) == 0);
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+
+    snprintf(expected,
+             sizeof(expected),
+             "RAW_MOVED_FROM path=/tmp/root/old mask=%u cookie=%u",
+             raw.mask,
+             raw.cookie);
+    assert(strcmp(text, expected) == 0);
+}
+
 static void test_invalid_or_truncated_output_fails(void)
 {
     alfred_record_t record;
@@ -686,6 +718,7 @@ int main(void)
     test_diagnostic_resync_detail_payload();
     test_diagnostic_lost_scope_payload();
     test_normalized_raw_payload();
+    test_normalized_raw_move_payload();
     test_invalid_or_truncated_output_fails();
 
     return 0;

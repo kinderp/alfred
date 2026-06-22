@@ -818,10 +818,10 @@ Non va anticipata nella prima implementazione.
    per tutta la famiglia locale `WATCH_RESYNC_*` e per i diagnostici
    `WATCH_LOST_*`: il runtime usa record diagnostici, sink comune e text sink.
    Primi micro-step raw fatti per `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`,
-   `RAW_MODIFY` e `RAW_CLOSE_WRITE`: `app.c` riceve `alfred_raw_event_t`, lo
-   converte con `alfred_record_from_raw()`, lo emette al sink comune e scrive
-   il payload compatibile su `raw.log`, poi consegna comunque il raw originale
-   ad `alfred_process()`.
+   `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM` e `RAW_MOVED_TO`: `app.c`
+   riceve `alfred_raw_event_t`, lo converte con `alfred_record_from_raw()`, lo
+   emette al sink comune e scrive il payload compatibile su `raw.log`, poi
+   consegna comunque il raw originale ad `alfred_process()`.
 8. Progettare Writer API v0, coda/ring buffer e backpressure.
    Specifica documentale in [Writer API v0](32-writer-api-v0.md).
 9. Solo dopo implementare JSONL come writer, non come API primaria.
@@ -844,11 +844,11 @@ L'adapter `alfred_record_from_raw()` produce record
 `normalized_raw + filesystem + RAW_*`. Non usa tipi semantici `FILE_*` o
 `DIR_*`, perche' la semantica resta responsabilita' del core. Per esempio un
 `ALFRED_RAW_MOVED_FROM` diventa `RAW_MOVED_FROM`, non `FILE_MOVED`.
-Il primo uso runtime e' volutamente limitato a `ALFRED_RAW_CREATE`,
-`ALFRED_RAW_DELETE`, `ALFRED_RAW_ATTRIB`, `ALFRED_RAW_MODIFY` e
-`ALFRED_RAW_CLOSE_WRITE`: `handle_backend_event()` in `app.c` costruisce record
-`RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY` o `RAW_CLOSE_WRITE`, li
-passa al sink comune e lascia al text sink produrre righe come:
+Il primo uso runtime copre `ALFRED_RAW_CREATE`, `ALFRED_RAW_DELETE`,
+`ALFRED_RAW_ATTRIB`, `ALFRED_RAW_MODIFY`, `ALFRED_RAW_CLOSE_WRITE`,
+`ALFRED_RAW_MOVED_FROM` e `ALFRED_RAW_MOVED_TO`: `handle_backend_event()` in
+`app.c` costruisce record `RAW_*`, li passa al sink comune e lascia al text
+sink produrre righe come:
 
 ```text
 RAW_CREATE path=/tmp/root/a.txt mask=1
@@ -856,10 +856,15 @@ RAW_DELETE path=/tmp/root/a.txt mask=2
 RAW_ATTRIB path=/tmp/root/a.txt mask=8
 RAW_MODIFY path=/tmp/root/a.txt mask=4
 RAW_CLOSE_WRITE path=/tmp/root/a.txt mask=16
+RAW_MOVED_FROM path=/tmp/root/old.txt mask=32 cookie=42
+RAW_MOVED_TO path=/tmp/root/new.txt mask=64 cookie=42
 ```
 
 Dopo il log normalizzato, lo stesso `alfred_raw_event_t` continua a essere
 passato ad `alfred_process()` per non cambiare la semantica del core.
+I record `RAW_MOVED_FROM` e `RAW_MOVED_TO` restano raw facts separati: il cookie
+viene preservato nel testo compatibile per rendere visibile la chiave di
+correlazione, ma la scelta semantica finale resta del core.
 
 Il builder `alfred_record_build_watch_diagnostic()` produce record
 `diagnostic + watch` o `diagnostic + recovery` a partire dai tipi `WATCH_*`
@@ -1020,10 +1025,10 @@ sink per produrre lo stesso payload testuale di prima. Nel backend inotify,
 `WATCH_LOST_*` usano gia' builder diagnostico, sink comune e text sink.
 `WATCH_RESYNC_SCAN_FAILED` e `WATCH_LOST_QUEUE_FAILED` conservano il canale
 error tramite un bridge di sink con routing event/error. Il raw path runtime e'
-iniziato con `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY` e
-`RAW_CLOSE_WRITE`: il raw originale resta consegnato al core, mentre il log raw
-normalizzato passa da record + sink + text sink. I raw `RAW_MOVED_FROM`,
-`RAW_MOVED_TO` e `RAW_OVERFLOW` restano da migrare.
+iniziato con `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`,
+`RAW_CLOSE_WRITE`, `RAW_MOVED_FROM` e `RAW_MOVED_TO`: il raw originale resta
+consegnato al core, mentre il log raw normalizzato passa da record + sink +
+text sink. `RAW_OVERFLOW` resta da migrare.
 
 ## Test futuri
 

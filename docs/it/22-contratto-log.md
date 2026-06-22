@@ -61,7 +61,7 @@ alfred_raw_event_t
 ```
 
 I primi casi runtime migrati sono `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`,
-`RAW_MODIFY` e `RAW_CLOSE_WRITE`:
+`RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM` e `RAW_MOVED_TO`:
 
 ```text
 RAW_CREATE path=/tmp/root/a.txt mask=1
@@ -71,6 +71,8 @@ RAW_DELETE path=/tmp/root/dir mask=258
 RAW_ATTRIB path=/tmp/root/a.txt mask=8
 RAW_MODIFY path=/tmp/root/a.txt mask=4
 RAW_CLOSE_WRITE path=/tmp/root/a.txt mask=16
+RAW_MOVED_FROM path=/tmp/root/old.txt mask=32 cookie=42
+RAW_MOVED_TO path=/tmp/root/new.txt mask=64 cookie=42
 ```
 
 Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
@@ -80,12 +82,17 @@ Queste righe non sostituiscono ancora le righe kernel `IN_CREATE` e
 core produce `FILE_MODIFIED`.
 `RAW_CLOSE_WRITE` affianca `IN_CLOSE_WRITE` e continua a essere il raw fact da
 cui il core produce `FILE_READY`.
+`RAW_MOVED_FROM` e `RAW_MOVED_TO` affiancano `IN_MOVED_FROM` e `IN_MOVED_TO`.
+Restano fatti raw separati: espongono il `cookie` del backend per permettere al
+core di correlare la coppia prima di scegliere `FILE_RENAMED`, `DIR_RENAMED`,
+`FILE_RELOCATED`, `DIR_RELOCATED` o altro esito semantico.
 `mask=1` corrisponde a `ALFRED_RAW_CREATE`; `mask=257` corrisponde a
 `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`; `mask=2` corrisponde a
 `ALFRED_RAW_DELETE`; `mask=258` corrisponde a
 `ALFRED_RAW_DELETE | ALFRED_RAW_ISDIR`; `mask=8` corrisponde a
 `ALFRED_RAW_ATTRIB`; `mask=4` corrisponde a `ALFRED_RAW_MODIFY`; `mask=16`
-corrisponde a `ALFRED_RAW_CLOSE_WRITE`.
+corrisponde a `ALFRED_RAW_CLOSE_WRITE`; `mask=32` corrisponde a
+`ALFRED_RAW_MOVED_FROM`; `mask=64` corrisponde a `ALFRED_RAW_MOVED_TO`.
 
 ## Raw log audit inotify
 
