@@ -382,9 +382,13 @@ dedicato `test_record_counter_sink.sh`.
 `tests/perf/bench_record_sinks.c` e `tests/perf/run_record_sinks.sh`
 introducono il primo micro-benchmark manuale per confrontare `counter`, `text`
 e `jsonl` sink con record sintetici in memoria. Il nuovo target
-`make perf-record-sinks` stampa CSV con `sink`, `records`, `elapsed_us`,
-`records_per_sec`, `bytes` e `counter_total`. Il benchmark non usa inotify, non
+`make perf-record-sinks` stampa CSV con `sink`, `records`, `runs`, `min_us`,
+`avg_us`, `max_us`, `records_per_sec_avg`, `bytes_last` e
+`counter_total_last`. Lo script accetta `--records` e `--runs`, cosi' si possono
+fare misure ripetute senza cambiare codice. Il benchmark non usa inotify, non
 scrive file/socket e non misura backpressure: serve come baseline locale per
 separare il costo del confine `record -> sink` dal costo di formattazione text o
 JSONL. La guida test e la Writer API spiegano come lanciarlo e come leggere le
-colonne.
+colonne. La guida test ora include anche esempi di interpretazione per righe
+`counter` e `jsonl`, la formula del throughput medio e le indicazioni pratiche
+per capire se il costo e' nel core/sink boundary oppure nella formattazione.

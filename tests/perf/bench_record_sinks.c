@@ -15,12 +15,48 @@
  *
  * Output columns:
  *
- * - sink: counter, text, or jsonl
- * - records: number of synthetic records emitted
- * - elapsed_us: monotonic wall-clock time spent emitting records
- * - records_per_sec: simple throughput for this run
- * - bytes: payload bytes observed by formatting sinks, 0 for counter
- * - counter_total: total records observed by the counter sink, 0 otherwise
+ * - sink: counter, text, or jsonl.
+ *   This tells which sink implementation was measured. Counter is the no-op
+ *   baseline, text is the compatibility formatter, and jsonl is the structured
+ *   JSONL formatter.
+ *
+ * - records: number of synthetic records emitted in each run.
+ *   If records is 100000 and runs is 5, each sink receives 5 independent runs
+ *   of 100000 records.
+ *
+ * - runs: number of repeated measurements for the same sink.
+ *   More than one run helps expose scheduler noise and cache effects. It is
+ *   still not a full statistical benchmark, but it is better than trusting one
+ *   timing sample.
+ *
+ * - min_us: fastest run in microseconds.
+ *   This is the best observed case for that sink on this machine.
+ *
+ * - avg_us: arithmetic mean of all run times in microseconds.
+ *   This is the main value to compare at this stage.
+ *
+ * - max_us: slowest run in microseconds.
+ *   If max_us is far from min_us, the machine or benchmark run was noisy.
+ *
+ * - records_per_sec_avg: throughput computed from records and avg_us.
+ *   Formula: records * 1,000,000 / avg_us.
+ *
+ * - bytes_last: payload bytes observed in the last run.
+ *   Text and JSONL sinks format strings, so this is the sum of the payload
+ *   lengths. Counter produces no payload and therefore reports 0.
+ *
+ * - counter_total_last: records observed by the counter sink in the last run.
+ *   It should match records for the counter row. It is 0 for text and jsonl.
+ *
+ * Interpretation examples:
+ *
+ * - counter fast, text slower, jsonl much slower is expected: counter only
+ *   increments integers, text formats compact human strings, and JSONL writes
+ *   field names, escaping, and nested objects.
+ * - counter slow means the problem is close to record creation, sink dispatch,
+ *   the benchmark loop, or the machine. It is not caused by JSON formatting.
+ * - jsonl slow while counter is fast means the cost is likely in serialization,
+ *   escaping, and produced byte volume.
  *
  * The numbers are useful for comparing implementations on the same machine.
  * They are not stable correctness thresholds and should not gate CI.
@@ -47,6 +83,12 @@ typedef enum {
 typedef struct {
     size_t bytes;
 } byte_count_writer_t;
+
+typedef struct {
+    uint64_t elapsed_us;
+    size_t bytes;
+    size_t counter_total;
+} bench_run_result_t;
 
 static uint64_t now_ns(void)
 {
@@ -125,7 +167,9 @@ static const char *sink_name(bench_sink_kind_t kind)
     }
 }
 
-static int run_benchmark(bench_sink_kind_t kind, size_t records)
+static int run_once(bench_sink_kind_t kind,
+                    size_t records,
+                    bench_run_result_t *result)
 {
     alfred_record_counter_sink_t counter_sink;
     alfred_record_text_sink_t text_sink;
@@ -136,12 +180,15 @@ static int run_benchmark(bench_sink_kind_t kind, size_t records)
     char jsonl_buffer[1024];
     uint64_t start_ns;
     uint64_t end_ns;
-    double elapsed_seconds;
-    double records_per_sec;
     size_t counter_total = 0u;
+
+    if (result == NULL) {
+        return -1;
+    }
 
     memset(&sink, 0, sizeof(sink));
     memset(&writer, 0, sizeof(writer));
+    memset(result, 0, sizeof(*result));
 
     switch (kind) {
     case BENCH_SINK_COUNTER:
@@ -185,22 +232,61 @@ static int run_benchmark(bench_sink_kind_t kind, size_t records)
         counter_total = counter_sink.total_records;
     }
 
-    elapsed_seconds = (double)(end_ns - start_ns) / 1000000000.0;
-    records_per_sec =
-        elapsed_seconds > 0.0 ? (double)records / elapsed_seconds : 0.0;
-
-    printf("%s,%zu,%llu,%.2f,%zu,%zu\n",
-           sink_name(kind),
-           records,
-           (unsigned long long)((end_ns - start_ns) / 1000ULL),
-           records_per_sec,
-           writer.bytes,
-           counter_total);
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = writer.bytes;
+    result->counter_total = counter_total;
 
     return 0;
 }
 
-static int parse_records(const char *text, size_t *records)
+static int run_benchmark(bench_sink_kind_t kind, size_t records, size_t runs)
+{
+    bench_run_result_t result;
+    uint64_t min_us = UINT64_MAX;
+    uint64_t max_us = 0u;
+    unsigned long long total_us = 0u;
+    double avg_us;
+    double records_per_sec_avg;
+    size_t bytes_last = 0u;
+    size_t counter_total_last = 0u;
+
+    for (size_t i = 0u; i < runs; i++) {
+        if (run_once(kind, records, &result) != 0) {
+            return -1;
+        }
+
+        if (result.elapsed_us < min_us) {
+            min_us = result.elapsed_us;
+        }
+        if (result.elapsed_us > max_us) {
+            max_us = result.elapsed_us;
+        }
+
+        total_us += (unsigned long long)result.elapsed_us;
+        bytes_last = result.bytes;
+        counter_total_last = result.counter_total;
+    }
+
+    avg_us = (double)total_us / (double)runs;
+    records_per_sec_avg = avg_us > 0.0
+        ? ((double)records * 1000000.0) / avg_us
+        : 0.0;
+
+    printf("%s,%zu,%zu,%llu,%.2f,%llu,%.2f,%zu,%zu\n",
+           sink_name(kind),
+           records,
+           runs,
+           (unsigned long long)min_us,
+           avg_us,
+           (unsigned long long)max_us,
+           records_per_sec_avg,
+           bytes_last,
+           counter_total_last);
+
+    return 0;
+}
+
+static int parse_size(const char *text, size_t *value)
 {
     char *end = NULL;
     unsigned long parsed;
@@ -211,15 +297,17 @@ static int parse_records(const char *text, size_t *records)
         return -1;
     }
 
-    *records = (size_t)parsed;
+    *value = (size_t)parsed;
     return 0;
 }
 
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [RECORDS]\n"
-            "example: %s 100000\n",
+            "usage: %s [--records N] [--runs N]\n"
+            "       %s [RECORDS]\n"
+            "example: %s --records 100000 --runs 5\n",
+            argv0,
             argv0,
             argv0);
 }
@@ -227,22 +315,38 @@ static void usage(const char *argv0)
 int main(int argc, char **argv)
 {
     size_t records = 100000u;
+    size_t runs = 1u;
 
-    if (argc > 2) {
-        usage(argv[0]);
-        return 1;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--records") == 0) {
+            if (i + 1 >= argc || parse_size(argv[i + 1], &records) != 0) {
+                fprintf(stderr, "invalid --records value\n");
+                return 1;
+            }
+            i++;
+        }
+        else if (strcmp(argv[i], "--runs") == 0) {
+            if (i + 1 >= argc || parse_size(argv[i + 1], &runs) != 0) {
+                fprintf(stderr, "invalid --runs value\n");
+                return 1;
+            }
+            i++;
+        }
+        else if (argc == 2 && parse_size(argv[i], &records) == 0) {
+            continue;
+        }
+        else {
+            usage(argv[0]);
+            return 1;
+        }
     }
 
-    if (argc == 2 && parse_records(argv[1], &records) != 0) {
-        fprintf(stderr, "invalid record count: %s\n", argv[1]);
-        return 1;
-    }
+    printf("sink,records,runs,min_us,avg_us,max_us,"
+           "records_per_sec_avg,bytes_last,counter_total_last\n");
 
-    printf("sink,records,elapsed_us,records_per_sec,bytes,counter_total\n");
-
-    if (run_benchmark(BENCH_SINK_COUNTER, records) != 0 ||
-        run_benchmark(BENCH_SINK_TEXT, records) != 0 ||
-        run_benchmark(BENCH_SINK_JSONL, records) != 0) {
+    if (run_benchmark(BENCH_SINK_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_TEXT, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_JSONL, records, runs) != 0) {
         return 1;
     }
 

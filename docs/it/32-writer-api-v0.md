@@ -721,9 +721,19 @@ make perf-record-sinks
 ```
 
 Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con tre righe:
-`counter`, `text` e `jsonl`. Questo non e' ancora un benchmark end-to-end di
+`counter`, `text` e `jsonl`. Lo script accetta anche:
+
+```bash
+cd tests/perf
+bash run_record_sinks.sh --records 1000000 --runs 5
+```
+
+Le run multiple producono `min_us`, `avg_us` e `max_us`, utili per non ragionare
+su una sola misura rumorosa. Questo non e' ancora un benchmark end-to-end di
 Alfred: non usa inotify, non legge eventi dal kernel, non scrive file e non
 misura backpressure. Misura solo record sintetici consegnati a sink isolati.
+La spiegazione campo per campo del CSV, con esempi pratici e interpretazioni,
+e' nella guida test: [make perf-record-sinks](10-debugging-test-e-strumenti.md#8-make-perf-record-sinks).
 
 ## Ownership e record accodati
 

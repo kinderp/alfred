@@ -5,6 +5,39 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build/tests/perf"
 TEST_BIN="$BUILD_DIR/bench_record_sinks"
+RECORDS=100000
+RUNS=1
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --records)
+            if [[ "$#" -lt 2 ]]; then
+                echo "missing value for --records" >&2
+                exit 1
+            fi
+            RECORDS="$2"
+            shift 2
+            ;;
+        --runs)
+            if [[ "$#" -lt 2 ]]; then
+                echo "missing value for --runs" >&2
+                exit 1
+            fi
+            RUNS="$2"
+            shift 2
+            ;;
+        *)
+            if [[ "$#" -eq 1 ]]; then
+                RECORDS="$1"
+                shift
+            else
+                echo "usage: $0 [--records N] [--runs N]" >&2
+                echo "       $0 [RECORDS]" >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
 
 mkdir -p "$BUILD_DIR"
 
@@ -33,4 +66,4 @@ gcc \
     "$ROOT_DIR/core/src/alfred_record_text_sink.c" \
     -o "$TEST_BIN"
 
-"$TEST_BIN" "${1:-100000}"
+"$TEST_BIN" --records "$RECORDS" --runs "$RUNS"

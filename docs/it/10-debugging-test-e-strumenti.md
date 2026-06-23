@@ -1519,13 +1519,13 @@ costo dei writer. Se `counter` e' veloce ma `jsonl` e' lento, il costo e'
 probabilmente nella serializzazione JSONL o nel writer. Se anche `counter` e'
 lento, il problema e' piu' vicino a record, dispatcher, coda o chiamata sink.
 
-Di default esegue 100000 record sintetici:
+Di default esegue 100000 record sintetici e una run per sink:
 
 ```text
-sink,records,elapsed_us,records_per_sec,bytes,counter_total
-counter,100000,1200,83333333.33,0,100000
-text,100000,9000,11111111.11,4100000,0
-jsonl,100000,18000,5555555.55,12000000,0
+sink,records,runs,min_us,avg_us,max_us,records_per_sec_avg,bytes_last,counter_total_last
+counter,100000,1,1200,1200.00,1200,83333333.33,0,100000
+text,100000,1,9000,9000.00,9000,11111111.11,4100000,0
+jsonl,100000,1,18000,18000.00,18000,5555555.55,12000000,0
 ```
 
 I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
@@ -1533,25 +1533,101 @@ dal carico del sistema, dal compilatore e dalla configurazione.
 
 Significato delle colonne:
 
-- `sink`: sink misurato
-- `records`: numero di record sintetici emessi
-- `elapsed_us`: tempo monotonic speso nel ciclo di emit
-- `records_per_sec`: throughput semplice calcolato sul tempo misurato
-- `bytes`: byte di payload osservati dai sink che formattano stringhe;
-  per `counter` vale `0`
-- `counter_total`: record contati dal counter sink; per gli altri sink vale `0`
+- `sink`: sink misurato. I valori attuali sono `counter`, `text` e `jsonl`.
+  `counter` e' la baseline senza I/O; `text` usa il formatter compatibile con i
+  log leggibili; `jsonl` usa il formatter strutturato JSONL.
+- `records`: numero di record sintetici inviati a quel sink in ogni run. Se vale
+  `100000`, ogni run invia 100000 `alfred_record_t`.
+- `runs`: numero di misurazioni ripetute per quello stesso sink. Se `records` e'
+  `100000` e `runs` e' `5`, allora il benchmark misura 5 volte `counter`, 5
+  volte `text` e 5 volte `jsonl`, sempre con 100000 record per run.
+- `min_us`: tempo della run piu' veloce, in microsecondi. E' il miglior caso
+  osservato su quella macchina.
+- `avg_us`: media aritmetica dei tempi, in microsecondi. E' il valore piu' utile
+  per confrontare i sink in questo micro-benchmark.
+- `max_us`: tempo della run piu' lenta, in microsecondi. Se `max_us` e' molto
+  lontano da `min_us`, il risultato e' rumoroso: la VM, lo scheduler o altri
+  processi possono avere interferito.
+- `records_per_sec_avg`: throughput medio calcolato da `records` e `avg_us`.
+  La formula e':
 
-E' possibile passare un numero diverso di record:
+```text
+records_per_sec_avg = records * 1000000 / avg_us
+```
+
+  Per esempio, con `records=100000` e `avg_us=50000`, il throughput medio e':
+
+```text
+100000 * 1000000 / 50000 = 2000000 record/sec
+```
+
+- `bytes_last`: byte di payload osservati nell'ultima run. Per `text` e' la
+  somma della lunghezza delle stringhe testuali prodotte. Per `jsonl` e' la
+  somma della lunghezza degli oggetti JSON prodotti. Per `counter` vale `0`
+  perche' il counter sink non produce payload.
+- `counter_total_last`: record contati dal counter sink nell'ultima run. Per la
+  riga `counter` dovrebbe essere uguale a `records`. Per `text` e `jsonl` vale
+  `0`, perche' quei sink non aggiornano il counter.
+
+E' possibile passare un numero diverso di record e piu' run:
 
 ```bash
 cd tests/perf
+bash run_record_sinks.sh --records 1000000 --runs 5
+```
+
+Per compatibilita' operativa resta valido anche il formato breve:
+
+```bash
 bash run_record_sinks.sh 1000000
 ```
 
+che imposta solo il numero di record e usa `runs=1`.
+
 Questo benchmark non e' ancora una suite performance ufficiale. Non ha warmup,
-non calcola percentili, non ripete automaticamente piu' run e non misura I/O su
-file o socket. Serve come primo strumento riproducibile per confrontare
-`counter`, `text` e `jsonl` senza modificare il runtime.
+non calcola percentili e non misura I/O su file o socket. Le run multiple
+riducono un po' il rumore, ma non sostituiscono una suite performance completa
+con ambiente controllato, ripetizioni statistiche e baseline versionate.
+
+Esempio di interpretazione:
+
+```text
+counter,100000,5,2800,3000.00,3400,33333333.33,0,100000
+```
+
+Questa riga significa:
+
+- il sink misurato e' `counter`;
+- ogni run invia 100000 record;
+- sono state fatte 5 run;
+- la run piu' veloce ha impiegato 2800 microsecondi;
+- la media e' 3000 microsecondi;
+- la run piu' lenta ha impiegato 3400 microsecondi;
+- il throughput medio e' circa 33 milioni di record/sec;
+- non sono stati prodotti byte di payload;
+- il counter ha contato 100000 record nell'ultima run.
+
+Altro esempio:
+
+```text
+jsonl,100000,5,350000,370000.00,410000,270270.27,18266602,0
+```
+
+Questa riga dice che JSONL e' molto piu' lento del counter: non per forza e' un
+bug, perche' JSONL deve scrivere nomi dei campi, virgolette, escape, numeri,
+oggetti annidati e molti piu' byte. Il campo `bytes_last` mostra proprio il
+volume di testo prodotto nell'ultima run.
+
+Lettura pratica dei risultati:
+
+- se `counter` e' veloce ma `text` e `jsonl` sono lenti, il costo e'
+  principalmente nella formattazione o nel volume di output;
+- se `counter` e' lento, il problema e' piu' vicino al ciclo del benchmark, alla
+  creazione dei record, alla chiamata `alfred_record_sink_emit()` o al carico
+  della macchina;
+- se `jsonl` produce molti piu' byte di `text`, e' normale che sia piu' lento;
+- se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
+  ripetere il test su una macchina meno carica.
 
 ### 9. Nessun `test-legacy-shadow`
 
