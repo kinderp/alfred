@@ -107,6 +107,165 @@ I writer possono fare lavoro costoso solo perche' sono fuori dal percorso caldo.
 Possono serializzare, raggruppare, fare flush, spedire su socket o aggiornare UI,
 ma non devono bloccare il collector.
 
+## Vista architetturale completa
+
+Il diagramma seguente mostra la forma target del percorso record/output. In
+Mermaid resta una vista statica, ma separa chiaramente:
+
+- il percorso caldo;
+- il punto in cui avviene la copia owned;
+- la coda;
+- il dispatcher;
+- i sink;
+- i writer a valle.
+
+```mermaid
+flowchart LR
+    subgraph Sources["Sorgenti eventi"]
+        OS["OS events"]
+        INO["inotify"]
+        FAN["fanotify futuro"]
+        EBPF["eBPF futuro"]
+    end
+
+    subgraph Hot["Percorso caldo"]
+        B["backend poll"]
+        N["adapter / builder"]
+        RB["record borrowed"]
+        CL["clone owned"]
+        Q["record queue"]
+    end
+
+    subgraph Cold["Fuori hot path"]
+        D["dispatcher"]
+        S1["text sink"]
+        S2["sink JSONL"]
+        S3["sink binary"]
+        S4["sink Lab"]
+    end
+
+    subgraph Writers["Writer / consumer"]
+        W1["raw/events log"]
+        W2["ledger JSONL"]
+        W3["MessagePack<br/>protobuf"]
+        W4["UI / report"]
+    end
+
+    OS --> INO
+    OS -.-> FAN
+    OS -.-> EBPF
+    INO -->|"struct inotify_event"| B
+    FAN -.->|"evento backend futuro"| B
+    EBPF -.->|"evento backend futuro"| B
+    B -->|"inotify_adapter_build_raw()"| N
+    N -->|"alfred_raw_event_t / alfred_record_t"| RB
+    RB -->|"alfred_record_clone_owned()"| CL
+    CL -->|"alfred_record_queue_push()"| Q
+    Q -->|"alfred_record_queue_pop()"| D
+    D -->|"alfred_record_sink_emit()"| S1
+    D -->|"alfred_record_sink_emit()"| S2
+    D -->|"alfred_record_sink_emit()"| S3
+    D -->|"alfred_record_sink_emit()"| S4
+    S1 -->|"alfred_record_text_sink_emit()"| W1
+    S2 -->|"jsonl_write() futuro"| W2
+    S3 -->|"binary_encode() futuro"| W3
+    S4 -->|"lab_update() futuro"| W4
+```
+
+Lettura del diagramma:
+
+1. I backend osservano eventi OS, per esempio `struct inotify_event`.
+2. Il backend chiama l'adapter o un builder per normalizzare.
+3. La normalizzazione produce `alfred_raw_event_t` e poi `alfred_record_t`.
+4. Prima del confine asincrono il record borrowed diventa owned con
+   `alfred_record_clone_owned()`.
+5. Il record owned entra nella queue con `alfred_record_queue_push()`.
+6. Fuori dal path caldo il worker estrae con `alfred_record_queue_pop()`.
+7. Il dispatcher chiama i sink con `alfred_record_sink_emit()`.
+8. Ogni sink consegna il record al proprio writer o consumer.
+
+La linea concettuale piu' importante e':
+
+```text
+backend -> record -> queue
+```
+
+Questa e' la fine del lavoro che deve restare veloce. Tutto cio' che viene dopo
+puo' essere piu' ricco, configurabile e costoso, ma non deve bloccare il backend.
+
+Tabella delle funzioni e dei dati che attraversano il diagramma:
+
+| Passaggio | Funzione / responsabilita' | Dato principale |
+| --- | --- | --- |
+| kernel -> backend | `read()` dentro il backend | `struct inotify_event` |
+| backend -> adapter | `inotify_adapter_build_raw()` | evento inotify + parent path |
+| adapter -> raw | ritorno adapter | `alfred_raw_event_t` |
+| raw -> record borrowed | `alfred_record_from_raw()` | `alfred_record_t` borrowed |
+| borrowed -> owned | `alfred_record_clone_owned()` | `alfred_record_t` owned |
+| enqueue | `alfred_record_queue_push()` | record owned copiato nella queue |
+| dequeue | `alfred_record_queue_pop()` | record owned trasferito al worker |
+| fan-out | `alfred_record_dispatcher_dispatch_one()` | stesso record verso i sink |
+| generic sink | `alfred_record_sink_emit()` | `sink->emit(userdata, record)` |
+| text sink | `alfred_record_text_sink_emit()` | payload testuale |
+| writer | callback `write()` o writer futuro | file, JSONL, binario, socket, UI |
+
+## Vista dinamica del record
+
+Mermaid nei Markdown comuni non produce una GIF o una vera animazione temporale.
+Per ora usiamo un sequence diagram, che e' la forma piu' leggibile per mostrare
+"il record che passa di mano" nel tempo.
+
+```mermaid
+sequenceDiagram
+    participant OS as OS/kernel
+    participant Backend as backend
+    participant Adapter as normalizer
+    participant Clone as owned clone
+    participant Queue as queue
+    participant Worker as worker
+    participant Disp as dispatcher
+    participant Sink as sink
+    participant Writer as writer
+
+    OS->>Backend: struct inotify_event
+    Backend->>Adapter: inotify_adapter_build_raw()
+    Adapter-->>Backend: alfred_raw_event_t
+    Backend->>Adapter: alfred_record_from_raw()
+    Adapter-->>Backend: alfred_record_t borrowed
+    Backend->>Clone: alfred_record_clone_owned()
+    Clone-->>Backend: alfred_record_t owned
+    Backend->>Queue: alfred_record_queue_push()
+    Note over Backend,Queue: fine percorso caldo
+
+    Worker->>Queue: alfred_record_queue_pop()
+    Queue-->>Worker: alfred_record_t owned
+    Worker->>Disp: alfred_record_dispatcher_dispatch_one()
+    Disp->>Sink: alfred_record_sink_emit()
+    Sink->>Sink: sink->emit(userdata, record)
+    Sink->>Writer: write / encode / send
+    Writer-->>Sink: ok o errore
+    Sink-->>Disp: ok o errore
+    Disp-->>Worker: risultato dispatch
+    Worker->>Worker: alfred_record_destroy_owned()
+```
+
+In una animazione vera, i frame sarebbero:
+
+| Frame | Cosa evidenziare |
+| --- | --- |
+| 1 | evento OS arriva al backend |
+| 2 | backend normalizza e crea record borrowed |
+| 3 | clone owned prima della queue |
+| 4 | record owned entra nella queue |
+| 5 | worker fa pop dalla queue |
+| 6 | dispatcher sceglie i sink |
+| 7 | sink chiama il writer |
+| 8 | worker distrugge il record owned |
+
+Questa tabella e' gia' pronta per una futura animazione SVG/HTML o D2. Per ora
+rimane una descrizione statica, ma stabilisce gli stage che l'animazione dovra'
+mostrare.
+
 Il fan-out sincrono dal backend e' vietato. Questo schema e' sbagliato:
 
 ```c
@@ -138,6 +297,37 @@ void dispatcher_loop(void)
             sink_write(record);
     }
 }
+```
+
+Il primo passo implementato verso questo schema e' `alfred_record_queue_t`.
+Questa coda non e' ancora il dispatcher definitivo e non e' ancora collegata al
+runtime. Serve a validare il confine minimo:
+
+```text
+record borrowed in ingresso
+-> record owned dentro la coda
+-> record owned consegnato al consumatore
+```
+
+La coda e' bounded e single-threaded nella versione v0. Questo e' un vincolo
+voluto, non una mancanza casuale:
+
+- bounded significa che l'overflow viene visto subito e non nascosto da crescita
+  illimitata della memoria;
+- single-threaded significa che possiamo testare prima ownership, FIFO,
+  wraparound e cleanup senza confondere il contratto con mutex e scheduling;
+- non collegata al runtime significa che il path caldo non cambia finche' non
+  abbiamo deciso dispatcher, backpressure e benchmark.
+
+La stessa idea vale per il primo dispatcher v0. Anche il dispatcher e'
+bounded, ma il limite non e' il numero di record: e' il numero massimo di sink
+registrabili. Il chiamante fornisce un array di sink e una capacita'. Se la
+capacita' e' esaurita, l'aggiunta di un altro sink fallisce. Questo rende
+esplicito il fan-out massimo:
+
+```text
+queue bounded      = massimo numero di record in attesa
+dispatcher bounded = massimo numero di sink destinatari
 ```
 
 In una fase successiva conviene valutare una coda per sink:
@@ -395,8 +585,63 @@ puntare a memoria con lifetime esplicitamente garantito dal runtime.
 Per v0 la soluzione piu' chiara e' una copia owned prima dell'enqueue. Anche se
 ha un costo, elimina ambiguita' su stringhe borrowed come path, messaggi di
 errore, nome backend, futuro `agent_session_id`, workspace, command line o
-policy rule. Ottimizzazioni come pool, arena, string table o buffer reference
-counted dovranno arrivare dopo benchmark e non prima del contratto.
+policy rule. Nel codice questa scelta preparatoria e' rappresentata da:
+
+```c
+int alfred_record_clone_owned(const alfred_record_t *src,
+                              alfred_record_t *dst);
+void alfred_record_destroy_owned(alfred_record_t *record);
+```
+
+Queste funzioni non sono ancora collegate al runtime hot path. Servono a
+verificare il contratto di ownership prima di introdurre queue, dispatcher e
+writer asincroni.
+
+`alfred_record_clone_owned()` non e' una replace API. La destinazione deve
+essere zeroed oppure non deve possedere stringhe. Se il chiamante vuole usare lo
+stesso `alfred_record_t dst` per piu' clone, deve distruggere il contenuto owned
+precedente prima del clone successivo:
+
+In questo contesto "zeroed" significa che la struct e' stata azzerata e i suoi
+puntatori sono `NULL`; "non-owned" significa che non contiene memoria dinamica
+di cui e' responsabile; "owned" significa che contiene copie allocate da
+liberare con `alfred_record_destroy_owned()`. La spiegazione C completa e' in
+[08](08-guida-c-usato-nel-progetto.md#ownership).
+
+```c
+alfred_record_clone_owned(&src1, &dst);
+alfred_record_destroy_owned(&dst);
+
+alfred_record_clone_owned(&src2, &dst);
+alfred_record_destroy_owned(&dst);
+```
+
+Questo vincolo evita una ambiguita' importante: una funzione di replace dovrebbe
+liberare automaticamente il contenuto precedente di `dst`, ma quel contenuto
+potrebbe essere borrowed e non allocato con `malloc()`. In quel caso una
+`free()` automatica sarebbe pericolosa. Per questo v0 preferisce un contratto
+piu' esplicito: il clone entra in una destinazione vuota, il destroy chiude il
+ciclo di ownership.
+
+### Confronto fra strategie di ownership
+
+| Strategia | Idea | Pro | Contro | Stato |
+| --- | --- | --- | --- | --- |
+| Deep copy per record | duplicare tutte le stringhe usate dal record | semplice, sicura, testabile | `malloc()` e copie nel path caldo se usata prima dell'enqueue | implementata come API preparatoria |
+| Storage inline fisso | buffer dentro lo slot della coda | niente allocazioni per evento, lifetime semplice | record grandi, copie potenzialmente pesanti, limiti fissi | candidata per ring buffer performante |
+| Pool/arena per batch | molte stringhe dentro una regione liberata insieme | meno allocazioni, migliore localita' | lifetime piu' complesso, difficile se i sink hanno tempi diversi | futura, dopo benchmark |
+| String/path table | condividere path e prefissi con lifetime controllato | riduce duplicati, utile su alberi ricorsivi | reference counting, lock, debugging piu' difficile | futura, non per v0 |
+
+La regola pratica e':
+
+```text
+prima sicurezza del lifetime, poi ottimizzazione misurata
+```
+
+Se la deep copy viene messa direttamente nel backend poll loop, puo' rallentare
+Alfred perche' porta nel path caldo `strlen()`, `malloc()`, `memcpy()` e
+gestione degli errori. Per questo la API owned nasce ora, ma il collegamento al
+dispatcher verra' deciso insieme ai benchmark no-op, text e JSONL.
 
 ## Code per sink
 
@@ -427,6 +672,496 @@ Le classi di sink previste sono:
 Questa classificazione non deve vivere nascosta dentro un writer. Deve essere
 visibile nella configurazione o nel registry, cosi' i test e i benchmark
 possono verificare cosa succede quando un sink e' lento.
+
+## Record Queue v0
+
+La prima API di coda e':
+
+```c
+int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity);
+void alfred_record_queue_destroy(alfred_record_queue_t *queue);
+void alfred_record_queue_clear(alfred_record_queue_t *queue);
+int alfred_record_queue_push(alfred_record_queue_t *queue,
+                             const alfred_record_t *record);
+int alfred_record_queue_pop(alfred_record_queue_t *queue,
+                            alfred_record_t *record);
+```
+
+`push()` riceve un record borrowed e clona le stringhe con
+`alfred_record_clone_owned()`. Questo permette al produttore di riusare il suo
+buffer subito dopo la chiamata. `pop()` trasferisce al chiamante il record owned:
+da quel momento il chiamante deve chiamare `alfred_record_destroy_owned()`.
+
+`pop()` non e' una replace API. La destinazione deve essere zeroed oppure deve
+essere gia' stata distrutta. Un ciclo corretto e':
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+
+while (alfred_record_queue_pop(&queue, &record) == 0) {
+    /* uso record */
+
+    alfred_record_destroy_owned(&record);
+}
+```
+
+Se il chiamante fa due `pop()` consecutivi nella stessa variabile senza destroy,
+il secondo `pop()` sovrascrive i puntatori owned del primo record e crea un
+memory leak. Rendere `pop()` una replace automatica sarebbe rischioso per lo
+stesso motivo della clone API: la destinazione potrebbe contenere puntatori
+borrowed, e una `free()` automatica su memoria borrowed sarebbe sbagliata.
+
+Anche `init()` ha una precondizione di ownership: la queue deve essere zeroed
+oppure deve essere gia' stata ripulita da `alfred_record_queue_destroy()`.
+Non basta dire "non inizializzata". In C una variabile automatica locale non
+inizializzata contiene valori indeterminati; se `init()` legge `queue.items`
+prima di azzerare la struct, leggere quel puntatore indeterminato e'
+comportamento indefinito. Quindi il pattern sicuro e' sempre:
+
+```c
+alfred_record_queue_t queue = {0};
+
+alfred_record_queue_init(&queue, capacity);
+```
+
+oppure, se la queue era gia' stata usata:
+
+```c
+alfred_record_queue_destroy(&queue);
+alfred_record_queue_init(&queue, new_capacity);
+```
+
+Una seconda `alfred_record_queue_init()` su una queue attiva viene rifiutata,
+perche' altrimenti il nuovo `memset()` perderebbe il vecchio `items` pointer e
+quindi anche gli owned record eventualmente accodati.
+
+### Contratto di ownership delle API v0
+
+Questa tabella riassume come usare le API di ownership e queue introdotte finora.
+E' la parte da leggere prima di scrivere codice che conserva un record oltre la
+chiamata corrente.
+
+| API | Cosa riceve | Cosa produce | Chi possiede la memoria dopo | Cleanup richiesto |
+| --- | --- | --- | --- | --- |
+| `alfred_record_clone_owned(src, dst)` | `src` borrowed, `dst` zeroed/non-owned | copia owned in `dst` | il chiamante possiede `dst` | `alfred_record_destroy_owned(&dst)` |
+| `alfred_record_destroy_owned(record)` | record owned o gia' zeroed | record azzerato | nessuno, le stringhe sono liberate | nessun cleanup ulteriore |
+| `alfred_record_queue_init(queue, capacity)` | queue zeroed/gia' distrutta | buffer bounded vuoto | la queue possiede `items` | `alfred_record_queue_destroy(&queue)` |
+| `alfred_record_queue_push(queue, record)` | queue valida, record borrowed | clone owned dentro la queue | la queue possiede il clone | destroy/clear della queue oppure pop |
+| `alfred_record_queue_pop(queue, record)` | queue valida, `record` zeroed/gia' distrutto | record owned trasferito al chiamante | il chiamante possiede `record` | `alfred_record_destroy_owned(&record)` |
+| `alfred_record_queue_clear(queue)` | queue valida | stessa queue vuota | la queue conserva il buffer | `alfred_record_queue_destroy(&queue)` finale |
+| `alfred_record_queue_destroy(queue)` | queue valida o zeroed | queue azzerata | nessuno | nessun cleanup ulteriore |
+
+Gli errori tipici sono:
+
+1. clonare due volte nello stesso `dst` senza destroy;
+2. fare due `pop()` nella stessa variabile senza destroy;
+3. chiamare `init()` su una queue gia' attiva senza destroy;
+4. chiamare `alfred_record_destroy_owned()` su un record borrowed.
+
+Esempio corretto completo:
+
+```c
+alfred_record_queue_t queue;
+alfred_record_t borrowed;
+alfred_record_t popped;
+
+memset(&queue, 0, sizeof(queue));
+memset(&borrowed, 0, sizeof(borrowed));
+memset(&popped, 0, sizeof(popped));
+
+borrowed.path = "/tmp/file"; /* borrowed/static string */
+
+if (alfred_record_queue_init(&queue, 16) != 0) {
+    return -1;
+}
+
+if (alfred_record_queue_push(&queue, &borrowed) != 0) {
+    alfred_record_queue_destroy(&queue);
+    return -1;
+}
+
+while (alfred_record_queue_pop(&queue, &popped) == 0) {
+    /* il chiamante possiede popped fino al destroy */
+
+    alfred_record_destroy_owned(&popped);
+}
+
+alfred_record_queue_destroy(&queue);
+```
+
+Notare due dettagli:
+
+- `borrowed.path` non viene mai liberato dal chiamante, perche' non e' owned;
+- `popped` viene distrutto dentro il ciclo prima di essere riusato.
+
+Questo modello e' didatticamente importante perche' separa tre concetti che
+spesso vengono confusi:
+
+| Concetto | Significato |
+| --- | --- |
+| record borrowed | vista valida solo durante la chiamata sincrona |
+| record owned | record che possiede le stringhe e puo' vivere piu' a lungo |
+| queue boundary | punto in cui un record puo' sopravvivere al produttore |
+
+In termini di prestazioni questa non e' ancora la soluzione finale. La coda v0
+usa deep copy per rendere il contratto facile da verificare. Prima di usarla nel
+path caldo bisognera' misurare:
+
+- costo di `malloc()` e `free()` per evento;
+- costo della copia dei path;
+- latenza media e p95/p99;
+- throughput con sink no-op, text e JSONL;
+- comportamento quando la coda e' piena.
+
+Solo dopo questi benchmark decideremo se mantenere deep copy, passare a storage
+inline, introdurre pool/arena o usare tabelle path condivise.
+
+## Record Dispatcher v0
+
+### Che cosa sono dispatcher e sink
+
+Il dispatcher e' il componente che riceve un `alfred_record_t` e lo consegna a
+uno o piu' destinatari registrati. Non decide il significato del record, non lo
+trasforma in JSONL, non scrive su file e non apre socket. Il suo compito e'
+solo fare routing:
+
+```text
+alfred_record_t
+-> dispatcher
+-> sink 1
+-> sink 2
+-> sink 3
+```
+
+Un sink e' un consumatore di record. In pratica e' un piccolo oggetto che dice:
+"quando ricevi un record, chiama questa funzione con questo contesto privato".
+Nel codice il sink base e':
+
+```c
+typedef int (*alfred_record_sink_emit_fn)(void *userdata,
+                                          const alfred_record_t *record);
+
+typedef struct {
+    alfred_record_sink_emit_fn emit;
+    void *userdata;
+} alfred_record_sink_t;
+```
+
+I due campi vanno letti cosi':
+
+| Campo | Significato |
+| --- | --- |
+| `emit` | funzione che il dispatcher deve chiamare per consegnare il record |
+| `userdata` | puntatore opaco al contesto privato del sink |
+
+`userdata` permette di usare la stessa interfaccia per sink molto diversi. Per
+esempio:
+
+- un text sink puo' mettere in `userdata` il proprio buffer e la callback che
+  scrive il payload testuale;
+- un futuro JSONL sink potra' mettere in `userdata` il proprio writer JSONL;
+- un sink di test puo' mettere in `userdata` una struttura che conta quante volte
+  e' stato chiamato;
+- un futuro socket sink potra' mettere in `userdata` il file descriptor o il
+  contesto del protocollo.
+
+Questa separazione e' importante perche' il dispatcher non deve conoscere il tipo
+reale del sink. Il dispatcher vede solo:
+
+```text
+emit(record)
+```
+
+Il resto resta privato del sink.
+
+### Come lavorano insieme
+
+Il percorso concettuale completo e':
+
+```text
+producer/backend/core
+-> alfred_record_t
+-> queue
+-> dispatcher
+-> sink
+-> writer/bridge
+```
+
+Ogni pezzo ha una responsabilita' diversa:
+
+| Pezzo | Responsabilita' |
+| --- | --- |
+| producer/backend/core | produce un record strutturato |
+| queue | conserva record owned in attesa |
+| dispatcher | sceglie quali sink devono ricevere il record |
+| sink | riceve il record attraverso `emit()` |
+| writer/bridge | serializza, scrive, invia o adatta il record |
+
+Una regola utile da ricordare e':
+
+```text
+la queue conserva, il dispatcher consegna, il sink consuma
+```
+
+Per esempio, con tre sink registrati:
+
+```text
+text sink
+jsonl sink
+lab sink
+```
+
+il dispatcher fara':
+
+```text
+record -> text sink
+record -> jsonl sink
+record -> lab sink
+```
+
+Il record passato ai sink e' una vista borrowed valida durante la chiamata. Se un
+sink vuole conservarlo per dopo, deve copiarlo o usare un'altra strategia di
+ownership sicura. Questo e' lo stesso principio usato per le code: appena un
+record supera un confine asincrono, non puo' piu' dipendere da memoria borrowed
+del produttore.
+
+### Come il dispatcher contatta i sink
+
+Il dispatcher contiene un array di sink registrati. Quando si chiama:
+
+```c
+alfred_record_dispatcher_dispatch_one(&dispatcher, &record);
+```
+
+il comportamento v0 e' equivalente a:
+
+```c
+for (i = 0; i < dispatcher->count; ++i) {
+    alfred_record_sink_emit(&dispatcher->sinks[i].sink, record);
+}
+```
+
+`alfred_record_sink_emit()` e' un wrapper difensivo: controlla che il sink esista,
+che la funzione `emit` non sia `NULL` e poi chiama davvero:
+
+```c
+sink->emit(sink->userdata, record);
+```
+
+Quindi il dispatcher non chiama direttamente `jsonl_write()`, `fprintf()` o
+`socket_send()`. Chiama sempre la stessa interfaccia astratta:
+
+```text
+alfred_record_sink_emit()
+```
+
+Sara' poi il sink concreto a decidere cosa fare.
+
+### Ordine di chiamata
+
+Nel dispatcher v0 i sink vengono chiamati in ordine di registrazione. Se il
+codice registra i sink cosi':
+
+```text
+1. text
+2. jsonl
+3. lab
+```
+
+l'ordine di dispatch sara':
+
+```text
+record -> text
+record -> jsonl
+record -> lab
+```
+
+Questo ordine e' testato in `tests/backend/test_record_dispatcher.c`. Il test
+usa sink finti che salvano l'ordine di chiamata e verifica che il dispatcher non
+lo cambi.
+
+### Cosa succede se un sink fallisce
+
+La policy v0 e' semplice: se un sink fallisce, il dispatcher si ferma e ritorna
+errore.
+
+Esempio:
+
+```text
+text  -> ok
+jsonl -> errore
+lab   -> non chiamato
+```
+
+Questa non e' necessariamente la policy finale. In futuro useremo le classi sink
+per decidere comportamenti diversi:
+
+- un sink `critical` potrebbe richiedere backpressure, errore serio o shutdown
+  controllato;
+- un sink `best-effort` potrebbe perdere record in modo controllato e aumentare
+  un contatore diagnostico;
+- un sink `debug` potrebbe essere disabilitato, campionato o droppato quando e'
+  lento.
+
+Per v0 scegliamo la regola piu' semplice perche' vogliamo fissare il contratto
+base prima di introdurre policy di backpressure piu' complesse.
+
+### Perche' il dispatcher non e' un writer
+
+Il dispatcher non e' un writer. Questa distinzione e' fondamentale.
+
+Il dispatcher sa:
+
+- quanti sink sono registrati;
+- in quale ordine chiamarli;
+- se un sink ha fallito;
+- quale classe futura ha un sink.
+
+Il dispatcher non deve sapere:
+
+- come si formatta JSONL;
+- come si formatta MessagePack;
+- come si scrive su `raw.log`;
+- come si fa `fflush()`;
+- come si invia un record su socket;
+- come si disegna Alfred Lab.
+
+Questa separazione protegge il percorso caldo di Alfred. Il backend deve produrre
+record e accodarli rapidamente; serializzazione, I/O, flush e integrazioni lente
+devono stare dietro sink/writer fuori dal path caldo.
+
+La prima API dispatcher e':
+
+```c
+int alfred_record_dispatcher_init(alfred_record_dispatcher_t *dispatcher,
+                                  alfred_record_dispatcher_sink_t *sinks,
+                                  size_t capacity);
+void alfred_record_dispatcher_clear(alfred_record_dispatcher_t *dispatcher);
+int alfred_record_dispatcher_add_sink(
+    alfred_record_dispatcher_t *dispatcher,
+    const char *name,
+    alfred_record_dispatcher_sink_class_t sink_class,
+    const alfred_record_sink_t *sink);
+int alfred_record_dispatcher_dispatch_one(
+    const alfred_record_dispatcher_t *dispatcher,
+    const alfred_record_t *record);
+```
+
+Il dispatcher non possiede writer, file descriptor, socket o buffer di
+serializzazione. Possiede solo la registrazione dei sink dentro lo storage
+fornito dal chiamante. Questo e' intenzionale:
+
+- mantiene il dispatcher piccolo;
+- rende il limite di fan-out esplicito;
+- evita allocazioni interne nella API v0;
+- prepara test e benchmark senza introdurre thread;
+- tiene writer e policy fuori dal contratto di routing.
+
+`dispatch_one()` chiama i sink in ordine di registrazione usando
+`alfred_record_sink_emit()`. Se un sink fallisce, la versione v0 si ferma subito
+e ritorna errore. Non esistono ancora retry, drop controllato, isolamento per
+sink o coda per sink: queste sono decisioni di backpressure da prendere dopo i
+benchmark.
+
+La differenza fra i tre concetti e':
+
+| Pezzo | Responsabilita' |
+| --- | --- |
+| queue | conserva record owned in attesa |
+| dispatcher | sceglie e chiama i sink registrati |
+| sink | riceve un record e lo consegna a un writer/bridge |
+
+Questa distinzione evita una confusione pericolosa: il dispatcher non e' il
+writer. Un dispatcher non deve sapere come si formatta JSONL, come si scrive su
+file o come si manda un messaggio su socket. Deve solo consegnare record.
+
+### Che cosa significa drain della queue
+
+"Drain della queue" significa svuotare una coda consumando i record che contiene.
+Nel nostro caso la queue contiene record owned:
+
+```text
+queue:
+[record 1][record 2][record 3]
+```
+
+Fare drain significa eseguire un ciclo completo:
+
+```text
+pop record 1
+-> dispatch record 1 ai sink
+-> destroy record 1
+
+pop record 2
+-> dispatch record 2 ai sink
+-> destroy record 2
+
+pop record 3
+-> dispatch record 3 ai sink
+-> destroy record 3
+```
+
+Alla fine la coda e' vuota:
+
+```text
+queue:
+vuota
+```
+
+Quindi "drain" non significa solo leggere la coda. Significa:
+
+```text
+estrai
+consegna
+rilascia memoria
+```
+
+Nel codice il percorso e':
+
+```text
+alfred_record_queue_t
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> sink emit()
+-> alfred_record_destroy_owned()
+```
+
+Questa funzione serve per collegare i pezzi che abbiamo separato:
+
+- la queue conserva record owned;
+- il dispatcher consegna record ai sink;
+- i sink ricevono record;
+- il destroy chiude il ciclo di ownership.
+
+Il parametro `max_records` rende il drain bounded anche nel tempo di lavoro. Se
+la queue contiene 1000 record ma `max_records = 64`, una chiamata processa al
+massimo 64 record e poi ritorna:
+
+```text
+queue iniziale: 1000 record
+max_records: 64
+drain corrente: 64 record processati
+queue finale: 936 record ancora in attesa
+```
+
+Questo sara' utile nel runtime futuro per evitare che il dispatcher monopolizzi
+troppo a lungo il programma. In altre parole, `max_records` aiuta batch,
+latenza e fairness.
+
+La policy v0 in caso di errore e' volutamente semplice. Se un sink fallisce dopo
+il `pop`, il record gia' estratto viene distrutto e la funzione ritorna errore.
+Nel runtime finale dovremo decidere una policy piu' completa:
+
+- retry;
+- requeue;
+- dead-letter queue;
+- drop diagnostico;
+- shutdown controllato per sink critical.
+
+Queste decisioni appartengono alla backpressure policy futura. Non le nascondiamo
+dentro il primo helper di drain.
 
 ## Regola contrattuale
 

@@ -1748,6 +1748,33 @@ La copertura iniziale include:
   semantici (`FILE_CREATED path=...`, `FILE_RENAMED from=... to=...`),
   diagnostici (`WATCH_STALE`, `WATCH_RESYNC_FAILED`), raw normalizzati
   (`RAW_CREATE ... mask=...`) e gestione della truncation
+- `test_record_owned.sh`: compila `test_record_owned.c` e verifica il primo
+  contratto di ownership per `alfred_record_t`. Il test controlla che i record
+  raw, semantici e diagnostici possano essere clonati con stringhe proprie,
+  diverse dai puntatori borrowed di origine, e che
+  `alfred_record_destroy_owned()` rilasci le stringhe e azzeri la struttura. E'
+  un test preparatorio per code, dispatcher asincroni e writer futuri: non
+  significa che il path caldo runtime usi gia' una copia profonda per evento.
+- `test_record_queue.sh`: compila `test_record_queue.c` e verifica la prima coda
+  bounded di record owned. Il test controlla che `push()` riceva un record
+  borrowed e lo conservi come owned, che `pop()` rispetti l'ordine FIFO, che il
+  wraparound del buffer circolare non cambi l'ordine, che l'overflow venga
+  rifiutato e che `clear()`/`destroy()` rilascino i record ancora accodati. Anche
+  questo e' un test preparatorio: la coda non e' ancora collegata al backend
+  runtime o ai writer.
+- `test_record_dispatcher.sh`: compila `test_record_dispatcher.c` e verifica il
+  primo dispatcher bounded di record. In questo caso bounded significa massimo
+  numero di sink registrabili, non massimo numero di record. Il test controlla
+  registrazione dei sink, ordine di fan-out, propagazione del primo errore,
+  rifiuto di input invalidi, overflow del numero sink e riuso dello storage dopo
+  `clear()`. Anche questo non e' ancora collegato al runtime: serve a fissare il
+  contratto prima di introdurre thread, code per sink o policy di backpressure.
+- `test_record_dispatcher_drain.sh`: compila
+  `test_record_dispatcher_drain.c` e verifica il primo ciclo queue -> dispatcher
+  -> sink -> destroy. Il test controlla drain di queue vuota, drain FIFO di piu'
+  record, limite `max_records`, zero-record drain, stop al primo errore sink e
+  conteggio dei record consegnati con successo. Lo scenario spiega che "drain"
+  significa consumare la coda, non solo leggerla.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

@@ -179,6 +179,66 @@ Il contratto di `alfred_record_from_raw()` e' stato reso esplicito: ogni raw
 record deve contenere una sola azione primaria, mentre `ALFRED_RAW_ISDIR` resta
 un qualificatore. Le mask ambigue vengono rifiutate dall'adapter e sono coperte
 da test dedicati.
+La prima API di ownership per i record e' stata aggiunta come passo
+preparatorio: `alfred_record_clone_owned()` e
+`alfred_record_destroy_owned()` clonano e liberano le stringhe presenti in
+`alfred_record_t`. La API non e' ancora collegata al runtime hot path; serve a
+fissare il contratto prima di introdurre code, dispatcher e writer asincroni.
+Il contratto di riuso della destinazione e' stato reso esplicito: la clone API
+scrive in un `dst` vuoto/non-owned e chi vuole riusare lo stesso record deve
+prima chiamare `alfred_record_destroy_owned()`. Questo evita leak da
+sovrascrittura e, allo stesso tempo, evita di trasformare la clone in una
+replace API che potrebbe fare `free()` su stringhe borrowed.
+`29-event-model-v0.md` e `32-writer-api-v0.md` documentano in dettaglio le
+quattro strategie discusse: deep copy per record, storage inline fisso,
+pool/arena per batch e string/path table.
+La prima `alfred_record_queue_t` e' stata aggiunta come micro-step successivo:
+riceve record borrowed, conserva record owned in una coda bounded
+single-threaded e trasferisce ownership al chiamante durante `pop()`. Anche
+questa API non e' ancora collegata al runtime; serve a fissare FIFO, overflow,
+cleanup e lifetime prima di introdurre dispatcher, backpressure e benchmark.
+Il contratto di `pop()` e' stato reso esplicito: la destinazione deve essere
+zeroed o gia' distrutta, perche' `pop()` trasferisce ownership in una
+destinazione vuota e non sostituisce automaticamente record owned precedenti.
+Anche `alfred_record_queue_init()` e' ora difensiva: rifiuta la reinit di una
+queue attiva, preservando il vecchio buffer e gli owned record finche' il
+chiamante non esegue `alfred_record_queue_destroy()`. Il contratto e' stato
+stretto ulteriormente: `init()` accetta solo queue zeroed o gia' distrutte, non
+variabili automatiche davvero non inizializzate, perche' il codice deve leggere
+`queue.items` prima di azzerare la struct.
+`32-writer-api-v0.md` ora contiene una tabella riepilogativa delle API di
+ownership/queue v0, con input, output, proprietario finale, cleanup richiesto ed
+errori tipici. `08-guida-c-usato-nel-progetto.md` collega la stessa logica a una
+freccia di ownership borrowed -> queue owned -> caller owned -> destroy.
+Il primo `alfred_record_dispatcher_t` e' stato aggiunto come micro-step
+successivo: registra sink in uno storage bounded fornito dal chiamante, chiama i
+sink in ordine di registrazione e propaga il primo errore. Il documento chiarisce
+che "bounded" puo' indicare limiti diversi: nella queue limita i record in
+attesa, nel dispatcher limita il numero di sink destinatari.
+La sezione `Record Dispatcher v0` di `32-writer-api-v0.md` e' stata poi ampliata
+in forma didattica: ora spiega il ruolo del dispatcher, cosa sono i sink, come
+`alfred_record_sink_emit()` chiama `sink->emit(userdata, record)`, in quale
+ordine vengono contattati i sink, cosa succede al primo errore e perche' il
+dispatcher non deve diventare un writer.
+Il primo helper di drain `alfred_record_dispatcher_drain_queue()` e' stato
+aggiunto come contratto testabile queue -> dispatcher -> sink -> destroy. La
+documentazione ora spiega che drain significa estrarre, consegnare e liberare i
+record owned, che `max_records` limita il batch e che retry/requeue/dead-letter
+sono decisioni future di backpressure.
+Prima della PR e' stato aggiunto un pass didattico sulle strutture e sui
+callback: `08-guida-c-usato-nel-progetto.md` ora spiega in modo esteso
+puntatori a funzione, callback, `void *userdata`, `emit + userdata` e i principali
+typedef callback usati da core, backend, scanner, watcher, sink e text sink.
+`16-mappa-codice-e-strutture.md` ora contiene una mappa delle nuove strutture
+Event Model/output: `alfred_record_sink_t`, `alfred_record_text_sink_t`,
+`alfred_record_queue_t`, `alfred_record_dispatcher_sink_t` e
+`alfred_record_dispatcher_t`, con campi, responsabilita' e ciclo drain.
+`32-writer-api-v0.md` ora contiene anche un diagramma architetturale Mermaid
+della pipeline completa backend -> record -> copia owned -> queue -> dispatcher
+-> sink -> writer, piu' un sequence diagram che mostra il passaggio temporale
+del record. Le animazioni vere restano rimandate alla roadmap documentazione
+avanzata, dove la pipeline record/output e' stata aggiunta agli scenari
+animabili.
 
 ## Aggiornamento Writer API v0
 
@@ -270,3 +330,20 @@ passaggio tecnico successivo senza anticipare JSONL.
 `28-audit-documentazione-e-debiti.md` registra come debiti dichiarati gli ADR
 brevi, la review architetturale periodica, i golden test JSONL e i tag
 architetturali cercabili nel codice.
+
+## Aggiornamento didattico lifetime e ownership C
+
+`08-guida-c-usato-nel-progetto.md` ora contiene una spiegazione estesa del
+lifetime della memoria in C: memoria automatica/stack, memoria statica, memoria
+dinamica/heap, borrowed pointer, owned pointer, memory leak, double free,
+use-after-free, `free()` su memoria borrowed e contratti di ownership delle
+funzioni. La sezione usa il caso reale di `alfred_record_clone_owned(src, dst)`
+per spiegare perche' il clone richiede una destinazione vuota/non-owned e perche'
+il riuso corretto e' `clone -> destroy -> clone -> destroy`.
+La stessa sezione chiarisce anche i termini zeroed, non-owned e owned con esempi
+minimi su `alfred_record_t`, cosi' i finding sulle API di ownership non
+richiedono conoscenza C implicita.
+
+`27-guida-lettura-documentazione.md` ora rimanda direttamente a questa sezione
+dall'indice tematico rapido, cosi' uno studente che legge i finding della PR su
+owned record, queue e dispatcher puo' recuperare prima i concetti C necessari.

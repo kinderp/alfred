@@ -195,15 +195,510 @@ Per questo distinguiamo due concetti:
 
 | Concetto | Uso | Ownership |
 | --- | --- | --- |
-| `alfred_record_t` | vista logica del record, usata da adapter e formatter | puo' contenere stringhe borrowed |
-| record owned futuro | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
+| `alfred_record_t` borrowed | vista logica del record, usata da adapter e formatter sincroni | puo' contenere stringhe borrowed |
+| `alfred_record_t` owned | copia sicura da mettere in coda o consegnare a thread diversi | possiede le stringhe e le rilascia esplicitamente |
 
-Il nome C definitivo del record owned e' rimandato. Le opzioni naturali sono un
-tipo dedicato, per esempio `alfred_owned_record_t`, oppure funzioni di clone e
-destroy come `alfred_record_clone_owned()` e `alfred_record_destroy_owned()`.
-Per v0 la priorita' non e' ottimizzare subito, ma evitare ambiguita': prima
-dell'enqueue il record deve diventare sicuro. Pool, arena, string table e
-strategie zero-copy potranno arrivare dopo benchmark reali.
+Nel codice la prima API di ownership e':
+
+```c
+int alfred_record_clone_owned(const alfred_record_t *src,
+                              alfred_record_t *dst);
+void alfred_record_destroy_owned(alfred_record_t *record);
+```
+
+Questa API clona in modo profondo i campi stringa oggi presenti nel record:
+`backend`, `path`, `old_path`, `new_path`, `os_error.name`,
+`os_error.message`, `watch.state`, `watch.reason`, `watch.error` e
+`recovery.detail_path`.
+
+La destinazione `dst` di `alfred_record_clone_owned()` deve essere vuota
+(`memset()` a zero) oppure non deve possedere stringhe. La funzione non e' una
+operazione di replace: se il chiamante clona una seconda volta nello stesso
+`dst` senza prima chiamare `alfred_record_destroy_owned(&dst)`, perde i
+puntatori alle stringhe allocate dal primo clone e quindi crea un memory leak.
+
+In questa frase "zeroed" significa che la struct e' stata azzerata e i suoi
+puntatori sono `NULL`; "non-owned" significa che la struct non contiene memoria
+dinamica che deve liberare; "owned" significa invece che contiene copie allocate
+e deve chiudere il ciclo con `alfred_record_destroy_owned()`. La spiegazione
+didattica completa e' in [08](08-guida-c-usato-nel-progetto.md#ownership).
+
+Il pattern corretto di riuso e':
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+
+alfred_record_clone_owned(&src1, &dst);
+/* uso di dst */
+alfred_record_destroy_owned(&dst);
+
+alfred_record_clone_owned(&src2, &dst);
+/* uso di dst */
+alfred_record_destroy_owned(&dst);
+```
+
+Questa scelta e' intenzionale. Rendere `alfred_record_clone_owned()` una replace
+API significherebbe liberare automaticamente il vecchio contenuto di `dst`, ma
+in C non possiamo sapere se quei puntatori sono davvero owned oppure borrowed.
+Fare `free()` su una stringa borrowed, ad esempio una string literal, puo'
+portare a comportamento indefinito o crash. Per v0 il contratto piu' chiaro e'
+quindi: il clone scrive dentro una destinazione vuota; chi vuole riusarla deve
+prima distruggerla.
+
+Il punto didattico importante e' che `alfred_record_t` resta lo stesso tipo
+logico. La differenza non e' il nome del tipo, ma la responsabilita' sulla
+memoria:
+
+- un record borrowed non deve sopravvivere al produttore;
+- un record owned puo' attraversare una coda, un dispatcher o un writer
+  asincrono;
+- chi crea il clone owned deve chiamare `alfred_record_destroy_owned()`.
+
+Questa API non e' ancora collegata al runtime hot path. Serve a fissare il
+contratto e a preparare il dispatcher senza introdurre allocazioni nel poll loop
+del backend.
+
+### Strategie possibili per l'ownership
+
+Quando un record deve attraversare una coda, Alfred deve scegliere dove mettere
+la memoria dei path e delle altre stringhe. Le alternative principali sono
+quattro.
+
+#### 1. Deep copy per record
+
+Ogni record accodato duplica tutte le stringhe che usa. In C significa chiamare
+funzioni equivalenti a `malloc()` + `memcpy()` per `path`, `old_path`,
+`new_path`, `reason`, `error` e altri campi presenti.
+
+Pro:
+
+- e' la soluzione piu' facile da capire;
+- rende chiaro chi possiede la memoria;
+- evita dangling pointer dopo il ritorno dal backend;
+- e' semplice da testare con assert sui puntatori;
+- e' una buona base didattica per spiegare ownership in C.
+
+Contro:
+
+- puo' essere costosa se eseguita per ogni evento nel path caldo;
+- introduce allocazioni e possibili fallimenti di memoria;
+- aumenta frammentazione e pressione sull'allocator;
+- copia path ripetuti anche quando condividono lunghi prefissi.
+
+Quando ha senso:
+
+- come API v0 preparatoria;
+- nei test;
+- per code a basso volume;
+- per prototipi in cui chiarezza e sicurezza valgono piu' del throughput.
+
+Quando non basta:
+
+- in produzione ad alto volume senza benchmark;
+- se il backend deve sostenere molti eventi al secondo;
+- se i writer sono lenti e la coda cresce molto.
+
+#### 2. Storage inline fisso nel record accodabile
+
+Il record accodabile contiene buffer interni, per esempio `char path[PATH_MAX]`,
+invece di puntatori a stringhe allocate separatamente.
+
+Pro:
+
+- niente `malloc()` per evento;
+- lifetime semplice: il buffer vive dentro lo slot della coda;
+- puo' essere molto prevedibile per un ring buffer;
+- riduce il rischio di frammentazione.
+
+Contro:
+
+- ogni record diventa molto grande, anche quando non usa tutti i campi;
+- copiare sempre buffer grandi puo' sprecare CPU e cache;
+- `PATH_MAX` non e' una soluzione elegante per tutti gli ambienti;
+- se in futuro aggiungiamo command line, workspace, policy id o agent context,
+  il record inline puo' crescere troppo.
+
+Quando ha senso:
+
+- per un primo ring buffer performante;
+- quando vogliamo evitare allocazioni nel path caldo;
+- quando i campi massimi sono pochi e ben delimitati.
+
+Quando non basta:
+
+- se i record diventano molto eterogenei;
+- se molti campi sono opzionali e raramente usati;
+- se serve supportare payload lunghi o dinamici.
+
+#### 3. Pool o arena per batch
+
+Invece di allocare ogni stringa singolarmente, Alfred puo' usare un pool di
+memoria o un'arena associata a un batch di record. Le stringhe vengono copiate
+dentro quell'area e liberate insieme.
+
+Pro:
+
+- riduce il costo di molte allocazioni piccole;
+- migliora localita' di memoria;
+- permette cleanup veloce di un batch;
+- puo' essere un buon compromesso fra sicurezza e prestazioni.
+
+Contro:
+
+- e' piu' complesso da implementare e spiegare;
+- richiede regole chiare sul lifetime dell'arena;
+- bisogna gestire cosa succede se un writer trattiene un record piu' a lungo
+  del batch;
+- rende piu' difficili alcuni test di ownership puntuale.
+
+Quando ha senso:
+
+- dopo benchmark reali;
+- quando il costo della deep copy per record risulta troppo alto;
+- se il dispatcher lavora per batch.
+
+Quando non basta:
+
+- se i record devono vivere tempi molto diversi;
+- se ogni sink ha una coda indipendente con velocita' molto diverse;
+- se serve rimuovere singoli record arbitrari dalla coda.
+
+#### 4. String table, path table o interning
+
+Alfred puo' mantenere una tabella di stringhe condivise. Path uguali o prefissi
+ricorrenti vengono memorizzati una volta sola e i record puntano a una entry con
+lifetime controllato.
+
+Pro:
+
+- evita copie ripetute di path e prefissi comuni;
+- puo' ridurre molta memoria su alberi ricorsivi;
+- puo' aiutare in futuro con workspace, root monitorate e path sensitivity;
+- e' una direzione interessante per prestazioni elevate.
+
+Contro:
+
+- e' la soluzione piu' complessa;
+- richiede reference counting o altra gestione lifetime;
+- puo' introdurre lock o contesa se condivisa fra thread;
+- gli errori di ownership diventano piu' difficili da debug;
+- rischia di anticipare ottimizzazioni prima di conoscere i colli di bottiglia.
+
+Quando ha senso:
+
+- dopo benchmark;
+- quando molti eventi condividono gli stessi path o prefissi;
+- quando il dispatcher e le code hanno gia' un contratto stabile.
+
+Quando non basta:
+
+- come primo passo didattico;
+- prima di avere metriche su eventi al secondo, memoria e latenza;
+- se rischia di aggiungere lock nel path caldo.
+
+### Scelta v0
+
+Per Event Model v0 scegliamo la prima strategia come API preparatoria:
+
+```text
+alfred_record_t borrowed
+-> alfred_record_clone_owned()
+-> alfred_record_t owned
+-> alfred_record_destroy_owned()
+```
+
+La scelta non significa che Alfred usera' per sempre una deep copy per evento
+nel path caldo. Significa che fissiamo subito il contratto di lifetime:
+
+- un record che resta sincrono puo' essere borrowed;
+- un record che supera un confine asincrono deve essere owned o avere una
+  strategia equivalente;
+- la soluzione piu' veloce verra' scelta dopo benchmark, non a intuito.
+
+Questa separazione evita due errori opposti:
+
+- accodare puntatori borrowed e creare bug difficili da riprodurre;
+- ottimizzare troppo presto con pool o interning prima di sapere dove Alfred
+  spende davvero tempo.
+
+### Record Queue v0
+
+Dopo avere introdotto la copia owned, Alfred aggiunge anche una prima coda
+bounded per record:
+
+```text
+alfred_record_t borrowed
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+-> record owned dentro alfred_record_queue_t
+-> alfred_record_queue_pop()
+-> record owned consegnato al consumatore
+-> alfred_record_destroy_owned()
+```
+
+Questa coda non e' ancora collegata al backend runtime. Serve a fissare un
+contratto importante prima di introdurre thread, dispatcher o writer asincroni:
+
+- chi produce il record puo' continuare a usare puntatori borrowed;
+- la coda non conserva quei puntatori borrowed;
+- la coda conserva una copia owned del record;
+- quando il record viene estratto, la proprieta' passa al chiamante;
+- il chiamante deve distruggere il record owned con
+  `alfred_record_destroy_owned()`;
+- la destinazione passata a `alfred_record_queue_pop()` deve essere zeroed o
+  gia' distrutta: `pop()` trasferisce ownership in una destinazione vuota, non
+  sostituisce automaticamente un record owned precedente;
+- `alfred_record_queue_init()` richiede una queue zeroed oppure gia' ripulita
+  da `alfred_record_queue_destroy()`: una variabile automatica locale lasciata
+  davvero non inizializzata non e' valida, perche' `init()` legge `queue.items`
+  prima di azzerare la struct;
+- per cambiare capacity bisogna chiamare `alfred_record_queue_destroy()` e poi
+  una nuova `init()`, non una seconda `init()` diretta;
+- se la coda viene svuotata o distrutta mentre contiene record, libera lei gli
+  owned record rimasti.
+
+Il pattern corretto quando si riusa la stessa variabile locale e':
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+
+while (alfred_record_queue_pop(&queue, &record) == 0) {
+    /* uso record */
+
+    alfred_record_destroy_owned(&record);
+}
+```
+
+Il pattern sbagliato e':
+
+```c
+alfred_record_queue_pop(&queue, &record);
+alfred_record_queue_pop(&queue, &record); /* leak del primo record popped */
+alfred_record_destroy_owned(&record);
+```
+
+Il secondo `pop()` sovrascrive i puntatori owned ricevuti dal primo `pop()`. Il
+destroy finale libera solo il secondo record.
+
+Anche la inizializzazione ha un contratto esplicito. Questo e' corretto:
+
+```c
+alfred_record_queue_t queue = {0};
+
+alfred_record_queue_init(&queue, 4);
+/* uso queue */
+alfred_record_queue_destroy(&queue);
+alfred_record_queue_init(&queue, 8);
+```
+
+Questo invece e' sbagliato:
+
+```c
+alfred_record_queue_t queue = {0};
+
+alfred_record_queue_init(&queue, 4);
+alfred_record_queue_push(&queue, &record);
+alfred_record_queue_init(&queue, 8); /* seconda init senza destroy */
+```
+
+La seconda `init()` perderebbe il puntatore al vecchio buffer e ai record owned
+ancora accodati. Per questo la implementazione difensiva rifiuta una
+reinizializzazione quando `queue->items` e' gia' non `NULL`.
+
+Riepilogo del contratto:
+
+| Operazione | Regola di ownership |
+| --- | --- |
+| clone owned | `dst` deve essere zeroed/non-owned, poi il chiamante lo distrugge |
+| push in queue | la queue crea e possiede una copia owned |
+| pop da queue | la ownership passa dalla queue al chiamante |
+| clear queue | la queue distrugge i record owned ancora accodati |
+| destroy queue | la queue distrugge record rimasti e buffer |
+| reinit queue | ammessa solo dopo `alfred_record_queue_destroy()` |
+
+La spiegazione didattica piu' completa, con esempi su stack/static/heap e memory
+leak, e' in [08](08-guida-c-usato-nel-progetto.md#ownership). La spiegazione
+operativa delle API queue/writer e' in [32](32-writer-api-v0.md#record-queue-v0).
+
+Il tipo introdotto e':
+
+```c
+typedef struct {
+    alfred_record_t *items;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} alfred_record_queue_t;
+```
+
+I campi hanno questo significato:
+
+| Campo | Significato |
+| --- | --- |
+| `items` | buffer circolare di `alfred_record_t` owned |
+| `capacity` | numero massimo di record accodabili |
+| `head` | posizione del prossimo record da estrarre |
+| `tail` | posizione dove verra' scritto il prossimo record |
+| `count` | numero di record attualmente presenti |
+
+La coda e' bounded: quando `count == capacity`, `push()` fallisce. Questa scelta
+e' intenzionale. Una coda infinita nasconderebbe il problema della backpressure:
+se i writer consumano piu' lentamente dei backend, Alfred deve decidere cosa
+fare invece di consumare memoria senza limite.
+
+In generale, in Alfred usiamo "bounded" per indicare un limite esplicito,
+misurabile e testabile. Una struttura bounded non cresce senza controllo:
+quando raggiunge la capacita' configurata, ritorna errore o applica una policy
+documentata. Questo e' importante per un progetto orientato alle prestazioni
+perche' evita che un picco di eventi o un writer lento diventino consumo di RAM
+illimitato.
+
+La versione v0 e' volutamente single-threaded. Non contiene mutex, condition
+variable, worker thread o policy di drop. Il suo scopo e' piu' piccolo:
+
+```text
+dimostrare che il confine di lifetime e' corretto
+```
+
+Il test `tests/backend/test_record_queue.c` verifica:
+
+- push di record borrowed;
+- copia owned del path dentro la coda;
+- pop FIFO;
+- wraparound del buffer circolare;
+- rifiuto dell'overflow;
+- cleanup con `clear()` e `destroy()`.
+
+Questa scelta non decide ancora la struttura definitiva del percorso caldo. In
+futuro la coda potra' essere sostituita o affiancata da ring buffer piu'
+performanti, code per sink, pool/arena o storage inline. Il punto che non deve
+cambiare e':
+
+```text
+un record che supera un confine asincrono non puo' dipendere da memoria borrowed
+del produttore.
+```
+
+### Record Dispatcher v0
+
+Dopo la coda, Alfred introduce anche un primo dispatcher bounded:
+
+```text
+record owned estratto dalla queue
+-> alfred_record_dispatcher_dispatch_one()
+-> sink registrato 1
+-> sink registrato 2
+-> ...
+```
+
+Il dispatcher v0 non e' ancora collegato al runtime. Serve a fissare il
+contratto di fan-out:
+
+- i sink vengono registrati in un array fornito dal chiamante;
+- il numero massimo di sink e' `capacity`;
+- se si prova ad aggiungere un sink oltre `capacity`, `add_sink()` fallisce;
+- i sink vengono chiamati in ordine di registrazione;
+- se un sink fallisce, il dispatcher si ferma e ritorna errore;
+- il dispatcher non serializza, non scrive file, non apre socket e non interpreta
+  il significato del record.
+
+Anche qui "bounded" significa capacita' massima esplicita. Nel caso della coda
+il limite riguarda quanti record possono stare in attesa. Nel caso del
+dispatcher il limite riguarda quanti sink possono ricevere lo stesso record:
+
+```text
+coda bounded       -> massimo numero di record accodati
+dispatcher bounded -> massimo numero di sink registrati
+```
+
+Il tipo principale e':
+
+```c
+typedef struct {
+    alfred_record_dispatcher_sink_t *sinks;
+    size_t capacity;
+    size_t count;
+} alfred_record_dispatcher_t;
+```
+
+Ogni sink registrato conserva:
+
+| Campo | Significato |
+| --- | --- |
+| `name` | nome borrowed del sink, utile per diagnostica futura |
+| `sink_class` | classe futura: critical, best-effort o debug |
+| `sink` | callback `alfred_record_sink_t` da invocare |
+
+La classe del sink non cambia ancora il comportamento. La registriamo gia'
+perche' sara' necessaria quando Alfred dovra' decidere cosa fare se un sink e'
+lento o fallisce:
+
+| Classe | Idea futura |
+| --- | --- |
+| `critical` | ledger/audit: fallimento serio, possibile backpressure o stop |
+| `best-effort` | integrazione utile: possibile drop controllato |
+| `debug` | output umano/Lab: disabilitabile o campionabile |
+
+Questa e' ancora una API sincrona di contratto. Non dimostra prestazioni finali
+e non deve essere interpretata come fan-out sincrono nel backend. Il percorso
+target resta:
+
+```text
+backend
+-> record
+-> enqueue rapido
+-> dispatcher fuori dal path caldo
+-> sink/writer
+```
+
+Il test `tests/backend/test_record_dispatcher.c` verifica:
+
+- registrazione bounded dei sink;
+- rifiuto di sink invalidi;
+- rifiuto di overflow del numero sink;
+- ordine di chiamata;
+- propagazione del primo errore;
+- riuso dello storage dopo `clear()`.
+
+### Queue Drain v0
+
+Il primo collegamento fra coda e dispatcher e':
+
+```text
+alfred_record_dispatcher_drain_queue()
+```
+
+Questa funzione consuma record dalla queue in modo bounded:
+
+```text
+queue pop
+-> dispatcher dispatch_one
+-> sink emit
+-> destroy owned record
+```
+
+Il verbo "drain" indica il ciclo completo: estrarre, consegnare e liberare. Non
+significa solo guardare gli elementi della coda. Ogni record estratto dalla queue
+e' owned; dopo il dispatch deve essere distrutto con
+`alfred_record_destroy_owned()` per chiudere correttamente la ownership.
+
+`max_records` limita quanti record possono essere processati in una singola
+chiamata. Questo evita drain non bounded e prepara il runtime futuro a lavorare
+per batch:
+
+```text
+queue con 1000 record + max_records=64 -> processa al massimo 64 record
+```
+
+La policy v0 in caso di errore e' semplice: se un sink fallisce, il record gia'
+estratto viene distrutto e la funzione ritorna errore. Retry, requeue,
+dead-letter queue, drop diagnostico e shutdown controllato saranno decisioni di
+backpressure future.
 
 ## Campi filesystem
 
