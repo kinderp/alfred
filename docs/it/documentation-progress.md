@@ -184,6 +184,11 @@ preparatorio: `alfred_record_clone_owned()` e
 `alfred_record_destroy_owned()` clonano e liberano le stringhe presenti in
 `alfred_record_t`. La API non e' ancora collegata al runtime hot path; serve a
 fissare il contratto prima di introdurre code, dispatcher e writer asincroni.
+Il contratto di riuso della destinazione e' stato reso esplicito: la clone API
+scrive in un `dst` vuoto/non-owned e chi vuole riusare lo stesso record deve
+prima chiamare `alfred_record_destroy_owned()`. Questo evita leak da
+sovrascrittura e, allo stesso tempo, evita di trasformare la clone in una
+replace API che potrebbe fare `free()` su stringhe borrowed.
 `29-event-model-v0.md` e `32-writer-api-v0.md` documentano in dettaglio le
 quattro strategie discusse: deep copy per record, storage inline fisso,
 pool/arena per batch e string/path table.

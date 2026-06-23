@@ -27,6 +27,13 @@ extern "C" {
  * alfred_record_t whose string pointers are independent from @src and can live
  * after the producer stack frame or backend buffer expires.
  *
+ * Ownership precondition:
+ *   @dst must be zeroed or must not currently own strings. This function is a
+ *   clone-into-empty-destination helper, not a replace helper. If callers want
+ *   to reuse the same destination record for another clone, they must first call
+ *   alfred_record_destroy_owned(dst). This avoids hiding dangerous frees of
+ *   borrowed records while still keeping the v0 ownership rule explicit.
+ *
  * This helper is intentionally not wired into the runtime hot path yet. It is a
  * contract and test step for the future queue/dispatcher boundary. Once a record
  * is enqueued or handed to another thread, producers should use an owned copy or

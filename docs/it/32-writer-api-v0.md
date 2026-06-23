@@ -597,6 +597,26 @@ Queste funzioni non sono ancora collegate al runtime hot path. Servono a
 verificare il contratto di ownership prima di introdurre queue, dispatcher e
 writer asincroni.
 
+`alfred_record_clone_owned()` non e' una replace API. La destinazione deve
+essere zeroed oppure non deve possedere stringhe. Se il chiamante vuole usare lo
+stesso `alfred_record_t dst` per piu' clone, deve distruggere il contenuto owned
+precedente prima del clone successivo:
+
+```c
+alfred_record_clone_owned(&src1, &dst);
+alfred_record_destroy_owned(&dst);
+
+alfred_record_clone_owned(&src2, &dst);
+alfred_record_destroy_owned(&dst);
+```
+
+Questo vincolo evita una ambiguita' importante: una funzione di replace dovrebbe
+liberare automaticamente il contenuto precedente di `dst`, ma quel contenuto
+potrebbe essere borrowed e non allocato con `malloc()`. In quel caso una
+`free()` automatica sarebbe pericolosa. Per questo v0 preferisce un contratto
+piu' esplicito: il clone entra in una destinazione vuota, il destroy chiude il
+ciclo di ownership.
+
 ### Confronto fra strategie di ownership
 
 | Strategia | Idea | Pro | Contro | Stato |

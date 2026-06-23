@@ -25,6 +25,11 @@
  * - frees owned strings
  * - clears the record so stale owned pointers cannot be reused accidentally
  *
+ * destination reuse:
+ * - clone_owned() is not a replace API
+ * - callers must destroy the previous owned destination before cloning into the
+ *   same alfred_record_t again
+ *
  * Meaning:
  * This is deliberately not connected to the backend hot path yet. It validates
  * the simple v0 ownership API before we decide whether the dispatcher will use
@@ -164,12 +169,52 @@ static void test_invalid_clone_input_fails(void)
     alfred_record_destroy_owned(NULL);
 }
 
+static void test_clone_destination_can_be_reused_after_destroy(void)
+{
+    alfred_record_t first_src;
+    alfred_record_t second_src;
+    alfred_record_t owned;
+
+    memset(&first_src, 0, sizeof(first_src));
+    memset(&second_src, 0, sizeof(second_src));
+    memset(&owned, 0, sizeof(owned));
+
+    first_src.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    first_src.layer = ALFRED_RECORD_LAYER_NORMALIZED_RAW;
+    first_src.category = ALFRED_RECORD_CATEGORY_FILESYSTEM;
+    first_src.type = ALFRED_RECORD_TYPE_RAW_CREATE;
+    first_src.path = "/tmp/root/first";
+
+    second_src.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    second_src.layer = ALFRED_RECORD_LAYER_NORMALIZED_RAW;
+    second_src.category = ALFRED_RECORD_CATEGORY_FILESYSTEM;
+    second_src.type = ALFRED_RECORD_TYPE_RAW_DELETE;
+    second_src.path = "/tmp/root/second";
+
+    assert(alfred_record_clone_owned(&first_src, &owned) == 0);
+    assert(strcmp(owned.path, "/tmp/root/first") == 0);
+
+    /*
+     * clone_owned() writes into an empty/non-owned destination. Reusing the same
+     * destination is fine only after destroying the previous owned strings.
+     */
+    alfred_record_destroy_owned(&owned);
+    assert(owned.path == NULL);
+
+    assert(alfred_record_clone_owned(&second_src, &owned) == 0);
+    assert(strcmp(owned.path, "/tmp/root/second") == 0);
+    assert(owned.path != second_src.path);
+
+    alfred_record_destroy_owned(&owned);
+}
+
 int main(void)
 {
     test_clone_raw_record_owns_path();
     test_clone_semantic_move_owns_both_paths();
     test_clone_diagnostic_owns_nested_strings();
     test_invalid_clone_input_fails();
+    test_clone_destination_can_be_reused_after_destroy();
 
     return 0;
 }

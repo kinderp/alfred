@@ -211,6 +211,36 @@ Questa API clona in modo profondo i campi stringa oggi presenti nel record:
 `os_error.message`, `watch.state`, `watch.reason`, `watch.error` e
 `recovery.detail_path`.
 
+La destinazione `dst` di `alfred_record_clone_owned()` deve essere vuota
+(`memset()` a zero) oppure non deve possedere stringhe. La funzione non e' una
+operazione di replace: se il chiamante clona una seconda volta nello stesso
+`dst` senza prima chiamare `alfred_record_destroy_owned(&dst)`, perde i
+puntatori alle stringhe allocate dal primo clone e quindi crea un memory leak.
+
+Il pattern corretto di riuso e':
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+
+alfred_record_clone_owned(&src1, &dst);
+/* uso di dst */
+alfred_record_destroy_owned(&dst);
+
+alfred_record_clone_owned(&src2, &dst);
+/* uso di dst */
+alfred_record_destroy_owned(&dst);
+```
+
+Questa scelta e' intenzionale. Rendere `alfred_record_clone_owned()` una replace
+API significherebbe liberare automaticamente il vecchio contenuto di `dst`, ma
+in C non possiamo sapere se quei puntatori sono davvero owned oppure borrowed.
+Fare `free()` su una stringa borrowed, ad esempio una string literal, puo'
+portare a comportamento indefinito o crash. Per v0 il contratto piu' chiaro e'
+quindi: il clone scrive dentro una destinazione vuota; chi vuole riusarla deve
+prima distruggerla.
+
 Il punto didattico importante e' che `alfred_record_t` resta lo stesso tipo
 logico. La differenza non e' il nome del tipo, ma la responsabilita' sulla
 memoria:
