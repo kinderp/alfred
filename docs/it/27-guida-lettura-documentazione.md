@@ -242,6 +242,7 @@ queste domande:
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
 | Build e Makefile | [09](09-makefile-e-build-system.md) |
+| Callback, puntatori a funzione e `void *userdata` | [08](08-guida-c-usato-nel-progetto.md), [16](16-mappa-codice-e-strutture.md), [32](32-writer-api-v0.md) |
 | CLI e configurazione | [19](19-roadmap-cli-e-man-page.md), [alfred(1)](../man/man1/alfred.1), [alfred.conf(5)](../man/man5/alfred.conf.5) |
 | Commenti nel codice | [11](11-come-contribuire.md#stile-dei-commenti-nel-codice), `docs/commenting-style.md`, `docs/commenting-progress.md` |
 | Contribuire | [11](11-come-contribuire.md), [00](00-regole-operative.md) |
@@ -258,6 +259,7 @@ queste domande:
 | Log | [22](22-contratto-log.md), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
+| Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |

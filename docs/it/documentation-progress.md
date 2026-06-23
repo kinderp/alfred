@@ -207,6 +207,20 @@ aggiunto come contratto testabile queue -> dispatcher -> sink -> destroy. La
 documentazione ora spiega che drain significa estrarre, consegnare e liberare i
 record owned, che `max_records` limita il batch e che retry/requeue/dead-letter
 sono decisioni future di backpressure.
+Prima della PR e' stato aggiunto un pass didattico sulle strutture e sui
+callback: `08-guida-c-usato-nel-progetto.md` ora spiega in modo esteso
+puntatori a funzione, callback, `void *userdata`, `emit + userdata` e i principali
+typedef callback usati da core, backend, scanner, watcher, sink e text sink.
+`16-mappa-codice-e-strutture.md` ora contiene una mappa delle nuove strutture
+Event Model/output: `alfred_record_sink_t`, `alfred_record_text_sink_t`,
+`alfred_record_queue_t`, `alfred_record_dispatcher_sink_t` e
+`alfred_record_dispatcher_t`, con campi, responsabilita' e ciclo drain.
+`32-writer-api-v0.md` ora contiene anche un diagramma architetturale Mermaid
+della pipeline completa backend -> record -> copia owned -> queue -> dispatcher
+-> sink -> writer, piu' un sequence diagram che mostra il passaggio temporale
+del record. Le animazioni vere restano rimandate alla roadmap documentazione
+avanzata, dove la pipeline record/output e' stata aggiunta agli scenari
+animabili.
 
 ## Aggiornamento Writer API v0
 

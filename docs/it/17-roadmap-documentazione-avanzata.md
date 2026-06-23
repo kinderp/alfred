@@ -388,6 +388,9 @@ Primi scenari animabili:
 - move+rename -> `RELOCATED`
 - close-write -> `FILE_READY`
 - aggiunta/rimozione watch
+- pipeline record/output:
+  backend -> record borrowed -> clone owned -> queue -> dispatcher -> sink ->
+  writer
 
 ## Decisione provvisoria
 

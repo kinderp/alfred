@@ -107,6 +107,165 @@ I writer possono fare lavoro costoso solo perche' sono fuori dal percorso caldo.
 Possono serializzare, raggruppare, fare flush, spedire su socket o aggiornare UI,
 ma non devono bloccare il collector.
 
+## Vista architetturale completa
+
+Il diagramma seguente mostra la forma target del percorso record/output. In
+Mermaid resta una vista statica, ma separa chiaramente:
+
+- il percorso caldo;
+- il punto in cui avviene la copia owned;
+- la coda;
+- il dispatcher;
+- i sink;
+- i writer a valle.
+
+```mermaid
+flowchart LR
+    subgraph Sources["Sorgenti eventi"]
+        OS["OS events"]
+        INO["inotify"]
+        FAN["fanotify futuro"]
+        EBPF["eBPF futuro"]
+    end
+
+    subgraph Hot["Percorso caldo"]
+        B["backend poll"]
+        N["adapter / builder"]
+        RB["record borrowed"]
+        CL["clone owned"]
+        Q["record queue"]
+    end
+
+    subgraph Cold["Fuori hot path"]
+        D["dispatcher"]
+        S1["text sink"]
+        S2["sink JSONL"]
+        S3["sink binary"]
+        S4["sink Lab"]
+    end
+
+    subgraph Writers["Writer / consumer"]
+        W1["raw/events log"]
+        W2["ledger JSONL"]
+        W3["MessagePack<br/>protobuf"]
+        W4["UI / report"]
+    end
+
+    OS --> INO
+    OS -.-> FAN
+    OS -.-> EBPF
+    INO -->|"struct inotify_event"| B
+    FAN -.->|"evento backend futuro"| B
+    EBPF -.->|"evento backend futuro"| B
+    B -->|"inotify_adapter_build_raw()"| N
+    N -->|"alfred_raw_event_t / alfred_record_t"| RB
+    RB -->|"alfred_record_clone_owned()"| CL
+    CL -->|"alfred_record_queue_push()"| Q
+    Q -->|"alfred_record_queue_pop()"| D
+    D -->|"alfred_record_sink_emit()"| S1
+    D -->|"alfred_record_sink_emit()"| S2
+    D -->|"alfred_record_sink_emit()"| S3
+    D -->|"alfred_record_sink_emit()"| S4
+    S1 -->|"alfred_record_text_sink_emit()"| W1
+    S2 -->|"jsonl_write() futuro"| W2
+    S3 -->|"binary_encode() futuro"| W3
+    S4 -->|"lab_update() futuro"| W4
+```
+
+Lettura del diagramma:
+
+1. I backend osservano eventi OS, per esempio `struct inotify_event`.
+2. Il backend chiama l'adapter o un builder per normalizzare.
+3. La normalizzazione produce `alfred_raw_event_t` e poi `alfred_record_t`.
+4. Prima del confine asincrono il record borrowed diventa owned con
+   `alfred_record_clone_owned()`.
+5. Il record owned entra nella queue con `alfred_record_queue_push()`.
+6. Fuori dal path caldo il worker estrae con `alfred_record_queue_pop()`.
+7. Il dispatcher chiama i sink con `alfred_record_sink_emit()`.
+8. Ogni sink consegna il record al proprio writer o consumer.
+
+La linea concettuale piu' importante e':
+
+```text
+backend -> record -> queue
+```
+
+Questa e' la fine del lavoro che deve restare veloce. Tutto cio' che viene dopo
+puo' essere piu' ricco, configurabile e costoso, ma non deve bloccare il backend.
+
+Tabella delle funzioni e dei dati che attraversano il diagramma:
+
+| Passaggio | Funzione / responsabilita' | Dato principale |
+| --- | --- | --- |
+| kernel -> backend | `read()` dentro il backend | `struct inotify_event` |
+| backend -> adapter | `inotify_adapter_build_raw()` | evento inotify + parent path |
+| adapter -> raw | ritorno adapter | `alfred_raw_event_t` |
+| raw -> record borrowed | `alfred_record_from_raw()` | `alfred_record_t` borrowed |
+| borrowed -> owned | `alfred_record_clone_owned()` | `alfred_record_t` owned |
+| enqueue | `alfred_record_queue_push()` | record owned copiato nella queue |
+| dequeue | `alfred_record_queue_pop()` | record owned trasferito al worker |
+| fan-out | `alfred_record_dispatcher_dispatch_one()` | stesso record verso i sink |
+| generic sink | `alfred_record_sink_emit()` | `sink->emit(userdata, record)` |
+| text sink | `alfred_record_text_sink_emit()` | payload testuale |
+| writer | callback `write()` o writer futuro | file, JSONL, binario, socket, UI |
+
+## Vista dinamica del record
+
+Mermaid nei Markdown comuni non produce una GIF o una vera animazione temporale.
+Per ora usiamo un sequence diagram, che e' la forma piu' leggibile per mostrare
+"il record che passa di mano" nel tempo.
+
+```mermaid
+sequenceDiagram
+    participant OS as OS/kernel
+    participant Backend as backend
+    participant Adapter as normalizer
+    participant Clone as owned clone
+    participant Queue as queue
+    participant Worker as worker
+    participant Disp as dispatcher
+    participant Sink as sink
+    participant Writer as writer
+
+    OS->>Backend: struct inotify_event
+    Backend->>Adapter: inotify_adapter_build_raw()
+    Adapter-->>Backend: alfred_raw_event_t
+    Backend->>Adapter: alfred_record_from_raw()
+    Adapter-->>Backend: alfred_record_t borrowed
+    Backend->>Clone: alfred_record_clone_owned()
+    Clone-->>Backend: alfred_record_t owned
+    Backend->>Queue: alfred_record_queue_push()
+    Note over Backend,Queue: fine percorso caldo
+
+    Worker->>Queue: alfred_record_queue_pop()
+    Queue-->>Worker: alfred_record_t owned
+    Worker->>Disp: alfred_record_dispatcher_dispatch_one()
+    Disp->>Sink: alfred_record_sink_emit()
+    Sink->>Sink: sink->emit(userdata, record)
+    Sink->>Writer: write / encode / send
+    Writer-->>Sink: ok o errore
+    Sink-->>Disp: ok o errore
+    Disp-->>Worker: risultato dispatch
+    Worker->>Worker: alfred_record_destroy_owned()
+```
+
+In una animazione vera, i frame sarebbero:
+
+| Frame | Cosa evidenziare |
+| --- | --- |
+| 1 | evento OS arriva al backend |
+| 2 | backend normalizza e crea record borrowed |
+| 3 | clone owned prima della queue |
+| 4 | record owned entra nella queue |
+| 5 | worker fa pop dalla queue |
+| 6 | dispatcher sceglie i sink |
+| 7 | sink chiama il writer |
+| 8 | worker distrugge il record owned |
+
+Questa tabella e' gia' pronta per una futura animazione SVG/HTML o D2. Per ora
+rimane una descrizione statica, ma stabilisce gli stage che l'animazione dovra'
+mostrare.
+
 Il fan-out sincrono dal backend e' vietato. Questo schema e' sbagliato:
 
 ```c

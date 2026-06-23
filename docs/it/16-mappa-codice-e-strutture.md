@@ -201,6 +201,270 @@ Questo e' il motivo per cui la cache move legacy non deve tornare nel percorso
 runtime normale. La correlazione dei move e' semantica, quindi appartiene al
 core.
 
+## Strutture dati Event Model, queue, dispatcher e sink
+
+Questa sezione descrive le strutture introdotte per portare Alfred verso un
+percorso di output piu' modulare:
+
+```text
+record
+-> queue
+-> dispatcher
+-> sink
+-> writer
+```
+
+Al momento questo percorso e' in gran parte preparatorio: i tipi esistono, sono
+testati e documentati, ma non tutto e' ancora collegato al runtime principale.
+Il motivo e' intenzionale: prima fissiamo contratti piccoli e verificabili, poi
+decidiamo dove inserirli nel path caldo.
+
+### Vista d'insieme
+
+```mermaid
+flowchart TD
+    A["alfred_record_t<br/>record strutturato"] --> B["alfred_record_clone_owned()"]
+    B --> C["alfred_record_queue_t<br/>coda bounded di record owned"]
+    C --> D["alfred_record_dispatcher_drain_queue()"]
+    D --> E["alfred_record_dispatcher_t<br/>fan-out bounded"]
+    E --> F["alfred_record_sink_t<br/>emit + userdata"]
+    F --> G["alfred_record_text_sink_t<br/>formatta payload testuale"]
+    G --> H["write callback<br/>logger, test, socket futuro"]
+```
+
+Lettura del diagramma:
+
+- `alfred_record_t` e' il dato comune.
+- `alfred_record_clone_owned()` trasforma una vista borrowed in una copia owned.
+- `alfred_record_queue_t` conserva record owned in attesa.
+- `alfred_record_dispatcher_drain_queue()` estrae record dalla coda, li consegna
+  al dispatcher e li distrugge dopo la consegna.
+- `alfred_record_dispatcher_t` decide quali sink riceveranno il record.
+- `alfred_record_sink_t` e' l'interfaccia generica `emit(record)`.
+- `alfred_record_text_sink_t` e' un sink concreto che formatta testo compatibile.
+
+### `alfred_record_sink_t`
+
+Definizione:
+
+```c
+typedef int (*alfred_record_sink_emit_fn)(
+    void *userdata,
+    const alfred_record_t *record
+);
+
+typedef struct {
+    alfred_record_sink_emit_fn emit;
+    void *userdata;
+} alfred_record_sink_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `emit` | callback da chiamare per consegnare un record | `alfred_record_text_sink_init()`, test sink, futuri writer | `alfred_record_sink_emit()`, dispatcher |
+| `userdata` | contesto opaco passato a `emit` | chi costruisce il sink | callback concreta del sink |
+
+Questa struttura e' una piccola interfaccia C. Non contiene una classe o un
+oggetto come in linguaggi object-oriented, ma ottiene un effetto simile:
+
+```text
+funzione da chiamare + contesto da passare
+```
+
+Quando il dispatcher consegna un record, non deve sapere se dietro il sink c'e'
+un writer testuale, JSONL, MessagePack, un test o un socket. Chiama solo:
+
+```c
+alfred_record_sink_emit(&sink, &record);
+```
+
+e il wrapper chiama:
+
+```c
+sink->emit(sink->userdata, record);
+```
+
+### `alfred_record_text_sink_t`
+
+Definizione:
+
+```c
+typedef int (*alfred_record_text_sink_write_fn)(
+    void *userdata,
+    const char *payload
+);
+
+typedef struct {
+    alfred_record_text_sink_write_fn write;
+    void *userdata;
+    char *buffer;
+    size_t buffer_size;
+} alfred_record_text_sink_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `write` | callback che riceve il payload testuale gia' formattato | runtime bridge o test | `alfred_record_text_sink_emit()` |
+| `userdata` | contesto opaco della callback `write` | chi costruisce il text sink | callback `write` |
+| `buffer` | buffer caller-owned usato per formattare il payload | chi costruisce il text sink | `alfred_record_text_sink_emit()` |
+| `buffer_size` | dimensione di `buffer` | chi costruisce il text sink | formatter testuale |
+
+Il text sink ha due responsabilita':
+
+1. ricevere un `alfred_record_t`;
+2. trasformarlo in payload testuale compatibile.
+
+Non deve aggiungere timestamp, newline, livelli di log o scegliere il file di
+destinazione. Dopo la formattazione chiama `write(userdata, payload)`. Questo
+mantiene separati formatter e output device.
+
+### `alfred_record_queue_t`
+
+Definizione:
+
+```c
+typedef struct {
+    alfred_record_t *items;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} alfred_record_queue_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `items` | buffer circolare di record owned | `alfred_record_queue_init()` | push, pop, clear, destroy |
+| `capacity` | massimo numero di record accodabili | `alfred_record_queue_init()` | push, query, overflow check |
+| `head` | indice del prossimo record da estrarre | init, pop, clear | pop, clear |
+| `tail` | indice del prossimo slot da scrivere | init, push, clear | push |
+| `count` | numero di record attualmente in coda | init, push, pop, clear | query, push, pop, drain |
+
+La queue e' bounded: se `count == capacity`, `push()` fallisce. Questo evita una
+coda che cresce senza limite quando i writer sono piu' lenti dei producer.
+
+La queue conserva record owned. Quindi:
+
+```text
+push(record borrowed)
+-> clone owned
+-> memorizza nella coda
+```
+
+Quando un record viene estratto:
+
+```text
+pop()
+-> trasferisce ownership al chiamante
+-> il chiamante deve chiamare alfred_record_destroy_owned()
+```
+
+### `alfred_record_dispatcher_sink_t`
+
+Definizione:
+
+```c
+typedef struct {
+    const char *name;
+    alfred_record_dispatcher_sink_class_t sink_class;
+    alfred_record_sink_t sink;
+} alfred_record_dispatcher_sink_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `name` | nome borrowed del sink, utile per diagnostica futura | `alfred_record_dispatcher_add_sink()` | diagnostica futura, test |
+| `sink_class` | classe futura: critical, best-effort o debug | `alfred_record_dispatcher_add_sink()` | futura policy backpressure |
+| `sink` | sink concreto da invocare | `alfred_record_dispatcher_add_sink()` | `alfred_record_dispatcher_dispatch_one()` |
+
+`sink_class` oggi e' metadato. Non cambia ancora il comportamento, ma documenta
+la direzione futura:
+
+- `critical`: perdita o errore serio;
+- `best-effort`: output utile ma non essenziale;
+- `debug`: output umano, trace o Lab.
+
+### `alfred_record_dispatcher_t`
+
+Definizione:
+
+```c
+typedef struct {
+    alfred_record_dispatcher_sink_t *sinks;
+    size_t capacity;
+    size_t count;
+} alfred_record_dispatcher_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `sinks` | array caller-owned dei sink registrati | `alfred_record_dispatcher_init()` | add, clear, dispatch |
+| `capacity` | massimo numero di sink registrabili | `alfred_record_dispatcher_init()` | add, query, overflow check |
+| `count` | numero di sink registrati | init, add, clear | dispatch, query |
+
+Anche il dispatcher e' bounded, ma qui il limite non riguarda i record:
+
+```text
+queue bounded       -> massimo numero di record accodati
+dispatcher bounded  -> massimo numero di sink destinatari
+```
+
+Il dispatcher non possiede i writer. Possiede solo la registrazione dei sink
+dentro un array fornito dal chiamante. Questo evita allocazioni interne e rende
+esplicito il fan-out massimo.
+
+### Ciclo drain
+
+Il primo ciclo che collega queue e dispatcher e':
+
+```text
+alfred_record_dispatcher_drain_queue()
+```
+
+Sequenza:
+
+```text
+while queue non vuota e batch non superato:
+  pop record owned
+  dispatch_one(record)
+  destroy record owned
+```
+
+`max_records` limita quanti record possono essere processati in una sola
+chiamata. Questo prepara il runtime futuro a lavorare per batch invece di
+svuotare sempre tutta la coda.
+
+### Stato attuale e stato futuro
+
+Oggi:
+
+```text
+record sink e text sink sono gia' usati dai bridge runtime compatibili
+queue, dispatcher e drain sono API preparatorie testate
+```
+
+Futuro:
+
+```text
+backend/core
+-> enqueue rapido
+-> worker/dispatcher fuori hot path
+-> sink per text/jsonl/binary/socket
+```
+
+Questa distinzione e' importante per non confondere "tipo dati implementato" con
+"percorso runtime finale gia' attivo".
+
 ## Strutture dati backend
 
 Le strutture dati principali del backend inotify sono:

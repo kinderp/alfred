@@ -436,6 +436,307 @@ Questa regola e' scritta anche nell'header del core:
 event memory expires after callback returns
 ```
 
+## Callback usate davvero in Alfred
+
+Nel progetto il pattern piu' comune e':
+
+```c
+typedef tipo_ritorno (*nome_callback_t)(argomenti..., void *userdata);
+```
+
+oppure:
+
+```c
+typedef tipo_ritorno (*nome_callback_t)(void *userdata, argomenti...);
+```
+
+La posizione di `userdata` puo' cambiare da API ad API, ma il significato resta
+lo stesso: e' il contesto opaco che il chiamante vuole ricevere quando la
+callback verra' invocata.
+
+La parola "opaco" significa: il componente che richiama la callback non sa che
+tipo reale c'e' dietro `userdata`. Per lui e' solo un indirizzo generico. La
+funzione callback invece conosce il tipo reale e lo converte.
+
+Esempio concettuale:
+
+```c
+static int my_callback(const alfred_raw_event_t *raw, void *userdata)
+{
+    app_t *app = userdata;
+
+    return alfred_process(app->core, raw);
+}
+```
+
+La funzione che chiama `my_callback()` non deve conoscere `app_t`. Deve solo
+sapere che deve passare lo stesso `userdata` ricevuto dal suo chiamante.
+
+### Tabella dei callback principali
+
+| Tipo callback | Dove vive | Chi lo chiama | A cosa serve |
+| --- | --- | --- | --- |
+| `alfred_emit_fn` | `core/include/alfred_correlator.h` | core semantico | consegnare un `alfred_event_t` prodotto dal core |
+| `inotify_backend_event_fn` | `modules/inotify/include/inotify_backend.h` | backend inotify | consegnare un `alfred_raw_event_t` all'app/core boundary |
+| `fs_scan_fn` | `app/include/fs_scanner.h` | scanner filesystem | notificare ogni entry trovata durante una scansione |
+| `watcher_iter_fn` | `modules/inotify/include/watcher.h` | watcher table | visitare watch in uno stato specifico |
+| `alfred_record_sink_emit_fn` | `core/include/alfred_record_sink.h` | dispatcher o bridge record | consegnare un `alfred_record_t` a un sink generico |
+| `alfred_record_text_sink_write_fn` | `core/include/alfred_record_text_sink.h` | text sink | consegnare un payload testuale gia' formattato |
+
+Questa tabella mostra una cosa importante: Alfred usa callback a livelli
+diversi, non solo nel core. Il concetto e' sempre lo stesso, ma cambia il tipo di
+dato consegnato.
+
+### Esempio: callback del backend inotify
+
+Il backend inotify espone:
+
+```c
+typedef int (*inotify_backend_event_fn)(
+    const alfred_raw_event_t *raw,
+    void *userdata
+);
+```
+
+La lettura della firma si fa da destra verso sinistra:
+
+```text
+inotify_backend_event_fn e' un puntatore a funzione
+che riceve:
+- const alfred_raw_event_t *raw
+- void *userdata
+e restituisce int
+```
+
+Quando `inotify_backend_poll()` riceve un evento dal kernel, costruisce un raw
+event Alfred e poi chiama:
+
+```text
+on_event(raw, userdata)
+```
+
+Nel runtime attuale `userdata` e' un `app_t *`, perche' la callback applicativa
+deve poter raggiungere il core:
+
+```text
+inotify_backend_poll(&ctx, handle_backend_event, app)
+
+handle_backend_event(raw, userdata)
+  app = userdata
+  alfred_process(app->core, raw)
+```
+
+Il backend non sa che `userdata` contiene `app_t *`. Questa e' la separazione
+voluta: il backend produce raw event, ma non conosce l'applicazione completa.
+
+### Esempio: callback del core
+
+Il core usa:
+
+```c
+typedef void (*alfred_emit_fn)(
+    const alfred_event_t *ev,
+    void *userdata
+);
+```
+
+Qui il core produce un evento semantico e chiama la callback registrata:
+
+```text
+emit(ev, userdata)
+```
+
+Nel runtime corrente la callback e' `core_logger_on_event()` e `userdata` punta
+al logger o a un contesto che permette di scrivere `events.log`. In futuro la
+stessa callback potrebbe inviare record verso un dispatcher, una coda, un socket
+o un test in memoria.
+
+La regola di lifetime resta:
+
+```text
+ev e' valido solo durante la callback
+```
+
+Se la callback vuole conservare informazioni, deve copiarle.
+
+### Esempio: sink generico
+
+Il sink generico usa:
+
+```c
+typedef int (*alfred_record_sink_emit_fn)(
+    void *userdata,
+    const alfred_record_t *record
+);
+
+typedef struct {
+    alfred_record_sink_emit_fn emit;
+    void *userdata;
+} alfred_record_sink_t;
+```
+
+Qui la callback non e' passata come argomento singolo a una funzione: e' un campo
+dentro una struttura. Questo e' molto comune in C quando si vuole costruire una
+"piccola interfaccia".
+
+La struttura significa:
+
+```text
+quando vuoi consegnare un record a questo sink:
+1. prendi sink.emit
+2. passa sink.userdata
+3. passa record
+```
+
+La funzione wrapper:
+
+```c
+alfred_record_sink_emit(&sink, &record);
+```
+
+fa internamente il controllo difensivo e poi chiama:
+
+```c
+sink->emit(sink->userdata, record);
+```
+
+Questo e' il punto in cui il puntatore a funzione viene richiamato davvero.
+
+### Esempio: text sink
+
+Il text sink e' un sink concreto. Espone:
+
+```c
+typedef int (*alfred_record_text_sink_write_fn)(
+    void *userdata,
+    const char *payload
+);
+
+typedef struct {
+    alfred_record_text_sink_write_fn write;
+    void *userdata;
+    char *buffer;
+    size_t buffer_size;
+} alfred_record_text_sink_t;
+```
+
+Qui ci sono due livelli:
+
+```text
+dispatcher
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> text_sink.write(userdata, payload)
+```
+
+Il generic sink riceve un record. Il text sink lo formatta in una stringa. Poi
+chiama un'altra callback `write()` per consegnare il payload testuale a chi sa
+dove scriverlo.
+
+Questa catena puo' sembrare lunga, ma separa responsabilita' diverse:
+
+- il dispatcher decide quali sink chiamare;
+- il generic sink uniforma l'interfaccia;
+- il text sink formatta;
+- la callback `write` scrive o cattura il payload.
+
+Nei test `write` puo' salvare il payload in un array. Nel runtime puo' adattarsi
+al logger. In futuro potrebbe scrivere su un buffer, una pipe o un socket.
+
+### Esempio: callback dello scanner
+
+Lo scanner filesystem usa:
+
+```c
+typedef int (*fs_scan_fn)(const fs_scan_entry_t *entry, void *userdata);
+```
+
+Lo scanner attraversa l'albero e, per ogni entry trovata, chiama la callback.
+Questo evita di imporre allo scanner una singola politica. Lo stesso scanner puo'
+essere usato per:
+
+- installare watch startup;
+- scoprire directory create troppo velocemente;
+- fare resync;
+- fare benchmark;
+- costruire report futuri.
+
+La callback decide cosa fare con ogni `entry`.
+
+### Esempio: callback della watcher table
+
+La watcher table usa:
+
+```c
+typedef int (*watcher_iter_fn)(
+    const watcher_entry_t *entry,
+    void *userdata
+);
+```
+
+Questa callback serve a visitare piu' watch senza esporre direttamente l'array
+interno della tabella. La watcher table mantiene il controllo del proprio stato;
+il chiamante riceve una `const watcher_entry_t *`, quindi puo' leggere l'entry ma
+non deve modificarla.
+
+Il ritorno `int` permette alla callback di fermare l'iterazione:
+
+```text
+0     -> continua
+!= 0  -> fermati e propaga questo valore
+```
+
+Questo pattern e' utile quando si cerca il primo elemento interessante o quando
+un errore deve interrompere il giro.
+
+### Come leggere una callback in una struct
+
+Quando vedi una struct come:
+
+```c
+typedef struct {
+    alfred_record_sink_emit_fn emit;
+    void *userdata;
+} alfred_record_sink_t;
+```
+
+leggila cosi':
+
+```text
+questa struct rappresenta un oggetto richiamabile;
+emit e' la funzione da chiamare;
+userdata e' il contesto da passare alla funzione.
+```
+
+Quando poi vedi:
+
+```c
+alfred_record_sink_emit(&sink, &record);
+```
+
+devi immaginare:
+
+```text
+sink.emit(sink.userdata, record)
+```
+
+Il wrapper esiste per centralizzare i controlli:
+
+- `sink != NULL`
+- `sink->emit != NULL`
+- `record != NULL`
+
+### Regole pratiche per non sbagliare
+
+1. Leggi sempre il `typedef` della callback prima di usarla.
+2. Controlla ordine e tipo degli argomenti.
+3. Chiediti chi possiede `userdata`.
+4. Chiediti quanto vive il record passato alla callback.
+5. Non salvare puntatori borrowed se la documentazione dice che valgono solo
+   durante la chiamata.
+6. Se devi conservare un record oltre la callback, usa una copia owned o una
+   strategia di ownership equivalente.
+
 ## `NULL`
 
 `NULL` indica un puntatore che non punta a un oggetto valido.
