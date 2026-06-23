@@ -470,10 +470,17 @@ Esempio diagnostico:
 {"schema_version":0,"layer":"diagnostic","category":"recovery","type":"WATCH_RESYNC_FAILED","backend":"inotify","path":"/tmp/root","os_error":{"code":2,"name":"ENOENT","message":"No such file or directory"},"watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF","error":"path-unreachable","retry_count":3},"recovery":{"detail_path":"/tmp/root/missing","result_code":-1,"pending_count":4}}
 ```
 
-Il formatter fa escaping JSON delle stringhe: virgolette, backslash, newline,
-tab e caratteri di controllo vengono emessi nella forma JSON corretta. Se il
-buffer fornito dal chiamante e' troppo piccolo, la funzione fallisce invece di
-produrre JSON troncato.
+Il formatter fa escaping JSON delle stringhe senza usare librerie esterne:
+virgolette, backslash, newline, tab, carriage return e caratteri di controllo
+vengono emessi nella forma JSON corretta. Se il buffer fornito dal chiamante e'
+troppo piccolo, la funzione fallisce invece di produrre JSON troncato.
+
+Questa scelta mantiene il micro-step piccolo e privo di dipendenze. Ha pero' un
+limite da conoscere: su Linux i path sono sequenze di byte, non necessariamente
+testo UTF-8 valido. JSON, invece, lavora con stringhe Unicode. Il JSONL v0
+assume che i campi stringa del record siano testo valido; la serializzazione
+lossless di path con byte non UTF-8 dovra' essere progettata prima di dichiarare
+il formato stabile per ambienti ostili o forensi.
 
 ### Limiti intenzionali v0
 

@@ -356,4 +356,6 @@ ancora collegato al runtime: formatta record raw, semantic e diagnostic in un
 oggetto JSON senza newline e consegna il payload a una callback caller-owned.
 `29-event-model-v0.md` e `32-writer-api-v0.md` documentano il mapping
 `alfred_record_t -> JSONL`, gli esempi raw/semantic/diagnostic, l'escaping delle
-stringhe e i limiti intenzionali v0.
+stringhe e i limiti intenzionali v0. La documentazione chiarisce anche che non
+usiamo librerie JSON esterne e che la serializzazione lossless di path Linux con
+byte non UTF-8 resta un tema futuro.

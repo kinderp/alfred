@@ -5,6 +5,11 @@
  * This formatter receives one borrowed record and writes one compact JSON object
  * into caller-provided storage. It does not write files, sockets, timestamps,
  * trailing newlines, or own any writer state.
+ *
+ * The formatter is deliberately dependency-free: it does not use an external
+ * JSON library. It escapes JSON control characters itself and currently assumes
+ * that record strings are valid textual data. Lossless serialization of Linux
+ * paths containing arbitrary non-UTF-8 bytes is future design work.
  * ========================================================================== */
 
 #ifndef ALFRED_RECORD_JSONL_H

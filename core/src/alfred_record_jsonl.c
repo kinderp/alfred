@@ -1,5 +1,10 @@
 /* ============================================================================
  * alfred_record_jsonl.c - JSON Lines formatter for Event Model v0 records
+ *
+ * This file intentionally avoids external JSON dependencies. The v0 formatter
+ * has a narrow contract: write one compact object into caller-owned memory,
+ * escape JSON control characters, and fail on truncation. It does not yet solve
+ * lossless encoding for arbitrary non-UTF-8 Linux path bytes.
  * ========================================================================== */
 
 #include "alfred_record_jsonl.h"

@@ -10,7 +10,8 @@
  *
  * raw move record:
  * - includes schema_version, layer, category, type, source, raw_mask, cookie
- * - includes escaped path text
+ * - includes escaped path text for quote, backslash, newline, tab, carriage
+ *   return, and generic control characters
  *
  * semantic rename record:
  * - includes old_path and new_path
@@ -42,7 +43,7 @@ static void test_jsonl_formats_raw_move_with_escaping(void)
     record.source = 1u;
     record.raw_mask = 64u;
     record.cookie = 123u;
-    record.path = "/tmp/root/a\"b\\c\nfile";
+    record.path = "/tmp/root/a\"b\\c\n\t\r\001file";
 
     assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
     assert(strcmp(buffer,
@@ -53,7 +54,7 @@ static void test_jsonl_formats_raw_move_with_escaping(void)
                   "\"source\":1,"
                   "\"raw_mask\":64,"
                   "\"cookie\":123,"
-                  "\"path\":\"/tmp/root/a\\\"b\\\\c\\nfile\"}") == 0);
+                  "\"path\":\"/tmp/root/a\\\"b\\\\c\\n\\t\\r\\u0001file\"}") == 0);
 }
 
 static void test_jsonl_formats_semantic_rename(void)

@@ -1243,6 +1243,7 @@ Il primo micro-step esiste nel codice:
   JSON compatto senza newline finale;
 - `alfred_record_jsonl_sink_emit()` adatta il formatter al confine generico
   `alfred_record_sink_t`;
+- non usa librerie JSON esterne: l'escaping e' implementato nel formatter;
 - il formatter non apre file, non scrive socket, non fa flush e non aggiunge
   timestamp di log esterni;
 - il codice runtime non usa ancora questo sink: il JSONL v0 e' testabile, ma
@@ -1263,6 +1264,12 @@ Esempio diagnostico:
 Il writer testuale corrente e il formatter JSONL ricevono lo stesso record
 strutturato. Non convertiamo testo in JSON: il testo e il JSONL sono due
 serializzazioni diverse dello stesso `alfred_record_t`.
+
+Nota sui path Linux: JSONL v0 tratta i campi stringa come testo valido. Linux
+permette nomi file composti da byte arbitrari, quindi un output forense
+realmente lossless dovra' decidere se aggiungere una rappresentazione byte-safe
+dedicata, per esempio base64 o escaping esplicito dei byte non UTF-8. Questo non
+e' risolto in questo micro-step.
 
 Nel codice C questo passaggio e' iniziato con due helper:
 
