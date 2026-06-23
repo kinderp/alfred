@@ -510,6 +510,29 @@ Il JSONL v0 non e' ancora un writer completo:
 Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`;
 poi potremo collegarlo a dispatcher, code, profili operativi e benchmark.
 
+### Debito tecnico JSONL v0
+
+Il JSONL v0 e' accettabile per questa fase perche' e' ancora un formatter
+preparatorio: non e' il writer runtime definitivo e non e' ancora il formato dei
+golden test ufficiali. Proprio per questo il debito tecnico deve restare
+visibile. Non deve diventare una scelta implicita dimenticata nel codice.
+
+| Debito | Stato attuale | Perche' e' accettabile ora | Quando va chiuso |
+| --- | --- | --- | --- |
+| Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
+| Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
+| Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Non e' collegato al percorso caldo runtime, quindi non blocca ancora il backend | Prima di collegare JSONL a output runtime reali |
+| Nessuna backpressure | Il sink non gestisce code, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi | Prima di writer buffered, socket, Lab o ledger JSONL continuativo |
+| Nessun newline/file/socket | Il formatter produce solo un oggetto JSON e il sink consegna una stringa | Mantiene separati formato, framing e I/O | Quando introdurremo Writer API completa e configurazione output |
+| Nessuna validazione schema esterna | I test confrontano stringhe esatte, ma non esiste ancora uno schema JSON formale | Sufficiente per bloccare il mapping C iniziale | Prima di pubblicare JSONL come interfaccia stabile per tool terzi |
+
+La regola pratica e': questo debito e' accettabile finche' JSONL resta un
+formatter/sink testabile fuori dal runtime. Quando JSONL diventera' output
+ufficiale, ledger, golden-test format o interfaccia per integrazioni esterne,
+questi punti dovranno essere risolti o trasformati in decisioni esplicite di
+schema v1.
+
 ## Backpressure
 
 Se un writer e' lento, Alfred deve avere una policy esplicita. Non deve

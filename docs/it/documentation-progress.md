@@ -360,4 +360,8 @@ stringhe e i limiti intenzionali v0. La documentazione chiarisce anche che non
 usiamo librerie JSON esterne e che la serializzazione lossless di path Linux con
 byte non UTF-8 resta un tema futuro. Il mapping `identity` e' stato fissato come
 coppia atomica: JSONL emette `device_id` e `inode_id` solo se sono entrambi
-presenti, evitando identita' parziali ambigue.
+presenti, evitando identita' parziali ambigue. `32-writer-api-v0.md` contiene
+ora anche una tabella esplicita di debito tecnico JSONL v0: omissione dei campi
+zero/`NULL`, assenza di `null` espliciti, path Linux non UTF-8 non lossless,
+sink sincrono, assenza di backpressure, assenza di framing file/socket e schema
+JSON non ancora formalizzato.
