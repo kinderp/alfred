@@ -11,6 +11,11 @@
 
 int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity)
 {
+    /*
+     * queue->items is the ownership marker for the backing buffer. Because this
+     * field is read before memset(), callers must pass a zeroed queue or a queue
+     * already cleared by destroy(), never a truly uninitialized automatic object.
+     */
     if (queue == NULL || capacity == 0u || queue->items != NULL) {
         return -1;
     }

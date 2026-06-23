@@ -44,9 +44,12 @@ typedef struct {
  * @queue: queue object to initialize
  * @capacity: maximum number of records accepted before push() reports full
  *
- * @queue must be zeroed or uninitialized. Reinitializing an active queue would
- * lose the owned record buffer; callers that need a different capacity must
- * first call alfred_record_queue_destroy(), then call init again.
+ * @queue must be zeroed or previously destroyed by
+ * alfred_record_queue_destroy(). Passing a truly uninitialized automatic
+ * variable is invalid because the implementation must inspect @queue->items
+ * before clearing the struct. Reinitializing an active queue would lose the
+ * owned record buffer; callers that need a different capacity must first call
+ * alfred_record_queue_destroy(), then call init again.
  * Implementations reject active queues defensively when @queue->items is not
  * NULL, preserving the previous queue instead of silently leaking it.
  *

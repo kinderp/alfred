@@ -202,7 +202,10 @@ zeroed o gia' distrutta, perche' `pop()` trasferisce ownership in una
 destinazione vuota e non sostituisce automaticamente record owned precedenti.
 Anche `alfred_record_queue_init()` e' ora difensiva: rifiuta la reinit di una
 queue attiva, preservando il vecchio buffer e gli owned record finche' il
-chiamante non esegue `alfred_record_queue_destroy()`.
+chiamante non esegue `alfred_record_queue_destroy()`. Il contratto e' stato
+stretto ulteriormente: `init()` accetta solo queue zeroed o gia' distrutte, non
+variabili automatiche davvero non inizializzate, perche' il codice deve leggere
+`queue.items` prima di azzerare la struct.
 `32-writer-api-v0.md` ora contiene una tabella riepilogativa delle API di
 ownership/queue v0, con input, output, proprietario finale, cleanup richiesto ed
 errori tipici. `08-guida-c-usato-nel-progetto.md` collega la stessa logica a una

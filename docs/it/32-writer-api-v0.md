@@ -713,16 +713,29 @@ memory leak. Rendere `pop()` una replace automatica sarebbe rischioso per lo
 stesso motivo della clone API: la destinazione potrebbe contenere puntatori
 borrowed, e una `free()` automatica su memoria borrowed sarebbe sbagliata.
 
-Anche `init()` ha una precondizione di ownership: la queue deve essere zeroed o
-non inizializzata. Una seconda `alfred_record_queue_init()` su una queue attiva
-viene rifiutata, perche' altrimenti il nuovo `memset()` perderebbe il vecchio
-`items` pointer e quindi anche gli owned record eventualmente accodati. Se serve
-cambiare capacity, il ciclo corretto e':
+Anche `init()` ha una precondizione di ownership: la queue deve essere zeroed
+oppure deve essere gia' stata ripulita da `alfred_record_queue_destroy()`.
+Non basta dire "non inizializzata". In C una variabile automatica locale non
+inizializzata contiene valori indeterminati; se `init()` legge `queue.items`
+prima di azzerare la struct, leggere quel puntatore indeterminato e'
+comportamento indefinito. Quindi il pattern sicuro e' sempre:
+
+```c
+alfred_record_queue_t queue = {0};
+
+alfred_record_queue_init(&queue, capacity);
+```
+
+oppure, se la queue era gia' stata usata:
 
 ```c
 alfred_record_queue_destroy(&queue);
 alfred_record_queue_init(&queue, new_capacity);
 ```
+
+Una seconda `alfred_record_queue_init()` su una queue attiva viene rifiutata,
+perche' altrimenti il nuovo `memset()` perderebbe il vecchio `items` pointer e
+quindi anche gli owned record eventualmente accodati.
 
 ### Contratto di ownership delle API v0
 
@@ -734,7 +747,7 @@ chiamata corrente.
 | --- | --- | --- | --- | --- |
 | `alfred_record_clone_owned(src, dst)` | `src` borrowed, `dst` zeroed/non-owned | copia owned in `dst` | il chiamante possiede `dst` | `alfred_record_destroy_owned(&dst)` |
 | `alfred_record_destroy_owned(record)` | record owned o gia' zeroed | record azzerato | nessuno, le stringhe sono liberate | nessun cleanup ulteriore |
-| `alfred_record_queue_init(queue, capacity)` | queue zeroed/non inizializzata | buffer bounded vuoto | la queue possiede `items` | `alfred_record_queue_destroy(&queue)` |
+| `alfred_record_queue_init(queue, capacity)` | queue zeroed/gia' distrutta | buffer bounded vuoto | la queue possiede `items` | `alfred_record_queue_destroy(&queue)` |
 | `alfred_record_queue_push(queue, record)` | queue valida, record borrowed | clone owned dentro la queue | la queue possiede il clone | destroy/clear della queue oppure pop |
 | `alfred_record_queue_pop(queue, record)` | queue valida, `record` zeroed/gia' distrutto | record owned trasferito al chiamante | il chiamante possiede `record` | `alfred_record_destroy_owned(&record)` |
 | `alfred_record_queue_clear(queue)` | queue valida | stessa queue vuota | la queue conserva il buffer | `alfred_record_queue_destroy(&queue)` finale |

@@ -24,6 +24,7 @@
  * - keep queue state auditable after cleanup
  *
  * init:
+ * - requires a zeroed queue or a queue already cleared by destroy()
  * - rejects reinitialization of an already active queue
  * - preserves the original queue when that invalid reinit is rejected
  *
@@ -255,6 +256,25 @@ static void test_queue_rejects_reinit_without_destroy(void)
     alfred_record_queue_destroy(&queue);
 }
 
+static void test_queue_can_reinit_after_destroy(void)
+{
+    alfred_record_queue_t queue;
+
+    memset(&queue, 0, sizeof(queue));
+
+    assert(alfred_record_queue_init(&queue, 2u) == 0);
+    alfred_record_queue_destroy(&queue);
+
+    /*
+     * destroy() returns the queue object to the zeroed state required by init().
+     * This is the supported way to change capacity or rebuild queue storage.
+     */
+    assert(alfred_record_queue_init(&queue, 4u) == 0);
+    assert(alfred_record_queue_capacity(&queue) == 4u);
+
+    alfred_record_queue_destroy(&queue);
+}
+
 int main(void)
 {
     test_queue_push_pop_owns_borrowed_path();
@@ -263,6 +283,7 @@ int main(void)
     test_queue_clear_releases_records_and_reuses_storage();
     test_queue_pop_destination_can_be_reused_after_destroy();
     test_queue_rejects_reinit_without_destroy();
+    test_queue_can_reinit_after_destroy();
 
     return 0;
 }
