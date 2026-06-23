@@ -364,6 +364,7 @@ Writer API v0 deve permettere almeno questi writer:
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
 | `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato, non ancora collegato al runtime |
+| `noop/counter` | benchmark e misure baseline | sink implementato per contare record senza serializzazione o I/O |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
 | `unix_socket` | integrazione locale con daemon, Lab o agent runtime | ideale per processi locali e controllo permessi Unix |
@@ -693,6 +694,25 @@ Metriche da raccogliere:
 
 Il benchmark piu' importante e' il no-op sink: misura il costo del cuore di
 Alfred senza I/O. Solo dopo ha senso confrontare text, JSONL e formati binari.
+
+Il primo sink no-op/counter esiste nel codice come
+`alfred_record_counter_sink_t`. Si collega al confine generico
+`alfred_record_sink_t`, riceve record borrowed e incrementa solo contatori
+numerici:
+
+```text
+alfred_record_t
+-> alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+-> total/layer/category counters
+```
+
+Questo sink non formatta testo, non genera JSONL, non apre file, non invia
+socket, non alloca memoria e non conserva puntatori borrowed come `path` o
+`backend`. Per questo e' utile come baseline: se in futuro `counter` e' veloce
+ma `jsonl` e' lento, il costo e' nella serializzazione o nel writer; se anche
+`counter` e' lento, il problema e' piu' vicino a record, dispatcher, coda o
+pipeline.
 
 ## Ownership e record accodati
 

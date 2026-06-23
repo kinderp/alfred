@@ -1775,6 +1775,15 @@ La copertura iniziale include:
   record, limite `max_records`, zero-record drain, stop al primo errore sink e
   conteggio dei record consegnati con successo. Lo scenario spiega che "drain"
   significa consumare la coda, non solo leggerla.
+- `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
+  il sink no-op/counter. Il test non confronta righe di log perche' questo sink
+  non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
+  un record semantico filesystem, un record raw normalizzato filesystem e un
+  record diagnostico recovery, poi controlla `total_records`, i contatori per
+  layer e quelli per category. Verifica anche che record con layer/category
+  `UNKNOWN` aumentino solo il totale e che input invalidi vengano rifiutati.
+  Questo test prepara i benchmark futuri: misura il confine `record -> sink`
+  senza includere costo di text, JSONL, file, socket, flush o allocazioni.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

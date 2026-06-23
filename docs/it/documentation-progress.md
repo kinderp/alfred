@@ -365,3 +365,14 @@ ora anche una tabella esplicita di debito tecnico JSONL v0: omissione dei campi
 zero/`NULL`, assenza di `null` espliciti, path Linux non UTF-8 non lossless,
 sink sincrono, assenza di backpressure, assenza di framing file/socket e schema
 JSON non ancora formalizzato.
+
+## Aggiornamento counter sink v0
+
+`alfred_record_counter_sink_t` introduce il primo sink no-op/counter per misure
+baseline. Il sink si collega al confine generico `alfred_record_sink_t`, conta
+record totali, layer principali e category principali, ma non formatta testo,
+non genera JSONL, non scrive file/socket, non alloca memoria e non conserva
+puntatori borrowed. `32-writer-api-v0.md` lo documenta come baseline per
+benchmark futuri, `29-event-model-v0.md` lo inserisce fra gli helper C del
+percorso record -> sink, e `10-debugging-test-e-strumenti.md` spiega il test
+dedicato `test_record_counter_sink.sh`.

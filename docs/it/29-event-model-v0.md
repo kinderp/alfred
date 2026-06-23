@@ -1292,6 +1292,9 @@ Nel codice C questo passaggio e' iniziato con due helper:
 - `alfred_record_text_sink_emit()` formatta un record e consegna il payload a
   una callback di scrittura
 - `alfred_record_jsonl_sink_emit()` fa la stessa cosa per JSONL
+- `alfred_record_counter_sink_emit()` riceve un record e incrementa solo
+  contatori numerici, senza serializzazione, I/O, allocazioni o ownership di
+  stringhe
 
 Il lato output semantico usa gia' il sink: `core_logger_on_event()` converte
 `alfred_event_t` in `alfred_record_t`, chiama `alfred_record_sink_emit()`,
@@ -1305,6 +1308,13 @@ il dispatcher asincrono, le code, i record owned e la Writer API completa sono
 rimandati; pero' il confine `record -> emit(record) -> sink` e' gia' il percorso
 di compatibilita' per questi stream runtime. Il sink testuale e' collegato al
 runtime, il sink JSONL e' per ora coperto da test dedicati.
+
+Il counter sink non e' una feature utente. E' un sink di misura e di contratto:
+serve a controllare quanto costa consegnare record attraverso il confine
+`record -> sink` quando il writer non fa nulla di costoso. Conta il totale dei
+record ricevuti e alcune famiglie principali per `layer` e `category`. Questo
+aiuta a distinguere, nei benchmark futuri, fra costo del cuore di Alfred e costo
+di writer come text, JSONL, socket o formati binari.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in
