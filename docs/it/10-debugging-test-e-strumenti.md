@@ -1498,7 +1498,62 @@ baseline versionate, ripetizioni, warmup, percentili e ambiente documentato. Per
 ora questo comando e' solo un primo strumento operativo per non discutere le
 prestazioni al buio.
 
-### 8. Nessun `test-legacy-shadow`
+### 8. `make perf-record-sinks`
+
+Il comando:
+
+```bash
+make perf-record-sinks
+```
+
+compila ed esegue un micro-benchmark dei sink record. Non osserva eventi reali
+del filesystem e non usa inotify: genera record sintetici in memoria e li invia
+a tre sink:
+
+- `counter`: sink no-op/counter, senza formattazione e senza I/O;
+- `text`: sink testuale compatibile;
+- `jsonl`: sink JSONL v0.
+
+Questo benchmark serve a separare il costo del confine `record -> sink` dal
+costo dei writer. Se `counter` e' veloce ma `jsonl` e' lento, il costo e'
+probabilmente nella serializzazione JSONL o nel writer. Se anche `counter` e'
+lento, il problema e' piu' vicino a record, dispatcher, coda o chiamata sink.
+
+Di default esegue 100000 record sintetici:
+
+```text
+sink,records,elapsed_us,records_per_sec,bytes,counter_total
+counter,100000,1200,83333333.33,0,100000
+text,100000,9000,11111111.11,4100000,0
+jsonl,100000,18000,5555555.55,12000000,0
+```
+
+I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
+dal carico del sistema, dal compilatore e dalla configurazione.
+
+Significato delle colonne:
+
+- `sink`: sink misurato
+- `records`: numero di record sintetici emessi
+- `elapsed_us`: tempo monotonic speso nel ciclo di emit
+- `records_per_sec`: throughput semplice calcolato sul tempo misurato
+- `bytes`: byte di payload osservati dai sink che formattano stringhe;
+  per `counter` vale `0`
+- `counter_total`: record contati dal counter sink; per gli altri sink vale `0`
+
+E' possibile passare un numero diverso di record:
+
+```bash
+cd tests/perf
+bash run_record_sinks.sh 1000000
+```
+
+Questo benchmark non e' ancora una suite performance ufficiale. Non ha warmup,
+non calcola percentili, non ripete automaticamente piu' run e non misura I/O su
+file o socket. Serve come primo strumento riproducibile per confrontare
+`counter`, `text` e `jsonl` senza modificare il runtime.
+
+### 9. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali

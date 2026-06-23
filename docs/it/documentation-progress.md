@@ -376,3 +376,15 @@ puntatori borrowed. `32-writer-api-v0.md` lo documenta come baseline per
 benchmark futuri, `29-event-model-v0.md` lo inserisce fra gli helper C del
 percorso record -> sink, e `10-debugging-test-e-strumenti.md` spiega il test
 dedicato `test_record_counter_sink.sh`.
+
+## Aggiornamento benchmark record sink
+
+`tests/perf/bench_record_sinks.c` e `tests/perf/run_record_sinks.sh`
+introducono il primo micro-benchmark manuale per confrontare `counter`, `text`
+e `jsonl` sink con record sintetici in memoria. Il nuovo target
+`make perf-record-sinks` stampa CSV con `sink`, `records`, `elapsed_us`,
+`records_per_sec`, `bytes` e `counter_total`. Il benchmark non usa inotify, non
+scrive file/socket e non misura backpressure: serve come baseline locale per
+separare il costo del confine `record -> sink` dal costo di formattazione text o
+JSONL. La guida test e la Writer API spiegano come lanciarlo e come leggere le
+colonne.

@@ -714,6 +714,17 @@ ma `jsonl` e' lento, il costo e' nella serializzazione o nel writer; se anche
 `counter` e' lento, il problema e' piu' vicino a record, dispatcher, coda o
 pipeline.
 
+Il primo harness manuale per questa misura e':
+
+```bash
+make perf-record-sinks
+```
+
+Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con tre righe:
+`counter`, `text` e `jsonl`. Questo non e' ancora un benchmark end-to-end di
+Alfred: non usa inotify, non legge eventi dal kernel, non scrive file e non
+misura backpressure. Misura solo record sintetici consegnati a sink isolati.
+
 ## Ownership e record accodati
 
 La Writer API v0 non puo' assumere che un `alfred_record_t` borrowed resti

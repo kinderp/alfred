@@ -242,6 +242,9 @@ test-watcher:
 perf-lost-scope:
 	cd tests/perf && bash run_lost_scope_recovery.sh
 
+perf-record-sinks:
+	cd tests/perf && bash run_record_sinks.sh
+
 # -----------------------------------------------------------------------------
 # VALGRIND
 # -----------------------------------------------------------------------------
@@ -327,6 +330,7 @@ banner:
 	test-watcher \
 	test-backend-diagnostics \
 	perf-lost-scope \
+	perf-record-sinks \
 	valgrind \
 	gdb \
 	format \
