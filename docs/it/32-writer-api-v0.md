@@ -363,7 +363,7 @@ Writer API v0 deve permettere almeno questi writer:
 | Writer | Uso principale | Note |
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
-| `jsonl` | test golden, integrazioni semplici, debugging strutturato | formato testuale strutturato, non API primaria |
+| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato, non ancora collegato al runtime |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
 | `unix_socket` | integrazione locale con daemon, Lab o agent runtime | ideale per processi locali e controllo permessi Unix |
@@ -405,6 +405,133 @@ backend
 
 Il testo puo' restare molto utile per debug e didattica, ma non deve essere
 usato come sorgente di verita' strutturata.
+
+## JSONL formatter e sink v0
+
+Il primo supporto JSONL e' intenzionalmente piccolo:
+
+```text
+alfred_record_t
+-> alfred_record_format_jsonl()
+-> oggetto JSON senza newline
+```
+
+e, attraverso il sink generico:
+
+```text
+alfred_record_t
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_sink_emit()
+-> callback write(payload)
+```
+
+Questa scelta replica il pattern del text sink. Il formatter non decide dove
+scrivere: non apre file, non scrive socket, non aggiunge newline e non fa flush.
+Il callback del writer riceve una stringa valida solo durante la chiamata e puo'
+decidere se aggiungere `\n`, scrivere su file, spedire su socket o salvare il
+payload in un test.
+
+Il JSONL v0 emette sempre:
+
+| Campo | Significato |
+| --- | --- |
+| `schema_version` | versione dello schema del record |
+| `layer` | layer architetturale: `normalized_raw`, `semantic`, `diagnostic`, ecc. |
+| `category` | famiglia del record: `filesystem`, `watch`, `recovery`, ecc. |
+| `type` | nome stabile del record, per esempio `FILE_CREATED` |
+
+Gli altri campi sono opzionali e compaiono solo quando il record li valorizza:
+
+| Campo | Quando compare |
+| --- | --- |
+| `seq`, `ts_ns` | se il produttore assegna sequenza o timestamp |
+| `source`, `raw_mask`, `cookie`, `pid` | se il record porta dati raw/backend |
+| `backend`, `path`, `old_path`, `new_path` | se sono disponibili percorsi o backend |
+| `identity` | se device/inode sono entrambi presenti |
+| `os_error` | se esiste un errore OS strutturato |
+| `watch` | se il record porta stato diagnostico del watch |
+| `recovery` | se il record porta contatori o dettagli di resync/recovery |
+
+Esempio raw:
+
+```json
+{"schema_version":0,"layer":"normalized_raw","category":"filesystem","type":"RAW_MOVED_FROM","source":1,"raw_mask":64,"cookie":123,"path":"/tmp/root/a.txt"}
+```
+
+Esempio semantico:
+
+```json
+{"schema_version":0,"layer":"semantic","category":"filesystem","type":"FILE_RENAMED","old_path":"/tmp/root/old.txt","new_path":"/tmp/root/new.txt"}
+```
+
+Esempio diagnostico:
+
+```json
+{"schema_version":0,"layer":"diagnostic","category":"recovery","type":"WATCH_RESYNC_FAILED","backend":"inotify","path":"/tmp/root","os_error":{"code":2,"name":"ENOENT","message":"No such file or directory"},"watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF","error":"path-unreachable","retry_count":3},"recovery":{"detail_path":"/tmp/root/missing","result_code":-1,"pending_count":4}}
+```
+
+Il formatter fa escaping JSON delle stringhe senza usare librerie esterne:
+virgolette, backslash, newline, tab, carriage return e caratteri di controllo
+vengono emessi nella forma JSON corretta. Se il buffer fornito dal chiamante e'
+troppo piccolo, la funzione fallisce invece di produrre JSON troncato.
+
+`identity` e' trattata come una coppia atomica. `device_id` e `inode_id`
+identificano un oggetto filesystem solo insieme: un inode senza device puo'
+collidere con inode uguali su altri filesystem, mentre un device senza inode non
+identifica alcun oggetto specifico. Per questo JSONL v0 emette:
+
+```json
+"identity":{"device_id":8,"inode_id":123}
+```
+
+solo quando entrambi i valori sono non zero. Se uno dei due manca, l'intero
+oggetto `identity` viene omesso. Non introduciamo identita' parziali implicite
+perche' renderebbero ambigui i golden test e i consumer futuri.
+
+Questa scelta mantiene il micro-step piccolo e privo di dipendenze. Ha pero' un
+limite da conoscere: su Linux i path sono sequenze di byte, non necessariamente
+testo UTF-8 valido. JSON, invece, lavora con stringhe Unicode. Il JSONL v0
+assume che i campi stringa del record siano testo valido; la serializzazione
+lossless di path con byte non UTF-8 dovra' essere progettata prima di dichiarare
+il formato stabile per ambienti ostili o forensi.
+
+### Limiti intenzionali v0
+
+Il JSONL v0 non e' ancora un writer completo:
+
+- non e' collegato al runtime degli eventi;
+- non gestisce file descriptor, path di output o rotazione log;
+- non aggiunge newline;
+- non fa buffering su file;
+- non implementa backpressure;
+- non assegna sequenze o timestamp da solo;
+- non sostituisce `alfred_record_t` come contratto interno.
+
+Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`;
+poi potremo collegarlo a dispatcher, code, profili operativi e benchmark.
+
+### Debito tecnico JSONL v0
+
+Il JSONL v0 e' accettabile per questa fase perche' e' ancora un formatter
+preparatorio: non e' il writer runtime definitivo e non e' ancora il formato dei
+golden test ufficiali. Proprio per questo il debito tecnico deve restare
+visibile. Non deve diventare una scelta implicita dimenticata nel codice.
+
+| Debito | Stato attuale | Perche' e' accettabile ora | Quando va chiuso |
+| --- | --- | --- | --- |
+| Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
+| Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
+| Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Non e' collegato al percorso caldo runtime, quindi non blocca ancora il backend | Prima di collegare JSONL a output runtime reali |
+| Nessuna backpressure | Il sink non gestisce code, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi | Prima di writer buffered, socket, Lab o ledger JSONL continuativo |
+| Nessun newline/file/socket | Il formatter produce solo un oggetto JSON e il sink consegna una stringa | Mantiene separati formato, framing e I/O | Quando introdurremo Writer API completa e configurazione output |
+| Nessuna validazione schema esterna | I test confrontano stringhe esatte, ma non esiste ancora uno schema JSON formale | Sufficiente per bloccare il mapping C iniziale | Prima di pubblicare JSONL come interfaccia stabile per tool terzi |
+
+La regola pratica e': questo debito e' accettabile finche' JSONL resta un
+formatter/sink testabile fuori dal runtime. Quando JSONL diventera' output
+ufficiale, ledger, golden-test format o interfaccia per integrazioni esterne,
+questi punti dovranno essere risolti o trasformati in decisioni esplicite di
+schema v1.
 
 ## Backpressure
 

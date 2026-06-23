@@ -1234,24 +1234,47 @@ result=valid
 La recovery ripara l'affidabilita' del backend. Non inventa retroattivamente un
 evento semantico `DIR_MOVED`.
 
-## JSONL futuro
+## JSONL v0
 
-JSONL sara' una serializzazione di Event Model v0, non la sorgente del modello.
+JSONL e' una serializzazione di Event Model v0, non la sorgente del modello.
+Il primo micro-step esiste nel codice:
 
-Esempio futuro:
+- `alfred_record_format_jsonl()` formatta un `alfred_record_t` in un oggetto
+  JSON compatto senza newline finale;
+- `alfred_record_jsonl_sink_emit()` adatta il formatter al confine generico
+  `alfred_record_sink_t`;
+- non usa librerie JSON esterne: l'escaping e' implementato nel formatter;
+- il formatter non apre file, non scrive socket, non fa flush e non aggiunge
+  timestamp di log esterni;
+- il codice runtime non usa ancora questo sink: il JSONL v0 e' testabile, ma
+  non e' ancora collegato al percorso reale degli eventi.
+
+Esempio semantico:
 
 ```json
-{"schema_version":0,"seq":15,"layer":"semantic","category":"filesystem","type":"FILE_CREATED","path":"/tmp/root/a.txt","object_kind":"file","source_backend":"inotify"}
+{"schema_version":0,"layer":"semantic","category":"filesystem","type":"FILE_CREATED","path":"/tmp/root/a.txt"}
 ```
 
 Esempio diagnostico:
 
 ```json
-{"schema_version":0,"seq":42,"layer":"diagnostic","category":"watch","type":"WATCH_STALE","path":"/tmp/root/watched","watch_id":7,"watch_state":"stale","reason":"IN_MOVE_SELF","source_backend":"inotify"}
+{"schema_version":0,"layer":"diagnostic","category":"watch","type":"WATCH_STALE","backend":"inotify","path":"/tmp/root/watched","watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF"}}
 ```
 
-Il writer testuale corrente e il futuro writer JSONL dovranno ricevere lo
-stesso record strutturato. Non dovremo convertire testo in JSON.
+Il writer testuale corrente e il formatter JSONL ricevono lo stesso record
+strutturato. Non convertiamo testo in JSON: il testo e il JSONL sono due
+serializzazioni diverse dello stesso `alfred_record_t`.
+
+Nota sui path Linux: JSONL v0 tratta i campi stringa come testo valido. Linux
+permette nomi file composti da byte arbitrari, quindi un output forense
+realmente lossless dovra' decidere se aggiungere una rappresentazione byte-safe
+dedicata, per esempio base64 o escaping esplicito dei byte non UTF-8. Questo non
+e' risolto in questo micro-step.
+
+Nota su `identity`: `device_id` e `inode_id` sono una coppia. Il JSONL v0 emette
+`identity` solo quando entrambi sono presenti. Una identita' parziale non basta
+per correlare in modo affidabile un oggetto filesystem, quindi viene omessa
+invece di essere serializzata in modo ambiguo.
 
 Nel codice C questo passaggio e' iniziato con due helper:
 
@@ -1263,9 +1286,12 @@ Nel codice C questo passaggio e' iniziato con due helper:
   `diagnostic + watch` o `diagnostic + recovery` per i principali `WATCH_*`
 - `alfred_record_format_text()` formatta il payload testuale di un record,
   senza timestamp, livello log o newline
+- `alfred_record_format_jsonl()` formatta un record come oggetto JSONL senza
+  newline
 - `alfred_record_sink_emit()` chiama un sink generico `emit(record)`
 - `alfred_record_text_sink_emit()` formatta un record e consegna il payload a
   una callback di scrittura
+- `alfred_record_jsonl_sink_emit()` fa la stessa cosa per JSONL
 
 Il lato output semantico usa gia' il sink: `core_logger_on_event()` converte
 `alfred_event_t` in `alfred_record_t`, chiama `alfred_record_sink_emit()`,
@@ -1276,8 +1302,9 @@ Anche il backend inotify usa gia' questo ponte per gli stream migrati in questa
 fase: raw principali, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
 `WATCH_RESYNC_*` e `WATCH_LOST_*`. Non e' ancora la Backend API finale, perche'
 il dispatcher asincrono, le code, i record owned e la Writer API completa sono
-rimandati; pero' il confine `record -> emit(record) -> text sink` e' gia' il
-percorso di compatibilita' per questi stream runtime.
+rimandati; pero' il confine `record -> emit(record) -> sink` e' gia' il percorso
+di compatibilita' per questi stream runtime. Il sink testuale e' collegato al
+runtime, il sink JSONL e' per ora coperto da test dedicati.
 
 Lo schema operativo dei passaggi C, con adapter, builder diagnostico e formatter
 testuale, e' documentato in

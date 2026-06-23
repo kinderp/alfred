@@ -347,3 +347,21 @@ richiedono conoscenza C implicita.
 `27-guida-lettura-documentazione.md` ora rimanda direttamente a questa sezione
 dall'indice tematico rapido, cosi' uno studente che legge i finding della PR su
 owned record, queue e dispatcher puo' recuperare prima i concetti C necessari.
+
+## Aggiornamento JSONL writer v0
+
+`alfred_record_format_jsonl()` e `alfred_record_jsonl_sink_emit()` introducono
+il primo supporto JSONL testabile sopra `alfred_record_t`. Il codice non e'
+ancora collegato al runtime: formatta record raw, semantic e diagnostic in un
+oggetto JSON senza newline e consegna il payload a una callback caller-owned.
+`29-event-model-v0.md` e `32-writer-api-v0.md` documentano il mapping
+`alfred_record_t -> JSONL`, gli esempi raw/semantic/diagnostic, l'escaping delle
+stringhe e i limiti intenzionali v0. La documentazione chiarisce anche che non
+usiamo librerie JSON esterne e che la serializzazione lossless di path Linux con
+byte non UTF-8 resta un tema futuro. Il mapping `identity` e' stato fissato come
+coppia atomica: JSONL emette `device_id` e `inode_id` solo se sono entrambi
+presenti, evitando identita' parziali ambigue. `32-writer-api-v0.md` contiene
+ora anche una tabella esplicita di debito tecnico JSONL v0: omissione dei campi
+zero/`NULL`, assenza di `null` espliciti, path Linux non UTF-8 non lossless,
+sink sincrono, assenza di backpressure, assenza di framing file/socket e schema
+JSON non ancora formalizzato.
