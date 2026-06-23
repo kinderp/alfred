@@ -380,21 +380,25 @@ static int append_identity(jsonl_buffer_t *buffer,
 {
     int inner_comma = 0;
 
+    /*
+     * Device and inode are meaningful as a pair. A single non-zero side is only
+     * partial evidence, not a stable filesystem identity, so JSONL v0 omits the
+     * whole object unless both values are present.
+     */
     if (identity == NULL ||
-        (identity->device_id == 0 && identity->inode_id == 0)) {
+        identity->device_id == 0 ||
+        identity->inode_id == 0) {
         return 0;
     }
 
     if (append_comma_if_needed(buffer, needs_comma) != 0 ||
         append_raw(buffer, "\"identity\":{") != 0 ||
-        append_u64_field(buffer,
-                         &inner_comma,
-                         "device_id",
-                         (uint64_t)identity->device_id) != 0 ||
-        append_u64_field(buffer,
-                         &inner_comma,
-                         "inode_id",
-                         (uint64_t)identity->inode_id) != 0 ||
+        append_comma_if_needed(buffer, &inner_comma) != 0 ||
+        append_json_string(buffer, "device_id") != 0 ||
+        append_fmt(buffer, ":%llu", (unsigned long long)identity->device_id) != 0 ||
+        append_comma_if_needed(buffer, &inner_comma) != 0 ||
+        append_json_string(buffer, "inode_id") != 0 ||
+        append_fmt(buffer, ":%llu", (unsigned long long)identity->inode_id) != 0 ||
         append_raw(buffer, "}") != 0) {
         return -1;
     }

@@ -358,4 +358,6 @@ oggetto JSON senza newline e consegna il payload a una callback caller-owned.
 `alfred_record_t -> JSONL`, gli esempi raw/semantic/diagnostic, l'escaping delle
 stringhe e i limiti intenzionali v0. La documentazione chiarisce anche che non
 usiamo librerie JSON esterne e che la serializzazione lossless di path Linux con
-byte non UTF-8 resta un tema futuro.
+byte non UTF-8 resta un tema futuro. Il mapping `identity` e' stato fissato come
+coppia atomica: JSONL emette `device_id` e `inode_id` solo se sono entrambi
+presenti, evitando identita' parziali ambigue.

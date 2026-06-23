@@ -447,7 +447,7 @@ Gli altri campi sono opzionali e compaiono solo quando il record li valorizza:
 | `seq`, `ts_ns` | se il produttore assegna sequenza o timestamp |
 | `source`, `raw_mask`, `cookie`, `pid` | se il record porta dati raw/backend |
 | `backend`, `path`, `old_path`, `new_path` | se sono disponibili percorsi o backend |
-| `identity` | se device/inode sono presenti |
+| `identity` | se device/inode sono entrambi presenti |
 | `os_error` | se esiste un errore OS strutturato |
 | `watch` | se il record porta stato diagnostico del watch |
 | `recovery` | se il record porta contatori o dettagli di resync/recovery |
@@ -474,6 +474,19 @@ Il formatter fa escaping JSON delle stringhe senza usare librerie esterne:
 virgolette, backslash, newline, tab, carriage return e caratteri di controllo
 vengono emessi nella forma JSON corretta. Se il buffer fornito dal chiamante e'
 troppo piccolo, la funzione fallisce invece di produrre JSON troncato.
+
+`identity` e' trattata come una coppia atomica. `device_id` e `inode_id`
+identificano un oggetto filesystem solo insieme: un inode senza device puo'
+collidere con inode uguali su altri filesystem, mentre un device senza inode non
+identifica alcun oggetto specifico. Per questo JSONL v0 emette:
+
+```json
+"identity":{"device_id":8,"inode_id":123}
+```
+
+solo quando entrambi i valori sono non zero. Se uno dei due manca, l'intero
+oggetto `identity` viene omesso. Non introduciamo identita' parziali implicite
+perche' renderebbero ambigui i golden test e i consumer futuri.
 
 Questa scelta mantiene il micro-step piccolo e privo di dipendenze. Ha pero' un
 limite da conoscere: su Linux i path sono sequenze di byte, non necessariamente

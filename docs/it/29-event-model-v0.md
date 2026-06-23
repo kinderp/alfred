@@ -1271,6 +1271,11 @@ realmente lossless dovra' decidere se aggiungere una rappresentazione byte-safe
 dedicata, per esempio base64 o escaping esplicito dei byte non UTF-8. Questo non
 e' risolto in questo micro-step.
 
+Nota su `identity`: `device_id` e `inode_id` sono una coppia. Il JSONL v0 emette
+`identity` solo quando entrambi sono presenti. Una identita' parziale non basta
+per correlare in modo affidabile un oggetto filesystem, quindi viene omessa
+invece di essere serializzata in modo ambiguo.
+
 Nel codice C questo passaggio e' iniziato con due helper:
 
 - `alfred_record_from_raw()` converte `alfred_raw_event_t` in record
