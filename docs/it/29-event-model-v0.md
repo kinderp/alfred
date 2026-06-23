@@ -555,6 +555,41 @@ Il test `tests/backend/test_record_dispatcher.c` verifica:
 - propagazione del primo errore;
 - riuso dello storage dopo `clear()`.
 
+### Queue Drain v0
+
+Il primo collegamento fra coda e dispatcher e':
+
+```text
+alfred_record_dispatcher_drain_queue()
+```
+
+Questa funzione consuma record dalla queue in modo bounded:
+
+```text
+queue pop
+-> dispatcher dispatch_one
+-> sink emit
+-> destroy owned record
+```
+
+Il verbo "drain" indica il ciclo completo: estrarre, consegnare e liberare. Non
+significa solo guardare gli elementi della coda. Ogni record estratto dalla queue
+e' owned; dopo il dispatch deve essere distrutto con
+`alfred_record_destroy_owned()` per chiudere correttamente la ownership.
+
+`max_records` limita quanti record possono essere processati in una singola
+chiamata. Questo evita drain non bounded e prepara il runtime futuro a lavorare
+per batch:
+
+```text
+queue con 1000 record + max_records=64 -> processa al massimo 64 record
+```
+
+La policy v0 in caso di errore e' semplice: se un sink fallisce, il record gia'
+estratto viene distrutto e la funzione ritorna errore. Retry, requeue,
+dead-letter queue, drop diagnostico e shutdown controllato saranno decisioni di
+backpressure future.
+
 ## Campi filesystem
 
 I record legati al filesystem possono usare questi campi.

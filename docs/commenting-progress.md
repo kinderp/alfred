@@ -44,6 +44,12 @@ Latest refresh:
   record dispatcher. Comments now explain bounded sink registration, synchronous
   v0 fan-out, sink class metadata reserved for future backpressure policy, and
   why the dispatcher does not own writer resources or run in the backend hot path.
+- refreshed `core/include/alfred_record_dispatcher.h`,
+  `core/src/alfred_record_dispatcher.c`, and added
+  `tests/backend/test_record_dispatcher_drain.c` after introducing the first
+  queue drain helper. Comments now explain the pop-dispatch-destroy lifecycle,
+  the max_records batch limit, and why retry/requeue/dead-letter policy remains a
+  future backpressure decision.
 - refreshed `modules/inotify/src/watch_manager.c` and
   `tests/backend/test_record_text_writer.c` after routing the first simple
   runtime backend diagnostics, `WATCH_ADDED` and `WATCH_REMOVED`, through

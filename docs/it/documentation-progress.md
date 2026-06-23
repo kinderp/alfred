@@ -202,6 +202,11 @@ in forma didattica: ora spiega il ruolo del dispatcher, cosa sono i sink, come
 `alfred_record_sink_emit()` chiama `sink->emit(userdata, record)`, in quale
 ordine vengono contattati i sink, cosa succede al primo errore e perche' il
 dispatcher non deve diventare un writer.
+Il primo helper di drain `alfred_record_dispatcher_drain_queue()` e' stato
+aggiunto come contratto testabile queue -> dispatcher -> sink -> destroy. La
+documentazione ora spiega che drain significa estrarre, consegnare e liberare i
+record owned, che `max_records` limita il batch e che retry/requeue/dead-letter
+sono decisioni future di backpressure.
 
 ## Aggiornamento Writer API v0
 

@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include "alfred_record_sink.h"
+#include "alfred_record_queue.h"
 
 #include <stddef.h>
 
@@ -114,6 +115,30 @@ int alfred_record_dispatcher_add_sink(
 int alfred_record_dispatcher_dispatch_one(
     const alfred_record_dispatcher_t *dispatcher,
     const alfred_record_t *record);
+
+/*
+ * alfred_record_dispatcher_drain_queue - pop and dispatch a bounded batch
+ * @dispatcher: initialized dispatcher
+ * @queue: owned-record queue to consume
+ * @max_records: maximum records to process in this call
+ * @dispatched: optional output count of successfully dispatched records
+ *
+ * "Drain" means consuming queued records by repeatedly popping one owned record,
+ * dispatching it to the registered sinks, and destroying the owned record after
+ * dispatch. The v0 helper stops when the queue is empty, @max_records records
+ * have been dispatched, or a sink reports an error.
+ *
+ * If a sink fails after a record is popped, v0 destroys that record and returns
+ * -1. Runtime retry, requeue, dead-letter, drop, and shutdown policy are future
+ * backpressure decisions and are deliberately not hidden in this helper.
+ *
+ * Return: 0 on normal completion, -1 on invalid input or first dispatch error.
+ */
+int alfred_record_dispatcher_drain_queue(
+    const alfred_record_dispatcher_t *dispatcher,
+    alfred_record_queue_t *queue,
+    size_t max_records,
+    size_t *dispatched);
 
 size_t alfred_record_dispatcher_count(
     const alfred_record_dispatcher_t *dispatcher);

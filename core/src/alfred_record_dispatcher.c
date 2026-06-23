@@ -4,6 +4,8 @@
 
 #include "alfred_record_dispatcher.h"
 
+#include "alfred_record_owned.h"
+
 #include <string.h>
 
 int alfred_record_dispatcher_init(alfred_record_dispatcher_t *dispatcher,
@@ -68,6 +70,49 @@ int alfred_record_dispatcher_dispatch_one(
         if (alfred_record_sink_emit(&dispatcher->sinks[i].sink, record) != 0) {
             return -1;
         }
+    }
+
+    return 0;
+}
+
+int alfred_record_dispatcher_drain_queue(
+    const alfred_record_dispatcher_t *dispatcher,
+    alfred_record_queue_t *queue,
+    size_t max_records,
+    size_t *dispatched)
+{
+    size_t count = 0u;
+
+    if (dispatched != NULL) {
+        *dispatched = 0u;
+    }
+
+    if (dispatcher == NULL || queue == NULL) {
+        return -1;
+    }
+
+    while (count < max_records && !alfred_record_queue_is_empty(queue)) {
+        alfred_record_t record;
+
+        memset(&record, 0, sizeof(record));
+        if (alfred_record_queue_pop(queue, &record) != 0) {
+            return -1;
+        }
+
+        if (alfred_record_dispatcher_dispatch_one(dispatcher, &record) != 0) {
+            alfred_record_destroy_owned(&record);
+            if (dispatched != NULL) {
+                *dispatched = count;
+            }
+            return -1;
+        }
+
+        alfred_record_destroy_owned(&record);
+        count++;
+    }
+
+    if (dispatched != NULL) {
+        *dispatched = count;
     }
 
     return 0;

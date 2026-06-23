@@ -1769,6 +1769,12 @@ La copertura iniziale include:
   rifiuto di input invalidi, overflow del numero sink e riuso dello storage dopo
   `clear()`. Anche questo non e' ancora collegato al runtime: serve a fissare il
   contratto prima di introdurre thread, code per sink o policy di backpressure.
+- `test_record_dispatcher_drain.sh`: compila
+  `test_record_dispatcher_drain.c` e verifica il primo ciclo queue -> dispatcher
+  -> sink -> destroy. Il test controlla drain di queue vuota, drain FIFO di piu'
+  record, limite `max_records`, zero-record drain, stop al primo errore sink e
+  conteggio dei record consegnati con successo. Lo scenario spiega che "drain"
+  significa consumare la coda, non solo leggerla.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che

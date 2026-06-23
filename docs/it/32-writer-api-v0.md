@@ -788,6 +788,92 @@ Questa distinzione evita una confusione pericolosa: il dispatcher non e' il
 writer. Un dispatcher non deve sapere come si formatta JSONL, come si scrive su
 file o come si manda un messaggio su socket. Deve solo consegnare record.
 
+### Che cosa significa drain della queue
+
+"Drain della queue" significa svuotare una coda consumando i record che contiene.
+Nel nostro caso la queue contiene record owned:
+
+```text
+queue:
+[record 1][record 2][record 3]
+```
+
+Fare drain significa eseguire un ciclo completo:
+
+```text
+pop record 1
+-> dispatch record 1 ai sink
+-> destroy record 1
+
+pop record 2
+-> dispatch record 2 ai sink
+-> destroy record 2
+
+pop record 3
+-> dispatch record 3 ai sink
+-> destroy record 3
+```
+
+Alla fine la coda e' vuota:
+
+```text
+queue:
+vuota
+```
+
+Quindi "drain" non significa solo leggere la coda. Significa:
+
+```text
+estrai
+consegna
+rilascia memoria
+```
+
+Nel codice il percorso e':
+
+```text
+alfred_record_queue_t
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> sink emit()
+-> alfred_record_destroy_owned()
+```
+
+Questa funzione serve per collegare i pezzi che abbiamo separato:
+
+- la queue conserva record owned;
+- il dispatcher consegna record ai sink;
+- i sink ricevono record;
+- il destroy chiude il ciclo di ownership.
+
+Il parametro `max_records` rende il drain bounded anche nel tempo di lavoro. Se
+la queue contiene 1000 record ma `max_records = 64`, una chiamata processa al
+massimo 64 record e poi ritorna:
+
+```text
+queue iniziale: 1000 record
+max_records: 64
+drain corrente: 64 record processati
+queue finale: 936 record ancora in attesa
+```
+
+Questo sara' utile nel runtime futuro per evitare che il dispatcher monopolizzi
+troppo a lungo il programma. In altre parole, `max_records` aiuta batch,
+latenza e fairness.
+
+La policy v0 in caso di errore e' volutamente semplice. Se un sink fallisce dopo
+il `pop`, il record gia' estratto viene distrutto e la funzione ritorna errore.
+Nel runtime finale dovremo decidere una policy piu' completa:
+
+- retry;
+- requeue;
+- dead-letter queue;
+- drop diagnostico;
+- shutdown controllato per sink critical.
+
+Queste decisioni appartengono alla backpressure policy futura. Non le nascondiamo
+dentro il primo helper di drain.
+
 ## Regola contrattuale
 
 La regola da non violare e':

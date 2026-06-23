@@ -8,13 +8,13 @@ mkdir -p "$BUILD_DIR"
 
 cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
     -I"$ROOT_DIR/core/include" \
-    "$ROOT_DIR/tests/backend/test_record_dispatcher.c" \
+    "$ROOT_DIR/tests/backend/test_record_dispatcher_drain.c" \
     "$ROOT_DIR/core/src/alfred_record_dispatcher.c" \
     "$ROOT_DIR/core/src/alfred_record_owned.c" \
     "$ROOT_DIR/core/src/alfred_record_queue.c" \
     "$ROOT_DIR/core/src/alfred_record_sink.c" \
-    -o "$BUILD_DIR/alfred_test_record_dispatcher"
+    -o "$BUILD_DIR/alfred_test_record_dispatcher_drain"
 
-"$BUILD_DIR/alfred_test_record_dispatcher"
+"$BUILD_DIR/alfred_test_record_dispatcher_drain"
 
-echo "PASS backend record dispatcher"
+echo "PASS backend record dispatcher drain"
