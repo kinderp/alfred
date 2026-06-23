@@ -197,6 +197,9 @@ riceve record borrowed, conserva record owned in una coda bounded
 single-threaded e trasferisce ownership al chiamante durante `pop()`. Anche
 questa API non e' ancora collegata al runtime; serve a fissare FIFO, overflow,
 cleanup e lifetime prima di introdurre dispatcher, backpressure e benchmark.
+Il contratto di `pop()` e' stato reso esplicito: la destinazione deve essere
+zeroed o gia' distrutta, perche' `pop()` trasferisce ownership in una
+destinazione vuota e non sostituisce automaticamente record owned precedenti.
 Il primo `alfred_record_dispatcher_t` e' stato aggiunto come micro-step
 successivo: registra sink in uno storage bounded fornito dal chiamante, chiama i
 sink in ordine di registrazione e propaga il primo errore. Il documento chiarisce

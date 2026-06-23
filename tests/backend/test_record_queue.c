@@ -17,6 +17,7 @@
  * - returns records in FIFO order
  * - transfers ownership to the caller
  * - clears the internal slot so queue cleanup does not double-free it
+ * - requires the destination record to be zeroed or already destroyed
  *
  * clear/destroy:
  * - release any owned records still queued
@@ -184,12 +185,49 @@ static void test_queue_clear_releases_records_and_reuses_storage(void)
     alfred_record_queue_destroy(&queue);
 }
 
+static void test_queue_pop_destination_can_be_reused_after_destroy(void)
+{
+    alfred_record_queue_t queue;
+    alfred_record_t first;
+    alfred_record_t second;
+    alfred_record_t popped;
+
+    memset(&queue, 0, sizeof(queue));
+    memset(&popped, 0, sizeof(popped));
+
+    first = make_raw_record("/tmp/root/first", ALFRED_RECORD_TYPE_RAW_CREATE);
+    second = make_raw_record("/tmp/root/second", ALFRED_RECORD_TYPE_RAW_DELETE);
+
+    assert(alfred_record_queue_init(&queue, 2u) == 0);
+    assert(alfred_record_queue_push(&queue, &first) == 0);
+    assert(alfred_record_queue_push(&queue, &second) == 0);
+
+    assert(alfred_record_queue_pop(&queue, &popped) == 0);
+    assert(strcmp(popped.path, "/tmp/root/first") == 0);
+
+    /*
+     * pop() transfers ownership into an empty/non-owned destination. Reusing
+     * the same local destination is correct only after destroying the previous
+     * owned record received from the queue.
+     */
+    alfred_record_destroy_owned(&popped);
+    assert(popped.path == NULL);
+
+    assert(alfred_record_queue_pop(&queue, &popped) == 0);
+    assert(strcmp(popped.path, "/tmp/root/second") == 0);
+    assert(popped.path != second.path);
+
+    alfred_record_destroy_owned(&popped);
+    alfred_record_queue_destroy(&queue);
+}
+
 int main(void)
 {
     test_queue_push_pop_owns_borrowed_path();
     test_queue_preserves_fifo_order_across_wraparound();
     test_queue_rejects_overflow_and_invalid_input();
     test_queue_clear_releases_records_and_reuses_storage();
+    test_queue_pop_destination_can_be_reused_after_destroy();
 
     return 0;
 }

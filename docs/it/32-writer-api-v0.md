@@ -692,6 +692,27 @@ int alfred_record_queue_pop(alfred_record_queue_t *queue,
 buffer subito dopo la chiamata. `pop()` trasferisce al chiamante il record owned:
 da quel momento il chiamante deve chiamare `alfred_record_destroy_owned()`.
 
+`pop()` non e' una replace API. La destinazione deve essere zeroed oppure deve
+essere gia' stata distrutta. Un ciclo corretto e':
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+
+while (alfred_record_queue_pop(&queue, &record) == 0) {
+    /* uso record */
+
+    alfred_record_destroy_owned(&record);
+}
+```
+
+Se il chiamante fa due `pop()` consecutivi nella stessa variabile senza destroy,
+il secondo `pop()` sovrascrive i puntatori owned del primo record e crea un
+memory leak. Rendere `pop()` una replace automatica sarebbe rischioso per lo
+stesso motivo della clone API: la destinazione potrebbe contenere puntatori
+borrowed, e una `free()` automatica su memoria borrowed sarebbe sbagliata.
+
 Questo modello e' didatticamente importante perche' separa tre concetti che
 spesso vengono confusi:
 

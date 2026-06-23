@@ -447,8 +447,36 @@ contratto importante prima di introdurre thread, dispatcher o writer asincroni:
 - quando il record viene estratto, la proprieta' passa al chiamante;
 - il chiamante deve distruggere il record owned con
   `alfred_record_destroy_owned()`;
+- la destinazione passata a `alfred_record_queue_pop()` deve essere zeroed o
+  gia' distrutta: `pop()` trasferisce ownership in una destinazione vuota, non
+  sostituisce automaticamente un record owned precedente;
 - se la coda viene svuotata o distrutta mentre contiene record, libera lei gli
   owned record rimasti.
+
+Il pattern corretto quando si riusa la stessa variabile locale e':
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+
+while (alfred_record_queue_pop(&queue, &record) == 0) {
+    /* uso record */
+
+    alfred_record_destroy_owned(&record);
+}
+```
+
+Il pattern sbagliato e':
+
+```c
+alfred_record_queue_pop(&queue, &record);
+alfred_record_queue_pop(&queue, &record); /* leak del primo record popped */
+alfred_record_destroy_owned(&record);
+```
+
+Il secondo `pop()` sovrascrive i puntatori owned ricevuti dal primo `pop()`. Il
+destroy finale libera solo il secondo record.
 
 Il tipo introdotto e':
 

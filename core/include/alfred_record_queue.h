@@ -86,6 +86,12 @@ int alfred_record_queue_push(alfred_record_queue_t *queue,
  * On success, @record must later be passed to alfred_record_destroy_owned().
  * The queue slot is cleared after ownership is transferred.
  *
+ * Ownership precondition:
+ *   @record must be zeroed or must not currently own strings. pop() transfers
+ *   one owned record into an empty destination; it is not a replace helper. If a
+ *   caller reuses the same local alfred_record_t in a loop, it must call
+ *   alfred_record_destroy_owned(record) before the next successful pop().
+ *
  * Return: 0 on success, -1 if the queue is invalid, empty, or @record is NULL.
  */
 int alfred_record_queue_pop(alfred_record_queue_t *queue,
