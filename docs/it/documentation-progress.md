@@ -203,6 +203,10 @@ destinazione vuota e non sostituisce automaticamente record owned precedenti.
 Anche `alfred_record_queue_init()` e' ora difensiva: rifiuta la reinit di una
 queue attiva, preservando il vecchio buffer e gli owned record finche' il
 chiamante non esegue `alfred_record_queue_destroy()`.
+`32-writer-api-v0.md` ora contiene una tabella riepilogativa delle API di
+ownership/queue v0, con input, output, proprietario finale, cleanup richiesto ed
+errori tipici. `08-guida-c-usato-nel-progetto.md` collega la stessa logica a una
+freccia di ownership borrowed -> queue owned -> caller owned -> destroy.
 Il primo `alfred_record_dispatcher_t` e' stato aggiunto come micro-step
 successivo: registra sink in uno storage bounded fornito dal chiamante, chiama i
 sink in ordine di registrazione e propaga il primo errore. Il documento chiarisce

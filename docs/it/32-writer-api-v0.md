@@ -724,6 +724,65 @@ alfred_record_queue_destroy(&queue);
 alfred_record_queue_init(&queue, new_capacity);
 ```
 
+### Contratto di ownership delle API v0
+
+Questa tabella riassume come usare le API di ownership e queue introdotte finora.
+E' la parte da leggere prima di scrivere codice che conserva un record oltre la
+chiamata corrente.
+
+| API | Cosa riceve | Cosa produce | Chi possiede la memoria dopo | Cleanup richiesto |
+| --- | --- | --- | --- | --- |
+| `alfred_record_clone_owned(src, dst)` | `src` borrowed, `dst` zeroed/non-owned | copia owned in `dst` | il chiamante possiede `dst` | `alfred_record_destroy_owned(&dst)` |
+| `alfred_record_destroy_owned(record)` | record owned o gia' zeroed | record azzerato | nessuno, le stringhe sono liberate | nessun cleanup ulteriore |
+| `alfred_record_queue_init(queue, capacity)` | queue zeroed/non inizializzata | buffer bounded vuoto | la queue possiede `items` | `alfred_record_queue_destroy(&queue)` |
+| `alfred_record_queue_push(queue, record)` | queue valida, record borrowed | clone owned dentro la queue | la queue possiede il clone | destroy/clear della queue oppure pop |
+| `alfred_record_queue_pop(queue, record)` | queue valida, `record` zeroed/gia' distrutto | record owned trasferito al chiamante | il chiamante possiede `record` | `alfred_record_destroy_owned(&record)` |
+| `alfred_record_queue_clear(queue)` | queue valida | stessa queue vuota | la queue conserva il buffer | `alfred_record_queue_destroy(&queue)` finale |
+| `alfred_record_queue_destroy(queue)` | queue valida o zeroed | queue azzerata | nessuno | nessun cleanup ulteriore |
+
+Gli errori tipici sono:
+
+1. clonare due volte nello stesso `dst` senza destroy;
+2. fare due `pop()` nella stessa variabile senza destroy;
+3. chiamare `init()` su una queue gia' attiva senza destroy;
+4. chiamare `alfred_record_destroy_owned()` su un record borrowed.
+
+Esempio corretto completo:
+
+```c
+alfred_record_queue_t queue;
+alfred_record_t borrowed;
+alfred_record_t popped;
+
+memset(&queue, 0, sizeof(queue));
+memset(&borrowed, 0, sizeof(borrowed));
+memset(&popped, 0, sizeof(popped));
+
+borrowed.path = "/tmp/file"; /* borrowed/static string */
+
+if (alfred_record_queue_init(&queue, 16) != 0) {
+    return -1;
+}
+
+if (alfred_record_queue_push(&queue, &borrowed) != 0) {
+    alfred_record_queue_destroy(&queue);
+    return -1;
+}
+
+while (alfred_record_queue_pop(&queue, &popped) == 0) {
+    /* il chiamante possiede popped fino al destroy */
+
+    alfred_record_destroy_owned(&popped);
+}
+
+alfred_record_queue_destroy(&queue);
+```
+
+Notare due dettagli:
+
+- `borrowed.path` non viene mai liberato dal chiamante, perche' non e' owned;
+- `popped` viene distrutto dentro il ciclo prima di essere riusato.
+
 Questo modello e' didatticamente importante perche' separa tre concetti che
 spesso vengono confusi:
 

@@ -47,6 +47,8 @@ typedef struct {
  * @queue must be zeroed or uninitialized. Reinitializing an active queue would
  * lose the owned record buffer; callers that need a different capacity must
  * first call alfred_record_queue_destroy(), then call init again.
+ * Implementations reject active queues defensively when @queue->items is not
+ * NULL, preserving the previous queue instead of silently leaking it.
  *
  * Return: 0 on success, -1 on invalid input or allocation failure.
  */
@@ -57,6 +59,11 @@ int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity);
  * @queue: queue initialized by alfred_record_queue_init()
  *
  * Safe to call with NULL. After this call, the queue is cleared to zero.
+ *
+ * Ownership effect:
+ *   Every still-queued owned record is destroyed before the backing buffer is
+ *   released. Records already popped from the queue are no longer owned by the
+ *   queue and remain the caller's responsibility.
  */
 void alfred_record_queue_destroy(alfred_record_queue_t *queue);
 
@@ -66,6 +73,10 @@ void alfred_record_queue_destroy(alfred_record_queue_t *queue);
  *
  * This is useful for future dispatcher shutdown and tests that want to reuse the
  * same bounded buffer without another allocation.
+ *
+ * Ownership effect:
+ *   Every currently queued owned record is destroyed. The backing buffer remains
+ *   allocated and can receive new pushed records with the same capacity.
  */
 void alfred_record_queue_clear(alfred_record_queue_t *queue);
 
@@ -76,6 +87,10 @@ void alfred_record_queue_clear(alfred_record_queue_t *queue);
  *
  * The queued entry is an owned clone. The caller may reuse or destroy its
  * borrowed buffers as soon as this function returns.
+ *
+ * Ownership effect:
+ *   On success, the queue owns an independent copy of the record strings. On
+ *   failure, the queue does not take ownership of anything from @record.
  *
  * Return: 0 on success, -1 if the queue is invalid, full, or cloning fails.
  */
@@ -95,6 +110,11 @@ int alfred_record_queue_push(alfred_record_queue_t *queue,
  *   one owned record into an empty destination; it is not a replace helper. If a
  *   caller reuses the same local alfred_record_t in a loop, it must call
  *   alfred_record_destroy_owned(record) before the next successful pop().
+ *
+ * Ownership effect:
+ *   On success, ownership moves from the queue slot to @record. The queue slot
+ *   is cleared so queue cleanup will not free the popped record again. On
+ *   failure, no ownership is transferred.
  *
  * Return: 0 on success, -1 if the queue is invalid, empty, or @record is NULL.
  */

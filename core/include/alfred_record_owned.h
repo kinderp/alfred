@@ -34,6 +34,11 @@ extern "C" {
  *   alfred_record_destroy_owned(dst). This avoids hiding dangerous frees of
  *   borrowed records while still keeping the v0 ownership rule explicit.
  *
+ * Ownership result:
+ *   On success, ownership of the duplicated strings belongs to @dst and the
+ *   caller must eventually call alfred_record_destroy_owned(dst). On failure,
+ *   this function releases any partial clone and leaves @dst untouched.
+ *
  * This helper is intentionally not wired into the runtime hot path yet. It is a
  * contract and test step for the future queue/dispatcher boundary. Once a record
  * is enqueued or handed to another thread, producers should use an owned copy or
@@ -52,6 +57,13 @@ int alfred_record_clone_owned(const alfred_record_t *src,
  * duplicates, then clears the whole struct to make repeated cleanup patterns
  * easier to audit. It must not be called on a purely borrowed record produced by
  * adapters or diagnostic builders.
+ *
+ * Safe inputs:
+ *   NULL is accepted. A zeroed owned record is accepted. A record that has
+ *   already been destroyed by this function is accepted because the first call
+ *   clears all pointers. A borrowed record is not accepted by contract, because
+ *   its string pointers may point to stack memory, static strings, or storage
+ *   owned by another component.
  */
 void alfred_record_destroy_owned(alfred_record_t *record);
 

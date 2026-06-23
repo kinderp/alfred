@@ -1302,6 +1302,30 @@ destroy(record)       -> libera le stringhe owned
 Questo non e' ancora il modello piu' performante possibile, ma e' il modello
 piu' chiaro per fissare il contratto e scrivere test.
 
+Quando leggi una API di questo tipo, prova sempre a seguire la ownership come
+una freccia:
+
+```text
+record borrowed del producer
+    |
+    | push() clona
+    v
+record owned dentro la queue
+    |
+    | pop() trasferisce
+    v
+record owned nel chiamante
+    |
+    | destroy_owned()
+    v
+memoria liberata
+```
+
+Se la freccia si perde, probabilmente c'e' un memory leak. Se due componenti
+pensano entrambi di possedere la stessa memoria, probabilmente c'e' il rischio
+di double free. Se un componente usa memoria dopo che la freccia e' arrivata al
+destroy, probabilmente c'e' un use-after-free.
+
 ## Regola pratica
 
 Quando leggi una funzione C, chiediti:

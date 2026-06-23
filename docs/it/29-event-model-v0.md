@@ -502,6 +502,21 @@ La seconda `init()` perderebbe il puntatore al vecchio buffer e ai record owned
 ancora accodati. Per questo la implementazione difensiva rifiuta una
 reinizializzazione quando `queue->items` e' gia' non `NULL`.
 
+Riepilogo del contratto:
+
+| Operazione | Regola di ownership |
+| --- | --- |
+| clone owned | `dst` deve essere zeroed/non-owned, poi il chiamante lo distrugge |
+| push in queue | la queue crea e possiede una copia owned |
+| pop da queue | la ownership passa dalla queue al chiamante |
+| clear queue | la queue distrugge i record owned ancora accodati |
+| destroy queue | la queue distrugge record rimasti e buffer |
+| reinit queue | ammessa solo dopo `alfred_record_queue_destroy()` |
+
+La spiegazione didattica piu' completa, con esempi su stack/static/heap e memory
+leak, e' in [08](08-guida-c-usato-nel-progetto.md#ownership). La spiegazione
+operativa delle API queue/writer e' in [32](32-writer-api-v0.md#record-queue-v0).
+
 Il tipo introdotto e':
 
 ```c
