@@ -217,6 +217,12 @@ operazione di replace: se il chiamante clona una seconda volta nello stesso
 `dst` senza prima chiamare `alfred_record_destroy_owned(&dst)`, perde i
 puntatori alle stringhe allocate dal primo clone e quindi crea un memory leak.
 
+In questa frase "zeroed" significa che la struct e' stata azzerata e i suoi
+puntatori sono `NULL`; "non-owned" significa che la struct non contiene memoria
+dinamica che deve liberare; "owned" significa invece che contiene copie allocate
+e deve chiudere il ciclo con `alfred_record_destroy_owned()`. La spiegazione
+didattica completa e' in [08](08-guida-c-usato-nel-progetto.md#ownership).
+
 Il pattern corretto di riuso e':
 
 ```c

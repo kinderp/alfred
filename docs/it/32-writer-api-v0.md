@@ -602,6 +602,12 @@ essere zeroed oppure non deve possedere stringhe. Se il chiamante vuole usare lo
 stesso `alfred_record_t dst` per piu' clone, deve distruggere il contenuto owned
 precedente prima del clone successivo:
 
+In questo contesto "zeroed" significa che la struct e' stata azzerata e i suoi
+puntatori sono `NULL`; "non-owned" significa che non contiene memoria dinamica
+di cui e' responsabile; "owned" significa che contiene copie allocate da
+liberare con `alfred_record_destroy_owned()`. La spiegazione C completa e' in
+[08](08-guida-c-usato-nel-progetto.md#ownership).
+
 ```c
 alfred_record_clone_owned(&src1, &dst);
 alfred_record_destroy_owned(&dst);

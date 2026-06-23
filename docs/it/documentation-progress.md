@@ -327,6 +327,9 @@ use-after-free, `free()` su memoria borrowed e contratti di ownership delle
 funzioni. La sezione usa il caso reale di `alfred_record_clone_owned(src, dst)`
 per spiegare perche' il clone richiede una destinazione vuota/non-owned e perche'
 il riuso corretto e' `clone -> destroy -> clone -> destroy`.
+La stessa sezione chiarisce anche i termini zeroed, non-owned e owned con esempi
+minimi su `alfred_record_t`, cosi' i finding sulle API di ownership non
+richiedono conoscenza C implicita.
 
 `27-guida-lettura-documentazione.md` ora rimanda direttamente a questa sezione
 dall'indice tematico rapido, cosi' uno studente che legge i finding della PR su

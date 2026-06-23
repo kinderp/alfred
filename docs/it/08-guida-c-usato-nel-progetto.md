@@ -1000,6 +1000,81 @@ Esempi nel progetto:
   le copie delle stringhe e deve essere distrutto con
   `alfred_record_destroy_owned()`
 
+In molte API di Alfred useremo tre parole:
+
+| Termine | Significato pratico |
+| --- | --- |
+| zeroed | la struct e' stata azzerata: numeri a `0`, puntatori a `NULL` |
+| non-owned | la struct non possiede memoria dinamica che deve liberare |
+| owned | la struct possiede memoria dinamica e deve liberarla con la cleanup corretta |
+
+`zeroed` significa che la struct e' stata inizializzata a zero:
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+```
+
+Dopo questa operazione:
+
+```c
+dst.path == NULL;
+dst.old_path == NULL;
+dst.new_path == NULL;
+```
+
+Quindi `dst` non contiene puntatori da liberare.
+
+`non-owned` significa che la struct non possiede memoria dinamica. Puo' essere
+vuota, oppure puo' contenere puntatori borrowed che non deve liberare:
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+record.path = "/tmp/file"; /* borrowed/static string */
+```
+
+Qui `record.path` punta a una stringa statica. `record` non la possiede, quindi
+non deve fare `free(record.path)`.
+
+`owned` significa invece che la struct contiene puntatori a memoria dinamica che
+ha la responsabilita' di liberare:
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+alfred_record_clone_owned(&src, &dst);
+
+/* dst ora possiede le copie delle stringhe clonate */
+
+alfred_record_destroy_owned(&dst);
+```
+
+Nel caso di `alfred_record_clone_owned(&src, &dst)`, la scelta piu' sicura e':
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+alfred_record_clone_owned(&src, &dst);
+
+/* uso dst */
+
+alfred_record_destroy_owned(&dst);
+```
+
+Detto in modo semplice:
+
+- `zeroed`: tutti i campi sono a zero o `NULL`;
+- `non-owned`: la struct non contiene memoria che lei deve liberare;
+- `owned`: la struct contiene memoria allocata che dovra' essere liberata.
+
+Il problema nasce se `dst` e' gia' owned e ci fai un altro clone sopra senza
+destroy. In quel caso perdi i vecchi puntatori e crei un memory leak.
+
 Capire ownership e' fondamentale in C per evitare:
 
 - memory leak
