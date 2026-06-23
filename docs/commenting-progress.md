@@ -38,6 +38,12 @@ Latest refresh:
   record queue. Comments now explain FIFO ownership transfer, bounded overflow,
   queue cleanup, and why the queue remains single-threaded and disconnected from
   the runtime path until dispatcher and benchmark policy are agreed.
+- added `core/include/alfred_record_dispatcher.h`,
+  `core/src/alfred_record_dispatcher.c`, and
+  `tests/backend/test_record_dispatcher.c` after introducing the first bounded
+  record dispatcher. Comments now explain bounded sink registration, synchronous
+  v0 fan-out, sink class metadata reserved for future backpressure policy, and
+  why the dispatcher does not own writer resources or run in the backend hot path.
 - refreshed `modules/inotify/src/watch_manager.c` and
   `tests/backend/test_record_text_writer.c` after routing the first simple
   runtime backend diagnostics, `WATCH_ADDED` and `WATCH_REMOVED`, through
@@ -432,9 +438,11 @@ Completed in the first heavy pass:
 | --- | --- |
 | Done | `core/examples/main_demo.c` |
 | Done | `core/include/alfred_correlator.h` |
+| Done | `core/include/alfred_record_dispatcher.h` |
 | Done | `core/include/alfred_record_owned.h` |
 | Done | `core/include/alfred_record_queue.h` |
 | Done | `core/src/alfred_correlator.c` |
+| Done | `core/src/alfred_record_dispatcher.c` |
 | Done | `core/src/alfred_record_owned.c` |
 | Done | `core/src/alfred_record_queue.c` |
 | Done | `core/src/alfred_tables.c` |

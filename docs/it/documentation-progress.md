@@ -192,6 +192,16 @@ riceve record borrowed, conserva record owned in una coda bounded
 single-threaded e trasferisce ownership al chiamante durante `pop()`. Anche
 questa API non e' ancora collegata al runtime; serve a fissare FIFO, overflow,
 cleanup e lifetime prima di introdurre dispatcher, backpressure e benchmark.
+Il primo `alfred_record_dispatcher_t` e' stato aggiunto come micro-step
+successivo: registra sink in uno storage bounded fornito dal chiamante, chiama i
+sink in ordine di registrazione e propaga il primo errore. Il documento chiarisce
+che "bounded" puo' indicare limiti diversi: nella queue limita i record in
+attesa, nel dispatcher limita il numero di sink destinatari.
+La sezione `Record Dispatcher v0` di `32-writer-api-v0.md` e' stata poi ampliata
+in forma didattica: ora spiega il ruolo del dispatcher, cosa sono i sink, come
+`alfred_record_sink_emit()` chiama `sink->emit(userdata, record)`, in quale
+ordine vengono contattati i sink, cosa succede al primo errore e perche' il
+dispatcher non deve diventare un writer.
 
 ## Aggiornamento Writer API v0
 

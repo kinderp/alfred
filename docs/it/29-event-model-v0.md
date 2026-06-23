@@ -441,6 +441,13 @@ e' intenzionale. Una coda infinita nasconderebbe il problema della backpressure:
 se i writer consumano piu' lentamente dei backend, Alfred deve decidere cosa
 fare invece di consumare memoria senza limite.
 
+In generale, in Alfred usiamo "bounded" per indicare un limite esplicito,
+misurabile e testabile. Una struttura bounded non cresce senza controllo:
+quando raggiunge la capacita' configurata, ritorna errore o applica una policy
+documentata. Questo e' importante per un progetto orientato alle prestazioni
+perche' evita che un picco di eventi o un writer lento diventino consumo di RAM
+illimitato.
+
 La versione v0 e' volutamente single-threaded. Non contiene mutex, condition
 variable, worker thread o policy di drop. Il suo scopo e' piu' piccolo:
 
@@ -466,6 +473,87 @@ cambiare e':
 un record che supera un confine asincrono non puo' dipendere da memoria borrowed
 del produttore.
 ```
+
+### Record Dispatcher v0
+
+Dopo la coda, Alfred introduce anche un primo dispatcher bounded:
+
+```text
+record owned estratto dalla queue
+-> alfred_record_dispatcher_dispatch_one()
+-> sink registrato 1
+-> sink registrato 2
+-> ...
+```
+
+Il dispatcher v0 non e' ancora collegato al runtime. Serve a fissare il
+contratto di fan-out:
+
+- i sink vengono registrati in un array fornito dal chiamante;
+- il numero massimo di sink e' `capacity`;
+- se si prova ad aggiungere un sink oltre `capacity`, `add_sink()` fallisce;
+- i sink vengono chiamati in ordine di registrazione;
+- se un sink fallisce, il dispatcher si ferma e ritorna errore;
+- il dispatcher non serializza, non scrive file, non apre socket e non interpreta
+  il significato del record.
+
+Anche qui "bounded" significa capacita' massima esplicita. Nel caso della coda
+il limite riguarda quanti record possono stare in attesa. Nel caso del
+dispatcher il limite riguarda quanti sink possono ricevere lo stesso record:
+
+```text
+coda bounded       -> massimo numero di record accodati
+dispatcher bounded -> massimo numero di sink registrati
+```
+
+Il tipo principale e':
+
+```c
+typedef struct {
+    alfred_record_dispatcher_sink_t *sinks;
+    size_t capacity;
+    size_t count;
+} alfred_record_dispatcher_t;
+```
+
+Ogni sink registrato conserva:
+
+| Campo | Significato |
+| --- | --- |
+| `name` | nome borrowed del sink, utile per diagnostica futura |
+| `sink_class` | classe futura: critical, best-effort o debug |
+| `sink` | callback `alfred_record_sink_t` da invocare |
+
+La classe del sink non cambia ancora il comportamento. La registriamo gia'
+perche' sara' necessaria quando Alfred dovra' decidere cosa fare se un sink e'
+lento o fallisce:
+
+| Classe | Idea futura |
+| --- | --- |
+| `critical` | ledger/audit: fallimento serio, possibile backpressure o stop |
+| `best-effort` | integrazione utile: possibile drop controllato |
+| `debug` | output umano/Lab: disabilitabile o campionabile |
+
+Questa e' ancora una API sincrona di contratto. Non dimostra prestazioni finali
+e non deve essere interpretata come fan-out sincrono nel backend. Il percorso
+target resta:
+
+```text
+backend
+-> record
+-> enqueue rapido
+-> dispatcher fuori dal path caldo
+-> sink/writer
+```
+
+Il test `tests/backend/test_record_dispatcher.c` verifica:
+
+- registrazione bounded dei sink;
+- rifiuto di sink invalidi;
+- rifiuto di overflow del numero sink;
+- ordine di chiamata;
+- propagazione del primo errore;
+- riuso dello storage dopo `clear()`.
 
 ## Campi filesystem
 

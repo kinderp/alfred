@@ -160,6 +160,17 @@ voluto, non una mancanza casuale:
 - non collegata al runtime significa che il path caldo non cambia finche' non
   abbiamo deciso dispatcher, backpressure e benchmark.
 
+La stessa idea vale per il primo dispatcher v0. Anche il dispatcher e'
+bounded, ma il limite non e' il numero di record: e' il numero massimo di sink
+registrabili. Il chiamante fornisce un array di sink e una capacita'. Se la
+capacita' e' esaurita, l'aggiunta di un altro sink fallisce. Questo rende
+esplicito il fan-out massimo:
+
+```text
+queue bounded      = massimo numero di record in attesa
+dispatcher bounded = massimo numero di sink destinatari
+```
+
 In una fase successiva conviene valutare una coda per sink:
 
 ```text
@@ -517,6 +528,265 @@ path caldo bisognera' misurare:
 
 Solo dopo questi benchmark decideremo se mantenere deep copy, passare a storage
 inline, introdurre pool/arena o usare tabelle path condivise.
+
+## Record Dispatcher v0
+
+### Che cosa sono dispatcher e sink
+
+Il dispatcher e' il componente che riceve un `alfred_record_t` e lo consegna a
+uno o piu' destinatari registrati. Non decide il significato del record, non lo
+trasforma in JSONL, non scrive su file e non apre socket. Il suo compito e'
+solo fare routing:
+
+```text
+alfred_record_t
+-> dispatcher
+-> sink 1
+-> sink 2
+-> sink 3
+```
+
+Un sink e' un consumatore di record. In pratica e' un piccolo oggetto che dice:
+"quando ricevi un record, chiama questa funzione con questo contesto privato".
+Nel codice il sink base e':
+
+```c
+typedef int (*alfred_record_sink_emit_fn)(void *userdata,
+                                          const alfred_record_t *record);
+
+typedef struct {
+    alfred_record_sink_emit_fn emit;
+    void *userdata;
+} alfred_record_sink_t;
+```
+
+I due campi vanno letti cosi':
+
+| Campo | Significato |
+| --- | --- |
+| `emit` | funzione che il dispatcher deve chiamare per consegnare il record |
+| `userdata` | puntatore opaco al contesto privato del sink |
+
+`userdata` permette di usare la stessa interfaccia per sink molto diversi. Per
+esempio:
+
+- un text sink puo' mettere in `userdata` il proprio buffer e la callback che
+  scrive il payload testuale;
+- un futuro JSONL sink potra' mettere in `userdata` il proprio writer JSONL;
+- un sink di test puo' mettere in `userdata` una struttura che conta quante volte
+  e' stato chiamato;
+- un futuro socket sink potra' mettere in `userdata` il file descriptor o il
+  contesto del protocollo.
+
+Questa separazione e' importante perche' il dispatcher non deve conoscere il tipo
+reale del sink. Il dispatcher vede solo:
+
+```text
+emit(record)
+```
+
+Il resto resta privato del sink.
+
+### Come lavorano insieme
+
+Il percorso concettuale completo e':
+
+```text
+producer/backend/core
+-> alfred_record_t
+-> queue
+-> dispatcher
+-> sink
+-> writer/bridge
+```
+
+Ogni pezzo ha una responsabilita' diversa:
+
+| Pezzo | Responsabilita' |
+| --- | --- |
+| producer/backend/core | produce un record strutturato |
+| queue | conserva record owned in attesa |
+| dispatcher | sceglie quali sink devono ricevere il record |
+| sink | riceve il record attraverso `emit()` |
+| writer/bridge | serializza, scrive, invia o adatta il record |
+
+Una regola utile da ricordare e':
+
+```text
+la queue conserva, il dispatcher consegna, il sink consuma
+```
+
+Per esempio, con tre sink registrati:
+
+```text
+text sink
+jsonl sink
+lab sink
+```
+
+il dispatcher fara':
+
+```text
+record -> text sink
+record -> jsonl sink
+record -> lab sink
+```
+
+Il record passato ai sink e' una vista borrowed valida durante la chiamata. Se un
+sink vuole conservarlo per dopo, deve copiarlo o usare un'altra strategia di
+ownership sicura. Questo e' lo stesso principio usato per le code: appena un
+record supera un confine asincrono, non puo' piu' dipendere da memoria borrowed
+del produttore.
+
+### Come il dispatcher contatta i sink
+
+Il dispatcher contiene un array di sink registrati. Quando si chiama:
+
+```c
+alfred_record_dispatcher_dispatch_one(&dispatcher, &record);
+```
+
+il comportamento v0 e' equivalente a:
+
+```c
+for (i = 0; i < dispatcher->count; ++i) {
+    alfred_record_sink_emit(&dispatcher->sinks[i].sink, record);
+}
+```
+
+`alfred_record_sink_emit()` e' un wrapper difensivo: controlla che il sink esista,
+che la funzione `emit` non sia `NULL` e poi chiama davvero:
+
+```c
+sink->emit(sink->userdata, record);
+```
+
+Quindi il dispatcher non chiama direttamente `jsonl_write()`, `fprintf()` o
+`socket_send()`. Chiama sempre la stessa interfaccia astratta:
+
+```text
+alfred_record_sink_emit()
+```
+
+Sara' poi il sink concreto a decidere cosa fare.
+
+### Ordine di chiamata
+
+Nel dispatcher v0 i sink vengono chiamati in ordine di registrazione. Se il
+codice registra i sink cosi':
+
+```text
+1. text
+2. jsonl
+3. lab
+```
+
+l'ordine di dispatch sara':
+
+```text
+record -> text
+record -> jsonl
+record -> lab
+```
+
+Questo ordine e' testato in `tests/backend/test_record_dispatcher.c`. Il test
+usa sink finti che salvano l'ordine di chiamata e verifica che il dispatcher non
+lo cambi.
+
+### Cosa succede se un sink fallisce
+
+La policy v0 e' semplice: se un sink fallisce, il dispatcher si ferma e ritorna
+errore.
+
+Esempio:
+
+```text
+text  -> ok
+jsonl -> errore
+lab   -> non chiamato
+```
+
+Questa non e' necessariamente la policy finale. In futuro useremo le classi sink
+per decidere comportamenti diversi:
+
+- un sink `critical` potrebbe richiedere backpressure, errore serio o shutdown
+  controllato;
+- un sink `best-effort` potrebbe perdere record in modo controllato e aumentare
+  un contatore diagnostico;
+- un sink `debug` potrebbe essere disabilitato, campionato o droppato quando e'
+  lento.
+
+Per v0 scegliamo la regola piu' semplice perche' vogliamo fissare il contratto
+base prima di introdurre policy di backpressure piu' complesse.
+
+### Perche' il dispatcher non e' un writer
+
+Il dispatcher non e' un writer. Questa distinzione e' fondamentale.
+
+Il dispatcher sa:
+
+- quanti sink sono registrati;
+- in quale ordine chiamarli;
+- se un sink ha fallito;
+- quale classe futura ha un sink.
+
+Il dispatcher non deve sapere:
+
+- come si formatta JSONL;
+- come si formatta MessagePack;
+- come si scrive su `raw.log`;
+- come si fa `fflush()`;
+- come si invia un record su socket;
+- come si disegna Alfred Lab.
+
+Questa separazione protegge il percorso caldo di Alfred. Il backend deve produrre
+record e accodarli rapidamente; serializzazione, I/O, flush e integrazioni lente
+devono stare dietro sink/writer fuori dal path caldo.
+
+La prima API dispatcher e':
+
+```c
+int alfred_record_dispatcher_init(alfred_record_dispatcher_t *dispatcher,
+                                  alfred_record_dispatcher_sink_t *sinks,
+                                  size_t capacity);
+void alfred_record_dispatcher_clear(alfred_record_dispatcher_t *dispatcher);
+int alfred_record_dispatcher_add_sink(
+    alfred_record_dispatcher_t *dispatcher,
+    const char *name,
+    alfred_record_dispatcher_sink_class_t sink_class,
+    const alfred_record_sink_t *sink);
+int alfred_record_dispatcher_dispatch_one(
+    const alfred_record_dispatcher_t *dispatcher,
+    const alfred_record_t *record);
+```
+
+Il dispatcher non possiede writer, file descriptor, socket o buffer di
+serializzazione. Possiede solo la registrazione dei sink dentro lo storage
+fornito dal chiamante. Questo e' intenzionale:
+
+- mantiene il dispatcher piccolo;
+- rende il limite di fan-out esplicito;
+- evita allocazioni interne nella API v0;
+- prepara test e benchmark senza introdurre thread;
+- tiene writer e policy fuori dal contratto di routing.
+
+`dispatch_one()` chiama i sink in ordine di registrazione usando
+`alfred_record_sink_emit()`. Se un sink fallisce, la versione v0 si ferma subito
+e ritorna errore. Non esistono ancora retry, drop controllato, isolamento per
+sink o coda per sink: queste sono decisioni di backpressure da prendere dopo i
+benchmark.
+
+La differenza fra i tre concetti e':
+
+| Pezzo | Responsabilita' |
+| --- | --- |
+| queue | conserva record owned in attesa |
+| dispatcher | sceglie e chiama i sink registrati |
+| sink | riceve un record e lo consegna a un writer/bridge |
+
+Questa distinzione evita una confusione pericolosa: il dispatcher non e' il
+writer. Un dispatcher non deve sapere come si formatta JSONL, come si scrive su
+file o come si manda un messaggio su socket. Deve solo consegnare record.
 
 ## Regola contrattuale
 

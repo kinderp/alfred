@@ -1762,6 +1762,13 @@ La copertura iniziale include:
   rifiutato e che `clear()`/`destroy()` rilascino i record ancora accodati. Anche
   questo e' un test preparatorio: la coda non e' ancora collegata al backend
   runtime o ai writer.
+- `test_record_dispatcher.sh`: compila `test_record_dispatcher.c` e verifica il
+  primo dispatcher bounded di record. In questo caso bounded significa massimo
+  numero di sink registrabili, non massimo numero di record. Il test controlla
+  registrazione dei sink, ordine di fan-out, propagazione del primo errore,
+  rifiuto di input invalidi, overflow del numero sink e riuso dello storage dopo
+  `clear()`. Anche questo non e' ancora collegato al runtime: serve a fissare il
+  contratto prima di introdurre thread, code per sink o policy di backpressure.
 
 Questi test sono separati dalla suite core per evitare un equivoco: una riga
 `WATCH_ADDED` e' utile per il manutentore del backend, ma non e' un evento che
