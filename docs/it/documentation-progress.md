@@ -200,6 +200,9 @@ cleanup e lifetime prima di introdurre dispatcher, backpressure e benchmark.
 Il contratto di `pop()` e' stato reso esplicito: la destinazione deve essere
 zeroed o gia' distrutta, perche' `pop()` trasferisce ownership in una
 destinazione vuota e non sostituisce automaticamente record owned precedenti.
+Anche `alfred_record_queue_init()` e' ora difensiva: rifiuta la reinit di una
+queue attiva, preservando il vecchio buffer e gli owned record finche' il
+chiamante non esegue `alfred_record_queue_destroy()`.
 Il primo `alfred_record_dispatcher_t` e' stato aggiunto come micro-step
 successivo: registra sink in uno storage bounded fornito dal chiamante, chiama i
 sink in ordine di registrazione e propaga il primo errore. Il documento chiarisce

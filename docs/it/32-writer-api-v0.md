@@ -713,6 +713,17 @@ memory leak. Rendere `pop()` una replace automatica sarebbe rischioso per lo
 stesso motivo della clone API: la destinazione potrebbe contenere puntatori
 borrowed, e una `free()` automatica su memoria borrowed sarebbe sbagliata.
 
+Anche `init()` ha una precondizione di ownership: la queue deve essere zeroed o
+non inizializzata. Una seconda `alfred_record_queue_init()` su una queue attiva
+viene rifiutata, perche' altrimenti il nuovo `memset()` perderebbe il vecchio
+`items` pointer e quindi anche gli owned record eventualmente accodati. Se serve
+cambiare capacity, il ciclo corretto e':
+
+```c
+alfred_record_queue_destroy(&queue);
+alfred_record_queue_init(&queue, new_capacity);
+```
+
 Questo modello e' didatticamente importante perche' separa tre concetti che
 spesso vengono confusi:
 

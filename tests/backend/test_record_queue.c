@@ -23,6 +23,10 @@
  * - release any owned records still queued
  * - keep queue state auditable after cleanup
  *
+ * init:
+ * - rejects reinitialization of an already active queue
+ * - preserves the original queue when that invalid reinit is rejected
+ *
  * Meaning:
  * This is not the final high-performance queue. It is a deliberately small v0
  * contract that lets us test lifetime and backpressure behavior before adding
@@ -221,6 +225,36 @@ static void test_queue_pop_destination_can_be_reused_after_destroy(void)
     alfred_record_queue_destroy(&queue);
 }
 
+static void test_queue_rejects_reinit_without_destroy(void)
+{
+    alfred_record_queue_t queue;
+    alfred_record_t src;
+    alfred_record_t popped;
+
+    memset(&queue, 0, sizeof(queue));
+    memset(&popped, 0, sizeof(popped));
+
+    src = make_raw_record("/tmp/root/kept", ALFRED_RECORD_TYPE_RAW_CREATE);
+
+    assert(alfred_record_queue_init(&queue, 2u) == 0);
+    assert(alfred_record_queue_push(&queue, &src) == 0);
+
+    /*
+     * A second init without destroy must fail. Otherwise init would overwrite
+     * queue.items and leak both the old queue buffer and any owned records
+     * still stored inside it.
+     */
+    assert(alfred_record_queue_init(&queue, 4u) != 0);
+
+    assert(alfred_record_queue_capacity(&queue) == 2u);
+    assert(alfred_record_queue_count(&queue) == 1u);
+    assert(alfred_record_queue_pop(&queue, &popped) == 0);
+    assert(strcmp(popped.path, "/tmp/root/kept") == 0);
+
+    alfred_record_destroy_owned(&popped);
+    alfred_record_queue_destroy(&queue);
+}
+
 int main(void)
 {
     test_queue_push_pop_owns_borrowed_path();
@@ -228,6 +262,7 @@ int main(void)
     test_queue_rejects_overflow_and_invalid_input();
     test_queue_clear_releases_records_and_reuses_storage();
     test_queue_pop_destination_can_be_reused_after_destroy();
+    test_queue_rejects_reinit_without_destroy();
 
     return 0;
 }

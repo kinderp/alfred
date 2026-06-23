@@ -44,6 +44,10 @@ typedef struct {
  * @queue: queue object to initialize
  * @capacity: maximum number of records accepted before push() reports full
  *
+ * @queue must be zeroed or uninitialized. Reinitializing an active queue would
+ * lose the owned record buffer; callers that need a different capacity must
+ * first call alfred_record_queue_destroy(), then call init again.
+ *
  * Return: 0 on success, -1 on invalid input or allocation failure.
  */
 int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity);

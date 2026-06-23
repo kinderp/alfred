@@ -450,6 +450,9 @@ contratto importante prima di introdurre thread, dispatcher o writer asincroni:
 - la destinazione passata a `alfred_record_queue_pop()` deve essere zeroed o
   gia' distrutta: `pop()` trasferisce ownership in una destinazione vuota, non
   sostituisce automaticamente un record owned precedente;
+- `alfred_record_queue_init()` richiede una queue zeroed/non inizializzata: per
+  cambiare capacity bisogna chiamare `alfred_record_queue_destroy()` e poi una
+  nuova `init()`, non una seconda `init()` diretta;
 - se la coda viene svuotata o distrutta mentre contiene record, libera lei gli
   owned record rimasti.
 
@@ -477,6 +480,27 @@ alfred_record_destroy_owned(&record);
 
 Il secondo `pop()` sovrascrive i puntatori owned ricevuti dal primo `pop()`. Il
 destroy finale libera solo il secondo record.
+
+Anche la inizializzazione ha un contratto esplicito. Questo e' corretto:
+
+```c
+alfred_record_queue_init(&queue, 4);
+/* uso queue */
+alfred_record_queue_destroy(&queue);
+alfred_record_queue_init(&queue, 8);
+```
+
+Questo invece e' sbagliato:
+
+```c
+alfred_record_queue_init(&queue, 4);
+alfred_record_queue_push(&queue, &record);
+alfred_record_queue_init(&queue, 8); /* seconda init senza destroy */
+```
+
+La seconda `init()` perderebbe il puntatore al vecchio buffer e ai record owned
+ancora accodati. Per questo la implementazione difensiva rifiuta una
+reinizializzazione quando `queue->items` e' gia' non `NULL`.
 
 Il tipo introdotto e':
 

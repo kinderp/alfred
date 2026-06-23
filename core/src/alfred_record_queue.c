@@ -11,7 +11,7 @@
 
 int alfred_record_queue_init(alfred_record_queue_t *queue, size_t capacity)
 {
-    if (queue == NULL || capacity == 0u) {
+    if (queue == NULL || capacity == 0u || queue->items != NULL) {
         return -1;
     }
 
