@@ -1443,7 +1443,27 @@ Il primo test controlla che:
 Questo serve alla futura gestione `IN_MOVE_SELF`: prima fissiamo il contratto
 della struttura dati, poi colleghiamo gli eventi critici alla policy di resync.
 
-### 7. `make perf-lost-scope`
+### 7. `make perf`
+
+Il comando:
+
+```bash
+make perf
+```
+
+non esegue benchmark. Stampa un indice in inglese dei benchmark manuali
+disponibili e spiega in poche righe cosa misura ciascun target. Questa scelta e'
+voluta: un target chiamato `perf` potrebbe sembrare un comando leggero, ma i
+benchmark possono essere lenti, creare alberi temporanei o dipendere dal carico
+della macchina. Per evitare lavoro pesante a sorpresa, `make perf` e' solo una
+guida rapida.
+
+Al momento l'output non contiene rimandi a pagine man, perche' le man page dei
+benchmark non sono ancora state scritte. Quando avremo `alfred-benchmarks(7)` o
+una pagina equivalente, potremo aggiungere riferimenti stabili direttamente
+nell'output del Makefile.
+
+### 8. `make perf-lost-scope`
 
 Il comando:
 
@@ -1498,7 +1518,7 @@ baseline versionate, ripetizioni, warmup, percentili e ambiente documentato. Per
 ora questo comando e' solo un primo strumento operativo per non discutere le
 prestazioni al buio.
 
-### 8. `make perf-record-sinks`
+### 9. `make perf-record-sinks`
 
 Il comando:
 
@@ -1629,7 +1649,7 @@ Lettura pratica dei risultati:
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.
 
-### 9. Nessun `test-legacy-shadow`
+### 10. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali

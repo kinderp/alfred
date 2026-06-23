@@ -239,6 +239,21 @@ test-scanner:
 test-watcher:
 	cd tests/watcher && bash run_all.sh
 
+perf:
+	@printf "Manual Alfred performance targets\n"
+	@printf "\n"
+	@printf "make perf-record-sinks\n"
+	@printf "  Measures synthetic alfred_record_t delivery to counter, text,\n"
+	@printf "  and JSONL sinks. It isolates record -> sink overhead from\n"
+	@printf "  inotify, filesystem I/O, sockets, flush policy, and\n"
+	@printf "  backpressure.\n"
+	@printf "\n"
+	@printf "make perf-lost-scope\n"
+	@printf "  Measures synthetic lost-scope recovery over generated\n"
+	@printf "  directory trees with fake watch operations. It isolates\n"
+	@printf "  scanner and recovery control flow from real\n"
+	@printf "  inotify_add_watch() cost.\n"
+
 perf-lost-scope:
 	cd tests/perf && bash run_lost_scope_recovery.sh
 
@@ -329,6 +344,7 @@ banner:
 	test-scanner \
 	test-watcher \
 	test-backend-diagnostics \
+	perf \
 	perf-lost-scope \
 	perf-record-sinks \
 	valgrind \

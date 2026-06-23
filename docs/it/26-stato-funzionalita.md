@@ -148,6 +148,7 @@ definitivamente una directory osservata rinominata o spostata.
 
 | Funzionalita' | Comando | Stato | Note |
 | --- | --- | --- | --- |
+| Indice benchmark manuali | `make perf` | Supportato | Elenca i target disponibili e cosa misurano; non esegue benchmark |
 | Benchmark manuale lost-scope | `make perf-lost-scope` | Supportato come strumento manuale | Misura recovery sintetica con fake watch operations; non e' gate CI |
 | Benchmark manuale record sink | `make perf-record-sinks` | Supportato come strumento manuale | Misura record sintetici verso counter, text e JSONL sink; non e' gate CI |
 | Suite performance stabile | futura | Rimandato | Servono baseline, warmup, percentili, profili e benchmark end-to-end |

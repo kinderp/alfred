@@ -392,3 +392,7 @@ JSONL. La guida test e la Writer API spiegano come lanciarlo e come leggere le
 colonne. La guida test ora include anche esempi di interpretazione per righe
 `counter` e `jsonl`, la formula del throughput medio e le indicazioni pratiche
 per capire se il costo e' nel core/sink boundary oppure nella formattazione.
+Il target `make perf` e' stato aggiunto come indice testuale dei benchmark
+manuali: non esegue misure, ma spiega in inglese cosa fanno
+`perf-record-sinks` e `perf-lost-scope`. Non contiene ancora riferimenti a man
+page perche' le pagine manuale dei benchmark non sono state scritte.
