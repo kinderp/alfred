@@ -661,3 +661,11 @@ Completed in the RAW_CLOSE_WRITE sink integration pass:
 - added `tests/backend/test_raw_close_write_record_sink.sh` with a header
   explaining that `IN_CLOSE_WRITE`/`RAW_CLOSE_WRITE` feeds `FILE_READY` and is
   tested separately from `RAW_MODIFY`
+
+Completed in the JSONL writer v0 pass:
+
+- added comments for `alfred_record_jsonl.h` and
+  `alfred_record_jsonl_sink.h` explaining that JSONL is an output
+  serialization of `alfred_record_t`, not the internal API
+- documented in test headers that the JSONL formatter emits one JSON object
+  without newline and that the sink delegates I/O to a caller callback

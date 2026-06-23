@@ -363,7 +363,7 @@ Writer API v0 deve permettere almeno questi writer:
 | Writer | Uso principale | Note |
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
-| `jsonl` | test golden, integrazioni semplici, debugging strutturato | formato testuale strutturato, non API primaria |
+| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato, non ancora collegato al runtime |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
 | `unix_socket` | integrazione locale con daemon, Lab o agent runtime | ideale per processi locali e controllo permessi Unix |
@@ -405,6 +405,90 @@ backend
 
 Il testo puo' restare molto utile per debug e didattica, ma non deve essere
 usato come sorgente di verita' strutturata.
+
+## JSONL formatter e sink v0
+
+Il primo supporto JSONL e' intenzionalmente piccolo:
+
+```text
+alfred_record_t
+-> alfred_record_format_jsonl()
+-> oggetto JSON senza newline
+```
+
+e, attraverso il sink generico:
+
+```text
+alfred_record_t
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_sink_emit()
+-> callback write(payload)
+```
+
+Questa scelta replica il pattern del text sink. Il formatter non decide dove
+scrivere: non apre file, non scrive socket, non aggiunge newline e non fa flush.
+Il callback del writer riceve una stringa valida solo durante la chiamata e puo'
+decidere se aggiungere `\n`, scrivere su file, spedire su socket o salvare il
+payload in un test.
+
+Il JSONL v0 emette sempre:
+
+| Campo | Significato |
+| --- | --- |
+| `schema_version` | versione dello schema del record |
+| `layer` | layer architetturale: `normalized_raw`, `semantic`, `diagnostic`, ecc. |
+| `category` | famiglia del record: `filesystem`, `watch`, `recovery`, ecc. |
+| `type` | nome stabile del record, per esempio `FILE_CREATED` |
+
+Gli altri campi sono opzionali e compaiono solo quando il record li valorizza:
+
+| Campo | Quando compare |
+| --- | --- |
+| `seq`, `ts_ns` | se il produttore assegna sequenza o timestamp |
+| `source`, `raw_mask`, `cookie`, `pid` | se il record porta dati raw/backend |
+| `backend`, `path`, `old_path`, `new_path` | se sono disponibili percorsi o backend |
+| `identity` | se device/inode sono presenti |
+| `os_error` | se esiste un errore OS strutturato |
+| `watch` | se il record porta stato diagnostico del watch |
+| `recovery` | se il record porta contatori o dettagli di resync/recovery |
+
+Esempio raw:
+
+```json
+{"schema_version":0,"layer":"normalized_raw","category":"filesystem","type":"RAW_MOVED_FROM","source":1,"raw_mask":64,"cookie":123,"path":"/tmp/root/a.txt"}
+```
+
+Esempio semantico:
+
+```json
+{"schema_version":0,"layer":"semantic","category":"filesystem","type":"FILE_RENAMED","old_path":"/tmp/root/old.txt","new_path":"/tmp/root/new.txt"}
+```
+
+Esempio diagnostico:
+
+```json
+{"schema_version":0,"layer":"diagnostic","category":"recovery","type":"WATCH_RESYNC_FAILED","backend":"inotify","path":"/tmp/root","os_error":{"code":2,"name":"ENOENT","message":"No such file or directory"},"watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF","error":"path-unreachable","retry_count":3},"recovery":{"detail_path":"/tmp/root/missing","result_code":-1,"pending_count":4}}
+```
+
+Il formatter fa escaping JSON delle stringhe: virgolette, backslash, newline,
+tab e caratteri di controllo vengono emessi nella forma JSON corretta. Se il
+buffer fornito dal chiamante e' troppo piccolo, la funzione fallisce invece di
+produrre JSON troncato.
+
+### Limiti intenzionali v0
+
+Il JSONL v0 non e' ancora un writer completo:
+
+- non e' collegato al runtime degli eventi;
+- non gestisce file descriptor, path di output o rotazione log;
+- non aggiunge newline;
+- non fa buffering su file;
+- non implementa backpressure;
+- non assegna sequenze o timestamp da solo;
+- non sostituisce `alfred_record_t` come contratto interno.
+
+Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`;
+poi potremo collegarlo a dispatcher, code, profili operativi e benchmark.
 
 ## Backpressure
 
