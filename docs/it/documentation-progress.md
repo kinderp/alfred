@@ -317,3 +317,17 @@ passaggio tecnico successivo senza anticipare JSONL.
 `28-audit-documentazione-e-debiti.md` registra come debiti dichiarati gli ADR
 brevi, la review architetturale periodica, i golden test JSONL e i tag
 architetturali cercabili nel codice.
+
+## Aggiornamento didattico lifetime e ownership C
+
+`08-guida-c-usato-nel-progetto.md` ora contiene una spiegazione estesa del
+lifetime della memoria in C: memoria automatica/stack, memoria statica, memoria
+dinamica/heap, borrowed pointer, owned pointer, memory leak, double free,
+use-after-free, `free()` su memoria borrowed e contratti di ownership delle
+funzioni. La sezione usa il caso reale di `alfred_record_clone_owned(src, dst)`
+per spiegare perche' il clone richiede una destinazione vuota/non-owned e perche'
+il riuso corretto e' `clone -> destroy -> clone -> destroy`.
+
+`27-guida-lettura-documentazione.md` ora rimanda direttamente a questa sezione
+dall'indice tematico rapido, cosi' uno studente che legge i finding della PR su
+owned record, queue e dispatcher puo' recuperare prima i concetti C necessari.

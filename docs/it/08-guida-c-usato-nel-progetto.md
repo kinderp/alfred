@@ -910,9 +910,84 @@ e si chiude con:
 close(ctx->runtime->fd);
 ```
 
+## Lifetime della memoria
+
+Il lifetime e' il tempo durante il quale un oggetto in memoria esiste davvero ed
+e' lecito usarlo. In C questo concetto e' fondamentale, perche' il linguaggio non
+controlla automaticamente se un puntatore punta ancora a memoria valida.
+
+I casi principali sono:
+
+| Tipo di memoria | Dove nasce | Quando muore | Chi la libera |
+| --- | --- | --- | --- |
+| automatica, o stack | variabili locali di funzione | quando la funzione ritorna | nessuno, la libera il runtime C |
+| statica | variabili globali o `static` | alla fine del programma | nessuno durante il runtime normale |
+| dinamica, o heap | `malloc()`, `calloc()`, `realloc()` | quando viene chiamata `free()` | il codice che possiede il puntatore |
+
+### Memoria automatica
+
+Una variabile locale normale vive sullo stack:
+
+```c
+static const char *make_bad_path(void)
+{
+    char path[64];
+
+    snprintf(path, sizeof(path), "/tmp/file");
+    return path; /* sbagliato */
+}
+```
+
+`path` esiste solo dentro `make_bad_path()`. Quando la funzione ritorna, quel
+buffer non e' piu' valido. Il puntatore restituito punta a memoria scaduta.
+
+Questo errore si chiama spesso dangling pointer: il puntatore esiste ancora, ma
+l'oggetto a cui puntava non esiste piu'.
+
+### Memoria statica
+
+Una string literal come:
+
+```c
+const char *path = "/tmp/file";
+```
+
+ha lifetime statico: il testo `"/tmp/file"` vive per tutta la durata del
+programma. Pero' non e' memoria posseduta dal chiamante e non deve essere
+liberata con `free()`.
+
+Questo e' sbagliato:
+
+```c
+const char *path = "/tmp/file";
+
+free((void *)path); /* sbagliato */
+```
+
+### Memoria dinamica
+
+La memoria dinamica nasce con `malloc()` o funzioni simili:
+
+```c
+char *copy = malloc(strlen(path) + 1);
+strcpy(copy, path);
+```
+
+Questa memoria resta valida finche' qualcuno chiama:
+
+```c
+free(copy);
+```
+
+Qui nasce il problema dell'ownership: chi deve chiamare `free()`?
+
 ## Ownership
 
 Ownership significa: chi e' responsabile di una risorsa?
+
+Se un componente possiede una risorsa, deve anche sapere quando liberarla.
+Se invece riceve solo un puntatore borrowed, puo' leggerlo temporaneamente, ma
+non deve liberarlo e non deve conservarlo oltre il lifetime promesso.
 
 Esempi nel progetto:
 
@@ -920,12 +995,237 @@ Esempi nel progetto:
 - `app_t` possiede `inotify_backend_t`, che a sua volta possiede il file
   descriptor inotify
 - `watcher_table_t` possiede le copie dei path associati ai watch
+- un `alfred_record_t` borrowed non possiede i path a cui punta
+- un `alfred_record_t` owned creato con `alfred_record_clone_owned()` possiede
+  le copie delle stringhe e deve essere distrutto con
+  `alfred_record_destroy_owned()`
 
 Capire ownership e' fondamentale in C per evitare:
 
 - memory leak
 - doppie `free()`
-- uso di risorse gia' chiuse
+- `free()` su memoria borrowed o statica
+- use-after-free
+- uso di puntatori a variabili locali ormai scadute
+
+### Borrowed e owned
+
+Un puntatore borrowed e' un prestito: puoi usarlo, ma non lo possiedi.
+
+Esempio:
+
+```c
+void print_path(const char *path)
+{
+    printf("%s\n", path);
+}
+```
+
+Qui `print_path()` riceve un `const char *`, lo legge e basta. Non deve fare
+`free(path)`, perche' non sa se `path` punta a:
+
+- una string literal
+- un buffer sullo stack del chiamante
+- una stringa dentro una struct
+- memoria allocata dinamicamente
+
+Un puntatore owned invece e' responsabilita' del codice che lo possiede:
+
+```c
+char *copy_path(const char *path)
+{
+    char *copy;
+
+    copy = malloc(strlen(path) + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+
+    strcpy(copy, path);
+    return copy; /* il chiamante ora possiede copy */
+}
+```
+
+Chi chiama deve liberare:
+
+```c
+char *path = copy_path("/tmp/file");
+
+/* uso path */
+
+free(path);
+```
+
+### Memory leak
+
+Un memory leak accade quando il programma perde l'ultimo puntatore a memoria
+allocata dinamicamente senza aver chiamato `free()`.
+
+Esempio:
+
+```c
+char *path;
+
+path = malloc(16);
+strcpy(path, "/tmp/one");
+
+path = malloc(16);
+strcpy(path, "/tmp/two");
+
+free(path);
+```
+
+La seconda assegnazione sovrascrive il puntatore alla prima allocazione. Dopo:
+
+```text
+path -> malloc("/tmp/two")
+        malloc("/tmp/one")  <-- perso, non liberabile
+```
+
+La memoria che conteneva `"/tmp/one"` e' ancora allocata, ma il programma non ha
+piu' nessun puntatore per raggiungerla e liberarla.
+
+Questo e' esattamente il rischio discusso per
+`alfred_record_clone_owned(src, dst)`: se `dst` contiene gia' stringhe owned e
+la funzione scrive un nuovo clone sopra `dst` senza prima distruggere il vecchio
+contenuto, i vecchi puntatori vengono persi.
+
+### Double free
+
+Una double free accade quando chiami `free()` due volte sulla stessa
+allocazione.
+
+```c
+char *path = malloc(16);
+
+free(path);
+free(path); /* sbagliato */
+```
+
+Dopo la prima `free()`, quel puntatore non rappresenta piu' una risorsa valida
+da liberare. Per questo molte funzioni di cleanup nel progetto azzerano la
+struttura dopo aver liberato le risorse:
+
+```c
+alfred_record_destroy_owned(&record);
+```
+
+`alfred_record_destroy_owned()` libera i campi owned e poi fa `memset()` della
+struct, cosi' i vecchi puntatori non restano visibili.
+
+### Use-after-free
+
+Un use-after-free accade quando usi memoria dopo averla liberata:
+
+```c
+char *path = malloc(16);
+strcpy(path, "/tmp/file");
+
+free(path);
+
+printf("%s\n", path); /* sbagliato */
+```
+
+Il programma potrebbe sembrare funzionare, oppure stampare spazzatura, oppure
+crashare. In C il risultato e' comportamento indefinito.
+
+### Free su memoria borrowed
+
+Non tutto quello che e' un puntatore va liberato.
+
+Questo e' sbagliato:
+
+```c
+alfred_record_t record;
+
+memset(&record, 0, sizeof(record));
+record.path = "/tmp/file"; /* borrowed/static string */
+
+alfred_record_destroy_owned(&record); /* sbagliato */
+```
+
+`alfred_record_destroy_owned()` va chiamata solo su record che sono stati
+inizializzati da `alfred_record_clone_owned()` o da una funzione che documenta
+lo stesso contratto owned. Se la struct contiene puntatori borrowed, il destroy
+provera' a liberarli e il programma puo' rompersi.
+
+### Contratti di ownership nelle funzioni
+
+Ogni funzione che riceve o restituisce puntatori dovrebbe chiarire il contratto:
+
+| Contratto | Significato |
+| --- | --- |
+| borrowed input | la funzione puo' leggere il puntatore solo durante la chiamata |
+| owned input | la funzione riceve anche la responsabilita' di liberare |
+| borrowed output | il chiamante puo' leggere ma non deve liberare |
+| owned output | il chiamante deve liberare con la funzione indicata |
+| transfer ownership | la proprieta' passa da un oggetto a un altro |
+
+Esempio reale:
+
+```c
+int alfred_record_clone_owned(const alfred_record_t *src,
+                              alfred_record_t *dst);
+void alfred_record_destroy_owned(alfred_record_t *record);
+```
+
+Il contratto e':
+
+- `src` e' borrowed: viene letto, ma non viene modificato e non viene liberato;
+- `dst` deve essere vuoto o non-owned;
+- dopo il successo, `dst` possiede le copie delle stringhe;
+- il chiamante deve chiudere il ciclo con `alfred_record_destroy_owned(&dst)`.
+
+Pattern corretto:
+
+```c
+alfred_record_t dst;
+
+memset(&dst, 0, sizeof(dst));
+
+alfred_record_clone_owned(&src1, &dst);
+/* uso dst */
+alfred_record_destroy_owned(&dst);
+
+alfred_record_clone_owned(&src2, &dst);
+/* uso dst */
+alfred_record_destroy_owned(&dst);
+```
+
+Pattern sbagliato:
+
+```c
+alfred_record_clone_owned(&src1, &dst);
+alfred_record_clone_owned(&src2, &dst); /* leak del primo clone */
+alfred_record_destroy_owned(&dst);
+```
+
+Il secondo clone sovrascrive i puntatori owned del primo clone. Il destroy finale
+libera solo il secondo clone.
+
+### Ownership e code
+
+Le code rendono il problema piu' importante. Se un backend produce un record con
+puntatori borrowed verso buffer temporanei, quel record e' sicuro solo finche'
+il backend non riusa quei buffer.
+
+Per questo la regola per una coda e':
+
+```text
+se un record deve essere letto piu' tardi, deve possedere i dati necessari
+oppure deve puntare a memoria con lifetime garantito
+```
+
+Nel branch corrente la `alfred_record_queue_t` usa una scelta semplice:
+
+```text
+push(record borrowed) -> clone owned dentro la coda
+pop(record)           -> trasferisce ownership al chiamante
+destroy(record)       -> libera le stringhe owned
+```
+
+Questo non e' ancora il modello piu' performante possibile, ma e' il modello
+piu' chiaro per fissare il contratto e scrivere test.
 
 ## Regola pratica
 
@@ -937,3 +1237,6 @@ Quando leggi una funzione C, chiediti:
 4. cosa possiede?
 5. cosa restituisce?
 6. chi deve fare cleanup?
+7. i puntatori ricevuti sono borrowed o owned?
+8. il chiamante puo' conservare quei puntatori dopo il ritorno?
+9. se la funzione fallisce, chi libera le risorse gia' allocate?

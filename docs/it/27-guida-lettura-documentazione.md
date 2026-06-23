@@ -259,6 +259,7 @@ queste domande:
 | Log | [22](22-contratto-log.md), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
+| Memoria C, lifetime, ownership e leak | [08](08-guida-c-usato-nel-progetto.md#lifetime-della-memoria), [29](29-event-model-v0.md#ownership-dei-campi), [32](32-writer-api-v0.md#ownership-e-record-accodati) |
 | Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
