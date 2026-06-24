@@ -322,6 +322,60 @@ Non deve aggiungere timestamp, newline, livelli di log o scegliere il file di
 destinazione. Dopo la formattazione chiama `write(userdata, payload)`. Questo
 mantiene separati formatter e output device.
 
+### `alfred_record_jsonl_writer_t`
+
+Definizione:
+
+```c
+typedef struct {
+    alfred_record_jsonl_writer_write_fn write;
+    void *userdata;
+    char *format_buffer;
+    size_t format_buffer_size;
+    char *buffer;
+    size_t buffer_size;
+    size_t used;
+} alfred_record_jsonl_writer_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `write` | callback che riceve bytes JSONL gia' flushati | chi costruisce il writer | `alfred_record_jsonl_writer_flush()` |
+| `userdata` | contesto opaco della callback `write` | chi costruisce il writer | callback `write` |
+| `format_buffer` | scratch buffer per un singolo oggetto JSON | chi costruisce il writer | formatter JSONL |
+| `format_buffer_size` | dimensione di `format_buffer` | chi costruisce il writer | formatter JSONL |
+| `buffer` | buffer output che accumula righe JSONL complete | chi costruisce il writer | emit, flush |
+| `buffer_size` | dimensione di `buffer` | chi costruisce il writer | emit, flush |
+| `used` | bytes validi non ancora flushati | init, emit, flush | emit, flush, query |
+
+Il JSONL writer buffered non e' il formatter e non e' un backend. Il formatter
+produce un oggetto JSON senza newline; il writer aggiunge `\n`, accumula una o
+piu' righe e chiama la callback solo al flush o quando deve liberare spazio per
+una nuova riga.
+
+Sequenza:
+
+```text
+alfred_record_jsonl_writer_emit(record)
+-> alfred_record_format_jsonl(record, format_buffer)
+-> copia format_buffer + '\n' dentro buffer
+-> se buffer non ha spazio, flush dei bytes gia' accumulati
+```
+
+Flush:
+
+```text
+alfred_record_jsonl_writer_flush()
+-> write(userdata, buffer, used)
+-> used = 0 solo se write ha successo
+```
+
+Questa scelta rende visibile la policy minima di buffering: non facciamo una
+write per ogni record e non perdiamo bytes buffered se la callback fallisce. Non
+esiste ancora thread, socket o file descriptor dentro questa struttura.
+
 ### `alfred_record_queue_t`
 
 Definizione:

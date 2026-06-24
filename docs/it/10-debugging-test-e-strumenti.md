@@ -2148,6 +2148,14 @@ La copertura iniziale include:
   controlla il riepilogo `max_records`, `dispatched`, `remaining` e `status` su
   coda vuota, batch limit, drain completo, errore sink e input invalidi. Non
   introduce thread: serve a fissare il confine del futuro worker.
+- `test_record_jsonl_writer.sh`: compila `test_record_jsonl_writer.c` e
+  verifica il primo writer JSONL buffered. Il test distingue formatter, sink e
+  writer: il formatter produce un oggetto JSON, il writer aggiunge newline,
+  accumula righe in un buffer caller-owned e chiama la callback di output solo
+  con `flush()` esplicito o quando manca spazio per una nuova riga completa. La
+  copertura controlla batching di piu' record, auto-flush, errore di flush con
+  bytes preservati, rifiuto di una singola riga troppo grande, esposizione come
+  sink generico e configurazione invalida.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

@@ -11,9 +11,10 @@ Non devono vivere nel percorso caldo dell'evento.
 ```
 
 Il documento definisce il contratto architetturale della Writer API. Il codice
-corrente ha gia' sink, text sink, JSONL sink, counter sink, queue e dispatcher
-preparatori, ma non ha ancora un runtime writer asincrono completo con worker,
-backpressure, profili operativi e writer configurabili.
+corrente ha gia' sink, text sink, JSONL sink, JSONL buffered writer, counter
+sink, queue e dispatcher preparatori, ma non ha ancora un runtime writer
+asincrono completo con worker, backpressure, profili operativi e writer
+configurabili.
 
 Per l'ordine operativo dei prossimi micro-step leggere anche
 [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md).
@@ -436,6 +437,49 @@ Il callback del writer riceve una stringa valida solo durante la chiamata e puo'
 decidere se aggiungere `\n`, scrivere su file, spedire su socket o salvare il
 payload in un test.
 
+Il micro-step successivo introduce il primo writer JSONL buffered:
+
+```text
+alfred_record_t
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> buffer interno del writer
+-> alfred_record_jsonl_writer_flush()
+-> callback write(data, size)
+```
+
+Questo livello e' diverso dal formatter e dal sink sincrono:
+
+| Livello | Funzione principale | Responsabilita' | Cosa non fa |
+| --- | --- | --- | --- |
+| formatter | `alfred_record_format_jsonl()` | trasforma un record in un oggetto JSON senza newline | non conserva stato, non scrive output |
+| sink sincrono | `alfred_record_jsonl_sink_emit()` | adatta record -> formatter -> callback immediata | non fa buffering, non possiede policy di flush |
+| writer buffered | `alfred_record_jsonl_writer_emit()` / `flush()` | accumula righe JSONL e scrive a blocchi | non apre file, non crea thread, non decide backpressure |
+
+Il writer buffered usa due buffer forniti dal chiamante:
+
+| Buffer | Ruolo |
+| --- | --- |
+| `format_buffer` | scratch buffer per formattare un singolo oggetto JSON |
+| `buffer` | output buffer che accumula una o piu' righe JSONL complete |
+
+Ogni record viene serializzato come oggetto JSON, poi il writer aggiunge `\n`.
+La callback riceve quindi bytes gia' nel formato JSON Lines, potenzialmente piu'
+righe in un solo blocco. Questo e' il primo passo concreto per evitare la regola
+sbagliata "un evento = una write/flush".
+
+Regola pratica:
+
+```text
+emit(record)  -> puo' solo appendere al buffer o flushare se manca spazio
+flush()       -> consegna i bytes accumulati alla callback
+```
+
+Se il buffer contiene dati e la callback di flush fallisce, il writer mantiene i
+bytes nel proprio buffer. In questo modo il chiamante puo' ispezionare lo stato
+o tentare un nuovo flush. Questa non e' ancora una policy di retry completa:
+serve solo a non perdere dati silenziosamente dentro il primo writer buffered.
+
 Il JSONL v0 emette sempre:
 
 | Campo | Significato |
@@ -506,14 +550,17 @@ Il JSONL v0 non e' ancora un writer completo:
 
 - non e' collegato al runtime degli eventi;
 - non gestisce file descriptor, path di output o rotazione log;
-- non aggiunge newline;
-- non fa buffering su file;
+- il formatter non aggiunge newline; il writer buffered invece aggiunge newline
+  ma non apre file;
+- il writer buffered accumula in memoria caller-owned, non fa ancora buffering
+  su file o socket reali;
 - non implementa backpressure;
 - non assegna sequenze o timestamp da solo;
 - non sostituisce `alfred_record_t` come contratto interno.
 
-Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`;
-poi potremo collegarlo a dispatcher, code, profili operativi e benchmark.
+Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`,
+poi fissiamo il contratto `record -> writer buffered`, e solo dopo colleghiamo
+il writer a dispatcher, code, profili operativi e benchmark.
 
 ### Debito tecnico JSONL v0
 
@@ -527,9 +574,10 @@ visibile. Non deve diventare una scelta implicita dimenticata nel codice.
 | Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
 | Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
 | Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
-| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Non e' collegato al percorso caldo runtime, quindi non blocca ancora il backend | Prima di collegare JSONL a output runtime reali |
-| Nessuna backpressure | Il sink non gestisce code, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi | Prima di writer buffered, socket, Lab o ledger JSONL continuativo |
-| Nessun newline/file/socket | Il formatter produce solo un oggetto JSON e il sink consegna una stringa | Mantiene separati formato, framing e I/O | Quando introdurremo Writer API completa e configurazione output |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Resta utile per dispatcher e test, ma non e' il writer runtime finale | Prima di collegare JSONL sincrono al path caldo |
+| Writer JSONL buffered minimale | `alfred_record_jsonl_writer_emit()` accumula righe in buffer caller-owned e `flush()` chiama una callback bytes | Fissa il contratto di batching senza thread, file o socket | Prima di output runtime reale configurabile |
+| Nessuna backpressure | Sink e writer non gestiscono code per sink, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi davvero | Prima di socket, Lab, ledger JSONL continuativo o writer thread |
+| Nessun file/socket | Il writer buffered consegna bytes a una callback, ma non apre output device | Mantiene separati formato, framing, buffering e I/O reale | Quando introdurremo configurazione output e profili runtime |
 | Nessuna validazione schema esterna | I test confrontano stringhe esatte, ma non esiste ancora uno schema JSON formale | Sufficiente per bloccare il mapping C iniziale | Prima di pubblicare JSONL come interfaccia stabile per tool terzi |
 
 La regola pratica e': questo debito e' accettabile finche' JSONL resta un

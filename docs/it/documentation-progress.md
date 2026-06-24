@@ -428,6 +428,15 @@ livello e restituisce `max_records`, `dispatched`, `remaining` e `status`.
 `test_record_runtime_drain.sh` copre coda vuota, batch limit, drain completo,
 errore sink e input invalidi.
 
+Aggiornamento successivo: `alfred_record_jsonl_writer_t` introduce il primo
+writer JSONL buffered. Il writer resta fuori dal backend e fuori da thread reali:
+usa un buffer di formattazione per un singolo oggetto JSON, un buffer output per
+una o piu' righe JSONL complete e una callback `write(data, size)` chiamata solo
+al flush o quando serve spazio per una nuova riga. `test_record_jsonl_writer.sh`
+copre batching, flush esplicito, auto-flush, errore di flush con bytes
+preservati, riga singola troppo grande, esposizione come sink generico e input
+invalidi.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
