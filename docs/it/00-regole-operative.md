@@ -228,6 +228,44 @@ Fixes review finding:
 Explain in English what the finding reported and how this commit fixes it.
 ```
 
+### Aggiornamento della descrizione PR dopo review multiple
+
+Quando una PR riceve piu' round di review, la descrizione creata dal template
+deve essere aggiornata dopo ogni round significativo. La PR non deve contenere
+solo lo stato iniziale del branch: deve diventare anche una traccia storica di
+che cosa le review successive hanno trovato e di come i finding sono stati
+risolti.
+
+Formato consigliato da aggiungere alla descrizione della PR:
+
+```text
+## Review update #N
+
+Summary:
+- Brief English summary of what this review focused on.
+- Brief English summary of the architectural or correctness risk found.
+
+Findings:
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+  Fix: <commit-sha> - short explanation of the fix.
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+  Fix: <commit-sha> - short explanation of the fix.
+```
+
+La sezione `Review update #N` deve essere scritta in inglese, come il resto
+della PR pubblica. Deve indicare:
+
+- il numero del round di review;
+- il senso della review, cioe' che tipo di rischio o parte del codice e' stata
+  controllata;
+- la lista puntata dei finding;
+- per ogni finding, il commit che lo risolve;
+- una spiegazione breve ma chiara del perche' il fix chiude il finding.
+
+Questa regola affianca, ma non sostituisce, i commenti inline: il commento
+inline resta il punto preciso nel codice, mentre la descrizione della PR offre
+una vista ordinata dell'evoluzione della review.
+
 Le regole di stile del messaggio seguono le pratiche raccolte in
 `Git Commit Best Practices`:
 
