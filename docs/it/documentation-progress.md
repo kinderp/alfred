@@ -455,13 +455,13 @@ disabilitata, tutti i passaggi sono no-op riusciti. Il test
 `test_record_output_pipeline.sh` copre disabled mode, pipeline JSONL abilitata,
 batch drain, queue full e flush failure con bytes preservati.
 
-Aggiornamento successivo: `app.c` collega la pipeline dietro
+Aggiornamento successivo: `app.c` e `core_logger.c` collegano la pipeline dietro
 `output_enabled=true` e `output_format=jsonl`. Il path e' ancora sincrono e
 aggiuntivo: i log compatibili restano attivi, mentre i raw record normalizzati
-gia' candidati al record sink vengono adattati una sola volta, scritti su
-`raw.log` tramite text sink e accodati nella pipeline JSONL per `output_log`.
-`test_output_pipeline_runtime.sh` verifica il comportamento end-to-end con
-`ALFRED_CONFIG`.
+gia' candidati al record sink e gli eventi semantici core vengono convertiti in
+`alfred_record_t`, scritti sui log compatibili tramite text sink e accodati nella
+pipeline JSONL per `output_log`. `test_output_pipeline_runtime.sh` verifica il
+comportamento end-to-end con `ALFRED_CONFIG`.
 
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit

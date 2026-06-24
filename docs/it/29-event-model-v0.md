@@ -1247,9 +1247,9 @@ Il primo micro-step esiste nel codice:
 - non usa librerie JSON esterne: l'escaping e' implementato nel formatter;
 - il formatter non apre file, non scrive socket, non fa flush e non aggiunge
   timestamp di log esterni;
-- il runtime usa JSONL solo nel primo percorso opt-in `output_enabled=true` per
-  i raw record normalizzati gia' migrati al record sink; non e' ancora il formato
-  unico di tutti gli eventi Alfred.
+- il runtime usa JSONL nel percorso opt-in `output_enabled=true` per i raw
+  record normalizzati gia' migrati al record sink e per gli eventi semantici
+  core; non e' ancora il formato unico di tutti gli eventi Alfred.
 
 Esempio semantico:
 

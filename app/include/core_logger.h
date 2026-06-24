@@ -11,18 +11,27 @@
 #define CORE_LOGGER_H
 
 #include "alfred_correlator.h"
+#include "alfred_record.h"
 #include "logger.h"
+
+typedef int (*core_logger_record_emit_fn)(const alfred_record_t *record,
+                                          void *userdata);
 
 /*
  * core_logger_context_t - application-owned core logging options
  * @logger: destination logger
+ * @emit_record: optional structured-record output callback
+ * @emit_record_userdata: opaque context passed to @emit_record
  *
  * The core itself emits structured alfred_event_t values. The application owns
- * the destination logger and this tiny context adapts the core callback shape
- * to logger_event().
+ * the destination logger and optional output pipeline. This context adapts the
+ * core callback shape to logger_event() and, when configured, to the generic
+ * record output path without making core_logger depend on app_t.
  */
 typedef struct {
     logger_t *logger;
+    core_logger_record_emit_fn emit_record;
+    void *emit_record_userdata;
 } core_logger_context_t;
 
 /*
@@ -32,9 +41,10 @@ typedef struct {
  *
  * Converts @ev to an Event Model v0 record, emits it through the compatibility
  * text sink, and writes the resulting plain-text payload through the
- * application logger. The callback does not take ownership of @ev or of the
- * path strings inside it; those values are valid only for the duration of the
- * callback.
+ * application logger. When @emit_record is configured, the same borrowed record
+ * is also offered to the application-owned structured output path. The callback
+ * does not take ownership of @ev or of the path strings inside it; those values
+ * are valid only for the duration of the callback.
  */
 void core_logger_on_event(const alfred_event_t *ev, void *userdata);
 

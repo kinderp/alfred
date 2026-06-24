@@ -468,10 +468,11 @@ record
 ```
 
 Il collegamento corrente e' ancora conservativo: `app_run()` continua a produrre
-i log storici e aggiunge il file JSONL solo per i raw record normalizzati gia'
-migrati al record sink. Non ci sono ancora worker thread, socket, code per sink o
-backpressure reale. Il callback applicativo adatta il raw una sola volta e usa lo
-stesso `alfred_record_t` per il log compatibile e per la pipeline JSONL.
+i log storici e aggiunge il file JSONL per i raw record normalizzati gia'
+migrati al record sink e per gli eventi semantici emessi dal core. Non ci sono
+ancora worker thread, socket, code per sink o backpressure reale. I callback
+applicativi costruiscono il record una sola volta e usano lo stesso
+`alfred_record_t` per il log compatibile e per la pipeline JSONL.
 
 `output_format` accetta per ora:
 

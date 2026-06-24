@@ -68,19 +68,24 @@ static int write_event_payload(void *userdata, const char *payload)
  * Return: 0 on success, -1 when conversion, sink setup, formatting, or logging
  * bridge fails.
  */
-static int log_record_event(logger_t *logger, const alfred_event_t *ev)
+static int log_record_event(core_logger_context_t *context,
+                            const alfred_event_t *ev)
 {
     alfred_record_t record;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
     char payload[1024];
 
+    if (context == NULL || context->logger == NULL) {
+        return -1;
+    }
+
     if (alfred_record_from_event(ev, &record) != 0) {
         return -1;
     }
 
     text_sink.write = write_event_payload;
-    text_sink.userdata = logger;
+    text_sink.userdata = context->logger;
     text_sink.buffer = payload;
     text_sink.buffer_size = sizeof(payload);
 
@@ -90,6 +95,18 @@ static int log_record_event(logger_t *logger, const alfred_event_t *ev)
 
     if (alfred_record_sink_emit(&sink, &record) != 0) {
         return -1;
+    }
+
+    /*
+     * Keep events.log compatibility first, then route the same semantic record
+     * to the optional structured output path. The record is still borrowed and
+     * valid only for this callback; queue-based pipelines must clone it before
+     * returning.
+     */
+    if (context->emit_record != NULL &&
+        context->emit_record(&record, context->emit_record_userdata) != 0) {
+        logger_error(context->logger,
+                     "failed to emit semantic output record");
     }
 
     return 0;
@@ -107,7 +124,7 @@ void core_logger_on_event(const alfred_event_t *ev, void *userdata)
     if (ev == NULL || context == NULL || context->logger == NULL)
         return;
 
-    if (log_record_event(context->logger, ev) != 0) {
+    if (log_record_event(context, ev) != 0) {
         log_plain_event(context->logger, ev);
     }
 }

@@ -41,6 +41,8 @@ static int log_raw_record(logger_t *logger, const alfred_record_t *record);
 static int app_init_output_pipeline(app_t *app);
 static void app_shutdown_output_pipeline(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
+static int app_emit_output_record_callback(const alfred_record_t *record,
+                                           void *userdata);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
 
@@ -427,6 +429,22 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
 }
 
 /*
+ * app_emit_output_record_callback - core_logger compatible output callback
+ * @record: borrowed Event Model v0 record emitted by the core logger
+ * @userdata: app_t pointer supplied during app_init()
+ *
+ * core_logger does not know app_t. This adapter keeps the public callback shape
+ * generic while reusing the application-owned output pipeline helper.
+ *
+ * Return: 0 on success or disabled output, -1 on invalid input or emit failure.
+ */
+static int app_emit_output_record_callback(const alfred_record_t *record,
+                                           void *userdata)
+{
+    return app_emit_output_record((app_t *)userdata, record);
+}
+
+/*
  * handle_backend_event - consume one backend event
  * @raw: optional raw event for the core
  * @userdata: application context supplied by app_run()
@@ -558,9 +576,11 @@ int app_init(app_t *app, int argc, char **argv)
     /*
      * The core is initialized after the logger because its emit callback writes
      * semantic events through logger_event(). Core mode is the official stream.
-     */
+    */
     alfred_config_default(&app->core_config);
     app->core_logger_context.logger = &app->logger;
+    app->core_logger_context.emit_record = app_emit_output_record_callback;
+    app->core_logger_context.emit_record_userdata = app;
 
     app->core = alfred_create(&app->core_config,
                               core_logger_on_event,

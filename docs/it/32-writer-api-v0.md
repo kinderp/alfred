@@ -630,11 +630,12 @@ record
 -> output_log
 ```
 
-Nel codice corrente questo path e' collegato ad `app_run()` solo per i record raw
-normalizzati gia' migrati al record sink. Il collegamento e' volutamente
-sincrono: il callback applicativo adatta il raw una sola volta, scrive il log
-compatibile e, se la pipeline e' abilitata, accoda lo stesso record nella
-pipeline JSONL e drena subito il batch disponibile.
+Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
+normalizzati gia' migrati al record sink e per gli eventi semantici emessi dal
+core. Il collegamento e' volutamente sincrono: il callback applicativo o il core
+logger costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
+pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
+subito il batch disponibile.
 
 La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
 gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel

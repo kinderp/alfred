@@ -131,12 +131,11 @@ la destinazione reale: per esempio `text sink/events.log`, `text sink/raw.log`,
 evitare frasi ambigue come "passa dal sink" senza sapere quale sink riceve il
 record e quale file o writer produce output.
 
-Il caso piu' importante per capire la differenza e' la semantica core:
-`FILE_CREATED` e' `Record model = si`, `Sink-capable = si`,
-`Runtime-routed = si` per `events.log`, ma `output.jsonl = no` perche' non abbiamo
-ancora collegato il callback core alla output pipeline. In altre parole: il
-record puo' attraversare la pipeline, ma oggi non viene ancora routato verso la
-pipeline JSONL configurabile.
+Il caso piu' importante per capire la differenza era la semantica core:
+`FILE_CREATED` era gia' `Record model = si` e `Sink-capable = si` prima di
+entrare in JSONL. Ora e' anche `Runtime-routed = text sink/events.log + output
+pipeline JSONL`, quindi `output.jsonl = si` quando l'output strutturato e'
+abilitato.
 
 La tabella usa queste colonne:
 
@@ -157,7 +156,7 @@ La tabella usa queste colonne:
 | Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | `raw.log` | previsto come `backend_observed + audit` | no, manca ancora tipo/formatter audit | no | no | aggiungere record audit solo se vogliamo output strutturato per audit read-only |
 | Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
-| Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink; no verso output pipeline | no | collegare anche gli eventi semantic alla output pipeline o a un dispatcher comune |
+| Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
 | Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: alcune righe passano da builder/sink, altre restano legacy | no | uniformare tutte le righe `WATCH_*` su record builder e poi inviarle al writer runtime |
 | Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | inviare diagnostica strutturata alla pipeline senza perdere il canale error/event legacy |
 | Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | stesso lavoro dei resync: dispatcher comune per diagnostica e policy error channel |
@@ -281,13 +280,13 @@ Questo e' il punto piu' importante dopo il collegamento runtime JSONL:
 ```text
 events.log semantico passa gia' da record sink text.
 Gli stessi record sono gia' sink-capable anche per JSONL.
-output.jsonl non riceve ancora gli eventi semantici solo per una scelta
-di routing runtime, non per mancanza del modello record o del formatter.
+output.jsonl riceve ora gli eventi semantici quando output_enabled=true.
 ```
 
-Il prossimo passo strutturale sara' decidere se far passare anche il callback
-core attraverso la stessa output pipeline o se introdurre prima un dispatcher
-applicativo comune per raw, semantic e diagnostic.
+Il prossimo passo strutturale non e' piu' "rendere la semantica JSONL-capable":
+lo e' gia'. Il lavoro rimasto e' allargare i test a piu' tipi semantici e
+decidere se introdurre un dispatcher applicativo comune per raw, semantic e
+diagnostic invece di avere piccoli bridge separati.
 
 ### Diagnostica watch, resync e lost-scope
 
@@ -351,7 +350,7 @@ output.jsonl != ledger completo di Alfred
 output.jsonl != contratto Agent Guard finale
 ```
 
-Oggi `output.jsonl` e' utile per verificare il primo percorso:
+Oggi `output.jsonl` e' utile per verificare i primi due percorsi:
 
 ```text
 alfred_raw_event_t
@@ -364,9 +363,21 @@ alfred_raw_event_t
 -> output_log
 ```
 
-Il contratto completo arrivera' quando anche semantica, diagnostica, lifecycle e
-futuri record security avranno un routing esplicito verso lo stesso modello di
-writer.
+e:
+
+```text
+alfred_event_t
+-> alfred_record_from_event()
+-> alfred_record_output_pipeline_enqueue()
+-> queue
+-> runtime drain
+-> dispatcher
+-> JSONL writer
+-> output_log
+```
+
+Il contratto completo arrivera' quando anche diagnostica, lifecycle e futuri
+record security avranno un routing esplicito verso lo stesso modello di writer.
 
 ## Raw log audit inotify
 
