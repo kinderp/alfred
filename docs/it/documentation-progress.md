@@ -367,6 +367,14 @@ zero/`NULL`, assenza di `null` espliciti, path Linux non UTF-8 non lossless,
 sink sincrono, assenza di backpressure, assenza di framing file/socket e schema
 JSON non ancora formalizzato.
 
+Il contratto del JSONL buffered writer e' stato chiarito anche sul ciclo di
+vita: `alfred_record_jsonl_writer_init()` accetta solo writer inattivi con
+`used == 0`. Se il writer contiene bytes pendenti, `init()` fallisce e preserva
+buffer e contatore. La scelta evita che una reinit accidentale cancelli righe
+JSONL non ancora flushate. `32-writer-api-v0.md` e
+`16-mappa-codice-e-strutture.md` spiegano ora la differenza tra stato inattivo,
+stato buffered attivo e riuso corretto del writer.
+
 ## Aggiornamento counter sink v0
 
 `alfred_record_counter_sink_t` introduce il primo sink no-op/counter per misure

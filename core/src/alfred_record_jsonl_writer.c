@@ -8,31 +8,36 @@
 
 #include <string.h>
 
-static int writer_is_configured(const alfred_record_jsonl_writer_t *writer)
+static int writer_storage_is_configured(
+    const alfred_record_jsonl_writer_t *writer)
 {
     return writer != NULL &&
            writer->write != NULL &&
            writer->format_buffer != NULL &&
            writer->format_buffer_size > 0u &&
            writer->buffer != NULL &&
-           writer->buffer_size > 0u &&
+           writer->buffer_size > 0u;
+}
+
+static int writer_runtime_is_valid(const alfred_record_jsonl_writer_t *writer)
+{
+    return writer_storage_is_configured(writer) &&
            writer->used <= writer->buffer_size;
 }
 
 int alfred_record_jsonl_writer_init(alfred_record_jsonl_writer_t *writer)
 {
-    if (!writer_is_configured(writer)) {
+    if (!writer_storage_is_configured(writer) || writer->used != 0u) {
         return -1;
     }
 
-    writer->used = 0u;
     return 0;
 }
 
 int alfred_record_jsonl_writer_init_sink(alfred_record_jsonl_writer_t *writer,
                                          alfred_record_sink_t *sink)
 {
-    if (!writer_is_configured(writer) || sink == NULL) {
+    if (!writer_runtime_is_valid(writer) || sink == NULL) {
         return -1;
     }
 
@@ -47,7 +52,7 @@ int alfred_record_jsonl_writer_emit(alfred_record_jsonl_writer_t *writer,
     int formatted;
     size_t line_size;
 
-    if (!writer_is_configured(writer) || record == NULL) {
+    if (!writer_runtime_is_valid(writer) || record == NULL) {
         return -1;
     }
 
@@ -85,7 +90,7 @@ int alfred_record_jsonl_writer_sink_emit(void *userdata,
 
 int alfred_record_jsonl_writer_flush(alfred_record_jsonl_writer_t *writer)
 {
-    if (!writer_is_configured(writer)) {
+    if (!writer_runtime_is_valid(writer)) {
         return -1;
     }
 

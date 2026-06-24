@@ -355,6 +355,13 @@ produce un oggetto JSON senza newline; il writer aggiunge `\n`, accumula una o
 piu' righe e chiama la callback solo al flush o quando deve liberare spazio per
 una nuova riga.
 
+`used` ha una regola speciale: durante `emit()` e `flush()` puo' essere maggiore
+di zero, perche' questo e' lo stato normale di un writer buffered con dati
+pendenti. Durante `alfred_record_jsonl_writer_init()`, invece, deve essere zero.
+La funzione di init valida solo writer inattivi e non puo' cancellare bytes gia'
+accumulati. Se un chiamante prova a reinizializzare un writer con `used > 0`,
+la funzione fallisce e preserva buffer e contatore.
+
 Sequenza:
 
 ```text

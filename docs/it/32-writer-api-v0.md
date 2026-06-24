@@ -481,6 +481,58 @@ bytes nel proprio buffer. In questo modo il chiamante puo' ispezionare lo stato
 o tentare un nuovo flush. Questa non e' ancora una policy di retry completa:
 serve solo a non perdere dati silenziosamente dentro il primo writer buffered.
 
+### Inizializzazione e bytes pendenti
+
+`alfred_record_jsonl_writer_init()` non e' una funzione di "reset forzato".
+Serve a validare un writer configurato ma inattivo. Per questo richiede:
+
+```text
+write != NULL
+format_buffer != NULL
+format_buffer_size > 0
+buffer != NULL
+buffer_size > 0
+used == 0
+```
+
+Il campo `used` indica quanti bytes JSONL sono gia' dentro `buffer` ma non sono
+ancora stati consegnati alla callback `write`. Quindi:
+
+```text
+used == 0  -> nessun dato pendente, init puo' validare il writer
+used > 0   -> ci sono dati pendenti, init deve fallire
+```
+
+Questa distinzione evita una perdita silenziosa di dati. Se `init()` azzerasse
+`used` mentre il buffer contiene ancora righe JSONL, Alfred perderebbe record del
+ledger senza errore visibile.
+
+Esempio:
+
+```text
+buffer = "{\"schema_version\":0}\n"
+used   = 21
+```
+
+In questo stato il writer e' attivo: contiene una riga JSONL non ancora flushata.
+Richiamare `alfred_record_jsonl_writer_init()` deve restituire `-1` e lasciare
+`used` e `buffer` invariati.
+
+Il riuso corretto e':
+
+```text
+init -> emit -> flush -> init eventuale su stato inattivo
+```
+
+oppure, se il chiamante decide consapevolmente di scartare i dati:
+
+```text
+discard esplicito fuori dal writer -> used = 0 -> init
+```
+
+La seconda forma deve essere esplicita nel codice chiamante. Il writer non deve
+nascondere uno scarto di record dentro una funzione chiamata `init()`.
+
 Il JSONL v0 emette sempre:
 
 | Campo | Significato |

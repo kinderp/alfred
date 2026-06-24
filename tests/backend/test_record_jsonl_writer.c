@@ -26,6 +26,14 @@
  * when an explicit flush is requested or when the buffer must be drained before
  * appending another complete line. This locks down the v0 rule that JSONL output
  * must not imply one flush per event.
+ *
+ * Ownership/lifetime contract:
+ * - init requires a configured but inactive writer with used == 0
+ * - init must not be used as a shortcut to discard pending buffered bytes
+ * - emit/flush may operate while used > 0 because that is the normal buffered
+ *   runtime state
+ * - a caller that wants to reinitialize storage must flush or explicitly discard
+ *   the old writer state before calling init again
  */
 
 #include "alfred_record_jsonl_writer.h"
@@ -321,6 +329,37 @@ static void test_writer_rejects_invalid_configuration(void)
     assert(alfred_record_jsonl_writer_init_sink(NULL, &sink) == -1);
 }
 
+static void test_writer_rejects_reinit_with_pending_bytes(void)
+{
+    capture_output_t capture;
+    alfred_record_jsonl_writer_t writer;
+    char format_buffer[256];
+    char output_buffer[512];
+    const char *pending = "{\"schema_version\":0}\n";
+    size_t pending_size = strlen(pending);
+
+    memset(&capture, 0, sizeof(capture));
+    configure_writer(&writer,
+                     &capture,
+                     format_buffer,
+                     sizeof(format_buffer),
+                     output_buffer,
+                     sizeof(output_buffer));
+
+    memcpy(output_buffer, pending, pending_size);
+    writer.used = pending_size;
+
+    /*
+     * Reinitializing an active writer would silently discard buffered JSONL.
+     * The v0 contract makes that invalid: callers must flush or explicitly
+     * discard pending bytes before init can be called again.
+     */
+    assert(alfred_record_jsonl_writer_init(&writer) == -1);
+    assert(writer.used == pending_size);
+    assert(memcmp(output_buffer, pending, pending_size) == 0);
+    assert(capture.count == 0u);
+}
+
 int main(void)
 {
     test_writer_buffers_until_explicit_flush();
@@ -330,6 +369,7 @@ int main(void)
     test_writer_rejects_oversized_single_line();
     test_writer_exposes_generic_sink();
     test_writer_rejects_invalid_configuration();
+    test_writer_rejects_reinit_with_pending_bytes();
 
     return 0;
 }

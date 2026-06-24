@@ -65,11 +65,18 @@ typedef struct {
 } alfred_record_jsonl_writer_t;
 
 /*
- * alfred_record_jsonl_writer_init - validate and reset a buffered JSONL writer
+ * alfred_record_jsonl_writer_init - validate an inactive buffered JSONL writer
  * @writer: writer state to initialize
  *
- * The function requires a zeroed or already inactive writer. It does not free
- * or flush existing buffered bytes before resetting @used to zero.
+ * The function requires a configured but inactive writer with @used == 0. It
+ * intentionally does not flush, discard, or reset existing buffered bytes. A
+ * caller that wants to reuse storage must first flush pending data or
+ * explicitly discard/destroy the old writer state, then call init on an
+ * inactive writer.
+ *
+ * Calling init on a writer with @used > 0 fails and preserves the pending
+ * bytes. This prevents accidental silent loss of JSONL ledger data at the
+ * writer/plugin boundary.
  *
  * Return: 0 on success, -1 on invalid configuration.
  */
