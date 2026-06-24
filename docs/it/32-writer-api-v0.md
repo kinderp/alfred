@@ -1344,6 +1344,65 @@ Nel runtime finale dovremo decidere una policy piu' completa:
 Queste decisioni appartengono alla backpressure policy futura. Non le nascondiamo
 dentro il primo helper di drain.
 
+### Worker/drain simulato single-threaded
+
+`alfred_record_dispatcher_drain_queue()` e'
+un helper basso livello: prende una queue, fa pop, dispatch e destroy. Non
+descrive ancora il livello runtime che, in futuro, sara' eseguito da un worker.
+
+Per dare un nome a quel livello senza introdurre thread reali, Alfred aggiunge:
+
+```c
+int alfred_record_runtime_drain_once(
+    const alfred_record_dispatcher_t *dispatcher,
+    alfred_record_queue_t *queue,
+    size_t max_records,
+    alfred_record_runtime_drain_result_t *result);
+```
+
+Questo helper e' ancora single-threaded. Fa una sola cosa: eseguire un tentativo
+bounded di drain e restituire un riepilogo:
+
+```c
+typedef struct {
+    size_t max_records;
+    size_t dispatched;
+    size_t remaining;
+    int status;
+} alfred_record_runtime_drain_result_t;
+```
+
+Significato dei campi:
+
+| Campo | Significato |
+| --- | --- |
+| `max_records` | limite batch richiesto dal chiamante |
+| `dispatched` | record consegnati con successo a tutti i sink |
+| `remaining` | record ancora presenti nella queue al ritorno |
+| `status` | `0` se il drain e' riuscito, `-1` se input o sink falliscono |
+
+La differenza concettuale e':
+
+| Livello | Ruolo |
+| --- | --- |
+| `alfred_record_dispatcher_drain_queue()` | meccanica di pop, dispatch e destroy |
+| `alfred_record_runtime_drain_once()` | passo runtime simulato che produce un risultato leggibile dal futuro worker |
+
+In altre parole, `runtime_drain_once()` non rende Alfred asincrono. Serve a
+stabilire l'interfaccia mentale del worker futuro:
+
+```text
+prendi un batch
+-> prova a consegnarlo
+-> registra quanti record sono passati
+-> registra quanti record restano
+-> segnala successo o errore
+```
+
+Questo confine evita di saltare direttamente a thread, lock, wakeup, shutdown e
+backpressure. Prima fissiamo cosa significa "un giro di lavoro" in modo
+deterministico e testabile.
+
 ## Regola contrattuale
 
 La regola da non violare e':

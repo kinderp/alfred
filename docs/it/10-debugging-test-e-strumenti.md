@@ -2142,6 +2142,12 @@ La copertura iniziale include:
   record, limite `max_records`, zero-record drain, stop al primo errore sink e
   conteggio dei record consegnati con successo. Lo scenario spiega che "drain"
   significa consumare la coda, non solo leggerla.
+- `test_record_runtime_drain.sh`: compila `test_record_runtime_drain.c` e
+  verifica il worker/drain simulato single-threaded. Il test usa
+  `alfred_record_runtime_drain_once()` sopra la queue e il dispatcher, poi
+  controlla il riepilogo `max_records`, `dispatched`, `remaining` e `status` su
+  coda vuota, batch limit, drain completo, errore sink e input invalidi. Non
+  introduce thread: serve a fissare il confine del futuro worker.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

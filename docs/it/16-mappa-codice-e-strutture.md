@@ -444,6 +444,48 @@ while queue non vuota e batch non superato:
 chiamata. Questo prepara il runtime futuro a lavorare per batch invece di
 svuotare sempre tutta la coda.
 
+### Runtime drain simulato
+
+Il livello successivo e':
+
+```text
+alfred_record_runtime_drain_once()
+```
+
+Questo helper non crea thread e non rende Alfred asincrono. Incapsula un solo
+giro di lavoro del futuro worker: prende un limite batch, chiama il drain basso
+livello e restituisce un riepilogo leggibile.
+
+```c
+typedef struct {
+    size_t max_records;
+    size_t dispatched;
+    size_t remaining;
+    int status;
+} alfred_record_runtime_drain_result_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `max_records` | limite batch richiesto dal chiamante | `alfred_record_runtime_drain_once()` | worker futuro, test, metriche |
+| `dispatched` | record consegnati con successo a tutti i sink | `alfred_record_runtime_drain_once()` | worker futuro, test, metriche |
+| `remaining` | record ancora presenti nella queue al ritorno | `alfred_record_runtime_drain_once()` | backpressure futura, test |
+| `status` | `0` successo, `-1` input non valido o fallimento sink | `alfred_record_runtime_drain_once()` | worker futuro, gestione errori |
+
+Differenza fra i due livelli:
+
+- `alfred_record_dispatcher_drain_queue()` esegue la meccanica:
+  pop, dispatch e destroy.
+- `alfred_record_runtime_drain_once()` nomina il passo runtime:
+  "prova a consumare un batch" e restituisce il risultato del tentativo.
+
+Questa separazione e' utile per gli studenti perche' mostra una tecnica comune:
+prima si rende testabile un passo sincrono e deterministico, poi in futuro lo si
+puo' mettere dentro un thread, un ciclo worker o una policy di backpressure
+senza cambiare il significato del passo.
+
 ### Stato attuale e stato futuro
 
 Oggi:

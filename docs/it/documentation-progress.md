@@ -421,6 +421,13 @@ pop, dispatch, sink emit e destroy del record owned. Sono la prima misura del
 percorso single-threaded piu' vicino al runtime writer target, ancora senza
 thread, socket, file flush o backpressure reale.
 
+Aggiornamento successivo: `alfred_record_runtime_drain_once()` introduce il
+worker/drain simulato single-threaded sopra queue e dispatcher. Il nuovo helper
+non crea thread e non collega writer runtime reali: chiama il drain basso
+livello e restituisce `max_records`, `dispatched`, `remaining` e `status`.
+`test_record_runtime_drain.sh` copre coda vuota, batch limit, drain completo,
+errore sink e input invalidi.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
