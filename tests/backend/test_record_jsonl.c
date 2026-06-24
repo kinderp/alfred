@@ -30,6 +30,7 @@
  * socket, or ledger writer will decide line framing and I/O policy.
  */
 
+#include "alfred_record_diagnostic.h"
 #include "alfred_record_jsonl.h"
 
 #include <assert.h>
@@ -130,6 +131,31 @@ static void test_jsonl_formats_diagnostic_payloads(void)
                   "\"pending_count\":4}}") == 0);
 }
 
+static void test_jsonl_formats_stale_event_dropped(void)
+{
+    alfred_record_t record;
+    char buffer[1024];
+
+    assert(alfred_record_build_stale_event_dropped("inotify",
+                                                   7,
+                                                   "/tmp/root/watched",
+                                                   "IN_CREATE",
+                                                   "a.txt",
+                                                   &record) == 0);
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
+    assert(strcmp(buffer,
+                  "{\"schema_version\":0,"
+                  "\"layer\":\"diagnostic\","
+                  "\"category\":\"watch\","
+                  "\"type\":\"WATCH_STALE_EVENT_DROPPED\","
+                  "\"backend\":\"inotify\","
+                  "\"path\":\"/tmp/root/watched\","
+                  "\"watch\":{\"watch_id\":7,"
+                  "\"event_mask\":\"IN_CREATE\","
+                  "\"event_name\":\"a.txt\"}}") == 0);
+}
+
 static void test_jsonl_formats_complete_identity_only(void)
 {
     alfred_record_t record;
@@ -203,6 +229,7 @@ int main(void)
     test_jsonl_formats_raw_move_with_escaping();
     test_jsonl_formats_semantic_rename();
     test_jsonl_formats_diagnostic_payloads();
+    test_jsonl_formats_stale_event_dropped();
     test_jsonl_formats_complete_identity_only();
     test_jsonl_omits_partial_identity();
     test_jsonl_rejects_invalid_input_and_truncation();

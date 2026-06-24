@@ -436,6 +436,72 @@ static void backend_log_watch_stale(inotify_backend_context_t *ctx,
 }
 
 /*
+ * backend_log_stale_event_dropped - emit WATCH_STALE_EVENT_DROPPED
+ * @ctx: narrowed backend context used by the poll path
+ * @wd: stale inotify watch descriptor that received the kernel event
+ * @path: borrowed stale path associated with @wd
+ * @event_mask: borrowed textual inotify mask for the dropped event
+ * @event_name: borrowed child name from the dropped event, or NULL
+ *
+ * A stale watch can still receive kernel events because inotify follows the
+ * filesystem object, not Alfred's saved textual path. Forwarding that event to
+ * raw/core would attach a possibly false path, so Alfred logs a diagnostic and
+ * deliberately drops the raw/core conversion. The record preserves mask/name as
+ * structured watch payload, then follows the same compatibility-first policy as
+ * the other watch diagnostics.
+ */
+static void backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
+                                            int wd,
+                                            const char *path,
+                                            const char *event_mask,
+                                            const char *event_name)
+{
+    alfred_record_t record;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_sink_t sink;
+    char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+
+    if (ctx == NULL || ctx->logger == NULL)
+        return;
+
+    if (alfred_record_build_stale_event_dropped("inotify",
+                                                wd,
+                                                path,
+                                                event_mask,
+                                                event_name,
+                                                &record) == 0) {
+        text_sink.write = backend_write_event_payload;
+        text_sink.userdata = ctx->logger;
+        text_sink.buffer = payload;
+        text_sink.buffer_size = sizeof(payload);
+
+        if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
+            alfred_record_sink_emit(&sink, &record) == 0) {
+            if (ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit stale dropped output record");
+            }
+
+            return;
+        }
+
+        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+            logger_event(ctx->logger, "%s", payload);
+            return;
+        }
+    }
+
+    logger_event(ctx->logger,
+                 "WATCH_STALE_EVENT_DROPPED wd=%d path=%s mask=%s name=%s",
+                 wd,
+                 path != NULL ? path : "",
+                 event_mask != NULL ? event_mask : "",
+                 event_name != NULL ? event_name : "");
+}
+
+/*
  * backend_resync_probe_result - internal outcomes of stale-watch recovery
  *
  * These values are diagnostic states for the backend resync probe. They are
@@ -2472,12 +2538,11 @@ static int backend_poll(inotify_backend_context_t *ctx,
              * Until resync proves a trustworthy path again, forwarding a raw
              * event would give the core a path that may now be false.
              */
-            logger_event(ctx->logger,
-                         "WATCH_STALE_EVENT_DROPPED wd=%d path=%s mask=%s name=%s",
-                         ev->wd,
-                         parent,
-                         mask_str,
-                         ev->len ? ev->name : "");
+            backend_log_stale_event_dropped(ctx,
+                                            ev->wd,
+                                            parent,
+                                            mask_str,
+                                            ev->len ? ev->name : "");
         }
 
         int callback_status =

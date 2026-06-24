@@ -18,6 +18,8 @@
  * - WATCH_ADDED wd=7 path=/tmp/root/watched
  * - WATCH_REMOVED wd=7 path=/tmp/root/watched
  * - WATCH_STALE wd=7 path=/tmp/root/watched reason=IN_MOVE_SELF
+ * - WATCH_STALE_EVENT_DROPPED wd=7 path=/tmp/root/watched
+ *   mask=IN_CREATE name=a.txt
  *
  * diagnostic recovery event:
  * - WATCH_RESYNC_FAILED wd=7 path=/tmp/root/watched
@@ -176,6 +178,19 @@ static void test_diagnostic_watch_payload(void)
     assert(strcmp(text,
                   "WATCH_STALE wd=7 path=/tmp/root/watched "
                   "reason=IN_MOVE_SELF") == 0);
+
+    assert(alfred_record_build_stale_event_dropped(
+               "inotify",
+               7,
+               "/tmp/root/watched",
+               "IN_CREATE",
+               "a.txt",
+               &record) == 0);
+
+    assert(alfred_record_format_text(&record, text, sizeof(text)) > 0);
+    assert(strcmp(text,
+                  "WATCH_STALE_EVENT_DROPPED wd=7 "
+                  "path=/tmp/root/watched mask=IN_CREATE name=a.txt") == 0);
 }
 
 static void test_diagnostic_recovery_payload(void)

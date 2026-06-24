@@ -157,7 +157,7 @@ La tabella usa queste colonne:
 | Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
-| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE` passano da text sink/events.log e output pipeline JSONL; `WATCH_STALE_EVENT_DROPPED` resta solo compatibile | parziale: si' per `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE` quando `output_enabled=true` | collegare `WATCH_STALE_EVENT_DROPPED` alla stessa output pipeline senza perdere il canale compatibile |
+| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
 | Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | inviare diagnostica strutturata alla pipeline senza perdere il canale error/event legacy |
 | Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | stesso lavoro dei resync: dispatcher comune per diagnostica e policy error channel |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
@@ -300,7 +300,7 @@ La copertura runtime pero' non e' ancora uniforme:
 
 | Famiglia diagnostica | Esempi | Log testuale oggi | Record builder | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Watch lifecycle | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si | si | parziale: `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE` verso text sink e JSONL, `WATCH_STALE_EVENT_DROPPED` solo compatibile | parziale: si' per `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE` | collegare `WATCH_STALE_EVENT_DROPPED` alla pipeline |
+| Watch lifecycle | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si | si | si', verso text sink e JSONL | si' | famiglia watch base completa; resync/lost-scope restano separati |
 | Resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END` | `events.log`/`errors.log` | si | si | parziale | no | preservare canale error/event e aggiungere record output |
 | Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | parziale | no | stesso routing diagnostico comune |
 | Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | parziale | no | aggiungere output strutturato senza duplicare logica |
@@ -350,7 +350,7 @@ output.jsonl != ledger completo di Alfred
 output.jsonl != contratto Agent Guard finale
 ```
 
-Oggi `output.jsonl` e' utile per verificare i primi due percorsi:
+Oggi `output.jsonl` e' utile per verificare tre percorsi:
 
 ```text
 alfred_raw_event_t
@@ -376,11 +376,13 @@ alfred_event_t
 -> output_log
 ```
 
-Il terzo percorso collegato e' la diagnostica watch semplice:
+Il terzo percorso collegato e' la diagnostica watch base:
 
 ```text
 watch_manager_add() / watch_manager_remove()
+oppure evento kernel su watch stale
 -> alfred_record_build_watch_diagnostic()
+   oppure alfred_record_build_stale_event_dropped()
 -> alfred_record_sink_emit()
 -> alfred_record_text_sink_emit()
 -> events.log
@@ -393,11 +395,23 @@ watch_manager_add() / watch_manager_remove()
 -> output_log
 ```
 
-Questo percorso oggi copre `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE`.
-Sono record diagnostici, non eventi semantici filesystem: dicono che Alfred ha
-iniziato a osservare un path, ha smesso di osservarlo, oppure non si fida piu'
-del mapping `wd -> path`. Non significano direttamente che l'utente abbia
-creato, cancellato, spostato o rinominato una directory.
+Questo percorso oggi copre `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+`WATCH_STALE_EVENT_DROPPED`. Sono record diagnostici, non eventi semantici
+filesystem: dicono che Alfred ha iniziato a osservare un path, ha smesso di
+osservarlo, non si fida piu' del mapping `wd -> path`, oppure ha visto un evento
+kernel su un watch stale e ha scelto di non inoltrarlo al core. Non significano
+direttamente che l'utente abbia creato, cancellato, spostato o rinominato una
+directory.
+
+`WATCH_STALE_EVENT_DROPPED` conserva due campi specifici nel payload `watch`:
+
+- `event_mask`: la mask testuale dell'evento kernel droppato, per esempio
+  `IN_CREATE` o `IN_IGNORED`;
+- `event_name`: il nome figlio portato dall'evento kernel, oppure stringa vuota
+  quando l'evento non ha nome.
+
+Questi campi spiegano cosa Alfred ha visto e perche' non lo ha trasformato in
+raw/core event.
 
 Il contratto completo arrivera' quando anche il resto della diagnostica,
 lifecycle e futuri record security avranno un routing esplicito verso lo stesso

@@ -517,6 +517,8 @@ typedef struct {
  * @state: borrowed state string such as "valid", "stale", or "removed"
  * @reason: borrowed reason string such as "IN_MOVE_SELF" or "IN_DELETE_SELF"
  * @error: borrowed error string such as "identity-mismatch", or NULL
+ * @event_mask: borrowed backend event-mask text for dropped-event diagnostics
+ * @event_name: borrowed backend child name for dropped-event diagnostics
  * @retry_after_ns: monotonic timestamp before the next retry may run
  * @retry_count: number of recovery attempts already made
  *
@@ -530,6 +532,8 @@ typedef struct {
     const char *state;
     const char *reason;
     const char *error;
+    const char *event_mask;
+    const char *event_name;
     uint64_t retry_after_ns;
     unsigned retry_count;
 } alfred_record_watch_t;

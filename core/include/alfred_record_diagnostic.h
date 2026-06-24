@@ -81,6 +81,31 @@ int alfred_record_build_watch_diagnostic_with_os_error(
     const char *os_error_message,
     alfred_record_t *out);
 
+/*
+ * alfred_record_build_stale_event_dropped - build dropped stale-watch record
+ * @backend: borrowed backend name such as "inotify", or NULL
+ * @watch_id: backend watch descriptor/id that received the dropped event
+ * @path: borrowed stale path associated with @watch_id, or NULL
+ * @event_mask: borrowed backend mask text for the dropped event
+ * @event_name: borrowed child name carried by the backend event, or NULL
+ * @out: destination record written by this function
+ *
+ * WATCH_STALE_EVENT_DROPPED needs to preserve a different shape from normal
+ * WATCH_STALE: it is not just a state transition, but evidence that Alfred saw
+ * one backend event and deliberately refused to forward it to raw/core because
+ * the watch path was stale. The builder stores the mask/name details inside the
+ * watch diagnostic payload. It does not copy strings: every string pointer in
+ * @out remains borrowed from the caller.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+int alfred_record_build_stale_event_dropped(const char *backend,
+                                            int watch_id,
+                                            const char *path,
+                                            const char *event_mask,
+                                            const char *event_name,
+                                            alfred_record_t *out);
+
 #ifdef __cplusplus
 }
 #endif

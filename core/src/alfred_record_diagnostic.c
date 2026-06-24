@@ -125,3 +125,31 @@ int alfred_record_build_watch_diagnostic_with_os_error(
 
     return 0;
 }
+
+int alfred_record_build_stale_event_dropped(const char *backend,
+                                            int watch_id,
+                                            const char *path,
+                                            const char *event_mask,
+                                            const char *event_name,
+                                            alfred_record_t *out)
+{
+    if (out == NULL || event_mask == NULL) {
+        return -1;
+    }
+
+    if (alfred_record_build_watch_diagnostic(
+            ALFRED_RECORD_TYPE_WATCH_STALE_EVENT_DROPPED,
+            backend,
+            watch_id,
+            path,
+            NULL,
+            NULL,
+            NULL,
+            out) != 0) {
+        return -1;
+    }
+
+    out->watch.event_mask = event_mask;
+    out->watch.event_name = event_name;
+    return 0;
+}

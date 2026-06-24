@@ -632,12 +632,12 @@ record
 
 Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
 normalizzati gia' migrati al record sink, per gli eventi semantici emessi dal
-core e per la diagnostica watch semplice `WATCH_ADDED`/`WATCH_REMOVED`/
-`WATCH_STALE`. Il collegamento e' volutamente sincrono: il callback
-applicativo, il core logger, il watch manager o il backend costruiscono un
-`alfred_record_t`, scrivono il log compatibile e, se la pipeline e' abilitata,
-accodano lo stesso record nella pipeline JSONL e drenano subito il batch
-disponibile.
+core e per tutta la diagnostica watch base: `WATCH_ADDED`, `WATCH_REMOVED`,
+`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`. Il collegamento e' volutamente
+sincrono: il callback applicativo, il core logger, il watch manager o il
+backend costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
+pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
+subito il batch disponibile.
 
 Il watch manager e il backend inotify non conoscono `app_t` e non conoscono il
 writer JSONL. Ricevono nel `inotify_backend_context_t` un callback generico

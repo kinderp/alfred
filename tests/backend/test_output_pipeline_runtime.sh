@@ -7,6 +7,7 @@
 # - one JSONL semantic DIR_CREATED record for created-dir
 # - one JSONL diagnostic WATCH_ADDED record for removed-dir
 # - one JSONL diagnostic WATCH_STALE record for removed-dir
+# - one JSONL diagnostic WATCH_STALE_EVENT_DROPPED record for removed-dir
 # - one JSONL diagnostic WATCH_REMOVED record for removed-dir
 # - raw.log compatibility lines are still present
 # - events.log compatibility lines are still present
@@ -123,6 +124,13 @@ if ! grep -Eq "WATCH_STALE wd=[0-9]+ path=.*/removed-dir reason=IN_DELETE_SELF" 
     exit 1
 fi
 
+if ! grep -Eq "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/removed-dir mask=.*IN_IGNORED .* name=" ./events.log; then
+    echo "FAIL: missing compatibility WATCH_STALE_EVENT_DROPPED for removed directory"
+    echo "----- events.log -----"
+    cat ./events.log || true
+    exit 1
+fi
+
 if ! grep -Eq "WATCH_REMOVED wd=[0-9]+ path=.*/removed-dir" ./events.log; then
     echo "FAIL: missing compatibility WATCH_REMOVED for removed directory"
     echo "----- events.log -----"
@@ -167,6 +175,13 @@ fi
 
 if ! grep -Eq '"category":"watch".*"type":"WATCH_STALE".*"path":".*/removed-dir".*"reason":"IN_DELETE_SELF"' "$OUTPUT_LOG"; then
     echo "FAIL: missing JSONL WATCH_STALE record for removed directory"
+    echo "----- output.jsonl -----"
+    cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq '"category":"watch".*"type":"WATCH_STALE_EVENT_DROPPED".*"path":".*/removed-dir".*"event_mask":"[^"]*IN_IGNORED[^"]*"' "$OUTPUT_LOG"; then
+    echo "FAIL: missing JSONL WATCH_STALE_EVENT_DROPPED record for removed directory"
     echo "----- output.jsonl -----"
     cat "$OUTPUT_LOG" || true
     exit 1

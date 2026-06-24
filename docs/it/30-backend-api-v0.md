@@ -817,7 +817,8 @@ Non va anticipata nella prima implementazione.
    Primi micro-step fatti per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
    per tutta la famiglia locale `WATCH_RESYNC_*` e per i diagnostici
    `WATCH_LOST_*`: il runtime usa record diagnostici, sink comune e text sink.
-   `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` usano anche il callback
+   `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+   `WATCH_STALE_EVENT_DROPPED` usano anche il callback
    `inotify_backend_context_t.emit_record` per offrire lo stesso record
    diagnostico alla output pipeline JSONL quando `output_enabled=true`.
    Micro-step raw fatti per `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`,
@@ -883,13 +884,24 @@ diagnostici, riempie gli eventuali campi recovery, passa il record al sink
 comune e il text sink produce il payload testuale compatibile per il logger
 esistente.
 
-Per `WATCH_ADDED`, `WATCH_REMOVED` e `WATCH_STALE` il
+Per `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+`WATCH_STALE_EVENT_DROPPED` il
 `inotify_backend_context_t` contiene anche un callback opzionale `emit_record`.
 Il watch manager o il backend lo chiamano dopo aver preservato `events.log`: il
 record diagnostico resta borrowed, quindi la output pipeline deve clonarlo prima
 di accodarlo. Questa scelta evita di far dipendere il backend da `app_t`, da
 JSONL o da un writer specifico. Se il callback non e' configurato, il
 comportamento resta identico al path compatibile.
+
+`WATCH_STALE_EVENT_DROPPED` usa un builder dedicato,
+`alfred_record_build_stale_event_dropped()`, perche' deve conservare campi
+diversi da una normale transizione stale:
+
+- `watch.event_mask`: mask testuale dell'evento kernel droppato;
+- `watch.event_name`: nome figlio dell'evento kernel droppato.
+
+Questi campi servono a dire "Alfred ha visto questo evento, ma non lo ha
+inoltrato al core perche' il path era stale".
 
 La scelta e' intenzionalmente limitata: `backend_log_watch_diagnostic_record()`
 sa costruire anche molti `WATCH_RESYNC_*` e `WATCH_LOST_*`, ma quei record

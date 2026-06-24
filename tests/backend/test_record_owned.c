@@ -123,6 +123,8 @@ static void test_clone_diagnostic_owns_nested_strings(void)
     src.watch.state = "stale";
     src.watch.reason = "IN_MOVE_SELF";
     src.watch.error = "path-unreachable";
+    src.watch.event_mask = "IN_CREATE";
+    src.watch.event_name = "a.txt";
     src.recovery.detail_path = "/tmp/root/watched/a";
     src.recovery.related_watch_id = 101;
 
@@ -135,6 +137,8 @@ static void test_clone_diagnostic_owns_nested_strings(void)
     assert(strcmp(owned.watch.state, src.watch.state) == 0);
     assert(strcmp(owned.watch.reason, src.watch.reason) == 0);
     assert(strcmp(owned.watch.error, src.watch.error) == 0);
+    assert(strcmp(owned.watch.event_mask, src.watch.event_mask) == 0);
+    assert(strcmp(owned.watch.event_name, src.watch.event_name) == 0);
     assert(strcmp(owned.recovery.detail_path, src.recovery.detail_path) == 0);
 
     assert(owned.backend != src.backend);
@@ -144,6 +148,8 @@ static void test_clone_diagnostic_owns_nested_strings(void)
     assert(owned.watch.state != src.watch.state);
     assert(owned.watch.reason != src.watch.reason);
     assert(owned.watch.error != src.watch.error);
+    assert(owned.watch.event_mask != src.watch.event_mask);
+    assert(owned.watch.event_name != src.watch.event_name);
     assert(owned.recovery.detail_path != src.recovery.detail_path);
     assert(owned.os_error.code == src.os_error.code);
     assert(owned.watch.watch_id == src.watch.watch_id);

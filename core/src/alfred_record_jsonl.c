@@ -445,6 +445,8 @@ static int append_watch(jsonl_buffer_t *buffer,
          watch->state == NULL &&
          watch->reason == NULL &&
          watch->error == NULL &&
+         watch->event_mask == NULL &&
+         watch->event_name == NULL &&
          watch->retry_after_ns == 0u &&
          watch->retry_count == 0u)) {
         return 0;
@@ -456,6 +458,14 @@ static int append_watch(jsonl_buffer_t *buffer,
         append_string_field(buffer, &inner_comma, "state", watch->state) != 0 ||
         append_string_field(buffer, &inner_comma, "reason", watch->reason) != 0 ||
         append_string_field(buffer, &inner_comma, "error", watch->error) != 0 ||
+        append_string_field(buffer,
+                            &inner_comma,
+                            "event_mask",
+                            watch->event_mask) != 0 ||
+        append_string_field(buffer,
+                            &inner_comma,
+                            "event_name",
+                            watch->event_name) != 0 ||
         append_u64_field(buffer,
                          &inner_comma,
                          "retry_after_ns",

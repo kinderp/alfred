@@ -469,13 +469,22 @@ lo usa per offrire `WATCH_ADDED` e `WATCH_REMOVED` alla stessa output pipeline
 JSONL dopo aver preservato `events.log`. Il watch manager continua a non
 conoscere `app_t`, file di output o writer: costruisce solo il record
 diagnostico e lo consegna al callback borrowed. `test_output_pipeline_runtime.sh`
-ora controlla anche `WATCH_ADDED` e `WATCH_REMOVED` in `output.jsonl`.
+ha iniziato a controllare anche `WATCH_ADDED` e `WATCH_REMOVED` in
+`output.jsonl`.
 
 Aggiornamento successivo: `WATCH_STALE` usa lo stesso callback `emit_record`
 dopo aver preservato `events.log`, quindi entra in `output.jsonl` quando
 `output_enabled=true`. Il routing resta volutamente limitato: `WATCH_RESYNC_*`,
-`WATCH_LOST_*` e `WATCH_STALE_EVENT_DROPPED` non sono ancora collegati al writer
-runtime e richiedono micro-step dedicati.
+`WATCH_LOST_*` e, in quel momento, `WATCH_STALE_EVENT_DROPPED` richiedevano
+ancora micro-step dedicati.
+
+Aggiornamento successivo: `WATCH_STALE_EVENT_DROPPED` completa la famiglia
+diagnostica watch base nel writer runtime. Il backend usa
+`alfred_record_build_stale_event_dropped()` per conservare in modo strutturato
+la mask e il nome dell'evento kernel scartato (`watch.event_mask` e
+`watch.event_name`), preserva prima `events.log`, poi offre il record borrowed
+alla output pipeline JSONL. Restano fuori dal writer runtime i diagnostici
+`WATCH_RESYNC_*` e `WATCH_LOST_*`.
 
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit

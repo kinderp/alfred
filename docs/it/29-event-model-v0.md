@@ -1249,8 +1249,9 @@ Il primo micro-step esiste nel codice:
   timestamp di log esterni;
 - il runtime usa JSONL nel percorso opt-in `output_enabled=true` per i raw
   record normalizzati gia' migrati al record sink e per gli eventi semantici
-  core, piu' la diagnostica watch semplice `WATCH_ADDED`, `WATCH_REMOVED` e
-  `WATCH_STALE`; non e' ancora il formato unico di tutti gli eventi Alfred.
+  core, piu' tutta la diagnostica watch base: `WATCH_ADDED`,
+  `WATCH_REMOVED`, `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`; non e' ancora
+  il formato unico di tutti gli eventi Alfred.
 
 Esempio semantico:
 
@@ -1263,6 +1264,16 @@ Esempio diagnostico:
 ```json
 {"schema_version":0,"layer":"diagnostic","category":"watch","type":"WATCH_STALE","backend":"inotify","path":"/tmp/root/watched","watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF"}}
 ```
+
+Esempio diagnostico di evento droppato su watch stale:
+
+```json
+{"schema_version":0,"layer":"diagnostic","category":"watch","type":"WATCH_STALE_EVENT_DROPPED","backend":"inotify","path":"/tmp/root/watched","watch":{"watch_id":7,"event_mask":"IN_CREATE","event_name":"a.txt"}}
+```
+
+In questo caso `event_mask` e `event_name` non descrivono un evento semantico
+accettato dal core. Descrivono invece il fatto kernel che Alfred ha visto e ha
+scartato perche' il path del watch era stale.
 
 Il writer testuale corrente e il formatter JSONL ricevono lo stesso record
 strutturato. Non convertiamo testo in JSON: il testo e il JSONL sono due
