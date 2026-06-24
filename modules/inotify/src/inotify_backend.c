@@ -4207,11 +4207,11 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
  * This is the lost-scope counterpart of backend_log_resync_record(). It builds
  * an Event Model v0 record, fills the recovery payload, emits the record
  * through the text sink, and falls back to the same text shape if the sink path
- * fails. Queue-level records are also offered to ctx->emit_record after the
- * compatibility log succeeds; scan/recovery records remain text-only until
- * their own migration step. WATCH_LOST_QUEUE_FAILED keeps the historical
- * error-log channel through the same routed sink callback used by local resync
- * failures.
+ * fails. Queue-level records and scan/classification records are also offered
+ * to ctx->emit_record after the compatibility log succeeds; reinstall, retry,
+ * gave-up, and recovery-end records remain text-only until their own migration
+ * step. WATCH_LOST_QUEUE_FAILED keeps the historical error-log channel through
+ * the same routed sink callback used by local resync failures.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -4287,7 +4287,15 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
             alfred_record_sink_emit(&sink, &record) == 0) {
             if ((type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED ||
                  type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED) &&
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_FOUND ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED) &&
                 ctx->emit_record != NULL &&
                 ctx->emit_record(&record,
                                  ctx->emit_record_userdata) != 0) {

@@ -604,6 +604,17 @@ fallimento callback; `test_output_pipeline_runtime.sh` verifica il record
 coverage, reinstallazione, retry e fine recovery restano text-only fino al
 prossimo micro-step.
 
+Aggiornamento successivo: anche la fase scan/classificazione lost-scope e'
+stata collegata alla output pipeline. `WATCH_LOST_SCAN_BEGIN`,
+`WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`,
+`WATCH_LOST_COVERAGE_DONE`, `WATCH_LOST_COVERAGE_MISSING`,
+`WATCH_LOST_COVERAGE_CLASS`, `WATCH_LOST_NOT_FOUND` e
+`WATCH_LOST_RECOVERY_FAILED` attraversano ora `ctx->emit_record` dopo il log
+compatibile. `tests/backend/test_lost_scope_scan_output_routing.c` verifica i
+campi strutturati principali. Restano text-only i record che installano o
+rimuovono watch durante recovery e quelli che schedulano/concludono la
+recovery: reinstall, rollback, retry scheduled, gave-up e recovery end.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

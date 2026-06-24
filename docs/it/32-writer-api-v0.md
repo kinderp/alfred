@@ -780,11 +780,15 @@ compatibile e poi offre lo stesso record borrowed al callback `emit_record`. Se
 essere ignorato. Questa scelta mantiene JSONL come ledger affidabile senza
 trasformare il backend in un writer JSONL diretto.
 
-I diagnostici `WATCH_LOST_*` sono migrati in modo parziale. I tre record
-queue-level (`WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED` e
-`WATCH_LOST_QUEUE_FAILED`) conservano il log compatibile e vengono poi offerti a
-`emit_record`, quindi compaiono in `output.jsonl` quando l'output strutturato e'
-abilitato. I record di scan/recovery lost-scope restano invece il passo
+I diagnostici `WATCH_LOST_*` sono migrati in modo parziale. I record queue-level
+(`WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`,
+`WATCH_LOST_QUEUE_FAILED`) e i record di scan/classificazione
+(`WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`,
+`WATCH_LOST_PREFIX_UPDATED`, `WATCH_LOST_COVERAGE_*`,
+`WATCH_LOST_NOT_FOUND`, `WATCH_LOST_RECOVERY_FAILED`) conservano il log
+compatibile e vengono poi offerti a `emit_record`, quindi compaiono in
+`output.jsonl` quando l'output strutturato e' abilitato. I record di
+reinstallazione, rollback, retry e fine recovery restano invece il passo
 successivo: sono gia' modellati come record e passano dal text sink
 compatibile, ma non vengono ancora offerti a `emit_record`.
 
