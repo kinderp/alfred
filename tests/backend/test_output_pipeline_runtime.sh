@@ -12,11 +12,14 @@
 # - raw.log compatibility lines are still present
 # - events.log compatibility lines are still present
 # - output_enabled=true with output_format=text is rejected at runtime
+# - output_enabled=true stops Alfred on runtime JSONL writer failure
 #
 # This test proves the first runtime wiring of the single-writer output
 # pipeline. output_enabled=true is additive: app.c still emits the compatibility
 # raw.log/events.log text records, and also enqueues the same adapted
 # alfred_record_t values into alfred_record_output_pipeline_t for JSONL output.
+# When JSONL output is explicitly enabled, writer failure is fatal: Alfred must
+# not keep processing events while producing an incomplete output.jsonl ledger.
 
 set -euo pipefail
 
@@ -52,6 +55,60 @@ if ALFRED_CONFIG="$CONFIG_FILE" \
    ALFRED_EVENT_ENGINE=core \
        "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1; then
     echo "FAIL: output_enabled=true must reject output_format=text for now"
+    exit 1
+fi
+
+reset_env
+
+cat > "$CONFIG_FILE" <<EOF
+output_enabled=true
+output_format=jsonl
+output_buffer_size=4096
+output_log=/dev/full
+EOF
+
+ALFRED_CONFIG="$CONFIG_FILE" \
+ALFRED_EVENT_ENGINE=core \
+    "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
+ALFRED_PID=$!
+
+sleep 1
+
+for i in $(seq 1 200); do
+    printf "hello %s\n" "$i" > "$TEST_ROOT/fill-jsonl-$i.txt" || true
+done
+
+for _ in $(seq 1 30); do
+    if ! kill -0 "$ALFRED_PID" 2>/dev/null; then
+        break
+    fi
+    sleep 0.1
+done
+
+if kill -0 "$ALFRED_PID" 2>/dev/null; then
+    echo "FAIL: JSONL writer failure must stop Alfred"
+    echo "----- errors.log -----"
+    cat ./errors.log || true
+    exit 1
+fi
+
+set +e
+wait "$ALFRED_PID"
+ALFRED_STATUS=$?
+set -e
+ALFRED_PID=""
+
+if [[ "$ALFRED_STATUS" == "0" ]]; then
+    echo "FAIL: JSONL writer failure must return a non-zero status"
+    echo "----- errors.log -----"
+    cat ./errors.log || true
+    exit 1
+fi
+
+if ! grep -Eq "failed to emit output record|structured output failed" ./errors.log; then
+    echo "FAIL: missing JSONL writer failure diagnostic"
+    echo "----- errors.log -----"
+    cat ./errors.log || true
     exit 1
 fi
 

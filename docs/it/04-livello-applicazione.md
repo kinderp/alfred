@@ -476,6 +476,14 @@ sink o backpressure reale. I callback applicativi costruiscono il record una
 sola volta o ricevono un record borrowed dal backend/core, poi usano lo stesso
 `alfred_record_t` per il log compatibile e per la pipeline JSONL.
 
+Se la pipeline JSONL e' abilitata e l'emissione di un record fallisce,
+`app_emit_output_record()` marca `app.output_failed`. Da quel momento il callback
+applicativo restituisce un errore I/O e `app_run()` termina invece di continuare
+con un ledger JSONL parziale. Questa e' una scelta "fail closed": per debug
+sarebbe possibile immaginare un output best-effort, ma per un futuro log usato da
+test golden, audit e replay e' piu' sicuro fermarsi e rendere evidente il
+problema.
+
 `output_format` accetta per ora:
 
 ```text

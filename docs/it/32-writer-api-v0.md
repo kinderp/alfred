@@ -639,6 +639,15 @@ backend costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
 pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
 subito il batch disponibile.
 
+La policy di errore v0 e' conservativa. Quando `output_enabled=true`, Alfred
+tratta la pipeline JSONL come parte del contratto runtime scelto dall'utente: se
+enqueue, drain o writer falliscono, il runtime viene fermato invece di continuare
+a processare eventi producendo un `output.jsonl` incompleto. Questa scelta e'
+intenzionale perche' JSONL diventera' base per ledger, test golden e replay: un
+buco silenzioso nel file sarebbe peggiore di un arresto esplicito. Con
+`output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
+continuano a comportarsi come prima.
+
 Il watch manager e il backend inotify non conoscono `app_t` e non conoscono il
 writer JSONL. Ricevono nel `inotify_backend_context_t` un callback generico
 `emit_record`: il backend offre un record diagnostico borrowed, l'applicazione

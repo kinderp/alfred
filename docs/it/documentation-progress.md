@@ -486,6 +486,15 @@ la mask e il nome dell'evento kernel scartato (`watch.event_mask` e
 alla output pipeline JSONL. Restano fuori dal writer runtime i diagnostici
 `WATCH_RESYNC_*` e `WATCH_LOST_*`.
 
+Aggiornamento successivo: la pipeline JSONL runtime adotta una policy
+fail-closed quando `output_enabled=true`. Se enqueue, drain o writer falliscono,
+`app_emit_output_record()` marca `app.output_failed` e il callback applicativo
+propaga `ERR_IO` verso `app_run()`. Questo evita che Alfred continui a processare
+eventi producendo un `output.jsonl` parziale e non affidabile. Il test runtime
+usa `/dev/full` per simulare un writer che fallisce durante il flush del buffer
+JSONL e verifica che Alfred termini con stato non-zero e diagnostica in
+`errors.log`.
+
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
 inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,

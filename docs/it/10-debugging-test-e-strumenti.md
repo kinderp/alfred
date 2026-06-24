@@ -2444,8 +2444,15 @@ ALFRED_CONFIG=/tmp/alfred-output.conf ./alfred /tmp/cartella-da-osservare
 Questa configurazione produce un file JSONL aggiuntivo. I log storici restano
 attivi: `output_enabled=true` non sostituisce ancora `raw.log`, `events.log` o
 `errors.log`. Il percorso e' ancora sincrono e copre i raw record normalizzati
-gia' migrati al record sink e gli eventi semantici core; thread, socket e
-backpressure reale restano futuri.
+gia' migrati al record sink, gli eventi semantici core e la diagnostica watch
+base; thread, socket e backpressure reale restano futuri.
+
+Il test `test_output_pipeline_runtime.sh` controlla anche la policy di errore
+della pipeline. Usa `/dev/full` come device di output che fallisce in scrittura:
+quando `output_enabled=true`, Alfred deve fermarsi con stato non-zero e scrivere
+un errore in `errors.log`. Questo fissa il contratto didattico e pratico: JSONL
+abilitato non e' un canale best-effort silenzioso, ma un ledger che deve essere
+completo oppure fallire in modo visibile.
 
 Esempi invalidi:
 

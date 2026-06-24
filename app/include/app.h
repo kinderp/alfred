@@ -69,6 +69,13 @@ typedef struct app {
     FILE *output_stream;
     char *output_format_buffer;
     char *output_buffer;
+    /*
+     * Set after the optional structured output path fails. When output is
+     * explicitly enabled, Alfred treats a writer/pipeline failure as a fatal
+     * runtime condition so output.jsonl cannot silently become an incomplete
+     * ledger while the event loop keeps processing filesystem activity.
+     */
+    int output_failed;
 
     /*
      * Core correlator configuration, callback context, and engine.

@@ -319,6 +319,20 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_IO;
     }
 
+    /*
+     * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
+     * extra buffering so write_output_bytes() observes device errors at the
+     * writer flush boundary instead of deferring them until shutdown. This keeps
+     * output failure policy testable with devices such as /dev/full while still
+     * avoiding one write per event: JSONL writer flushes only when its own buffer
+     * is full or during shutdown.
+     */
+    if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
+        logger_error(&app->logger,
+                     "failed to configure output log buffering");
+        return ERR_IO;
+    }
+
     app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
     app->output_buffer = malloc(app->config.output.buffer_size);
 
@@ -403,6 +417,12 @@ static void app_shutdown_output_pipeline(app_t *app)
  * proves the runtime path behind output_enabled=true without introducing worker
  * threads, wakeups, per-sink queues, or real backpressure yet.
  *
+ * Failure policy:
+ *   output_enabled=true makes the structured output path part of the runtime
+ *   contract. If enqueue, drain, or writer delivery fails, the application marks
+ *   output_failed so the event loop can stop instead of producing a silent
+ *   partial JSONL ledger. Disabled output remains a successful no-op.
+ *
  * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
  */
 static int app_emit_output_record(app_t *app, const alfred_record_t *record)
@@ -417,17 +437,28 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
         return 0;
     }
 
+    if (app->output_failed) {
+        return -1;
+    }
+
     if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
                                               record) != 0) {
+        app->output_failed = 1;
         return -1;
     }
 
     if (alfred_record_output_pipeline_drain_once(&app->output_pipeline,
                                                  &drain_result) != 0) {
+        app->output_failed = 1;
         return -1;
     }
 
-    return drain_result.status == 0 ? 0 : -1;
+    if (drain_result.status != 0) {
+        app->output_failed = 1;
+        return -1;
+    }
+
+    return 0;
 }
 
 /*
@@ -478,6 +509,7 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
                 if (app_emit_output_record(app, &record) != 0) {
                     logger_error(&app->logger,
                                  "failed to emit output record");
+                    return ERR_IO;
                 }
             }
             else {
@@ -492,6 +524,12 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
             logger_error(&app->logger,
                          "core failed to process raw event");
         }
+    }
+
+    if (app->output_failed) {
+        logger_error(&app->logger,
+                     "structured output failed; stopping event loop");
+        return ERR_IO;
     }
 
     return ERR_OK;
@@ -659,6 +697,8 @@ fail:
  */
 int app_run(app_t *app)
 {
+    error_t error = ERR_OK;
+
     if (app == NULL)
         return ERR_INVALID_ARG;
 
@@ -670,9 +710,10 @@ int app_run(app_t *app)
 
     while (app->running) {
 
-        if (inotify_backend_poll(&backend_ctx,
-                                 handle_backend_event,
-                                 app) != ERR_OK) {
+        error = inotify_backend_poll(&backend_ctx,
+                                     handle_backend_event,
+                                     app);
+        if (error != ERR_OK) {
             break;
         }
     }
@@ -680,7 +721,7 @@ int app_run(app_t *app)
     logger_info(&app->logger,
                 "event loop terminated");
 
-    return ERR_OK;
+    return error;
 }
 
 /*
