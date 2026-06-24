@@ -836,11 +836,14 @@ legacy `logger_event()` o `logger_error()` per conservare `events.log` /
 costruito. Il formatter umano non e' quindi il gate di JSONL: e' solo uno dei
 modi per produrre la riga compatibile.
 
-La stessa regola vale per i diagnostici piu' piccoli gestiti dal helper
-generico del backend, in particolare `WATCH_STALE` e il `WATCH_RESYNC_FAILED`
-semplice. Anche se la riga testuale compatibile viene scritta dal fallback
-legacy, il record strutturato deve comunque attraversare `emit_record` quando
-l'output strutturato e' abilitato.
+La stessa regola vale per i diagnostici piu' piccoli gestiti dai helper watch
+del backend, in particolare `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` e il
+`WATCH_RESYNC_FAILED` semplice. Anche se la riga testuale compatibile viene
+scritta dal fallback legacy, il record strutturato deve comunque attraversare
+`emit_record` quando l'output strutturato e' abilitato. Questo e' importante
+per `WATCH_STALE_EVENT_DROPPED`: quel record e' la prova che Alfred ha visto un
+evento kernel su un watch stale e lo ha scartato per evitare di inventare un
+raw/core event con path inaffidabile.
 
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |

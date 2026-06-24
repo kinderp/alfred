@@ -654,6 +654,17 @@ per payload troppo lungo, viene scritto il fallback legacy e poi viene chiamato
 `test_resync_output_routing.c` includono casi con path lungo e callback
 fallito/riuscito per fissare il contratto.
 
+Aggiornamento successivo: una terza review della stessa PR ha individuato il
+residuo su `WATCH_STALE_EVENT_DROPPED`. Anche questo diagnostico e' gia'
+sink-capable e runtime-routed, quindi il fallback del text sink non puo'
+impedire al record strutturato di attraversare `emit_record`. Il helper
+`backend_log_stale_event_dropped()` ora segue lo stesso schema
+`record_built`/`compat_logged`: scrive prima la riga compatibile, eventualmente
+tramite fallback legacy, e poi offre comunque il record gia' costruito al
+callback strutturato. `tests/backend/test_watch_stale_output_failure.c` copre
+path lungo, emissione riuscita e fallimento fail-closed anche per
+`WATCH_STALE_EVENT_DROPPED`.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

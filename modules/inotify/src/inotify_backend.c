@@ -476,8 +476,10 @@ static int backend_log_watch_stale(inotify_backend_context_t *ctx,
  * filesystem object, not Alfred's saved textual path. Forwarding that event to
  * raw/core would attach a possibly false path, so Alfred logs a diagnostic and
  * deliberately drops the raw/core conversion. The record preserves mask/name as
- * structured watch payload, then follows the same compatibility-first policy as
- * the other watch diagnostics.
+ * structured watch payload, then follows the same compatibility-first policy
+ * as the other watch diagnostics: text compatibility is written first, but a
+ * text formatter fallback must not prevent the already-built structured record
+ * from reaching emit_record.
  */
 static int backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
                                            int wd,
@@ -489,6 +491,8 @@ static int backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
     char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+    int record_built = 0;
+    int compat_logged = 0;
 
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
@@ -499,6 +503,7 @@ static int backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
                                                 event_mask,
                                                 event_name,
                                                 &record) == 0) {
+        record_built = 1;
         text_sink.write = backend_write_event_payload;
         text_sink.userdata = ctx->logger;
         text_sink.buffer = payload;
@@ -506,29 +511,33 @@ static int backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            if (ctx->emit_record != NULL &&
-                ctx->emit_record(&record,
-                                 ctx->emit_record_userdata) != 0) {
-                logger_error(ctx->logger,
-                             "failed to emit stale dropped output record");
-                return -1;
-            }
-
-            return 0;
+            compat_logged = 1;
         }
 
-        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+        if (!compat_logged &&
+            alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
             logger_event(ctx->logger, "%s", payload);
-            return 0;
+            compat_logged = 1;
         }
     }
 
-    logger_event(ctx->logger,
-                 "WATCH_STALE_EVENT_DROPPED wd=%d path=%s mask=%s name=%s",
-                 wd,
-                 path != NULL ? path : "",
-                 event_mask != NULL ? event_mask : "",
-                 event_name != NULL ? event_name : "");
+    if (!compat_logged) {
+        logger_event(ctx->logger,
+                     "WATCH_STALE_EVENT_DROPPED wd=%d path=%s mask=%s name=%s",
+                     wd,
+                     path != NULL ? path : "",
+                     event_mask != NULL ? event_mask : "",
+                     event_name != NULL ? event_name : "");
+    }
+
+    if (record_built &&
+        ctx->emit_record != NULL &&
+        ctx->emit_record(&record, ctx->emit_record_userdata) != 0) {
+        logger_error(ctx->logger,
+                     "failed to emit stale dropped output record");
+        return -1;
+    }
+
     return 0;
 }
 

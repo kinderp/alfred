@@ -764,12 +764,23 @@ fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
 continuare ignorando il fatto che il ledger strutturato ha perso proprio il
 record che segnala "questo path non e' piu' affidabile".
 
-`WATCH_STALE` e il `WATCH_RESYNC_FAILED` semplice passano dal helper generico
-`backend_log_watch_diagnostic_record()`. Anche qui il text sink non e' il gate
-di JSONL: se il buffer testuale non basta, il backend scrive il fallback legacy
-compatibile e poi chiama comunque `emit_record` con il record gia' costruito.
-Questo evita che un path molto lungo renda completo `events.log` ma incompleto
-`output.jsonl`.
+`WATCH_STALE_EVENT_DROPPED` segue la stessa regola. Questo diagnostico viene
+emesso quando il kernel invia ancora un evento su un watch marcato `STALE`.
+Alfred non puo' trasformarlo in raw/core event perche' il path salvato potrebbe
+essere falso, quindi scrive solo un diagnostico. Anche qui il log compatibile e
+il record strutturato sono due contratti diversi: se il text sink non riesce a
+formattare la riga umana, per esempio per un path molto lungo, il backend usa il
+fallback legacy `logger_event()` ma deve comunque chiamare `emit_record` con il
+record gia' costruito. In caso contrario `events.log` direbbe che l'evento e'
+stato visto e droppato, mentre `output.jsonl` perderebbe proprio la prova
+strutturata del drop.
+
+`WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` e il `WATCH_RESYNC_FAILED` semplice
+passano da helper diagnostici che applicano la stessa separazione concettuale.
+Il text sink non e' il gate di JSONL: se il buffer testuale non basta, il
+backend scrive il fallback legacy compatibile e poi chiama comunque
+`emit_record` con il record gia' costruito. Questo evita che un path molto lungo
+renda completo `events.log` ma incompleto `output.jsonl`.
 
 I diagnostici `WATCH_RESYNC_*` seguono la stessa migrazione. Sono record Event
 Model v0, usano `alfred_record_text_sink_t` per produrre le righe compatibili di
