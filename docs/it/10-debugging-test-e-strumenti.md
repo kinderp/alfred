@@ -2162,6 +2162,13 @@ La copertura iniziale include:
   `output_format=jsonl`, `output_buffer_size=65536`, accettazione di `text` e
   `jsonl`, rifiuto di formati non implementati e rifiuto di buffer troppo
   piccoli o non numerici.
+- `test_record_output_pipeline.sh`: compila `test_record_output_pipeline.c` e
+  verifica la prima pipeline composta `record -> queue -> dispatcher -> JSONL
+  writer`. Il test non tocca `app_run()`: usa record sintetici per controllare
+  che una pipeline disabilitata sia un no-op, che una pipeline JSONL abilitata
+  accodi record owned, rispetti `drain_batch_size`, segnali queue full, consegni
+  record al writer solo tramite drain e chiami la callback di output solo al
+  flush.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

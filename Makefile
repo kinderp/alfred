@@ -107,6 +107,7 @@ CORE_SRCS := \
 	$(CORE_DIR)/src/alfred_record_jsonl_sink.c \
 	$(CORE_DIR)/src/alfred_record_jsonl_writer.c \
 	$(CORE_DIR)/src/alfred_record_owned.c \
+	$(CORE_DIR)/src/alfred_record_output_pipeline.c \
 	$(CORE_DIR)/src/alfred_record_queue.c \
 	$(CORE_DIR)/src/alfred_record_runtime.c \
 	$(CORE_DIR)/src/alfred_record_sink.c \

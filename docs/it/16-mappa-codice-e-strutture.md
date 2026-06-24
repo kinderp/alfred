@@ -376,6 +376,55 @@ Questa scelta rende visibile la policy minima di buffering: non facciamo una
 write per ogni record e non perdiamo bytes buffered se la callback fallisce. Non
 esiste ancora thread, socket o file descriptor dentro questa struttura.
 
+### `alfred_record_output_pipeline_t`
+
+Definizione:
+
+```c
+typedef struct {
+    int enabled;
+    alfred_record_output_pipeline_format_t format;
+    size_t drain_batch_size;
+    alfred_record_queue_t queue;
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t sink_storage[1];
+    alfred_record_jsonl_writer_t writer;
+} alfred_record_output_pipeline_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `enabled` | abilita o spegne la pipeline | `alfred_record_output_pipeline_init()` | enqueue, drain, flush |
+| `format` | formato writer attivo, oggi JSONL | init | test, futuro runtime |
+| `drain_batch_size` | limite batch per ogni drain | init | `alfred_record_output_pipeline_drain_once()` |
+| `queue` | coda bounded owned | init, enqueue, drain, destroy | enqueue, drain, query |
+| `dispatcher` | routing verso sink registrati | init | drain |
+| `sink_storage[1]` | storage embedded per un solo sink v0 | init | dispatcher |
+| `writer` | JSONL buffered writer | init, drain, flush | drain, flush, query |
+
+La pipeline compone pezzi gia' separati:
+
+```text
+enqueue(record)
+-> clone owned nella queue
+drain_once()
+-> queue pop
+-> dispatcher
+-> JSONL writer buffer
+flush()
+-> callback write(data, size)
+```
+
+Se `enabled` e' falso, tutti questi passaggi sono no-op riusciti. Questo serve a
+modellare `output_enabled=false`: il nuovo percorso esiste come struttura
+testabile, ma non interferisce con `raw.log`, `events.log` ed `errors.log`.
+
+Questa struttura non possiede file descriptor, socket, thread o buffer allocati
+dal writer. Possiede solo la queue allocata da `alfred_record_queue_init()`; i
+buffer del writer sono caller-owned.
+
 ### `alfred_record_queue_t`
 
 Definizione:

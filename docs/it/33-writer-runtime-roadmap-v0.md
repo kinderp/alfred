@@ -338,7 +338,7 @@ Ogni micro-step deve aggiornare documentazione e test. Se cambia ownership,
 queue, dispatcher o sink, bisogna aggiornare anche la documentazione C per gli
 studenti.
 
-I primi sette punti sono ora coperti: questa roadmap esiste,
+I primi otto punti sono ora coperti: questa roadmap esiste,
 `make perf-record-sinks` produce la riga `queue-counter` per misurare clone
 owned, push nella coda, pop, emit al counter e destroy del record owned,
 produce righe `dispatcher-*` per misurare routing verso counter, text, JSONL e
@@ -350,8 +350,10 @@ JSONL buffered isolato dal backend: formatta record, aggiunge newline, accumula
 bytes e li consegna solo al flush o quando deve liberare spazio.
 `config_t.output` introduce la configurazione minima, disabilitata di default:
 `output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536`.
-Il prossimo passo resta collegare sperimentalmente il runtime record queue a un
-solo writer.
+`alfred_record_output_pipeline_t` collega sperimentalmente, in modo
+single-threaded e fuori da `app_run()`, queue, dispatcher, runtime drain e JSONL
+writer. Il prossimo passo resta misurare questa pipeline o decidere se collegarla
+al runtime applicativo dietro `output_enabled=true`.
 
 ## Cose da non fare ora
 

@@ -446,6 +446,14 @@ compatibile `raw.log`/`events.log`/`errors.log`, mentre `enabled=true` e' solo
 un'intenzione validata per il futuro percorso `record -> queue -> dispatcher ->
 writer`. `test_output_config.sh` copre default, valori validi e invalidi.
 
+Aggiornamento successivo: `alfred_record_output_pipeline_t` introduce la prima
+pipeline composta single-writer. La pipeline e' ancora fuori da `app_run()` e
+non crea thread: quando e' abilitata, fa `enqueue` di record owned nella queue,
+`drain_once` verso dispatcher e JSONL writer, e `flush` separato verso callback
+bytes. Quando e' disabilitata, tutti i passaggi sono no-op riusciti. Il test
+`test_record_output_pipeline.sh` copre disabled mode, pipeline JSONL abilitata,
+batch drain, queue full e flush failure con bytes preservati.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

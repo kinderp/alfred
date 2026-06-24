@@ -644,6 +644,72 @@ Queste scelte appartengono ai prossimi passi. In questo micro-step fissiamo solo
 le tre informazioni necessarie per non hardcodare formato e dimensione del
 buffer.
 
+## Output pipeline sperimentale
+
+Il passo successivo compone i blocchi gia' testati in una pipeline singola:
+
+```text
+alfred_record_t
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_output_pipeline_flush()
+-> callback write(data, size)
+```
+
+Il tipo principale e':
+
+```c
+typedef struct {
+    int enabled;
+    alfred_record_output_pipeline_format_t format;
+    size_t drain_batch_size;
+    alfred_record_queue_t queue;
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t sink_storage[1];
+    alfred_record_jsonl_writer_t writer;
+} alfred_record_output_pipeline_t;
+```
+
+Significato:
+
+| Campo | Ruolo |
+| --- | --- |
+| `enabled` | se falso, la pipeline e' un no-op |
+| `format` | formato writer attivo; v0 supporta solo JSONL |
+| `drain_batch_size` | massimo numero di record consumati da un drain |
+| `queue` | coda bounded di record owned |
+| `dispatcher` | fan-out bounded; v0 registra un solo sink |
+| `sink_storage[1]` | storage embedded per il sink JSONL |
+| `writer` | JSONL buffered writer |
+
+Quando la pipeline e' disabilitata, `enqueue`, `drain_once` e `flush` tornano
+successo senza produrre output. Questo rappresenta il comportamento di
+`output_enabled=false`: il runtime compatibile continua a usare i log correnti e
+la nuova pipeline non partecipa.
+
+Quando la pipeline e' abilitata, il record viene clonato nella queue come owned,
+poi il drain consegna un batch al dispatcher. Il dispatcher chiama il sink JSONL
+e il sink scrive nel buffer del writer. La callback di output non viene chiamata
+dal drain: viene chiamata solo da `alfred_record_output_pipeline_flush()`.
+
+Questa scelta e' intenzionale:
+
+- `enqueue()` misura il confine borrowed -> owned;
+- `drain_once()` misura il confine queue -> dispatcher -> writer;
+- `flush()` misura il confine writer buffered -> output device callback.
+
+La pipeline non apre file, non crea thread, non implementa retry e non decide
+policy di backpressure. Se la queue e' piena, `enqueue()` fallisce. Se il flush
+fallisce, i bytes restano nel JSONL writer come gia' definito dal contratto del
+writer buffered.
+
+Questa e' ancora una pipeline sperimentale e testabile, non il percorso finale
+di `app_run()`.
+
 ## Backpressure
 
 Se un writer e' lento, Alfred deve avere una policy esplicita. Non deve
