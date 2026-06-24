@@ -1476,6 +1476,20 @@ layer=semantic category=filesystem type=DIR_CREATED
 layer=diagnostic category=watch type=WATCH_ADDED
 ```
 
+Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
+correlato:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=FILE_RENAMED
+```
+
+Il test controlla anche che i due raw move abbiano un cookie non nullo e uguale.
+Questo e' importante perche' `RAW_MOVED_FROM` e `RAW_MOVED_TO` sono due mezzi
+eventi raw: il core li correla tramite cookie e produce un solo
+`FILE_RENAMED` semantico con `old_path` e `new_path`.
+
 Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
 umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
 dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
@@ -2360,6 +2374,13 @@ La copertura iniziale include:
   `DIR_CREATED` e `WATCH_ADDED`. Questo test e' volutamente piccolo: non vuole
   duplicare tutta la suite testuale, ma fissare il formato dati pubblico su uno
   scenario rappresentativo.
+- `tests/jsonl/test_rename_file_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `old-jsonl.txt` e poi lo rinomina in
+  `new-jsonl.txt`. Il test verifica che i log compatibili continuino a mostrare
+  `RAW_MOVED_FROM`, `RAW_MOVED_TO` e `FILE_RENAMED`, poi fa parsing di
+  `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
+  il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
+  record semantico deve esporre `old_path` e `new_path`.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

@@ -707,3 +707,11 @@ file e una directory, verifica i log compatibili e poi fa parsing reale di
 contratto esterno strutturato per `RAW_CREATE`, `FILE_CREATED`, `DIR_CREATED` e
 `WATCH_ADDED`. La GitHub Action esegue ora anche `make test-jsonl` e carica i
 log/JSONL della suite in caso di fallimento.
+
+Aggiornamento successivo: la suite JSONL contiene ora anche
+`test_rename_file_jsonl.sh`. Lo scenario crea `old-jsonl.txt`, lo rinomina in
+`new-jsonl.txt` e verifica il contratto strutturato di `RAW_MOVED_FROM`,
+`RAW_MOVED_TO` e `FILE_RENAMED`. Il test controlla che i due raw move espongano
+lo stesso cookie non nullo e che il record semantico usi `old_path` e
+`new_path`, fissando il primo caso di correlazione raw -> semantica nel formato
+JSONL pubblico.
