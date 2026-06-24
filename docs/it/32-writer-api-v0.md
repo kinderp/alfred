@@ -747,6 +747,15 @@ lo clona/enqueue nella pipeline se `output_enabled=true`, oppure lo ignora in
 modo riuscito se l'output strutturato e' disabilitato. Questa e' la stessa
 regola di ownership usata per gli eventi semantici del core.
 
+`WATCH_ADDED` e `WATCH_REMOVED` nascono nel watch manager, cioe' nel codice che
+installa o rimuove watch inotify e aggiorna la watcher table. Anche qui valgono
+due contratti separati: il log compatibile in `events.log` serve agli utenti e
+ai test storici; il record strutturato serve a JSONL e ai futuri writer. Se il
+text sink non riesce a formattare la riga umana, il watch manager scrive il
+fallback legacy `WATCH_ADDED wd=N path=P` o `WATCH_REMOVED wd=N path=P`, ma
+deve comunque chiamare `emit_record` con il record gia' costruito. In questo
+modo un problema del formato umano non rende incompleto il ledger strutturato.
+
 Se `emit_record` fallisce, il backend non deve decidere una policy locale come
 "continua comunque" o "termina il processo". Deve propagare l'errore al proprio
 chiamante. La scelta fail-closed appartiene all'applicazione perche'
@@ -763,6 +772,72 @@ stesso `alfred_record_t` borrowed al callback `emit_record`. Se il callback
 fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
 continuare ignorando il fatto che il ledger strutturato ha perso proprio il
 record che segnala "questo path non e' piu' affidabile".
+
+`WATCH_STALE_EVENT_DROPPED` segue la stessa regola. Questo diagnostico viene
+emesso quando il kernel invia ancora un evento su un watch marcato `STALE`.
+Alfred non puo' trasformarlo in raw/core event perche' il path salvato potrebbe
+essere falso, quindi scrive solo un diagnostico. Anche qui il log compatibile e
+il record strutturato sono due contratti diversi: se il text sink non riesce a
+formattare la riga umana, per esempio per un path molto lungo, il backend usa il
+fallback legacy `logger_event()` ma deve comunque chiamare `emit_record` con il
+record gia' costruito. In caso contrario `events.log` direbbe che l'evento e'
+stato visto e droppato, mentre `output.jsonl` perderebbe proprio la prova
+strutturata del drop.
+
+`WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` e il `WATCH_RESYNC_FAILED` semplice
+passano da helper diagnostici che applicano la stessa separazione concettuale.
+Il text sink non e' il gate di JSONL: se il buffer testuale non basta, il
+backend scrive il fallback legacy compatibile e poi chiama comunque
+`emit_record` con il record gia' costruito. Questo evita che un path molto lungo
+renda completo `events.log` ma incompleto `output.jsonl`.
+
+I diagnostici `WATCH_RESYNC_*` seguono la stessa migrazione. Sono record Event
+Model v0, usano `alfred_record_text_sink_t` per produrre le righe compatibili di
+`events.log` o `errors.log`, e vengono poi offerti a `emit_record`. Quindi:
+
+- sono `sink-capable`, perche' text formatter e JSONL formatter conoscono i
+  tipi;
+- sono `runtime-routed` prima verso il text sink legacy del backend inotify e
+  poi verso la output pipeline;
+- compaiono in `output.jsonl` quando `output_enabled=true`.
+
+La regola implementata e' la stessa dei watch base: il backend conserva il log
+compatibile e poi offre lo stesso record borrowed al callback `emit_record`. Se
+`output_enabled=true` e il callback fallisce, l'errore risale al poll invece di
+essere ignorato. Questa scelta mantiene JSONL come ledger affidabile senza
+trasformare il backend in un writer JSONL diretto.
+
+Il log compatibile e il ledger strutturato non devono pero' dipendere dallo
+stesso successo interno. Il text sink usa un buffer fisso per produrre la riga
+umana di `events.log` o `errors.log`; se un path molto lungo non entra in quel
+buffer, il backend usa ancora il vecchio fallback `logger_event()` /
+`logger_error()` per preservare il log storico. Dopo quel fallback deve comunque
+offrire il record gia' costruito a `emit_record`. In altre parole: un fallimento
+del formatter testuale umano puo' cambiare il modo in cui si scrive la riga
+compatibile, ma non puo' impedire al record strutturato di arrivare alla output
+pipeline.
+
+I diagnostici `WATCH_LOST_*` seguono ora la stessa regola completa. Conservano
+il log compatibile e vengono poi offerti a `emit_record`, quindi compaiono in
+`output.jsonl` quando l'output strutturato e' abilitato. Questo include
+queue-level, scan, found, prefix update, coverage, reinstallazione, rollback,
+retry, gave-up, recovery failed e recovery end.
+
+Questo richiede una regola importante di ownership logica, non solo di memoria:
+il chiamante runtime deve controllare il valore di ritorno del helper che emette
+il diagnostico. Prima della migrazione molti call-site potevano ignorare il
+ritorno perche' stavano solo scrivendo log umani. Dopo la migrazione, ignorarlo
+vorrebbe dire poter perdere un record JSONL mentre la recovery prosegue. Per
+questo la recovery lost-scope distingue il risultato interno `output-failed` da
+`scan-failed`: `scan-failed` riguarda una ricerca o una riparazione non
+affidabile; `output-failed` riguarda il ledger strutturato e deve fermare il
+poll quando `emit_record` e' stato installato dall'applicazione.
+
+Anche per `WATCH_LOST_*` vale la stessa separazione tra compatibilita' testuale
+e output strutturato. Se il text sink non riesce a formattare una riga molto
+lunga, il backend scrive la forma legacy equivalente e poi chiama comunque
+`emit_record`. Se invece fallisce `emit_record`, la recovery non puo'
+proseguire come se `output.jsonl` fosse completo.
 
 La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
 righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:

@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build/tests/backend"
-TEST_BIN="$BUILD_DIR/test_watch_diagnostic_output_failure"
+TEST_BIN="$BUILD_DIR/test_lost_scope_completion_output_routing"
 
 mkdir -p "$BUILD_DIR"
 
@@ -31,7 +31,7 @@ gcc \
     -I"$ROOT_DIR/core/include" \
     -I"$ROOT_DIR/core/src" \
     -I"$ROOT_DIR/modules/inotify/include" \
-    "$ROOT_DIR/tests/backend/test_watch_diagnostic_output_failure.c" \
+    "$ROOT_DIR/tests/backend/test_lost_scope_completion_output_routing.c" \
     "$ROOT_DIR/app/src/fs_scanner.c" \
     "$ROOT_DIR/app/src/logger.c" \
     "$ROOT_DIR/app/src/utils.c" \
@@ -39,7 +39,9 @@ gcc \
     "$ROOT_DIR/core/src/alfred_record_sink.c" \
     "$ROOT_DIR/core/src/alfred_record_text.c" \
     "$ROOT_DIR/core/src/alfred_record_text_sink.c" \
+    "$ROOT_DIR/modules/inotify/src/inotify_adapter.c" \
     "$ROOT_DIR/modules/inotify/src/inotify_config.c" \
+    "$ROOT_DIR/modules/inotify/src/watch_manager.c" \
     "$ROOT_DIR/modules/inotify/src/watcher.c" \
     -o "$TEST_BIN" \
     -fsanitize=address \
@@ -47,4 +49,4 @@ gcc \
 
 ASAN_OPTIONS=detect_leaks=0 "$TEST_BIN"
 
-echo "PASS backend watch diagnostic output failure"
+echo "PASS backend WATCH_LOST completion output routing"

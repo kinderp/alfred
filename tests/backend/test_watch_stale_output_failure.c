@@ -1,14 +1,19 @@
 /*
- * test_watch_stale_output_failure.c - fail-closed WATCH_STALE test
+ * test_watch_stale_output_failure.c - fail-closed stale-watch diagnostics
  *
  * Expected log contract:
  *
  * events.log:
  * - WATCH_STALE wd=42 path=/tmp/alfred-watch-stale-output-failure
  *   reason=IN_MOVE_SELF
+ * - WATCH_STALE_EVENT_DROPPED wd=45 path=<long-path>
+ *   mask=IN_IGNORED name=after-move.txt
+ * - WATCH_STALE_EVENT_DROPPED wd=46 path=<long-path>
+ *   mask=IN_IGNORED name=after-move.txt
  *
  * errors.log:
  * - failed to emit watch stale output record
+ * - failed to emit stale dropped output record
  *
  * Meaning:
  * WATCH_STALE is backend diagnostic state: it says a watch descriptor still
@@ -19,6 +24,12 @@
  * output_enabled=true. The backend still does not know JSONL, files, queues, or
  * application policy; it only propagates the callback failure across the
  * backend/app boundary.
+ *
+ * WATCH_STALE_EVENT_DROPPED is the next diagnostic emitted after Alfred sees a
+ * kernel event on a stale watch. It is not forwarded to raw/core because the
+ * saved path is unreliable. The test uses a deliberately long path to force the
+ * compatibility text formatter through the legacy logger fallback; even in that
+ * fallback branch, the already-built record must still reach emit_record.
  */
 
 #include "inotify_backend.h"
@@ -33,33 +44,78 @@
 
 typedef struct failing_watch_stale_emit_context {
     unsigned calls;
+    int fail;
+    alfred_record_type_t expected_type;
+    const char *expected_path;
+    const char *expected_reason;
+    const char *expected_event_mask;
+    const char *expected_event_name;
 } failing_watch_stale_emit_context_t;
 
 /*
- * fail_watch_stale_emit_record - reject only WATCH_STALE records
+ * fail_watch_stale_emit_record - collect or reject selected stale diagnostics
  * @record: borrowed diagnostic record produced by the backend helper
  * @userdata: failing_watch_stale_emit_context_t used to count calls
  *
  * The test callback models an application output pipeline failure at the exact
- * boundary under review. It asserts that no unrelated diagnostic type reaches
- * this path, increments the call counter, and returns failure.
+ * boundary under review. It asserts the expected diagnostic type and payload,
+ * increments the call counter, and optionally returns failure.
  *
- * Return: always -1 to model structured output failure.
+ * Return: -1 when @userdata requests failure, 0 otherwise.
  */
-static int fail_watch_stale_emit_record(const alfred_record_t *record,
-                                        void *userdata)
+static int collect_or_fail_watch_stale_emit_record(const alfred_record_t *record,
+                                                   void *userdata)
 {
     failing_watch_stale_emit_context_t *ctx = userdata;
 
     assert(record != NULL);
     assert(ctx != NULL);
-    assert(record->type == ALFRED_RECORD_TYPE_WATCH_STALE);
+    assert(record->type == ctx->expected_type);
     assert(record->category == ALFRED_RECORD_CATEGORY_WATCH);
-    assert(record->watch.reason != NULL);
-    assert(strcmp(record->watch.reason, "IN_MOVE_SELF") == 0);
+    assert(record->path != NULL);
+    assert(ctx->expected_path != NULL);
+    assert(strcmp(record->path, ctx->expected_path) == 0);
+
+    if (ctx->expected_type == ALFRED_RECORD_TYPE_WATCH_STALE) {
+        assert(ctx->expected_reason != NULL);
+        assert(record->watch.reason != NULL);
+        assert(strcmp(record->watch.reason, ctx->expected_reason) == 0);
+    } else {
+        assert(ctx->expected_type ==
+               ALFRED_RECORD_TYPE_WATCH_STALE_EVENT_DROPPED);
+        assert(ctx->expected_event_mask != NULL);
+        assert(ctx->expected_event_name != NULL);
+        assert(record->watch.event_mask != NULL);
+        assert(record->watch.event_name != NULL);
+        assert(strcmp(record->watch.event_mask,
+                      ctx->expected_event_mask) == 0);
+        assert(strcmp(record->watch.event_name,
+                      ctx->expected_event_name) == 0);
+    }
 
     ctx->calls++;
-    return -1;
+    return ctx->fail ? -1 : 0;
+}
+
+/*
+ * fill_long_path - build a path that cannot fit the backend text sink buffer
+ * @dst: destination buffer
+ * @dst_size: size of @dst in bytes
+ *
+ * WATCH_STALE and WATCH_STALE_EVENT_DROPPED both use fixed-size compatibility
+ * text buffers before emit_record. The long path forces each helper through its
+ * legacy logger fallback while the already-built structured record must still
+ * cross emit_record.
+ */
+static void fill_long_path(char *dst, size_t dst_size)
+{
+    assert(dst != NULL);
+    assert(dst_size > 8u);
+
+    strcpy(dst, "/tmp/");
+    memset(dst + 5, 's', dst_size - 7u);
+    dst[dst_size - 2u] = 'z';
+    dst[dst_size - 1u] = '\0';
 }
 
 /*
@@ -103,11 +159,15 @@ int main(void)
 
     failing_watch_stale_emit_context_t emit_ctx;
     memset(&emit_ctx, 0, sizeof(emit_ctx));
+    emit_ctx.fail = 1;
+    emit_ctx.expected_type = ALFRED_RECORD_TYPE_WATCH_STALE;
+    emit_ctx.expected_path = stale_path;
+    emit_ctx.expected_reason = "IN_MOVE_SELF";
 
     inotify_backend_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.logger = &logger;
-    ctx.emit_record = fail_watch_stale_emit_record;
+    ctx.emit_record = collect_or_fail_watch_stale_emit_record;
     ctx.emit_record_userdata = &emit_ctx;
 
     assert(backend_log_watch_stale(&ctx,
@@ -116,13 +176,68 @@ int main(void)
                                    "IN_MOVE_SELF") == -1);
     assert(emit_ctx.calls == 1u);
 
+    char long_path[BACKEND_RECORD_TEXT_BUFFER_SIZE + 128u];
+
+    fill_long_path(long_path, sizeof(long_path));
+    emit_ctx.fail = 0;
+    emit_ctx.expected_type = ALFRED_RECORD_TYPE_WATCH_STALE;
+    emit_ctx.expected_path = long_path;
+    emit_ctx.expected_reason = "IN_MOVE_SELF";
+
+    assert(backend_log_watch_stale(&ctx,
+                                   43,
+                                   long_path,
+                                   "IN_MOVE_SELF") == 0);
+    assert(emit_ctx.calls == 2u);
+
+    emit_ctx.fail = 1;
+    emit_ctx.expected_type = ALFRED_RECORD_TYPE_WATCH_STALE;
+    emit_ctx.expected_reason = "IN_MOVE_SELF";
+
+    assert(backend_log_watch_stale(&ctx,
+                                   44,
+                                   long_path,
+                                   "IN_MOVE_SELF") == -1);
+    assert(emit_ctx.calls == 3u);
+
+    emit_ctx.fail = 0;
+    emit_ctx.expected_type = ALFRED_RECORD_TYPE_WATCH_STALE_EVENT_DROPPED;
+    emit_ctx.expected_path = long_path;
+    emit_ctx.expected_reason = NULL;
+    emit_ctx.expected_event_mask = "IN_IGNORED";
+    emit_ctx.expected_event_name = "after-move.txt";
+
+    assert(backend_log_stale_event_dropped(&ctx,
+                                           45,
+                                           long_path,
+                                           "IN_IGNORED",
+                                           "after-move.txt") == 0);
+    assert(emit_ctx.calls == 4u);
+
+    emit_ctx.fail = 1;
+
+    assert(backend_log_stale_event_dropped(&ctx,
+                                           46,
+                                           long_path,
+                                           "IN_IGNORED",
+                                           "after-move.txt") == -1);
+    assert(emit_ctx.calls == 5u);
+
     logger_close(&logger);
 
     assert(file_contains(event_log, "WATCH_STALE wd=42"));
+    assert(file_contains(event_log, "WATCH_STALE wd=43"));
+    assert(file_contains(event_log, "WATCH_STALE wd=44"));
+    assert(file_contains(event_log, "WATCH_STALE_EVENT_DROPPED wd=45"));
+    assert(file_contains(event_log, "WATCH_STALE_EVENT_DROPPED wd=46"));
     assert(file_contains(event_log, stale_path));
     assert(file_contains(event_log, "reason=IN_MOVE_SELF"));
+    assert(file_contains(event_log, "mask=IN_IGNORED"));
+    assert(file_contains(event_log, "name=after-move.txt"));
     assert(file_contains(error_log,
                          "failed to emit watch stale output record"));
+    assert(file_contains(error_log,
+                         "failed to emit stale dropped output record"));
 
     unlink(raw_log);
     unlink(event_log);

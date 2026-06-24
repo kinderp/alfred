@@ -576,6 +576,104 @@ perdere silenziosamente il record JSONL solo perche' la riga legacy supera il
 buffer umano. `test_output_pipeline_runtime.sh` copre questo caso con un path
 profondo creato prima dello startup e un file creato dopo l'avvio.
 
+Aggiornamento successivo: la mappa del contratto log chiarisce il prossimo
+micro-step sui diagnostici `WATCH_RESYNC_*`. Questi record sono gia'
+`sink-capable` perche' hanno builder Event Model v0 e formatter text/JSONL, ma
+oggi sono `runtime-routed` solo verso il text sink compatibile del backend
+inotify. Non attraversano ancora `emit_record` e quindi non compaiono in
+`output.jsonl`. La documentazione ora distingue esplicitamente text sink legacy,
+output pipeline e prossimo routing fail-closed verso JSONL.
+
+Aggiornamento successivo: i diagnostici `WATCH_RESYNC_*` sono stati collegati
+alla output pipeline. Il backend inotify conserva prima la riga compatibile in
+`events.log` o `errors.log`, poi offre lo stesso record borrowed a
+`ctx->emit_record`. Se il callback fallisce, il percorso resync propaga errore
+e il poll puo' fallire chiuso quando l'utente ha abilitato l'output
+strutturato. `tests/backend/test_resync_output_routing.c` fissa il contratto per
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e il ramo di fallimento callback. I
+diagnostici `WATCH_LOST_*` restano il prossimo gruppo da migrare.
+
+Aggiornamento successivo: il primo sottoinsieme `WATCH_LOST_*` e' stato
+collegato alla output pipeline. `WATCH_LOST_QUEUED`,
+`WATCH_LOST_QUEUE_SKIPPED` e `WATCH_LOST_QUEUE_FAILED` conservano il log
+compatibile e poi attraversano `ctx->emit_record`, quindi possono comparire in
+`output.jsonl` quando l'output strutturato e' abilitato. Il test mirato
+`tests/backend/test_lost_scope_queue_output_routing.c` copre successi e
+fallimento callback; `test_output_pipeline_runtime.sh` verifica il record
+`WATCH_LOST_QUEUED` nel runtime end-to-end. I record lost-scope di scan,
+coverage, reinstallazione, retry e fine recovery restano text-only fino al
+prossimo micro-step.
+
+Aggiornamento successivo: anche la fase scan/classificazione lost-scope e'
+stata collegata alla output pipeline. `WATCH_LOST_SCAN_BEGIN`,
+`WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`,
+`WATCH_LOST_COVERAGE_DONE`, `WATCH_LOST_COVERAGE_MISSING`,
+`WATCH_LOST_COVERAGE_CLASS`, `WATCH_LOST_NOT_FOUND` e
+`WATCH_LOST_RECOVERY_FAILED` attraversano ora `ctx->emit_record` dopo il log
+compatibile. `tests/backend/test_lost_scope_scan_output_routing.c` verifica i
+campi strutturati principali. Restano text-only i record che installano o
+rimuovono watch durante recovery e quelli che schedulano/concludono la
+recovery: reinstall, rollback, retry scheduled, gave-up e recovery end.
+
+Aggiornamento successivo: il routing `WATCH_LOST_*` e' completo. Anche
+`WATCH_LOST_REINSTALLED`, `WATCH_LOST_REINSTALL_FAILED`,
+`WATCH_LOST_ROLLBACK`, `WATCH_LOST_RETRY_SCHEDULED`,
+`WATCH_LOST_RECOVERY_GAVE_UP` e `WATCH_LOST_RECOVERY_END` vengono offerti a
+`ctx->emit_record` dopo il log compatibile. Il test
+`tests/backend/test_lost_scope_completion_output_routing.c` verifica i campi
+strutturati della fase finale: path installato, watch rimosso in rollback,
+retry count, delay, pending count, stato finale e numero di watch validati.
+
+Aggiornamento successivo: la review della PR sui `WATCH_LOST_*` ha chiarito il
+contratto di errore del confine `emit_record`. I call-site della recovery
+lost-scope non possono piu' ignorare il valore di ritorno del helper
+diagnostico: se il log compatibile e' stato scritto ma il record strutturato
+viene rifiutato da `emit_record`, il backend propaga `output-failed` e il poll
+runtime si ferma. Questo evita che `events.log` sembri completo mentre
+`output.jsonl` perde un record diagnostico della recovery. Il test
+`tests/backend/test_lost_scope_recovery.c` copre il caso in cui
+`WATCH_LOST_FOUND` viene rifiutato dal callback e la recovery si interrompe
+prima di `WATCH_LOST_RECOVERY_END`.
+
+Aggiornamento successivo: la stessa review ha evidenziato che il text sink non
+puo' essere il gate del ledger strutturato. Se `alfred_record_text_sink_emit()`
+fallisce per buffer testuale insufficiente, i helper `WATCH_RESYNC_*` e
+`WATCH_LOST_*` scrivono comunque il fallback legacy su `events.log` /
+`errors.log` e poi chiamano `emit_record` con il record gia' costruito. I test
+`tests/backend/test_resync_output_routing.c` e
+`tests/backend/test_lost_scope_scan_output_routing.c` coprono path lunghi che
+forzano il fallback e verificano che il record strutturato attraversi ancora la
+output pipeline.
+
+Aggiornamento successivo: una seconda review della PR ha trovato lo stesso
+pattern nel helper generico `backend_log_watch_diagnostic_record()`, usato da
+`WATCH_STALE` e dal `WATCH_RESYNC_FAILED` semplice. Anche quel helper ora
+separa compatibilita' testuale e output strutturato: se il text sink fallisce
+per payload troppo lungo, viene scritto il fallback legacy e poi viene chiamato
+`emit_record`. I test `test_watch_stale_output_failure.c` e
+`test_resync_output_routing.c` includono casi con path lungo e callback
+fallito/riuscito per fissare il contratto.
+
+Aggiornamento successivo: una terza review della stessa PR ha individuato il
+residuo su `WATCH_STALE_EVENT_DROPPED`. Anche questo diagnostico e' gia'
+sink-capable e runtime-routed, quindi il fallback del text sink non puo'
+impedire al record strutturato di attraversare `emit_record`. Il helper
+`backend_log_stale_event_dropped()` ora segue lo stesso schema
+`record_built`/`compat_logged`: scrive prima la riga compatibile, eventualmente
+tramite fallback legacy, e poi offre comunque il record gia' costruito al
+callback strutturato. `tests/backend/test_watch_stale_output_failure.c` copre
+path lungo, emissione riuscita e fallimento fail-closed anche per
+`WATCH_STALE_EVENT_DROPPED`.
+
+Aggiornamento successivo: una quarta review ha completato la stessa regola per
+la diagnostica watch lifecycle in `watch_manager.c`. `WATCH_ADDED` e
+`WATCH_REMOVED` ora separano anche loro il log compatibile dal confine
+strutturato: se il text sink non riesce a formattare la riga umana, viene
+scritto il fallback legacy e il record gia' costruito attraversa comunque
+`emit_record`. `tests/backend/test_watch_diagnostic_output_failure.c` include
+un caso con path sintetico lungo per forzare questo fallback senza modificare la
+API pubblica del watch manager.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

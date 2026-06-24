@@ -95,8 +95,10 @@ static int watch_manager_write_event_payload(void *userdata,
  * sink format the compatibility payload, then let the existing logger add
  * timestamp/level/newline details. When the application provides a structured
  * output callback, the same borrowed record is then offered to the output
- * pipeline. The fallback preserves the old payload if record creation, sink
- * setup, formatting, or logging fails.
+ * pipeline. The compatibility text path is not allowed to gate structured
+ * output: if record creation succeeds but the text sink cannot format the
+ * payload, the helper writes the legacy fallback line and still offers the
+ * already-built record to emit_record.
  */
 static int watch_manager_log_simple_watch_diagnostic(
     const inotify_backend_context_t *ctx,
@@ -109,6 +111,8 @@ static int watch_manager_log_simple_watch_diagnostic(
     alfred_record_sink_t sink;
     const char *name;
     char payload[PATH_MAX + 64u];
+    int record_built = 0;
+    int compat_logged = 0;
 
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
@@ -126,6 +130,7 @@ static int watch_manager_log_simple_watch_diagnostic(
             NULL,
             NULL,
             &record) == 0) {
+        record_built = 1;
         text_sink.write = watch_manager_write_event_payload;
         text_sink.userdata = ctx->logger;
         text_sink.buffer = payload;
@@ -133,28 +138,26 @@ static int watch_manager_log_simple_watch_diagnostic(
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            /*
-             * Keep events.log compatibility first, then expose the diagnostic
-             * record to optional structured output. Queue-based output must
-             * clone this borrowed record before returning.
-             */
-            if (ctx->emit_record != NULL &&
-                ctx->emit_record(&record,
-                                 ctx->emit_record_userdata) != 0) {
-                logger_error(ctx->logger,
-                             "failed to emit watch diagnostic output record");
-                return -1;
-            }
-
-            return 0;
+            compat_logged = 1;
         }
     }
 
-    logger_event(ctx->logger,
-                 "%s wd=%d path=%s",
-                 name,
-                 wd,
-                 path != NULL ? path : "");
+    if (!compat_logged) {
+        logger_event(ctx->logger,
+                     "%s wd=%d path=%s",
+                     name,
+                     wd,
+                     path != NULL ? path : "");
+    }
+
+    if (record_built &&
+        ctx->emit_record != NULL &&
+        ctx->emit_record(&record, ctx->emit_record_userdata) != 0) {
+        logger_error(ctx->logger,
+                     "failed to emit watch diagnostic output record");
+        return -1;
+    }
+
     return 0;
 }
 
