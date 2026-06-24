@@ -1325,6 +1325,7 @@ git diff --check
 make
 make test
 make test-backend-diagnostics
+make test-jsonl
 make test-scanner
 make test-watcher
 ```
@@ -1335,6 +1336,15 @@ backend che non fa parte dello stream semantico. `make test-scanner` e'
 separato perche' verifica il componente di attraversamento filesystem, non il
 runtime inotify -> core. `make test-watcher` e' ancora piu' mirato: controlla la
 tabella `wd -> path` e lo stato di affidabilita' dei watch senza avviare Alfred.
+`make test-jsonl` e' separato perche' protegge il contratto esterno
+strutturato di `output.jsonl`, non la compatibilita' testuale storica.
+
+Nota importante: non lanciare in parallelo, dallo stesso checkout, suite che
+avviano Alfred e scrivono `raw.log`, `events.log`, `errors.log` o
+`output.jsonl`. Per esempio `make test` e `make test-backend-diagnostics`
+devono essere eseguiti in sequenza. Se girano insieme nella stessa directory,
+possono cancellare o sovrascrivere i log l'una dell'altra e produrre falsi
+fallimenti. La CI li esegue infatti come step separati e sequenziali.
 
 ### 1. `git diff --check`
 
@@ -1426,7 +1436,55 @@ Questo passo risponde alla domanda:
 il backend inotify mantiene correttamente il proprio stato interno?
 ```
 
-### 5. `make test-scanner`
+### 5. `make test-jsonl`
+
+Il comando:
+
+```bash
+make test-jsonl
+```
+
+ricostruisce il binario core-only ed esegue la suite in:
+
+```text
+tests/jsonl/
+```
+
+Questa suite e' il primo posto in cui fissiamo il contratto esterno strutturato
+di Alfred. A differenza dei test testuali, che cercano righe in `raw.log` o
+`events.log`, questi test leggono `output.jsonl` prodotto con:
+
+```text
+output_enabled=true
+output_format=jsonl
+```
+
+Il primo scenario, `test_create_file_and_dir_jsonl.sh`, crea un file e una
+directory dentro una root osservata. Il test verifica due cose in parallelo:
+
+- i log compatibili restano presenti in `raw.log` ed `events.log`
+- `output.jsonl` contiene record JSON validi con campi strutturati attesi
+
+Lo script usa Python solo con la libreria standard `json`: non serve una
+dipendenza esterna come `jq`. Ogni riga viene parsata come JSON, viene
+controllato `schema_version=0` e poi vengono cercati record con:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_CREATE
+layer=semantic category=filesystem type=FILE_CREATED
+layer=semantic category=filesystem type=DIR_CREATED
+layer=diagnostic category=watch type=WATCH_ADDED
+```
+
+Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
+umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
+dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
+
+La suite JSONL non deve duplicare tutti i test core e backend. Va ampliata per
+scenari rappresentativi del contratto pubblico: rename/move, recovery, errori
+strutturati e, in futuro, sessione agente o policy.
+
+### 6. `make test-scanner`
 
 Il comando:
 
@@ -1466,7 +1524,7 @@ Poi verifica che lo scanner:
 Questo target serve alla futura progettazione resync e indicizzazione. Non
 sostituisce `make test` o `make test-backend-diagnostics`.
 
-### 6. `make test-watcher`
+### 7. `make test-watcher`
 
 Il comando:
 
@@ -2294,6 +2352,14 @@ La copertura iniziale include:
   usato dal text sink del core logger. Il contratto verificato e' che
   `output.jsonl` riceva comunque il record `FILE_CREATED`: il ledger strutturato
   non deve dipendere dal successo del formatter testuale legacy.
+- `tests/jsonl/test_create_file_and_dir_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true` e controlla il primo golden end-to-end del contratto
+  JSONL. Lo scenario crea `file-jsonl.txt` e `dir-jsonl`, poi verifica che
+  `raw.log` ed `events.log` continuino a contenere le righe compatibili e che
+  `output.jsonl` contenga record JSON validi per `RAW_CREATE`, `FILE_CREATED`,
+  `DIR_CREATED` e `WATCH_ADDED`. Questo test e' volutamente piccolo: non vuole
+  duplicare tutta la suite testuale, ma fissare il formato dati pubblico su uno
+  scenario rappresentativo.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

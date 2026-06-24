@@ -698,3 +698,12 @@ pubblici end-to-end devono essere fissati progressivamente con golden test
 JSONL, perche' `output.jsonl` e' il contratto esterno strutturato. I test
 testuali su `raw.log`, `events.log` ed `errors.log` restano in parallelo come
 compatibilita' storica, debug umano e supporto didattico.
+
+Aggiornamento successivo: nasce la prima suite golden JSONL end-to-end in
+`tests/jsonl`. Il target `make test-jsonl` compila Alfred e lancia
+`test_create_file_and_dir_jsonl.sh`, che abilita `output_enabled=true`, crea un
+file e una directory, verifica i log compatibili e poi fa parsing reale di
+`output.jsonl` con la libreria standard Python `json`. Il test fissa il primo
+contratto esterno strutturato per `RAW_CREATE`, `FILE_CREATED`, `DIR_CREATED` e
+`WATCH_ADDED`. La GitHub Action esegue ora anche `make test-jsonl` e carica i
+log/JSONL della suite in caso di fallimento.

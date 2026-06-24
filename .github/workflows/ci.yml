@@ -36,6 +36,9 @@ jobs:
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
 
+      - name: Run JSONL golden tests
+        run: make test-jsonl
+
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -45,3 +48,5 @@ jobs:
           path: |
             tests/core/*.log
             tests/backend/*.log
+            tests/jsonl/*.log
+            tests/jsonl/*.jsonl
