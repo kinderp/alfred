@@ -636,6 +636,13 @@ sincrono: il callback applicativo adatta il raw una sola volta, scrive il log
 compatibile e, se la pipeline e' abilitata, accoda lo stesso record nella
 pipeline JSONL e drena subito il batch disponibile.
 
+La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
+gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel
+[Contratto dei log](22-contratto-log.md#copertura-record-sink-e-output-jsonl).
+Quel capitolo distingue raw kernel, raw Alfred normalizzati, raw sintetici,
+eventi semantici, diagnostica watch/resync/lost-scope, lifecycle, errori e
+trace.
+
 Perche' non aggiungiamo ancora `output_target` o `flush_interval_ms`:
 
 - `output_target` apre il tema di file, stdout, socket, unix socket e Lab;

@@ -463,6 +463,16 @@ gia' candidati al record sink vengono adattati una sola volta, scritti su
 `test_output_pipeline_runtime.sh` verifica il comportamento end-to-end con
 `ALFRED_CONFIG`.
 
+Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
+copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
+inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,
+diagnostica watch/resync/lost-scope, lifecycle, errori, trace e security futura.
+La mappa chiarisce per ogni famiglia se oggi appare nei log testuali, se esiste
+un adapter/builder verso `alfred_record_t`, se il record e' sink-capable, se e'
+gia' runtime-routed verso un sink o una pipeline, e se entra in `output.jsonl`.
+La regola fissata e' che `output.jsonl` oggi e' un sottoinsieme strutturato
+opt-in, non una copia completa di Alfred.
+
 Aggiornamento successivo: `make perf-record-sinks` produce anche la riga
 `output-pipeline-jsonl`. Questa misura la pipeline composta con record sintetici:
 enqueue owned, runtime drain, dispatcher, JSONL buffered writer e flush finale

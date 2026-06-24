@@ -264,7 +264,7 @@ queste domande:
 | Fork e pull request | [11](11-come-contribuire.md) |
 | GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr) |
 | Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
-| Log | [22](22-contratto-log.md), [14](14-scenari-test.md) |
+| Log e copertura JSONL | [22](22-contratto-log.md#copertura-record-sink-e-output-jsonl), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Memoria C, lifetime, ownership e leak | [08](08-guida-c-usato-nel-progetto.md#lifetime-della-memoria), [29](29-event-model-v0.md#ownership-dei-campi), [32](32-writer-api-v0.md#ownership-e-record-accodati) |
