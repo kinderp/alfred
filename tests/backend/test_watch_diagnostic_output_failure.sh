@@ -40,7 +40,6 @@ gcc \
     "$ROOT_DIR/core/src/alfred_record_text.c" \
     "$ROOT_DIR/core/src/alfred_record_text_sink.c" \
     "$ROOT_DIR/modules/inotify/src/inotify_config.c" \
-    "$ROOT_DIR/modules/inotify/src/watch_manager.c" \
     "$ROOT_DIR/modules/inotify/src/watcher.c" \
     -o "$TEST_BIN" \
     -fsanitize=address \

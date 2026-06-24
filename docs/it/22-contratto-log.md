@@ -712,9 +712,11 @@ sono eventi semantici del core.
 passato come root non deve produrre `WATCH_ADDED`; deve fallire con diagnostica
 di errore backend, come verificato da `test_onlydir_rejects_file_root.sh`.
 
-Dal primo passo di Backend API v0, `WATCH_ADDED`, `WATCH_REMOVED` e
-`WATCH_STALE` nascono come record diagnostici strutturati e attraversano gia' il
-sink comune `emit(record)` prima di essere scritti come testo compatibile.
+Dal primo passo di Backend API v0, `WATCH_ADDED`, `WATCH_REMOVED`,
+`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED` nascono come record diagnostici
+strutturati. La compatibilita' testuale resta il primo output visibile, ma il
+record costruito viene poi offerto al callback `emit_record` quando la output
+pipeline e' installata.
 
 ```text
 watch_manager_add() / watch_manager_remove()
@@ -723,6 +725,7 @@ watch_manager_add() / watch_manager_remove()
 -> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event()
+-> inotify_backend_context_t.emit_record()
 
 backend_handle_move_self/delete_self/unmount()
 -> alfred_record_build_watch_diagnostic(WATCH_STALE, reason=R)
@@ -730,7 +733,14 @@ backend_handle_move_self/delete_self/unmount()
 -> alfred_record_text_sink_emit()
 -> alfred_record_format_text()
 -> logger_event()
+-> inotify_backend_context_t.emit_record()
 ```
+
+Se il text sink non riesce a produrre la riga compatibile, per esempio per un
+payload troppo lungo in un test di confine, il backend usa il fallback legacy
+`logger_event()` e poi chiama comunque `emit_record` con il record gia'
+costruito. Questa regola evita che `events.log` sia completo mentre
+`output.jsonl` perde un diagnostico watch.
 
 Il payload testuale resta volutamente identico:
 

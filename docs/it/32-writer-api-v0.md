@@ -747,6 +747,15 @@ lo clona/enqueue nella pipeline se `output_enabled=true`, oppure lo ignora in
 modo riuscito se l'output strutturato e' disabilitato. Questa e' la stessa
 regola di ownership usata per gli eventi semantici del core.
 
+`WATCH_ADDED` e `WATCH_REMOVED` nascono nel watch manager, cioe' nel codice che
+installa o rimuove watch inotify e aggiorna la watcher table. Anche qui valgono
+due contratti separati: il log compatibile in `events.log` serve agli utenti e
+ai test storici; il record strutturato serve a JSONL e ai futuri writer. Se il
+text sink non riesce a formattare la riga umana, il watch manager scrive il
+fallback legacy `WATCH_ADDED wd=N path=P` o `WATCH_REMOVED wd=N path=P`, ma
+deve comunque chiamare `emit_record` con il record gia' costruito. In questo
+modo un problema del formato umano non rende incompleto il ledger strutturato.
+
 Se `emit_record` fallisce, il backend non deve decidere una policy locale come
 "continua comunque" o "termina il processo". Deve propagare l'errore al proprio
 chiamante. La scelta fail-closed appartiene all'applicazione perche'

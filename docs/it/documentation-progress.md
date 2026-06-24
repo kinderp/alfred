@@ -665,6 +665,15 @@ callback strutturato. `tests/backend/test_watch_stale_output_failure.c` copre
 path lungo, emissione riuscita e fallimento fail-closed anche per
 `WATCH_STALE_EVENT_DROPPED`.
 
+Aggiornamento successivo: una quarta review ha completato la stessa regola per
+la diagnostica watch lifecycle in `watch_manager.c`. `WATCH_ADDED` e
+`WATCH_REMOVED` ora separano anche loro il log compatibile dal confine
+strutturato: se il text sink non riesce a formattare la riga umana, viene
+scritto il fallback legacy e il record gia' costruito attraversa comunque
+`emit_record`. `tests/backend/test_watch_diagnostic_output_failure.c` include
+un caso con path sintetico lungo per forzare questo fallback senza modificare la
+API pubblica del watch manager.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
