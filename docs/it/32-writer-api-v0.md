@@ -10,9 +10,13 @@ Non sono il modello dati primario.
 Non devono vivere nel percorso caldo dell'evento.
 ```
 
-Il documento e' una roadmap architetturale. Il codice corrente ha gia' un primo
-confine `record -> sink -> text sink`, ma non ha ancora una vera Writer API con
-code, worker, backpressure e plugin writer configurabili.
+Il documento definisce il contratto architetturale della Writer API. Il codice
+corrente ha gia' sink, text sink, JSONL sink, counter sink, queue e dispatcher
+preparatori, ma non ha ancora un runtime writer asincrono completo con worker,
+backpressure, profili operativi e writer configurabili.
+
+Per l'ordine operativo dei prossimi micro-step leggere anche
+[Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md).
 
 ## Perche' serve
 

@@ -49,6 +49,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `30-backend-api-v0.md` |
 | Completo | `31-milestone-inotify-reference-backend.md` |
 | Parziale | `32-writer-api-v0.md` |
+| Parziale | `33-writer-runtime-roadmap-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -396,3 +397,19 @@ Il target `make perf` e' stato aggiunto come indice testuale dei benchmark
 manuali: non esegue misure, ma spiega in inglese cosa fanno
 `perf-record-sinks` e `perf-lost-scope`. Non contiene ancora riferimenti a man
 page perche' le pagine manuale dei benchmark non sono state scritte.
+
+## Aggiornamento Writer Runtime v0
+
+`33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
+dei writer. Il nuovo documento chiarisce che il percorso caldo deve fermarsi a
+`record -> enqueue`, mentre text, JSONL, protobuf, MessagePack, socket, Lab,
+flush, report e policy pesante devono stare fuori dal percorso caldo. La
+roadmap documenta lo stato corrente di sink, queue, dispatcher e benchmark,
+spiega il confine borrowed -> owned prima della coda, confronta coda comune e
+future code per sink, introduce le classi `critical`, `best_effort` e `debug`,
+descrive il problema della backpressure e fissa un ordine di micro-step:
+benchmark queue -> counter, dispatcher -> sink, queue -> dispatcher -> sink,
+worker simulato, JSONL buffered writer e solo dopo eventuali thread o code per
+sink. `README.md`, `27-guida-lettura-documentazione.md`,
+`31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
+stati aggiornati per rimandare al nuovo capitolo.

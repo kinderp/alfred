@@ -160,10 +160,11 @@ definitivamente una directory osservata rinominata o spostata.
 
 | Area | Stato | Motivo del rinvio |
 | --- | --- | --- |
-| JSONL stabile | Rimandato | Ora deve basarsi su Event Model v0: JSONL e' output, non Backend API |
+| JSONL runtime stabile | Parziale/rimandato | Formatter e sink JSONL v0 esistono sopra `alfred_record_t`; mancano writer buffered, newline/framing runtime, configurazione output, backpressure e golden test end-to-end |
 | Tracepoint logici | Rimandato | Servono per Lab e debug strutturato, ma vanno progettati dopo il modello eventi |
 | Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale, sink comune e text sink; core logger via record + sink; `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*` backend via record + sink; `RAW_CREATE`/`RAW_DELETE`/`RAW_ATTRIB`/`RAW_MODIFY`/`RAW_CLOSE_WRITE` runtime via record + sink; policy OS error documentata; campi OS error presenti in `alfred_record_t`; runtime `WATCH_RESYNC_FAILED` con `errno=N (...)` via record disponibile | Specifica in `30-backend-api-v0.md`; manca refactor completo inotify a `emit(record)` e migrazione degli altri raw runtime |
-| Writer API v0 | Documentata come roadmap | Specifica in `32-writer-api-v0.md`; mancano coda/ring buffer, eventuali code per sink, worker writer, profili operativi, backpressure, JSONL stabile e plugin writer |
+| Writer API v0 | Documentata e parzialmente implementata | Specifica in `32-writer-api-v0.md`; esistono sink, text sink, JSONL sink, counter sink, queue e dispatcher preparatori; manca il collegamento runtime asincrono |
+| Writer Runtime v0 | Roadmap documentata | Specifica in `33-writer-runtime-roadmap-v0.md`; mancano worker, benchmark queue/dispatcher completi, profili output, backpressure e collegamento dei writer fuori hot path |
 | Plugin dinamici `.so` | Rimandato | Prima stabilizzare API statica e ownership memoria |
 | fanotify | Rimandato | Non e' "inotify 2": serve Backend API e modello permission/enforcement |
 | audit/eBPF | Rimandato | Richiedono process context, syscall/network model, capabilities e privilegi |
