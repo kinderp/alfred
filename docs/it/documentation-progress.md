@@ -576,6 +576,14 @@ perdere silenziosamente il record JSONL solo perche' la riga legacy supera il
 buffer umano. `test_output_pipeline_runtime.sh` copre questo caso con un path
 profondo creato prima dello startup e un file creato dopo l'avvio.
 
+Aggiornamento successivo: la mappa del contratto log chiarisce il prossimo
+micro-step sui diagnostici `WATCH_RESYNC_*`. Questi record sono gia'
+`sink-capable` perche' hanno builder Event Model v0 e formatter text/JSONL, ma
+oggi sono `runtime-routed` solo verso il text sink compatibile del backend
+inotify. Non attraversano ancora `emit_record` e quindi non compaiono in
+`output.jsonl`. La documentazione ora distingue esplicitamente text sink legacy,
+output pipeline e prossimo routing fail-closed verso JSONL.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

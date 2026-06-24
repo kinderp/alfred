@@ -764,6 +764,24 @@ fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
 continuare ignorando il fatto che il ledger strutturato ha perso proprio il
 record che segnala "questo path non e' piu' affidabile".
 
+I diagnostici `WATCH_RESYNC_*` sono il passo successivo della stessa migrazione.
+Oggi sono gia' record Event Model v0 e usano gia' `alfred_record_text_sink_t`
+per produrre le righe compatibili di `events.log` o `errors.log`, ma non vengono
+ancora offerti a `emit_record`. Quindi:
+
+- sono `sink-capable`, perche' text formatter e JSONL formatter conoscono i
+  tipi;
+- sono `runtime-routed` solo verso il text sink legacy del backend inotify;
+- non sono ancora `output-pipeline-routed`, quindi non compaiono in
+  `output.jsonl`.
+
+La regola per migrarli e' la stessa dei watch base: il backend deve conservare
+il log compatibile e poi offrire lo stesso record borrowed al callback
+`emit_record`. Se `output_enabled=true` e il callback fallisce, l'errore deve
+risalire al poll/startup invece di essere ignorato. Questa scelta mantiene
+JSONL come ledger affidabile senza trasformare il backend in un writer JSONL
+diretto.
+
 La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
 righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:
 questo e' voluto per non trasformare il percorso corrente in una scrittura file
