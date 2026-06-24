@@ -16,6 +16,8 @@
 # - output_enabled=true with output_format=text is rejected at runtime
 # - output_enabled=true with too-small output_buffer_size is rejected
 # - output_enabled=true stops Alfred on runtime JSONL writer failure
+# - output_enabled=true returns non-zero when buffered JSONL bytes fail only
+#   during final shutdown flush
 #
 # This test proves the first runtime wiring of the single-writer output
 # pipeline. output_enabled=true is additive: app.c still emits the compatibility
@@ -130,6 +132,50 @@ fi
 
 if ! grep -Eq "failed to emit output record|structured output failed" ./errors.log; then
     echo "FAIL: missing JSONL writer failure diagnostic"
+    echo "----- errors.log -----"
+    cat ./errors.log || true
+    exit 1
+fi
+
+reset_env
+
+cat > "$CONFIG_FILE" <<EOF
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+output_log=/dev/full
+EOF
+
+ALFRED_CONFIG="$CONFIG_FILE" \
+ALFRED_EVENT_ENGINE=core \
+    "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
+ALFRED_PID=$!
+
+sleep 1
+
+# This creates only a small amount of JSONL data, so the writer keeps the record
+# buffered during app_run(). The output failure should surface at shutdown flush,
+# and main() must convert that final flush failure into a non-zero process exit.
+printf "shutdown flush only\n" > "$TEST_ROOT/shutdown-flush-only.txt"
+sleep 1
+
+kill -TERM "$ALFRED_PID" 2>/dev/null || true
+
+set +e
+wait "$ALFRED_PID"
+ALFRED_STATUS=$?
+set -e
+ALFRED_PID=""
+
+if [[ "$ALFRED_STATUS" == "0" ]]; then
+    echo "FAIL: shutdown JSONL flush failure must return a non-zero status"
+    echo "----- errors.log -----"
+    cat ./errors.log || true
+    exit 1
+fi
+
+if ! grep -Eq "failed to flush output pipeline" ./errors.log; then
+    echo "FAIL: missing shutdown JSONL flush failure diagnostic"
     echo "----- errors.log -----"
     cat ./errors.log || true
     exit 1

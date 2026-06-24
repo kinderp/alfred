@@ -484,6 +484,15 @@ sarebbe possibile immaginare un output best-effort, ma per un futuro log usato d
 test golden, audit e replay e' piu' sicuro fermarsi e rendere evidente il
 problema.
 
+La stessa regola vale anche alla fine del processo. Il writer JSONL e'
+bufferizzato: un record puo' essere gia' stato accettato dalla pipeline ma non
+ancora scritto sul file perche' il buffer non e' pieno. In quel caso l'errore di
+I/O puo' emergere solo durante il flush finale nello shutdown. Per questo
+`app_shutdown()` restituisce uno stato: se il flush finale fallisce, `main()`
+non deve restituire successo anche se `app_run()` era terminato normalmente.
+Senza questa propagazione Alfred potrebbe produrre un `output.jsonl` incompleto
+e uscire con codice `0`, cioe' con un segnale falso di riuscita.
+
 Questa regola vale anche quando il record nasce dentro il backend inotify come
 diagnostica watch. Il backend non decide di chiudere Alfred e non conosce JSONL:
 chiama solo il callback `emit_record` ricevuto nel `inotify_backend_context_t`.

@@ -39,7 +39,7 @@ static void app_build_inotify_backend_context(
 );
 static int log_raw_record(logger_t *logger, const alfred_record_t *record);
 static int app_init_output_pipeline(app_t *app);
-static void app_shutdown_output_pipeline(app_t *app);
+static int app_shutdown_output_pipeline(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
 static int app_emit_output_record_callback(const alfred_record_t *record,
                                            void *userdata);
@@ -381,24 +381,34 @@ static int app_init_output_pipeline(app_t *app)
  *
  * Shutdown keeps the policy explicit: first flush buffered JSONL records, then
  * destroy the owned queue state, free borrowed writer buffers, and finally close
- * the destination stream. Flush failures are logged but do not prevent cleanup.
+ * the destination stream. Flush failures are still logged, but they are also
+ * returned to the caller so main() can avoid reporting a successful run when the
+ * configured JSONL ledger is incomplete.
+ *
+ * Return: 0 when no output failure was observed, -1 when a final flush failed.
  */
-static void app_shutdown_output_pipeline(app_t *app)
+static int app_shutdown_output_pipeline(app_t *app)
 {
+    int status = 0;
+
     if (app == NULL) {
-        return;
+        return 0;
     }
 
     if (app->output_pipeline.enabled) {
         if (alfred_record_output_pipeline_flush(&app->output_pipeline) != 0) {
             logger_error(&app->logger,
                          "failed to flush output pipeline");
+            app->output_failed = 1;
+            status = -1;
         }
     }
 
     if (app->output_stream != NULL && fflush(app->output_stream) != 0) {
         logger_error(&app->logger,
                      "failed to flush output log stream");
+        app->output_failed = 1;
+        status = -1;
     }
 
     alfred_record_output_pipeline_destroy(&app->output_pipeline);
@@ -413,6 +423,8 @@ static void app_shutdown_output_pipeline(app_t *app)
         fclose(app->output_stream);
         app->output_stream = NULL;
     }
+
+    return status;
 }
 
 /*
@@ -737,11 +749,16 @@ int app_run(app_t *app)
  *
  * Releases resources in an order that keeps logging available until the end.
  * The function accepts NULL for convenience in failure paths.
+ *
+ * Return: ERR_OK when cleanup did not observe an output failure, ERR_IO when
+ * the final structured output flush failed.
  */
-void app_shutdown(app_t *app)
+int app_shutdown(app_t *app)
 {
+    int shutdown_status = ERR_OK;
+
     if (app == NULL)
-        return;
+        return ERR_OK;
 
     logger_info(&app->logger,
                 "shutdown started");
@@ -750,7 +767,9 @@ void app_shutdown(app_t *app)
     app_build_inotify_backend_context(app, &backend_ctx);
     inotify_backend_shutdown(&backend_ctx);
 
-    app_shutdown_output_pipeline(app);
+    if (app_shutdown_output_pipeline(app) != 0) {
+        shutdown_status = ERR_IO;
+    }
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may
@@ -770,4 +789,6 @@ void app_shutdown(app_t *app)
     logger_close(&app->logger);
 
     g_app = NULL;
+
+    return shutdown_status;
 }

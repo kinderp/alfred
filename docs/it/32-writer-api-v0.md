@@ -755,6 +755,15 @@ file `output_log`. Per questo `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
 `WATCH_STALE_EVENT_DROPPED` devono fermare startup o poll se il loro record
 strutturato non puo' attraversare la callback configurata.
 
+La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
+righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:
+questo e' voluto per non trasformare il percorso corrente in una scrittura file
+per evento. Se pero' rimangono bytes buffered e il target fallisce solo durante
+il flush finale, Alfred deve comunque considerare il ledger incompleto.
+`app_shutdown()` quindi propaga l'errore di flush finale a `main()`: se il loop
+era terminato senza errori ma il flush conclusivo fallisce, il processo deve
+uscire con stato non zero.
+
 La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
 gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel
 [Contratto dei log](22-contratto-log.md#copertura-record-sink-e-output-jsonl).

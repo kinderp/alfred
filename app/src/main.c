@@ -24,18 +24,27 @@
 int main(int argc, char **argv)
 {
     app_t app;
+    int shutdown_rc;
 
     int rc = app_init(&app, argc, argv);
 
     if (rc != 0) {
         fprintf(stderr, "startup failed\n");
-        app_shutdown(&app);
+        (void)app_shutdown(&app);
         return 1;
     }
 
     rc = app_run(&app);
 
-    app_shutdown(&app);
+    shutdown_rc = app_shutdown(&app);
 
-    return rc;
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (shutdown_rc != 0) {
+        return 1;
+    }
+
+    return 0;
 }

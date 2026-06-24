@@ -510,6 +510,14 @@ usa `/dev/full` per simulare un writer che fallisce durante il flush del buffer
 JSONL e verifica che Alfred termini con stato non-zero e diagnostica in
 `errors.log`.
 
+Aggiornamento successivo: il contratto fail-closed copre anche il flush finale
+di shutdown. Un record puo' restare nel buffer JSONL se il buffer non si riempie
+durante `app_run()`: in quel caso l'errore di I/O puo' comparire solo quando
+`app_shutdown()` chiama il flush conclusivo. `app_shutdown()` ora restituisce
+`ERR_IO` in quel caso e `main()` lo converte in exit non-zero quando il loop era
+terminato senza errori. `test_output_pipeline_runtime.sh` aggiunge uno scenario
+con pochi eventi e `output_log=/dev/full` per bloccare questa regressione.
+
 Aggiornamento successivo: la stessa policy e' stata estesa alla diagnostica
 watch base prodotta direttamente dal backend. `watch_manager_add()`,
 `watch_manager_remove()`, `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED` propagano

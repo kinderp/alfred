@@ -215,6 +215,18 @@ Quando una PR riceve finding tecnici, il flusso obbligatorio e':
 5. nel messaggio del commit corrispondente indicare che il commit risolve quel
    finding, citando la PR e il link al commento/finding.
 
+Se in chat e' stata gia' data una spiegazione del finding e della soluzione
+scelta, quella spiegazione non deve restare solo nella conversazione. Quando si
+chiude il finding, riportarla in inglese:
+
+- nella risposta al commento inline, insieme al link al commit;
+- nel body del commit che risolve il finding.
+
+La versione nel commento e nel commit puo' essere sintetizzata, ma deve
+conservare il ragionamento tecnico: qual era il rischio, perche' il codice
+precedente era insufficiente, quale comportamento nuovo chiude il problema e
+quale test lo blocca.
+
 Questa regola serve a trasformare la review in documentazione storica: chi legge
 la PR deve poter partire dal finding, arrivare al commit che lo risolve e capire
 perche' la soluzione e' corretta.

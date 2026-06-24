@@ -121,7 +121,12 @@ int app_run(app_t *app);
  * @app: application context to release
  *
  * Releases resources owned by app_t. The function is safe to call with NULL.
+ * If structured output is enabled, the final JSONL flush is part of the
+ * runtime contract and a flush failure is reported to the caller.
+ *
+ * Return: ERR_OK when shutdown completed without output failure, ERR_IO when
+ * the final structured output flush failed.
  */
-void app_shutdown(app_t *app);
+int app_shutdown(app_t *app);
 
 #endif
