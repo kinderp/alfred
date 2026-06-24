@@ -778,6 +778,32 @@ Questa e' la pipeline v0 sincrona oggi collegata ad `app_run()` quando
 verificare il contratto `record -> queue -> dispatcher -> writer` su output reale
 prima di introdurre worker thread, code per sink e backpressure reale.
 
+Anche nella v0 sincrona vale gia' una regola architetturale importante: dopo che
+un `alfred_record_t` valido e' stato costruito, nessun writer compatibile deve
+decidere implicitamente se un altro writer ricevera' quel record. In particolare,
+il JSONL runtime non deve dipendere dal successo del formatter testuale legacy di
+`events.log` o `raw.log`. Il formato testuale usa buffer umani e compatibili con
+il passato; JSONL e' invece il ledger strutturato opt-in. Se una riga testuale e'
+troppo lunga per il buffer del text sink, il log compatibile puo' usare il proprio
+fallback, ma il record strutturato deve essere offerto comunque alla pipeline
+JSONL.
+
+Questa regola anticipa il comportamento del runtime finale con code separate:
+
+```text
+record
+-> queue text     -> text writer
+-> queue jsonl    -> JSONL writer
+-> queue binary   -> MessagePack/Protobuf writer
+-> queue lab      -> Lab/socket/UI
+```
+
+Nel runtime finale un sink lento o fallito non dovra' bloccare gli altri sink,
+salvo una policy esplicita. Nel runtime v0 non abbiamo ancora code per sink, ma
+possiamo gia' evitare la dipendenza sbagliata piu' pericolosa: il record JSONL
+non deve essere saltato solo perche' la serializzazione testuale compatibile ha
+fallito.
+
 ## Backpressure
 
 Se un writer e' lento, Alfred deve avere una policy esplicita. Non deve

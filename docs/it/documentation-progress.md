@@ -529,6 +529,14 @@ quando `output_enabled=true` e `output_format=jsonl`. Resta invece non
 implementato il writer asincrono finale con worker thread, code per sink,
 backpressure avanzata, target multipli e profili operativi.
 
+Aggiornamento successivo: il routing dei record semantici verso JSONL e' stato
+separato dal successo del text sink compatibile. La v0 resta sincrona, ma un
+record semantico strutturato valido viene ora offerto alla output pipeline prima
+del formatter testuale di `events.log`, cosi' un path molto lungo non puo' far
+perdere silenziosamente il record JSONL solo perche' la riga legacy supera il
+buffer umano. `test_output_pipeline_runtime.sh` copre questo caso con un path
+profondo creato prima dello startup e un file creato dopo l'avvio.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

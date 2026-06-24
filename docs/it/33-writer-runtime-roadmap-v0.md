@@ -51,6 +51,16 @@ asincrono completo. Il runtime corrente usa ancora bridge sincroni in diversi
 punti. La coda, il dispatcher e i sink servono a fissare il contratto prima di
 collegare il percorso runtime reale.
 
+La sequenzialita' attuale e' quindi una fase di validazione, non una regola di
+prodotto. Oggi alcuni record passano ancora attraverso bridge chiamati in ordine
+nello stesso callback applicativo; domani il record dovra' essere accodato una
+sola volta nel percorso caldo e consumato da worker/sink indipendenti. Di
+conseguenza, gia' nella v0, il successo di un writer non deve essere una
+precondizione nascosta per consegnare il record a un altro writer. Un esempio
+concreto e' il rapporto fra `events.log` e JSONL: il text writer compatibile puo'
+fallire su una riga umana troppo lunga, ma il record strutturato deve comunque
+essere offerto alla pipeline JSONL.
+
 ## Regola del percorso caldo
 
 Il percorso caldo target e':

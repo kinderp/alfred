@@ -59,11 +59,11 @@ static int write_event_payload(void *userdata, const char *payload)
  * @ev: semantic event emitted by the core
  *
  * This is the first runtime use of the record sink boundary on the core output
- * side. The semantic event is converted to alfred_record_t, emitted to a text
- * sink, formatted as the same payload as before, and finally bridged back to
- * logger_event(). The output must remain byte-for-byte compatible with the old
- * event payloads, so tests still see FILE_CREATED path=... and FILE_RENAMED
- * from=... to=....
+ * side. The semantic event is converted to alfred_record_t once. The structured
+ * output callback sees that record before the compatibility text sink, because a
+ * legacy text payload buffer must not decide whether JSONL receives the semantic
+ * event. The compatibility text sink still preserves the old event payloads, so
+ * tests continue to see FILE_CREATED path=... and FILE_RENAMED from=... to=....
  *
  * Return: 0 on success, -1 when conversion, sink setup, formatting, or logging
  * bridge fails.
@@ -84,6 +84,23 @@ static int log_record_event(core_logger_context_t *context,
         return -1;
     }
 
+    /*
+     * Offer the structured semantic record before formatting events.log text.
+     * The text sink uses a fixed compatibility payload buffer and may reject
+     * truncation for very long paths. JSONL must not silently lose a valid record
+     * because the legacy human-readable formatter could not fit its line.
+     *
+     * If output fails, app_emit_output_record() marks the app output path failed;
+     * handle_backend_event() observes that after alfred_process() returns and
+     * stops the event loop. We still continue here so events.log can preserve the
+     * semantic event when possible.
+     */
+    if (context->emit_record != NULL &&
+        context->emit_record(&record, context->emit_record_userdata) != 0) {
+        logger_error(context->logger,
+                     "failed to emit semantic output record");
+    }
+
     text_sink.write = write_event_payload;
     text_sink.userdata = context->logger;
     text_sink.buffer = payload;
@@ -95,18 +112,6 @@ static int log_record_event(core_logger_context_t *context,
 
     if (alfred_record_sink_emit(&sink, &record) != 0) {
         return -1;
-    }
-
-    /*
-     * Keep events.log compatibility first, then route the same semantic record
-     * to the optional structured output path. The record is still borrowed and
-     * valid only for this callback; queue-based pipelines must clone it before
-     * returning.
-     */
-    if (context->emit_record != NULL &&
-        context->emit_record(&record, context->emit_record_userdata) != 0) {
-        logger_error(context->logger,
-                     "failed to emit semantic output record");
     }
 
     return 0;

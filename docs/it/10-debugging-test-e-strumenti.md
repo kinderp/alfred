@@ -2231,6 +2231,13 @@ La copertura iniziale include:
   runtime e' aggiuntivo: i log compatibili restano presenti, mentre i raw record
   normalizzati, gli eventi semantici core e la diagnostica watch base vengono
   accodati nella pipeline JSONL.
+  Lo stesso test contiene anche uno scenario con path semantico lungo. La
+  directory profonda viene creata prima dello startup, cosi' i watch ricorsivi
+  coprono tutto il percorso; il file viene creato dopo l'avvio. Questo produce un
+  normale `FILE_CREATED` con una riga testuale piu' lunga del buffer compatibile
+  usato dal text sink del core logger. Il contratto verificato e' che
+  `output.jsonl` riceva comunque il record `FILE_CREATED`: il ledger strutturato
+  non deve dipendere dal successo del formatter testuale legacy.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

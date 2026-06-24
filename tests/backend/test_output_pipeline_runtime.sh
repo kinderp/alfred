@@ -5,6 +5,8 @@
 # - one JSONL raw record for created-dir
 # - one JSONL semantic FILE_CREATED record for created-file.txt
 # - one JSONL semantic DIR_CREATED record for created-dir
+# - one JSONL semantic FILE_CREATED record for a long path that exceeds the
+#   compatibility text-sink payload buffer
 # - one JSONL diagnostic WATCH_ADDED record for removed-dir
 # - one JSONL diagnostic WATCH_STALE record for removed-dir
 # - one JSONL diagnostic WATCH_STALE_EVENT_DROPPED record for removed-dir
@@ -136,6 +138,19 @@ fi
 reset_env
 : > "$OUTPUT_LOG"
 
+LONG_SEMANTIC_DIR="$TEST_ROOT"
+for i in $(seq 1 23); do
+    LONG_SEMANTIC_DIR="$LONG_SEMANTIC_DIR/$(printf 'semantic-%041d' "$i")"
+done
+LONG_SEMANTIC_FILE="$LONG_SEMANTIC_DIR/created-long-file.txt"
+
+# The long directory is created before Alfred starts so startup recursive watches
+# cover the whole path. The later file creation then produces a normal semantic
+# FILE_CREATED event whose compatibility text line is longer than the current
+# 1024-byte core_logger payload buffer. JSONL must still receive the structured
+# record because it should depend on alfred_record_t, not on the text sink buffer.
+mkdir -p "$LONG_SEMANTIC_DIR"
+
 cat > "$CONFIG_FILE" <<EOF
 output_enabled=true
 output_format=jsonl
@@ -151,6 +166,7 @@ ALFRED_PID=$!
 sleep 1
 
 printf "hello\n" > "$TEST_ROOT/created-file.txt"
+printf "hello long path\n" > "$LONG_SEMANTIC_FILE"
 mkdir "$TEST_ROOT/created-dir"
 mkdir "$TEST_ROOT/removed-dir"
 sleep 1
@@ -176,6 +192,13 @@ fi
 
 if ! grep -Eq "FILE_CREATED path=.*/created-file.txt" ./events.log; then
     echo "FAIL: missing compatibility FILE_CREATED for created file"
+    echo "----- events.log -----"
+    cat ./events.log || true
+    exit 1
+fi
+
+if ! grep -Eq "FILE_CREATED path=.*/created-long-file.txt" ./events.log; then
+    echo "FAIL: missing compatibility FILE_CREATED for long-path file"
     echo "----- events.log -----"
     cat ./events.log || true
     exit 1
@@ -232,6 +255,13 @@ fi
 
 if ! grep -Eq '"category":"filesystem".*"type":"FILE_CREATED".*"path":".*/created-file.txt"' "$OUTPUT_LOG"; then
     echo "FAIL: missing JSONL FILE_CREATED record for created file"
+    echo "----- output.jsonl -----"
+    cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq '"category":"filesystem".*"type":"FILE_CREATED".*"path":".*/created-long-file.txt"' "$OUTPUT_LOG"; then
+    echo "FAIL: missing JSONL FILE_CREATED record for long-path file"
     echo "----- output.jsonl -----"
     cat "$OUTPUT_LOG" || true
     exit 1
