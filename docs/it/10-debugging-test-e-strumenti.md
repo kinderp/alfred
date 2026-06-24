@@ -2425,7 +2425,7 @@ Significato:
 | --- | --- |
 | `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> JSONL writer` |
 | `output_format` | formato del writer; in v0 `jsonl` e' il solo formato attivabile nel runtime |
-| `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `4096` |
+| `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `8192` |
 | `output_log` | file JSONL append-only prodotto quando `output_enabled=true` |
 
 Esempio valido:
@@ -2461,7 +2461,7 @@ output_format=protobuf
 output_enabled=true
 output_format=text
 output_buffer_size=0
-output_buffer_size=1024
+output_buffer_size=4096
 output_buffer_size=8192kb
 ```
 

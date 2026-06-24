@@ -608,7 +608,7 @@ Campi:
 | --- | --- | --- | --- |
 | `output_enabled` | `config.output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
 | `output_format` | `config.output.format` | `jsonl` | formato richiesto; `jsonl` e' il solo formato runtime abilitabile in v0 |
-| `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `4096` |
+| `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `8192` |
 | `output_log` | `config.output_log` | `output.jsonl` | file append-only usato dal primo writer JSONL runtime |
 
 Quando `output_enabled=false`, il path runtime resta quello compatibile:
@@ -647,6 +647,38 @@ intenzionale perche' JSONL diventera' base per ledger, test golden e replay: un
 buco silenzioso nel file sarebbe peggiore di un arresto esplicito. Con
 `output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
 continuano a comportarsi come prima.
+
+Il minimo `8192` per `output_buffer_size` non e' arbitrario. Nel percorso JSONL
+runtime ci sono due buffer consecutivi:
+
+- `format_buffer`: scratch buffer temporaneo usato da
+  `alfred_record_format_jsonl()` per trasformare un singolo `alfred_record_t` in
+  una singola riga JSONL senza `\n`;
+- `output_buffer`: buffer del writer usato da
+  `alfred_record_jsonl_writer_emit()` per accumulare una o piu' righe JSONL gia'
+  formattate prima del flush sul file.
+
+`app.c` assegna al `format_buffer` 8192 bytes. Se il `format_buffer` riesce a
+contenere un record, quel record puo' occupare fino a 8191 bytes piu' il
+terminatore NUL interno usato dalle funzioni C sulle stringhe. Subito dopo il
+writer deve copiare la stessa riga dentro `output_buffer` e aggiungere il
+newline JSONL `\n`. Quindi un `output_buffer` da 8192 bytes puo' contenere la
+riga formattata massima prodotta dal formatter piu' il newline finale.
+
+Il bug architetturale evitato da questo vincolo era una configurazione accettata
+solo in apparenza:
+
+```text
+format_buffer_size = 8192
+output_buffer_size = 4096
+```
+
+Con quella configurazione un record lungo ma valido poteva essere formattato
+correttamente nel primo buffer, per esempio 5000 bytes, ma poi fallire nella
+copia verso il secondo buffer perche' 5000 bytes piu' `\n` non entrano in 4096
+bytes. In v0 Alfred rifiuta quindi buffer di output piu' piccoli prima di
+avviare il runtime, invece di accettare una configurazione che fallirebbe solo
+quando arriva un record lungo ma corretto.
 
 Il watch manager e il backend inotify non conoscono `app_t` e non conoscono il
 writer JSONL. Ricevono nel `inotify_backend_context_t` un callback generico

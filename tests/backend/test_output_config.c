@@ -14,7 +14,7 @@
  * accepted config:
  * - output_enabled=true
  * - output_format=text or output_format=jsonl
- * - output_buffer_size >= OUTPUT_BUFFER_SIZE_MIN
+ * - output_buffer_size >= OUTPUT_BUFFER_SIZE_MIN (8192 in v0)
  * - output_log=custom-output.jsonl
  *
  * rejected config:
@@ -112,7 +112,7 @@ static void test_output_config_accepts_text(void)
     write_config_file(path,
                       "output_enabled=false\n"
                       "output_format=text\n"
-                      "output_buffer_size=4096\n");
+                      "output_buffer_size=8192\n");
 
     config_defaults(&cfg);
     assert(config_load(&cfg, path) == ERR_OK);
@@ -140,7 +140,7 @@ static void test_output_config_rejects_invalid_buffer_size(void)
     const char *too_small = "/tmp/alfred_output_config_too_small.conf";
     const char *not_numeric = "/tmp/alfred_output_config_not_numeric.conf";
 
-    write_config_file(too_small, "output_buffer_size=1024\n");
+    write_config_file(too_small, "output_buffer_size=4096\n");
     write_config_file(not_numeric, "output_buffer_size=8192kb\n");
 
     config_defaults(&cfg);

@@ -441,7 +441,7 @@ Aggiornamento successivo: `config_t.output` introduce la configurazione minima
 del runtime output. I default sono `output_enabled=false`,
 `output_format=jsonl`, `output_buffer_size=65536` e `output_log=output.jsonl`;
 il parser accetta anche `text` per configurazioni disabilitate/future, rifiuta
-formati non implementati e rifiuta buffer sotto `4096` o malformati. La
+formati non implementati e rifiuta buffer sotto `8192` o malformati. La
 documentazione chiarisce che `enabled=false` mantiene solo il path compatibile
 `raw.log`/`events.log`/`errors.log`, mentre `enabled=true` collega in modo
 sincrono il primo percorso JSONL aggiuntivo per i raw record gia' migrati al

@@ -22,7 +22,13 @@
 #endif
 
 #define OUTPUT_BUFFER_SIZE_DEFAULT (64u * 1024u)
-#define OUTPUT_BUFFER_SIZE_MIN 4096u
+/*
+ * The runtime JSONL writer uses a separate scratch buffer for one formatted
+ * object. The output buffer must be large enough to hold any object that fits in
+ * that scratch buffer plus the trailing JSONL newline. app.c currently uses an
+ * 8192-byte scratch buffer, so v0 rejects smaller configured output buffers.
+ */
+#define OUTPUT_BUFFER_SIZE_MIN 8192u
 
 /*
  * output_format_t - configured format for the runtime writer path

@@ -12,6 +12,7 @@
 # - raw.log compatibility lines are still present
 # - events.log compatibility lines are still present
 # - output_enabled=true with output_format=text is rejected at runtime
+# - output_enabled=true with too-small output_buffer_size is rejected
 # - output_enabled=true stops Alfred on runtime JSONL writer failure
 #
 # This test proves the first runtime wiring of the single-writer output
@@ -64,6 +65,22 @@ cat > "$CONFIG_FILE" <<EOF
 output_enabled=true
 output_format=jsonl
 output_buffer_size=4096
+output_log=$OUTPUT_LOG
+EOF
+
+if ALFRED_CONFIG="$CONFIG_FILE" \
+   ALFRED_EVENT_ENGINE=core \
+       "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1; then
+    echo "FAIL: output_enabled=true must reject too-small output_buffer_size"
+    exit 1
+fi
+
+reset_env
+
+cat > "$CONFIG_FILE" <<EOF
+output_enabled=true
+output_format=jsonl
+output_buffer_size=8192
 output_log=/dev/full
 EOF
 
@@ -74,8 +91,9 @@ ALFRED_PID=$!
 
 sleep 1
 
-for i in $(seq 1 200); do
-    printf "hello %s\n" "$i" > "$TEST_ROOT/fill-jsonl-$i.txt" || true
+LONG_NAME="$(printf 'x%.0s' $(seq 1 180))"
+for i in $(seq 1 600); do
+    printf "hello %s\n" "$i" > "$TEST_ROOT/fill-jsonl-$i-$LONG_NAME.txt" || true
 done
 
 for _ in $(seq 1 30); do
@@ -89,6 +107,9 @@ if kill -0 "$ALFRED_PID" 2>/dev/null; then
     echo "FAIL: JSONL writer failure must stop Alfred"
     echo "----- errors.log -----"
     cat ./errors.log || true
+    kill -TERM "$ALFRED_PID" 2>/dev/null || true
+    wait "$ALFRED_PID" 2>/dev/null || true
+    ALFRED_PID=""
     exit 1
 fi
 

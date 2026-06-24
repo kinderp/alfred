@@ -498,10 +498,12 @@ per compatibilita', debug e didattica, ma non e' ancora attivabile con
 `protobuf`, `messagepack` o `socket` sono rifiutati finche' non esiste un writer
 con contratto documentato.
 
-`output_buffer_size` deve essere almeno `4096`. Il default e' `65536`, cioe'
-64 KiB. Il minimo evita configurazioni inutilizzabili: una singola riga JSONL
-puo' contenere path, errori OS e dettagli diagnostici, quindi un buffer troppo
-piccolo fallirebbe al primo record realistico.
+`output_buffer_size` deve essere almeno `8192`. Il default e' `65536`, cioe'
+64 KiB. Il minimo evita configurazioni inutilizzabili: il writer JSONL usa uno
+scratch buffer da 8192 bytes per formattare un singolo oggetto; il buffer output
+deve poter contenere almeno qualunque oggetto che entra in quello scratch buffer,
+piu' il newline finale della riga JSONL. Se fosse piu' piccolo, una configurazione
+formalmente valida potrebbe fallire al primo record lungo ma corretto.
 
 Esempio:
 

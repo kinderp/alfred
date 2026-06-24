@@ -311,6 +311,13 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_CONFIG;
     }
 
+    if (app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
+        logger_error(&app->logger,
+                     "output_buffer_size must be at least %u bytes",
+                     APP_OUTPUT_FORMAT_BUFFER_SIZE);
+        return ERR_CONFIG;
+    }
+
     app->output_stream = fopen(app->config.output_log, "a");
     if (app->output_stream == NULL) {
         logger_error(&app->logger,
