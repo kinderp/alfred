@@ -12,9 +12,10 @@ Non devono vivere nel percorso caldo dell'evento.
 
 Il documento definisce il contratto architetturale della Writer API. Il codice
 corrente ha gia' sink, text sink, JSONL sink, JSONL buffered writer, counter
-sink, queue e dispatcher preparatori, ma non ha ancora un runtime writer
-asincrono completo con worker, backpressure, profili operativi e writer
-configurabili.
+sink, queue e dispatcher. Ha anche un primo collegamento runtime opt-in:
+`app_run()` puo' scrivere JSONL su `output_log` quando `output_enabled=true` e
+`output_format=jsonl`. Non ha ancora, invece, un runtime writer asincrono
+completo con worker, backpressure, profili operativi e writer configurabili.
 
 Per l'ordine operativo dei prossimi micro-step leggere anche
 [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md).
@@ -368,7 +369,7 @@ Writer API v0 deve permettere almeno questi writer:
 | Writer | Uso principale | Note |
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
-| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato, non ancora collegato al runtime |
+| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato e collegato al runtime opt-in tramite `output_enabled=true` |
 | `noop/counter` | benchmark e misure baseline | sink implementato per contare record senza serializzazione o I/O |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
@@ -546,45 +547,52 @@ il formato stabile per ambienti ostili o forensi.
 
 ### Limiti intenzionali v0
 
-Il JSONL v0 non e' ancora un writer completo:
+Il JSONL v0 e' collegato al runtime, ma non e' ancora il writer definitivo di
+produzione:
 
-- non e' collegato al runtime degli eventi;
-- non gestisce file descriptor, path di output o rotazione log;
+- e' collegato ad `app_run()` solo quando `output_enabled=true` e
+  `output_format=jsonl`;
+- l'applicazione apre `output_log` e passa al writer una callback bytes, ma il
+  writer buffered resta separato da file descriptor, path di output e rotazione
+  log;
 - il formatter non aggiunge newline; il writer buffered invece aggiunge newline
-  ma non apre file;
-- il writer buffered accumula in memoria caller-owned, non fa ancora buffering
-  su file o socket reali;
-- non implementa backpressure;
+  e accumula righe gia' formattate prima del flush;
+- il percorso runtime v0 e' ancora sincrono: enqueue, drain e writer avvengono
+  nel callback applicativo invece che in un worker thread;
+- non implementa backpressure avanzata, code per sink, retry o profili
+  critical/best-effort/debug;
 - non assegna sequenze o timestamp da solo;
 - non sostituisce `alfred_record_t` come contratto interno.
 
-Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`,
-poi fissiamo il contratto `record -> writer buffered`, e solo dopo colleghiamo
-il writer a dispatcher, code, profili operativi e benchmark.
+Questi limiti sono voluti. Abbiamo prima fissato il mapping
+`alfred_record_t -> JSONL`, poi il contratto `record -> writer buffered`, poi il
+percorso `record -> queue -> dispatcher -> writer`. Il collegamento runtime
+attuale serve a verificare quel contratto end-to-end su file reale senza ancora
+spostare serializzazione, I/O e backpressure fuori dal percorso sincrono.
 
 ### Debito tecnico JSONL v0
 
-Il JSONL v0 e' accettabile per questa fase perche' e' ancora un formatter
-preparatorio: non e' il writer runtime definitivo e non e' ancora il formato dei
-golden test ufficiali. Proprio per questo il debito tecnico deve restare
-visibile. Non deve diventare una scelta implicita dimenticata nel codice.
+Il JSONL v0 e' accettabile per questa fase perche' e' un output runtime opt-in,
+non ancora il writer asincrono definitivo e non ancora il formato dei golden test
+ufficiali. Proprio per questo il debito tecnico deve restare visibile. Non deve
+diventare una scelta implicita dimenticata nel codice.
 
 | Debito | Stato attuale | Perche' e' accettabile ora | Quando va chiuso |
 | --- | --- | --- | --- |
 | Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
 | Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
 | Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
-| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Resta utile per dispatcher e test, ma non e' il writer runtime finale | Prima di collegare JSONL sincrono al path caldo |
-| Writer JSONL buffered minimale | `alfred_record_jsonl_writer_emit()` accumula righe in buffer caller-owned e `flush()` chiama una callback bytes | Fissa il contratto di batching senza thread, file o socket | Prima di output runtime reale configurabile |
-| Nessuna backpressure | Sink e writer non gestiscono code per sink, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi davvero | Prima di socket, Lab, ledger JSONL continuativo o writer thread |
-| Nessun file/socket | Il writer buffered consegna bytes a una callback, ma non apre output device | Mantiene separati formato, framing, buffering e I/O reale | Quando introdurremo configurazione output e profili runtime |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta durante il drain chiamato dal callback applicativo | Rende verificabile il percorso runtime opt-in senza introdurre ancora worker thread | Prima di rendere il path caldo realmente asincrono |
+| Writer JSONL buffered minimale | `alfred_record_jsonl_writer_emit()` accumula righe in buffer caller-owned e `flush()` chiama una callback bytes | Fissa il contratto di batching; `app.c` fornisce oggi la callback che scrive su `output_log` | Prima di output runtime con target multipli e profili operativi |
+| Backpressure solo fail-closed | Sink e writer non gestiscono code per sink, drop, retry o classi critical/best-effort/debug; se la pipeline runtime fallisce, Alfred si ferma | Evita un ledger JSONL parziale e silenzioso nella fase v0 | Prima di socket, Lab, ledger JSONL continuativo o writer thread |
+| File/socket gestiti fuori dal writer | Il writer buffered consegna bytes a una callback; oggi `app.c` apre `output_log`, ma il writer non conosce path, file descriptor o rotazione | Mantiene separati formato, framing, buffering e I/O reale | Quando introdurremo target multipli, rotazione o plugin writer |
 | Nessuna validazione schema esterna | I test confrontano stringhe esatte, ma non esiste ancora uno schema JSON formale | Sufficiente per bloccare il mapping C iniziale | Prima di pubblicare JSONL come interfaccia stabile per tool terzi |
 
-La regola pratica e': questo debito e' accettabile finche' JSONL resta un
-formatter/sink testabile fuori dal runtime. Quando JSONL diventera' output
-ufficiale, ledger, golden-test format o interfaccia per integrazioni esterne,
-questi punti dovranno essere risolti o trasformati in decisioni esplicite di
-schema v1.
+La regola pratica e': questo debito e' accettabile finche' JSONL resta un output
+runtime opt-in usato per validare la pipeline e non ancora il contratto pubblico
+stabile di Alfred. Quando JSONL diventera' ledger ufficiale, golden-test format
+o interfaccia per integrazioni esterne, questi punti dovranno essere risolti o
+trasformati in decisioni esplicite di schema v1.
 
 ## Configurazione output minima
 
@@ -765,9 +773,10 @@ policy di backpressure. Se la queue e' piena, `enqueue()` fallisce. Se il flush
 fallisce, i bytes restano nel JSONL writer come gia' definito dal contratto del
 writer buffered.
 
-Questa e' ancora una pipeline v0 sincrona, non il percorso finale di `app_run()`.
-Serve a verificare il contratto `record -> queue -> dispatcher -> writer` prima
-di introdurre worker thread, code per sink e backpressure reale.
+Questa e' la pipeline v0 sincrona oggi collegata ad `app_run()` quando
+`output_enabled=true`, ma non e' il percorso finale ad alte prestazioni. Serve a
+verificare il contratto `record -> queue -> dispatcher -> writer` su output reale
+prima di introdurre worker thread, code per sink e backpressure reale.
 
 ## Backpressure
 

@@ -424,7 +424,7 @@ Campi minimi:
 
 | Campo | Default | Significato |
 | --- | --- | --- |
-| `output.enabled` | `false` | abilita in futuro il percorso `record -> queue -> dispatcher -> writer` |
+| `output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
 | `output.format` | `jsonl` | formato richiesto; in v0 `jsonl` e' il solo formato attivabile |
 | `output.buffer_size` | `65536` | dimensione in bytes del buffer per writer buffered come JSONL |
 | `output_log` | `output.jsonl` | file JSONL append-only usato quando `output_enabled=true` |

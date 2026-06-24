@@ -521,6 +521,14 @@ indicativi, che `runs=1` non basta per dichiarazioni prestazionali definitive e
 che il risultato utile per ora e' l'assenza di overhead macroscopico del wrapper
 pipeline rispetto a queue + dispatcher + JSONL.
 
+Aggiornamento successivo: la documentazione Writer API v0 e la mappa codice sono
+state riallineate allo stato runtime corrente. JSONL non e' piu' descritto come
+formatter non collegato al runtime: oggi `app_run()` puo' instradare i record
+gia' migrati nella pipeline `record -> queue -> dispatcher -> JSONL writer`
+quando `output_enabled=true` e `output_format=jsonl`. Resta invece non
+implementato il writer asincrono finale con worker thread, code per sink,
+backpressure avanzata, target multipli e profili operativi.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

@@ -929,7 +929,7 @@ flowchart TD
 
     D --> F["watcher_init(capacity)"]
     M --> G["inotify_add_watch(mask | IN_ONLYDIR)"]
-    O3 --> W["future JSONL writer buffer"]
+    O3 --> W["JSONL writer buffer"]
 ```
 
 Campi rilevanti:
@@ -939,9 +939,9 @@ Campi rilevanti:
 | `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
 | `inotify.watch_mask` | maschera eventi inotify usata per aggiungere watch; il watch manager aggiunge poi `IN_ONLYDIR` come flag di installazione | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
-| `output.enabled` | abilita il futuro percorso `record -> queue -> dispatcher -> writer` | `config_defaults()`, `config_load()` | futuro runtime writer |
-| `output.format` | formato richiesto dal futuro writer, oggi `text` o `jsonl` | `config_defaults()`, `config_load()` | futuro registry/dispatcher writer |
-| `output.buffer_size` | bytes per writer buffered come JSONL | `config_defaults()`, `config_load()` | futuro writer JSONL runtime |
+| `output.enabled` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` | `config_defaults()`, `config_load()` | `app_init_output_pipeline()` |
+| `output.format` | formato richiesto dal writer; `jsonl` e' il solo formato attivabile nel runtime v0 | `config_defaults()`, `config_load()` | `app_init_output_pipeline()` |
+| `output.buffer_size` | bytes per writer buffered come JSONL, minimo `8192` | `config_defaults()`, `config_load()` | `app_init_output_pipeline()`, JSONL writer runtime |
 
 `output_config_t` non e' configurazione del backend. Se `output.enabled` e'
 `false`, il runtime resta sul percorso compatibile:
@@ -950,15 +950,18 @@ Campi rilevanti:
 backend/core -> logger attuale -> raw.log / events.log / errors.log
 ```
 
-Se `output.enabled` e' `true`, la configurazione descrive il percorso futuro:
+Se `output.enabled` e' `true`, la configurazione descrive il percorso runtime
+opt-in:
 
 ```text
-record -> queue -> runtime drain / worker -> dispatcher -> writer
+record -> queue -> runtime drain sincrono -> dispatcher -> JSONL writer
 ```
 
-Nel codice corrente questa seconda forma e' solo memorizzata e validata. Non e'
-ancora collegata ad `app_run()`, quindi non cambia il path caldo e non attiva
-automaticamente il JSONL writer buffered.
+Nel codice corrente questa seconda forma e' collegata ad `app_run()` per i record
+gia' migrati alla pipeline. Non sostituisce i log compatibili: aggiunge
+`output_log` quando `output_enabled=true` e `output_format=jsonl`. Resta pero'
+una pipeline v0 sincrona, non ancora il runtime finale con worker thread, code
+per sink e backpressure reale.
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` delega a `inotify_config_defaults()`, questa prende il
