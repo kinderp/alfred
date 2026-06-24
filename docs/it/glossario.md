@@ -36,9 +36,11 @@ plugin, tracepoint e futuri guardrail.
 ## alfred_record_t
 
 Struttura C definita in `core/include/alfred_record.h` che rappresenta il record
-comune di Event Model v0. Per ora e' un contratto dati: descrive come
-rappresentare raw event normalizzati, eventi semantici e diagnostica backend,
-ma non e' ancora collegata al runtime o ai writer.
+comune di Event Model v0. E' il contratto dati usato per rappresentare raw event
+normalizzati, eventi semantici e diagnostica backend. Nel runtime corrente una
+parte dei record passa gia' da sink testuali compatibili e dalla pipeline JSONL
+opt-in; l'obiettivo resta far diventare `alfred_record_t` il confine comune per
+tutti i writer futuri.
 
 ## Backend API v0
 

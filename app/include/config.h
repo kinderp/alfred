@@ -17,6 +17,48 @@
 #include "errors.h"
 #include "inotify_config.h"
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#define OUTPUT_BUFFER_SIZE_DEFAULT (64u * 1024u)
+/*
+ * The runtime JSONL writer uses a separate scratch buffer for one formatted
+ * object. The output buffer must be large enough to hold any object that fits in
+ * that scratch buffer plus the trailing JSONL newline. app.c currently uses an
+ * 8192-byte scratch buffer, so v0 rejects smaller configured output buffers.
+ */
+#define OUTPUT_BUFFER_SIZE_MIN 8192u
+
+/*
+ * output_format_t - configured format for the runtime writer path
+ *
+ * The enum describes the writer format requested by configuration. It does not
+ * mean every format is wired into app_run(): output.enabled controls whether
+ * the runtime writer path should be active, and app.c currently accepts JSONL.
+ */
+typedef enum {
+    OUTPUT_FORMAT_TEXT = 0,
+    OUTPUT_FORMAT_JSONL = 1
+} output_format_t;
+
+/*
+ * output_config_t - top-level output runtime configuration
+ * @enabled: opt-in flag for the record -> queue -> dispatcher -> writer path.
+ *           When false, Alfred keeps only the current compatibility log path.
+ * @format: requested writer format for the runtime output path
+ * @buffer_size: bytes reserved for buffered writers such as JSONL
+ *
+ * This is application-level configuration, not backend configuration. The
+ * inotify backend must not receive this struct and must not decide output
+ * format, buffering, or writer policy.
+ */
+typedef struct {
+    int enabled;
+    output_format_t format;
+    size_t buffer_size;
+} output_config_t;
+
 /*
  * config_t - runtime configuration values
  *
@@ -35,10 +77,14 @@ typedef struct {
     /* Linux inotify backend configuration. */
     inotify_config_t inotify;
 
+    /* Optional record output runtime configuration. */
+    output_config_t output;
+
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];
     char event_log[PATH_MAX];
     char error_log[PATH_MAX];
+    char output_log[PATH_MAX];
 
 } config_t;
 

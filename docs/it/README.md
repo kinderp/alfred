@@ -37,7 +37,9 @@ piu' dettaglio.
 28. [Backend API v0](30-backend-api-v0.md)
 29. [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
 30. [Writer API v0](32-writer-api-v0.md)
-31. [Glossario](glossario.md)
+31. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
+32. [Report benchmark prestazioni](34-report-benchmark-prestazioni.md)
+33. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 

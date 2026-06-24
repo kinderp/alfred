@@ -59,28 +59,50 @@ static int write_event_payload(void *userdata, const char *payload)
  * @ev: semantic event emitted by the core
  *
  * This is the first runtime use of the record sink boundary on the core output
- * side. The semantic event is converted to alfred_record_t, emitted to a text
- * sink, formatted as the same payload as before, and finally bridged back to
- * logger_event(). The output must remain byte-for-byte compatible with the old
- * event payloads, so tests still see FILE_CREATED path=... and FILE_RENAMED
- * from=... to=....
+ * side. The semantic event is converted to alfred_record_t once. The structured
+ * output callback sees that record before the compatibility text sink, because a
+ * legacy text payload buffer must not decide whether JSONL receives the semantic
+ * event. The compatibility text sink still preserves the old event payloads, so
+ * tests continue to see FILE_CREATED path=... and FILE_RENAMED from=... to=....
  *
  * Return: 0 on success, -1 when conversion, sink setup, formatting, or logging
  * bridge fails.
  */
-static int log_record_event(logger_t *logger, const alfred_event_t *ev)
+static int log_record_event(core_logger_context_t *context,
+                            const alfred_event_t *ev)
 {
     alfred_record_t record;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
     char payload[1024];
 
+    if (context == NULL || context->logger == NULL) {
+        return -1;
+    }
+
     if (alfred_record_from_event(ev, &record) != 0) {
         return -1;
     }
 
+    /*
+     * Offer the structured semantic record before formatting events.log text.
+     * The text sink uses a fixed compatibility payload buffer and may reject
+     * truncation for very long paths. JSONL must not silently lose a valid record
+     * because the legacy human-readable formatter could not fit its line.
+     *
+     * If output fails, app_emit_output_record() marks the app output path failed;
+     * handle_backend_event() observes that after alfred_process() returns and
+     * stops the event loop. We still continue here so events.log can preserve the
+     * semantic event when possible.
+     */
+    if (context->emit_record != NULL &&
+        context->emit_record(&record, context->emit_record_userdata) != 0) {
+        logger_error(context->logger,
+                     "failed to emit semantic output record");
+    }
+
     text_sink.write = write_event_payload;
-    text_sink.userdata = logger;
+    text_sink.userdata = context->logger;
     text_sink.buffer = payload;
     text_sink.buffer_size = sizeof(payload);
 
@@ -107,7 +129,7 @@ void core_logger_on_event(const alfred_event_t *ev, void *userdata)
     if (ev == NULL || context == NULL || context->logger == NULL)
         return;
 
-    if (log_record_event(context->logger, ev) != 0) {
+    if (log_record_event(context, ev) != 0) {
         log_plain_event(context->logger, ev);
     }
 }

@@ -201,6 +201,95 @@ I commit devono seguire sempre queste regole:
 - non committare file locali non tracciati, log generati o esperimenti fuori
   task
 
+### Commit che risolvono finding di review
+
+Quando una PR riceve finding tecnici, il flusso obbligatorio e':
+
+1. inserire i finding come commenti inline nella PR, non solo come riepilogo
+   generale;
+2. risolvere ogni finding con un commit monoscopo quando possibile;
+3. dopo il fix, aggiungere una risposta al commento inline del finding;
+4. nella risposta indicare il commit che risolve il finding come link Markdown
+   cliccabile alla pagina GitHub del commit, usando lo SHA breve come testo del
+   link, e spiegare in inglese la soluzione applicata;
+5. nel messaggio del commit corrispondente indicare che il commit risolve quel
+   finding, citando la PR e il link al commento/finding.
+
+Se in chat e' stata gia' data una spiegazione del finding e della soluzione
+scelta, quella spiegazione non deve restare solo nella conversazione. Quando si
+chiude il finding, riportarla in inglese:
+
+- nella risposta al commento inline, insieme al link al commit;
+- nel body del commit che risolve il finding.
+
+La versione nel commento e nel commit puo' essere sintetizzata, ma deve
+conservare il ragionamento tecnico: qual era il rischio, perche' il codice
+precedente era insufficiente, quale comportamento nuovo chiude il problema e
+quale test lo blocca.
+
+Questa regola serve a trasformare la review in documentazione storica: chi legge
+la PR deve poter partire dal finding, arrivare al commit che lo risolve e capire
+perche' la soluzione e' corretta.
+
+Formato consigliato nel body del commit:
+
+```text
+Fixes review finding:
+- PR: https://github.com/kinderp/alfred/pull/N
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+
+Explain in English what the finding reported and how this commit fixes it.
+```
+
+Formato consigliato per la risposta al commento inline:
+
+```text
+Fixed in [d406dec3](https://github.com/kinderp/alfred/commit/d406dec30eae64eaa8ae737981fde6eafb8a4774).
+
+Explain in English what changed and why this closes the finding.
+```
+
+### Aggiornamento della descrizione PR dopo review multiple
+
+Quando una PR riceve piu' round di review, la descrizione creata dal template
+deve essere aggiornata dopo ogni round significativo. La PR non deve contenere
+solo lo stato iniziale del branch: deve diventare anche una traccia storica di
+che cosa le review successive hanno trovato e di come i finding sono stati
+risolti.
+
+Formato consigliato da aggiungere alla descrizione della PR:
+
+```text
+## Review round N
+
+Summary:
+- Brief English summary of what this review focused on.
+- Brief English summary of the architectural or correctness risk found.
+
+Findings:
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+```
+
+La sezione `Review round N` deve essere scritta in inglese, come il resto della
+PR pubblica. Non usare forme come `Review update #1`: in Markdown GitHub
+trasforma automaticamente `#1`, `#2` e forme simili in link a issue o pull
+request, creando riferimenti ambigui e non intenzionali. Deve indicare:
+
+- il numero del round di review;
+- il senso della review, cioe' che tipo di rischio o parte del codice e' stata
+  controllata;
+- la lista puntata dei finding;
+- per ogni finding, il commit che lo risolve come link Markdown cliccabile alla
+  pagina GitHub del commit;
+- una spiegazione breve ma chiara del perche' il fix chiude il finding.
+
+Questa regola affianca, ma non sostituisce, i commenti inline: il commento
+inline resta il punto preciso nel codice, mentre la descrizione della PR offre
+una vista ordinata dell'evoluzione della review.
+
 Le regole di stile del messaggio seguono le pratiche raccolte in
 `Git Commit Best Practices`:
 

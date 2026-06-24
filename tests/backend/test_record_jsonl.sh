@@ -7,6 +7,7 @@ cc -std=gnu99 \
     -Wformat=2 -Wundef -Wnull-dereference -Wdouble-promotion \
     -I../../core/include \
     ../../core/src/alfred_record_jsonl.c \
+    ../../core/src/alfred_record_diagnostic.c \
     test_record_jsonl.c \
     -o /tmp/alfred_test_record_jsonl
 

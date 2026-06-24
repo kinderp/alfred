@@ -78,6 +78,8 @@ void alfred_record_destroy_owned(alfred_record_t *record)
     free((void *)record->watch.state);
     free((void *)record->watch.reason);
     free((void *)record->watch.error);
+    free((void *)record->watch.event_mask);
+    free((void *)record->watch.event_name);
     free((void *)record->recovery.detail_path);
 
     memset(record, 0, sizeof(*record));
@@ -102,6 +104,8 @@ int alfred_record_clone_owned(const alfred_record_t *src,
     clone.watch.state = NULL;
     clone.watch.reason = NULL;
     clone.watch.error = NULL;
+    clone.watch.event_mask = NULL;
+    clone.watch.event_name = NULL;
     clone.recovery.detail_path = NULL;
 
     if (clone_string_field(src->backend, &clone.backend) != 0 ||
@@ -113,6 +117,10 @@ int alfred_record_clone_owned(const alfred_record_t *src,
         clone_string_field(src->watch.state, &clone.watch.state) != 0 ||
         clone_string_field(src->watch.reason, &clone.watch.reason) != 0 ||
         clone_string_field(src->watch.error, &clone.watch.error) != 0 ||
+        clone_string_field(src->watch.event_mask,
+                           &clone.watch.event_mask) != 0 ||
+        clone_string_field(src->watch.event_name,
+                           &clone.watch.event_name) != 0 ||
         clone_string_field(src->recovery.detail_path,
                            &clone.recovery.detail_path) != 0) {
         alfred_record_destroy_owned(&clone);

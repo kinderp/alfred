@@ -10,9 +10,15 @@ Non sono il modello dati primario.
 Non devono vivere nel percorso caldo dell'evento.
 ```
 
-Il documento e' una roadmap architetturale. Il codice corrente ha gia' un primo
-confine `record -> sink -> text sink`, ma non ha ancora una vera Writer API con
-code, worker, backpressure e plugin writer configurabili.
+Il documento definisce il contratto architetturale della Writer API. Il codice
+corrente ha gia' sink, text sink, JSONL sink, JSONL buffered writer, counter
+sink, queue e dispatcher. Ha anche un primo collegamento runtime opt-in:
+`app_run()` puo' scrivere JSONL su `output_log` quando `output_enabled=true` e
+`output_format=jsonl`. Non ha ancora, invece, un runtime writer asincrono
+completo con worker, backpressure, profili operativi e writer configurabili.
+
+Per l'ordine operativo dei prossimi micro-step leggere anche
+[Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md).
 
 ## Perche' serve
 
@@ -363,7 +369,7 @@ Writer API v0 deve permettere almeno questi writer:
 | Writer | Uso principale | Note |
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
-| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato, non ancora collegato al runtime |
+| `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato e collegato al runtime opt-in tramite `output_enabled=true` |
 | `noop/counter` | benchmark e misure baseline | sink implementato per contare record senza serializzazione o I/O |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
@@ -432,6 +438,101 @@ Il callback del writer riceve una stringa valida solo durante la chiamata e puo'
 decidere se aggiungere `\n`, scrivere su file, spedire su socket o salvare il
 payload in un test.
 
+Il micro-step successivo introduce il primo writer JSONL buffered:
+
+```text
+alfred_record_t
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> buffer interno del writer
+-> alfred_record_jsonl_writer_flush()
+-> callback write(data, size)
+```
+
+Questo livello e' diverso dal formatter e dal sink sincrono:
+
+| Livello | Funzione principale | Responsabilita' | Cosa non fa |
+| --- | --- | --- | --- |
+| formatter | `alfred_record_format_jsonl()` | trasforma un record in un oggetto JSON senza newline | non conserva stato, non scrive output |
+| sink sincrono | `alfred_record_jsonl_sink_emit()` | adatta record -> formatter -> callback immediata | non fa buffering, non possiede policy di flush |
+| writer buffered | `alfred_record_jsonl_writer_emit()` / `flush()` | accumula righe JSONL e scrive a blocchi | non apre file, non crea thread, non decide backpressure |
+
+Il writer buffered usa due buffer forniti dal chiamante:
+
+| Buffer | Ruolo |
+| --- | --- |
+| `format_buffer` | scratch buffer per formattare un singolo oggetto JSON |
+| `buffer` | output buffer che accumula una o piu' righe JSONL complete |
+
+Ogni record viene serializzato come oggetto JSON, poi il writer aggiunge `\n`.
+La callback riceve quindi bytes gia' nel formato JSON Lines, potenzialmente piu'
+righe in un solo blocco. Questo e' il primo passo concreto per evitare la regola
+sbagliata "un evento = una write/flush".
+
+Regola pratica:
+
+```text
+emit(record)  -> puo' solo appendere al buffer o flushare se manca spazio
+flush()       -> consegna i bytes accumulati alla callback
+```
+
+Se il buffer contiene dati e la callback di flush fallisce, il writer mantiene i
+bytes nel proprio buffer. In questo modo il chiamante puo' ispezionare lo stato
+o tentare un nuovo flush. Questa non e' ancora una policy di retry completa:
+serve solo a non perdere dati silenziosamente dentro il primo writer buffered.
+
+### Inizializzazione e bytes pendenti
+
+`alfred_record_jsonl_writer_init()` non e' una funzione di "reset forzato".
+Serve a validare un writer configurato ma inattivo. Per questo richiede:
+
+```text
+write != NULL
+format_buffer != NULL
+format_buffer_size > 0
+buffer != NULL
+buffer_size > 0
+used == 0
+```
+
+Il campo `used` indica quanti bytes JSONL sono gia' dentro `buffer` ma non sono
+ancora stati consegnati alla callback `write`. Quindi:
+
+```text
+used == 0  -> nessun dato pendente, init puo' validare il writer
+used > 0   -> ci sono dati pendenti, init deve fallire
+```
+
+Questa distinzione evita una perdita silenziosa di dati. Se `init()` azzerasse
+`used` mentre il buffer contiene ancora righe JSONL, Alfred perderebbe record del
+ledger senza errore visibile.
+
+Esempio:
+
+```text
+buffer = "{\"schema_version\":0}\n"
+used   = 21
+```
+
+In questo stato il writer e' attivo: contiene una riga JSONL non ancora flushata.
+Richiamare `alfred_record_jsonl_writer_init()` deve restituire `-1` e lasciare
+`used` e `buffer` invariati.
+
+Il riuso corretto e':
+
+```text
+init -> emit -> flush -> init eventuale su stato inattivo
+```
+
+oppure, se il chiamante decide consapevolmente di scartare i dati:
+
+```text
+discard esplicito fuori dal writer -> used = 0 -> init
+```
+
+La seconda forma deve essere esplicita nel codice chiamante. Il writer non deve
+nascondere uno scarto di record dentro una funzione chiamata `init()`.
+
 Il JSONL v0 emette sempre:
 
 | Campo | Significato |
@@ -498,41 +599,288 @@ il formato stabile per ambienti ostili o forensi.
 
 ### Limiti intenzionali v0
 
-Il JSONL v0 non e' ancora un writer completo:
+Il JSONL v0 e' collegato al runtime, ma non e' ancora il writer definitivo di
+produzione:
 
-- non e' collegato al runtime degli eventi;
-- non gestisce file descriptor, path di output o rotazione log;
-- non aggiunge newline;
-- non fa buffering su file;
-- non implementa backpressure;
+- e' collegato ad `app_run()` solo quando `output_enabled=true` e
+  `output_format=jsonl`;
+- l'applicazione apre `output_log` e passa al writer una callback bytes, ma il
+  writer buffered resta separato da file descriptor, path di output e rotazione
+  log;
+- il formatter non aggiunge newline; il writer buffered invece aggiunge newline
+  e accumula righe gia' formattate prima del flush;
+- il percorso runtime v0 e' ancora sincrono: enqueue, drain e writer avvengono
+  nel callback applicativo invece che in un worker thread;
+- non implementa backpressure avanzata, code per sink, retry o profili
+  critical/best-effort/debug;
 - non assegna sequenze o timestamp da solo;
 - non sostituisce `alfred_record_t` come contratto interno.
 
-Questi limiti sono voluti. Prima fissiamo il mapping `alfred_record_t -> JSONL`;
-poi potremo collegarlo a dispatcher, code, profili operativi e benchmark.
+Questi limiti sono voluti. Abbiamo prima fissato il mapping
+`alfred_record_t -> JSONL`, poi il contratto `record -> writer buffered`, poi il
+percorso `record -> queue -> dispatcher -> writer`. Il collegamento runtime
+attuale serve a verificare quel contratto end-to-end su file reale senza ancora
+spostare serializzazione, I/O e backpressure fuori dal percorso sincrono.
 
 ### Debito tecnico JSONL v0
 
-Il JSONL v0 e' accettabile per questa fase perche' e' ancora un formatter
-preparatorio: non e' il writer runtime definitivo e non e' ancora il formato dei
-golden test ufficiali. Proprio per questo il debito tecnico deve restare
-visibile. Non deve diventare una scelta implicita dimenticata nel codice.
+Il JSONL v0 e' accettabile per questa fase perche' e' un output runtime opt-in,
+non ancora il writer asincrono definitivo e non ancora il formato dei golden test
+ufficiali. Proprio per questo il debito tecnico deve restare visibile. Non deve
+diventare una scelta implicita dimenticata nel codice.
 
 | Debito | Stato attuale | Perche' e' accettabile ora | Quando va chiuso |
 | --- | --- | --- | --- |
 | Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
 | Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
 | Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
-| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta e chiama subito la callback | Non e' collegato al percorso caldo runtime, quindi non blocca ancora il backend | Prima di collegare JSONL a output runtime reali |
-| Nessuna backpressure | Il sink non gestisce code, drop, retry o classi critical/best-effort/debug | Non esiste ancora un writer file/socket che possa saturarsi | Prima di writer buffered, socket, Lab o ledger JSONL continuativo |
-| Nessun newline/file/socket | Il formatter produce solo un oggetto JSON e il sink consegna una stringa | Mantiene separati formato, framing e I/O | Quando introdurremo Writer API completa e configurazione output |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta durante il drain chiamato dal callback applicativo | Rende verificabile il percorso runtime opt-in senza introdurre ancora worker thread | Prima di rendere il path caldo realmente asincrono |
+| Writer JSONL buffered minimale | `alfred_record_jsonl_writer_emit()` accumula righe in buffer caller-owned e `flush()` chiama una callback bytes | Fissa il contratto di batching; `app.c` fornisce oggi la callback che scrive su `output_log` | Prima di output runtime con target multipli e profili operativi |
+| Backpressure solo fail-closed | Sink e writer non gestiscono code per sink, drop, retry o classi critical/best-effort/debug; se la pipeline runtime fallisce, Alfred si ferma | Evita un ledger JSONL parziale e silenzioso nella fase v0 | Prima di socket, Lab, ledger JSONL continuativo o writer thread |
+| File/socket gestiti fuori dal writer | Il writer buffered consegna bytes a una callback; oggi `app.c` apre `output_log`, ma il writer non conosce path, file descriptor o rotazione | Mantiene separati formato, framing, buffering e I/O reale | Quando introdurremo target multipli, rotazione o plugin writer |
 | Nessuna validazione schema esterna | I test confrontano stringhe esatte, ma non esiste ancora uno schema JSON formale | Sufficiente per bloccare il mapping C iniziale | Prima di pubblicare JSONL come interfaccia stabile per tool terzi |
 
-La regola pratica e': questo debito e' accettabile finche' JSONL resta un
-formatter/sink testabile fuori dal runtime. Quando JSONL diventera' output
-ufficiale, ledger, golden-test format o interfaccia per integrazioni esterne,
-questi punti dovranno essere risolti o trasformati in decisioni esplicite di
-schema v1.
+La regola pratica e': questo debito e' accettabile finche' JSONL resta un output
+runtime opt-in usato per validare la pipeline e non ancora il contratto pubblico
+stabile di Alfred. Quando JSONL diventera' ledger ufficiale, golden-test format
+o interfaccia per integrazioni esterne, questi punti dovranno essere risolti o
+trasformati in decisioni esplicite di schema v1.
+
+## Configurazione output minima
+
+Il primo contratto configurabile del Writer Runtime v0 e' volutamente piccolo:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+```
+
+Questa configurazione collega il primo writer runtime solo quando
+`output_enabled=true` e `output_format=jsonl`. Il default resta spento per non
+cambiare il comportamento storico. Quando e' acceso, il percorso JSONL e'
+aggiuntivo: `raw.log`, `events.log` ed `errors.log` continuano a essere prodotti.
+
+Campi:
+
+| Chiave | Campo C | Default | Significato |
+| --- | --- | --- | --- |
+| `output_enabled` | `config.output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
+| `output_format` | `config.output.format` | `jsonl` | formato richiesto; `jsonl` e' il solo formato runtime abilitabile in v0 |
+| `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `8192` |
+| `output_log` | `config.output_log` | `output.jsonl` | file append-only usato dal primo writer JSONL runtime |
+
+Quando `output_enabled=false`, il path runtime resta quello compatibile:
+
+```text
+backend/core
+-> logger attuale
+-> raw.log / events.log / errors.log
+```
+
+Quando `output_enabled=true`, la configurazione descrive il path target:
+
+```text
+record
+-> queue
+-> runtime drain sincrono
+-> dispatcher
+-> JSONL buffered writer
+-> output_log
+```
+
+Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
+normalizzati gia' migrati al record sink, per gli eventi semantici emessi dal
+core e per tutta la diagnostica watch base: `WATCH_ADDED`, `WATCH_REMOVED`,
+`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`. Il collegamento e' volutamente
+sincrono: il callback applicativo, il core logger, il watch manager o il
+backend costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
+pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
+subito il batch disponibile.
+
+La policy di errore v0 e' conservativa. Quando `output_enabled=true`, Alfred
+tratta la pipeline JSONL come parte del contratto runtime scelto dall'utente: se
+enqueue, drain o writer falliscono, il runtime viene fermato invece di continuare
+a processare eventi producendo un `output.jsonl` incompleto. Questa scelta e'
+intenzionale perche' JSONL diventera' base per ledger, test golden e replay: un
+buco silenzioso nel file sarebbe peggiore di un arresto esplicito. Con
+`output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
+continuano a comportarsi come prima.
+
+Il minimo `8192` per `output_buffer_size` non e' arbitrario. Nel percorso JSONL
+runtime ci sono due buffer consecutivi:
+
+- `format_buffer`: scratch buffer temporaneo usato da
+  `alfred_record_format_jsonl()` per trasformare un singolo `alfred_record_t` in
+  una singola riga JSONL senza `\n`;
+- `output_buffer`: buffer del writer usato da
+  `alfred_record_jsonl_writer_emit()` per accumulare una o piu' righe JSONL gia'
+  formattate prima del flush sul file.
+
+`app.c` assegna al `format_buffer` 8192 bytes. Se il `format_buffer` riesce a
+contenere un record, quel record puo' occupare fino a 8191 bytes piu' il
+terminatore NUL interno usato dalle funzioni C sulle stringhe. Subito dopo il
+writer deve copiare la stessa riga dentro `output_buffer` e aggiungere il
+newline JSONL `\n`. Quindi un `output_buffer` da 8192 bytes puo' contenere la
+riga formattata massima prodotta dal formatter piu' il newline finale.
+
+Il bug architetturale evitato da questo vincolo era una configurazione accettata
+solo in apparenza:
+
+```text
+format_buffer_size = 8192
+output_buffer_size = 4096
+```
+
+Con quella configurazione un record lungo ma valido poteva essere formattato
+correttamente nel primo buffer, per esempio 5000 bytes, ma poi fallire nella
+copia verso il secondo buffer perche' 5000 bytes piu' `\n` non entrano in 4096
+bytes. In v0 Alfred rifiuta quindi buffer di output piu' piccoli prima di
+avviare il runtime, invece di accettare una configurazione che fallirebbe solo
+quando arriva un record lungo ma corretto.
+
+Il watch manager e il backend inotify non conoscono `app_t` e non conoscono il
+writer JSONL. Ricevono nel `inotify_backend_context_t` un callback generico
+`emit_record`: il backend offre un record diagnostico borrowed, l'applicazione
+lo clona/enqueue nella pipeline se `output_enabled=true`, oppure lo ignora in
+modo riuscito se l'output strutturato e' disabilitato. Questa e' la stessa
+regola di ownership usata per gli eventi semantici del core.
+
+Se `emit_record` fallisce, il backend non deve decidere una policy locale come
+"continua comunque" o "termina il processo". Deve propagare l'errore al proprio
+chiamante. La scelta fail-closed appartiene all'applicazione perche'
+l'applicazione possiede la configurazione `output_enabled`, la pipeline e il
+file `output_log`. Per questo `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+`WATCH_STALE_EVENT_DROPPED` devono fermare startup o poll se il loro record
+strutturato non puo' attraversare la callback configurata.
+
+`WATCH_STALE` merita una nota separata perche' nasce in un punto diverso da
+`WATCH_ADDED`: non durante l'installazione del watch, ma mentre il backend sta
+processando un self-event come `IN_MOVE_SELF`, `IN_DELETE_SELF` o `IN_UNMOUNT`.
+Il backend prima scrive il record compatibile in `events.log`, poi offre lo
+stesso `alfred_record_t` borrowed al callback `emit_record`. Se il callback
+fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
+continuare ignorando il fatto che il ledger strutturato ha perso proprio il
+record che segnala "questo path non e' piu' affidabile".
+
+La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
+righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:
+questo e' voluto per non trasformare il percorso corrente in una scrittura file
+per evento. Se pero' rimangono bytes buffered e il target fallisce solo durante
+il flush finale, Alfred deve comunque considerare il ledger incompleto.
+`app_shutdown()` quindi propaga l'errore di flush finale a `main()`: se il loop
+era terminato senza errori ma il flush conclusivo fallisce, il processo deve
+uscire con stato non zero.
+
+La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
+gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel
+[Contratto dei log](22-contratto-log.md#copertura-record-sink-e-output-jsonl).
+Quel capitolo distingue raw kernel, raw Alfred normalizzati, raw sintetici,
+eventi semantici, diagnostica watch/resync/lost-scope, lifecycle, errori e
+trace.
+
+Perche' non aggiungiamo ancora `output_target` o `flush_interval_ms`:
+
+- `output_target` apre il tema di file, stdout, socket, unix socket e Lab;
+- `flush_interval_ms` richiede timer o worker thread reali.
+
+Queste scelte appartengono ai prossimi passi. In questo micro-step il target e'
+solo un file JSONL in append mode.
+
+## Output pipeline sperimentale
+
+Il passo successivo compone i blocchi gia' testati in una pipeline singola:
+
+```text
+alfred_record_t
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_output_pipeline_flush()
+-> callback write(data, size)
+```
+
+Il tipo principale e':
+
+```c
+typedef struct {
+    int enabled;
+    alfred_record_output_pipeline_format_t format;
+    size_t drain_batch_size;
+    alfred_record_queue_t queue;
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t sink_storage[1];
+    alfred_record_jsonl_writer_t writer;
+} alfred_record_output_pipeline_t;
+```
+
+Significato:
+
+| Campo | Ruolo |
+| --- | --- |
+| `enabled` | se falso, la pipeline e' un no-op |
+| `format` | formato writer attivo; v0 supporta solo JSONL |
+| `drain_batch_size` | massimo numero di record consumati da un drain |
+| `queue` | coda bounded di record owned |
+| `dispatcher` | fan-out bounded; v0 registra un solo sink |
+| `sink_storage[1]` | storage embedded per il sink JSONL |
+| `writer` | JSONL buffered writer |
+
+Quando la pipeline e' disabilitata, `enqueue`, `drain_once` e `flush` tornano
+successo senza produrre output. Questo rappresenta il comportamento di
+`output_enabled=false`: il runtime compatibile continua a usare i log correnti e
+la nuova pipeline non partecipa.
+
+Quando la pipeline e' abilitata, il record viene clonato nella queue come owned,
+poi il drain consegna un batch al dispatcher. Il dispatcher chiama il sink JSONL
+e il sink scrive nel buffer del writer. La callback di output non viene chiamata
+dal drain: viene chiamata solo da `alfred_record_output_pipeline_flush()`.
+
+Questa scelta e' intenzionale:
+
+- `enqueue()` misura il confine borrowed -> owned;
+- `drain_once()` misura il confine queue -> dispatcher -> writer;
+- `flush()` misura il confine writer buffered -> output device callback.
+
+La pipeline non apre file, non crea thread, non implementa retry e non decide
+policy di backpressure. Se la queue e' piena, `enqueue()` fallisce. Se il flush
+fallisce, i bytes restano nel JSONL writer come gia' definito dal contratto del
+writer buffered.
+
+Questa e' la pipeline v0 sincrona oggi collegata ad `app_run()` quando
+`output_enabled=true`, ma non e' il percorso finale ad alte prestazioni. Serve a
+verificare il contratto `record -> queue -> dispatcher -> writer` su output reale
+prima di introdurre worker thread, code per sink e backpressure reale.
+
+Anche nella v0 sincrona vale gia' una regola architetturale importante: dopo che
+un `alfred_record_t` valido e' stato costruito, nessun writer compatibile deve
+decidere implicitamente se un altro writer ricevera' quel record. In particolare,
+il JSONL runtime non deve dipendere dal successo del formatter testuale legacy di
+`events.log` o `raw.log`. Il formato testuale usa buffer umani e compatibili con
+il passato; JSONL e' invece il ledger strutturato opt-in. Se una riga testuale e'
+troppo lunga per il buffer del text sink, il log compatibile puo' usare il proprio
+fallback, ma il record strutturato deve essere offerto comunque alla pipeline
+JSONL.
+
+Questa regola anticipa il comportamento del runtime finale con code separate:
+
+```text
+record
+-> queue text     -> text writer
+-> queue jsonl    -> JSONL writer
+-> queue binary   -> MessagePack/Protobuf writer
+-> queue lab      -> Lab/socket/UI
+```
+
+Nel runtime finale un sink lento o fallito non dovra' bloccare gli altri sink,
+salvo una policy esplicita. Nel runtime v0 non abbiamo ancora code per sink, ma
+possiamo gia' evitare la dipendenza sbagliata piu' pericolosa: il record JSONL
+non deve essere saltato solo perche' la serializzazione testuale compatibile ha
+fallito.
 
 ## Backpressure
 
@@ -720,8 +1068,20 @@ Il primo harness manuale per questa misura e':
 make perf-record-sinks
 ```
 
-Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con tre righe:
-`counter`, `text` e `jsonl`. Lo script accetta anche:
+Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con righe
+dirette, righe queue, righe dispatcher, righe queue-dispatcher e una riga
+`output-pipeline-jsonl`. Le righe
+`counter`, `text` e `jsonl` misurano l'emissione diretta verso un sink. La riga
+`queue-counter` misura il primo confine `record borrowed -> clone owned ->
+queue push -> queue pop -> counter sink -> destroy owned`, senza formattazione e
+senza I/O. Le righe `dispatcher-*` misurano
+`alfred_record_dispatcher_dispatch_one()` verso uno o piu' sink registrati,
+senza coda e senza thread. Le righe `queue-dispatcher-*` misurano
+`alfred_record_dispatcher_drain_queue()`, cioe' il percorso single-threaded piu'
+vicino al runtime target prima di introdurre worker reali. La riga
+`output-pipeline-jsonl` misura l'oggetto `alfred_record_output_pipeline_t`
+assemblato: enqueue, runtime drain, dispatcher, JSONL buffered writer e flush
+finale verso callback in memoria. Lo script accetta anche:
 
 ```bash
 cd tests/perf
@@ -733,7 +1093,7 @@ su una sola misura rumorosa. Questo non e' ancora un benchmark end-to-end di
 Alfred: non usa inotify, non legge eventi dal kernel, non scrive file e non
 misura backpressure. Misura solo record sintetici consegnati a sink isolati.
 La spiegazione campo per campo del CSV, con esempi pratici e interpretazioni,
-e' nella guida test: [make perf-record-sinks](10-debugging-test-e-strumenti.md#8-make-perf-record-sinks).
+e' nella guida test: [make perf-record-sinks](10-debugging-test-e-strumenti.md#9-make-perf-record-sinks).
 
 ## Ownership e record accodati
 
@@ -1330,6 +1690,65 @@ Nel runtime finale dovremo decidere una policy piu' completa:
 
 Queste decisioni appartengono alla backpressure policy futura. Non le nascondiamo
 dentro il primo helper di drain.
+
+### Worker/drain simulato single-threaded
+
+`alfred_record_dispatcher_drain_queue()` e'
+un helper basso livello: prende una queue, fa pop, dispatch e destroy. Non
+descrive ancora il livello runtime che, in futuro, sara' eseguito da un worker.
+
+Per dare un nome a quel livello senza introdurre thread reali, Alfred aggiunge:
+
+```c
+int alfred_record_runtime_drain_once(
+    const alfred_record_dispatcher_t *dispatcher,
+    alfred_record_queue_t *queue,
+    size_t max_records,
+    alfred_record_runtime_drain_result_t *result);
+```
+
+Questo helper e' ancora single-threaded. Fa una sola cosa: eseguire un tentativo
+bounded di drain e restituire un riepilogo:
+
+```c
+typedef struct {
+    size_t max_records;
+    size_t dispatched;
+    size_t remaining;
+    int status;
+} alfred_record_runtime_drain_result_t;
+```
+
+Significato dei campi:
+
+| Campo | Significato |
+| --- | --- |
+| `max_records` | limite batch richiesto dal chiamante |
+| `dispatched` | record consegnati con successo a tutti i sink |
+| `remaining` | record ancora presenti nella queue al ritorno |
+| `status` | `0` se il drain e' riuscito, `-1` se input o sink falliscono |
+
+La differenza concettuale e':
+
+| Livello | Ruolo |
+| --- | --- |
+| `alfred_record_dispatcher_drain_queue()` | meccanica di pop, dispatch e destroy |
+| `alfred_record_runtime_drain_once()` | passo runtime simulato che produce un risultato leggibile dal futuro worker |
+
+In altre parole, `runtime_drain_once()` non rende Alfred asincrono. Serve a
+stabilire l'interfaccia mentale del worker futuro:
+
+```text
+prendi un batch
+-> prova a consegnarlo
+-> registra quanti record sono passati
+-> registra quanti record restano
+-> segnala successo o errore
+```
+
+Questo confine evita di saltare direttamente a thread, lock, wakeup, shutdown e
+backpressure. Prima fissiamo cosa significa "un giro di lavoro" in modo
+deterministico e testabile.
 
 ## Regola contrattuale
 

@@ -421,8 +421,12 @@ watch_manager_add_recursive()
 
 Ogni `watch_manager_add()` riuscito produce il diagnostico backend
 `WATCH_ADDED`. Ogni `watch_manager_remove()` produce `WATCH_REMOVED`. Questi due
-diagnostici sono ora il primo punto backend che attraversa il confine
-`record -> emit(record) -> text sink -> logger_event()`:
+diagnostici attraversano due confini distinti:
+
+- il confine compatibile `record -> text sink -> logger_event()`, che conserva
+  `events.log`;
+- il confine opzionale `record -> emit_record -> output pipeline`, che produce
+  JSONL quando `output_enabled=true`.
 
 ```text
 watch_manager_add() / watch_manager_remove()
@@ -430,11 +434,15 @@ watch_manager_add() / watch_manager_remove()
     -> alfred_record_sink_emit()
     -> alfred_record_text_sink_emit()
     -> logger_event()
+    -> inotify_backend_context_t.emit_record()
+    -> output.jsonl se la pipeline e' abilitata
 ```
 
 Il payload resta identico a prima, per esempio `WATCH_ADDED wd=N path=P`, ma il
-dato nasce come `alfred_record_t` e passa gia' dal sink comune. Questo non rende
-`WATCH_ADDED` un evento semantico: resta diagnostica sullo stato del backend.
+dato nasce come `alfred_record_t` e passa gia' dal sink comune. Il callback
+`emit_record` e' generico proprio per non far conoscere al watch manager
+`app_t`, file JSONL, socket o futuri writer. Questo non rende `WATCH_ADDED` un
+evento semantico: resta diagnostica sullo stato del backend.
 
 Questo percorso non genera raw sintetici perche' le directory esistono gia'
 prima dell'avvio del polling.

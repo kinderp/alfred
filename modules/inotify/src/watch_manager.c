@@ -93,10 +93,12 @@ static int watch_manager_write_event_payload(void *userdata,
  * the Event Model v0 sink boundary for watch-table state changes: build a
  * structured diagnostic record, emit it through the generic sink, let the text
  * sink format the compatibility payload, then let the existing logger add
- * timestamp/level/newline details. The fallback preserves the old payload if
- * record creation, sink setup, formatting, or logging fails.
+ * timestamp/level/newline details. When the application provides a structured
+ * output callback, the same borrowed record is then offered to the output
+ * pipeline. The fallback preserves the old payload if record creation, sink
+ * setup, formatting, or logging fails.
  */
-static void watch_manager_log_simple_watch_diagnostic(
+static int watch_manager_log_simple_watch_diagnostic(
     const inotify_backend_context_t *ctx,
     alfred_record_type_t type,
     int wd,
@@ -109,11 +111,11 @@ static void watch_manager_log_simple_watch_diagnostic(
     char payload[PATH_MAX + 64u];
 
     if (ctx == NULL || ctx->logger == NULL)
-        return;
+        return -1;
 
     name = watch_manager_watch_record_name(type);
     if (name == NULL)
-        return;
+        return -1;
 
     if (alfred_record_build_watch_diagnostic(
             type,
@@ -131,7 +133,20 @@ static void watch_manager_log_simple_watch_diagnostic(
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            return;
+            /*
+             * Keep events.log compatibility first, then expose the diagnostic
+             * record to optional structured output. Queue-based output must
+             * clone this borrowed record before returning.
+             */
+            if (ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit watch diagnostic output record");
+                return -1;
+            }
+
+            return 0;
         }
     }
 
@@ -140,6 +155,7 @@ static void watch_manager_log_simple_watch_diagnostic(
                  name,
                  wd,
                  path != NULL ? path : "");
+    return 0;
 }
 
 /*
@@ -355,11 +371,20 @@ int watch_manager_add(inotify_backend_context_t *ctx,
         return -1;
     }
 
-    watch_manager_log_simple_watch_diagnostic(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_ADDED,
-        wd,
-        path);
+    if (watch_manager_log_simple_watch_diagnostic(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_ADDED,
+            wd,
+            path) != 0) {
+
+        inotify_rm_watch(ctx->runtime->fd,
+                         wd);
+
+        watcher_remove(&ctx->runtime->watchers,
+                       wd);
+
+        return -1;
+    }
 
     return wd;
 }
@@ -408,11 +433,13 @@ int watch_manager_remove(inotify_backend_context_t *ctx,
     watcher_remove(&ctx->runtime->watchers,
                    wd);
 
-    watch_manager_log_simple_watch_diagnostic(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_REMOVED,
-        wd,
-        removed_path);
+    if (watch_manager_log_simple_watch_diagnostic(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_REMOVED,
+            wd,
+            removed_path) != 0) {
+        return -1;
+    }
 
     return 0;
 }

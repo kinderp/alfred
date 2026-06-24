@@ -13,6 +13,8 @@
 
 #include "app.h"
 #include "alfred_record_adapter.h"
+#include "alfred_record_output_pipeline.h"
+#include "alfred_record_runtime.h"
 #include "alfred_record_sink.h"
 #include "alfred_record_text_sink.h"
 #include "core_logger.h"
@@ -35,9 +37,19 @@ static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 );
-static int log_raw_record(logger_t *logger, const alfred_raw_event_t *raw);
+static int log_raw_record(logger_t *logger, const alfred_record_t *record);
+static int app_init_output_pipeline(app_t *app);
+static int app_shutdown_output_pipeline(app_t *app);
+static int app_emit_output_record(app_t *app, const alfred_record_t *record);
+static int app_emit_output_record_callback(const alfred_record_t *record,
+                                           void *userdata);
 static int handle_backend_event(const alfred_raw_event_t *raw,
                                 void *userdata);
+
+enum {
+    APP_OUTPUT_QUEUE_CAPACITY = 1024u,
+    APP_OUTPUT_FORMAT_BUFFER_SIZE = 8192u
+};
 
 /* ============================================================================
  * Signal State
@@ -67,6 +79,8 @@ static void app_build_inotify_backend_context(
     ctx->runtime = &app->inotify;
     ctx->config = &app->config.inotify;
     ctx->logger = &app->logger;
+    ctx->emit_record = app_emit_output_record_callback;
+    ctx->emit_record_userdata = app;
 }
 
 /* ============================================================================
@@ -138,6 +152,33 @@ static int write_raw_payload(void *userdata, const char *payload)
 }
 
 /*
+ * write_output_bytes - write buffered JSONL bytes to the configured output file
+ * @userdata: FILE stream opened by app_init_output_pipeline()
+ * @data: borrowed byte buffer from the JSONL writer
+ * @size: number of bytes to write
+ *
+ * This callback is intentionally byte-oriented rather than printf-oriented.
+ * The JSONL writer has already formatted complete lines into its own buffer;
+ * the application layer only moves those bytes to the configured destination.
+ *
+ * Return: 0 on success, -1 on invalid input or short write.
+ */
+static int write_output_bytes(void *userdata, const char *data, size_t size)
+{
+    FILE *fp = userdata;
+
+    if (fp == NULL || (data == NULL && size > 0u)) {
+        return -1;
+    }
+
+    if (size == 0u) {
+        return 0;
+    }
+
+    return fwrite(data, 1u, size, fp) == size ? 0 : -1;
+}
+
+/*
  * is_raw_record_sink_candidate - choose raw events migrated to the sink
  * @raw: borrowed raw event from the backend callback
  *
@@ -204,34 +245,25 @@ static int is_raw_record_sink_candidate(const alfred_raw_event_t *raw)
 }
 
 /*
- * log_raw_record - emit selected raw facts through Event Model v0 sinks
+ * log_raw_record - emit one raw record through the compatibility text sink
  * @logger: application logger that owns raw.log
- * @raw: backend raw event to adapt
+ * @record: already adapted Event Model v0 raw record
  *
- * The backend still delivers alfred_raw_event_t to app.c and the core still
- * consumes that value through alfred_process(). This helper migrates the
- * compatibility raw log for selected normalized raw facts to the same record ->
- * sink -> text sink shape used by semantic and watch diagnostics.
+ * The backend still delivers alfred_raw_event_t to app.c and the core consumes
+ * that value through alfred_process(). The application adapts selected raw
+ * facts once, then this helper keeps raw.log compatibility through the same
+ * record -> sink -> text sink shape used by semantic and watch diagnostics.
  *
- * Return: 0 on success or when @raw is not part of this micro-step, -1 when
- * conversion, sink setup, formatting, or logger bridging fails.
+ * Return: 0 on success, -1 on invalid input, sink setup, formatting, or logger
+ * bridging failure.
  */
-static int log_raw_record(logger_t *logger, const alfred_raw_event_t *raw)
+static int log_raw_record(logger_t *logger, const alfred_record_t *record)
 {
-    alfred_record_t record;
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
     char payload[PATH_MAX + 64u];
 
-    if (logger == NULL) {
-        return -1;
-    }
-
-    if (!is_raw_record_sink_candidate(raw)) {
-        return 0;
-    }
-
-    if (alfred_record_from_raw(raw, &record) != 0) {
+    if (logger == NULL || record == NULL) {
         return -1;
     }
 
@@ -244,11 +276,224 @@ static int log_raw_record(logger_t *logger, const alfred_raw_event_t *raw)
         return -1;
     }
 
-    if (alfred_record_sink_emit(&sink, &record) != 0) {
+    if (alfred_record_sink_emit(&sink, record) != 0) {
         return -1;
     }
 
     return 0;
+}
+
+/*
+ * app_init_output_pipeline - initialize optional structured output runtime
+ * @app: application context with parsed configuration
+ *
+ * The pipeline is disabled by default. When enabled in this first runtime
+ * wiring step, it is additive to raw.log/events.log/errors.log and supports
+ * only JSONL because that is the only buffered writer with a v0 contract.
+ *
+ * Return: ERR_OK on success, ERR_CONFIG/ERR_ALLOC/ERR_IO on failure.
+ */
+static int app_init_output_pipeline(app_t *app)
+{
+    alfred_record_output_pipeline_config_t pipeline_config;
+
+    if (app == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    if (!app->config.output.enabled) {
+        return ERR_OK;
+    }
+
+    if (app->config.output.format != OUTPUT_FORMAT_JSONL) {
+        logger_error(&app->logger,
+                     "output_enabled requires output_format=jsonl");
+        return ERR_CONFIG;
+    }
+
+    if (app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
+        logger_error(&app->logger,
+                     "output_buffer_size must be at least %u bytes",
+                     APP_OUTPUT_FORMAT_BUFFER_SIZE);
+        return ERR_CONFIG;
+    }
+
+    app->output_stream = fopen(app->config.output_log, "a");
+    if (app->output_stream == NULL) {
+        logger_error(&app->logger,
+                     "failed to open output log %s",
+                     app->config.output_log);
+        return ERR_IO;
+    }
+
+    /*
+     * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
+     * extra buffering so write_output_bytes() observes device errors at the
+     * writer flush boundary instead of deferring them until shutdown. This keeps
+     * output failure policy testable with devices such as /dev/full while still
+     * avoiding one write per event: JSONL writer flushes only when its own buffer
+     * is full or during shutdown.
+     */
+    if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
+        logger_error(&app->logger,
+                     "failed to configure output log buffering");
+        return ERR_IO;
+    }
+
+    app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
+    app->output_buffer = malloc(app->config.output.buffer_size);
+
+    if (app->output_format_buffer == NULL || app->output_buffer == NULL) {
+        logger_error(&app->logger,
+                     "failed to allocate output pipeline buffers");
+        return ERR_ALLOC;
+    }
+
+    memset(&pipeline_config, 0, sizeof(pipeline_config));
+    pipeline_config.enabled = 1;
+    pipeline_config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
+    pipeline_config.queue_capacity = APP_OUTPUT_QUEUE_CAPACITY;
+    pipeline_config.drain_batch_size = APP_OUTPUT_QUEUE_CAPACITY;
+    pipeline_config.write = write_output_bytes;
+    pipeline_config.userdata = app->output_stream;
+    pipeline_config.format_buffer = app->output_format_buffer;
+    pipeline_config.format_buffer_size = APP_OUTPUT_FORMAT_BUFFER_SIZE;
+    pipeline_config.output_buffer = app->output_buffer;
+    pipeline_config.output_buffer_size = app->config.output.buffer_size;
+
+    if (alfred_record_output_pipeline_init(&app->output_pipeline,
+                                           &pipeline_config) != 0) {
+        logger_error(&app->logger,
+                     "failed to initialize output pipeline");
+        return ERR_ALLOC;
+    }
+
+    logger_info(&app->logger,
+                "output pipeline initialized format=jsonl path=%s",
+                app->config.output_log);
+
+    return ERR_OK;
+}
+
+/*
+ * app_shutdown_output_pipeline - flush and release optional output runtime
+ * @app: application context that may own an output pipeline
+ *
+ * Shutdown keeps the policy explicit: first flush buffered JSONL records, then
+ * destroy the owned queue state, free borrowed writer buffers, and finally close
+ * the destination stream. Flush failures are still logged, but they are also
+ * returned to the caller so main() can avoid reporting a successful run when the
+ * configured JSONL ledger is incomplete.
+ *
+ * Return: 0 when no output failure was observed, -1 when a final flush failed.
+ */
+static int app_shutdown_output_pipeline(app_t *app)
+{
+    int status = 0;
+
+    if (app == NULL) {
+        return 0;
+    }
+
+    if (app->output_pipeline.enabled) {
+        if (alfred_record_output_pipeline_flush(&app->output_pipeline) != 0) {
+            logger_error(&app->logger,
+                         "failed to flush output pipeline");
+            app->output_failed = 1;
+            status = -1;
+        }
+    }
+
+    if (app->output_stream != NULL && fflush(app->output_stream) != 0) {
+        logger_error(&app->logger,
+                     "failed to flush output log stream");
+        app->output_failed = 1;
+        status = -1;
+    }
+
+    alfred_record_output_pipeline_destroy(&app->output_pipeline);
+
+    free(app->output_format_buffer);
+    app->output_format_buffer = NULL;
+
+    free(app->output_buffer);
+    app->output_buffer = NULL;
+
+    if (app->output_stream != NULL) {
+        fclose(app->output_stream);
+        app->output_stream = NULL;
+    }
+
+    return status;
+}
+
+/*
+ * app_emit_output_record - enqueue and drain one optional runtime output record
+ * @app: application context
+ * @record: borrowed Event Model v0 record
+ *
+ * This is deliberately synchronous for the first app_run() wiring step. It
+ * proves the runtime path behind output_enabled=true without introducing worker
+ * threads, wakeups, per-sink queues, or real backpressure yet.
+ *
+ * Failure policy:
+ *   output_enabled=true makes the structured output path part of the runtime
+ *   contract. If enqueue, drain, or writer delivery fails, the application marks
+ *   output_failed so the event loop can stop instead of producing a silent
+ *   partial JSONL ledger. Disabled output remains a successful no-op.
+ *
+ * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
+ */
+static int app_emit_output_record(app_t *app, const alfred_record_t *record)
+{
+    alfred_record_runtime_drain_result_t drain_result;
+
+    if (app == NULL || record == NULL) {
+        return -1;
+    }
+
+    if (!app->output_pipeline.enabled) {
+        return 0;
+    }
+
+    if (app->output_failed) {
+        return -1;
+    }
+
+    if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
+                                              record) != 0) {
+        app->output_failed = 1;
+        return -1;
+    }
+
+    if (alfred_record_output_pipeline_drain_once(&app->output_pipeline,
+                                                 &drain_result) != 0) {
+        app->output_failed = 1;
+        return -1;
+    }
+
+    if (drain_result.status != 0) {
+        app->output_failed = 1;
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+ * app_emit_output_record_callback - core_logger compatible output callback
+ * @record: borrowed Event Model v0 record emitted by the core logger
+ * @userdata: app_t pointer supplied during app_init()
+ *
+ * core_logger does not know app_t. This adapter keeps the public callback shape
+ * generic while reusing the application-owned output pipeline helper.
+ *
+ * Return: 0 on success or disabled output, -1 on invalid input or emit failure.
+ */
+static int app_emit_output_record_callback(const alfred_record_t *record,
+                                           void *userdata)
+{
+    return app_emit_output_record((app_t *)userdata, record);
 }
 
 /*
@@ -271,9 +516,25 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
         return ERR_INVALID_ARG;
 
     if (raw != NULL) {
-        if (log_raw_record(&app->logger, raw) != 0) {
-            logger_error(&app->logger,
-                         "failed to log raw record");
+        if (is_raw_record_sink_candidate(raw)) {
+            alfred_record_t record;
+
+            if (alfred_record_from_raw(raw, &record) == 0) {
+                if (log_raw_record(&app->logger, &record) != 0) {
+                    logger_error(&app->logger,
+                                 "failed to log raw record");
+                }
+
+                if (app_emit_output_record(app, &record) != 0) {
+                    logger_error(&app->logger,
+                                 "failed to emit output record");
+                    return ERR_IO;
+                }
+            }
+            else {
+                logger_error(&app->logger,
+                             "failed to adapt output record");
+            }
         }
     }
 
@@ -282,6 +543,12 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
             logger_error(&app->logger,
                          "core failed to process raw event");
         }
+    }
+
+    if (app->output_failed) {
+        logger_error(&app->logger,
+                     "structured output failed; stopping event loop");
+        return ERR_IO;
     }
 
     return ERR_OK;
@@ -368,9 +635,11 @@ int app_init(app_t *app, int argc, char **argv)
     /*
      * The core is initialized after the logger because its emit callback writes
      * semantic events through logger_event(). Core mode is the official stream.
-     */
+    */
     alfred_config_default(&app->core_config);
     app->core_logger_context.logger = &app->logger;
+    app->core_logger_context.emit_record = app_emit_output_record_callback;
+    app->core_logger_context.emit_record_userdata = app;
 
     app->core = alfred_create(&app->core_config,
                               core_logger_on_event,
@@ -386,6 +655,10 @@ int app_init(app_t *app, int argc, char **argv)
 
     logger_info(&app->logger,
                 "alfred core initialized event_engine=core");
+
+    error = app_init_output_pipeline(app);
+    if (error != ERR_OK)
+        goto fail;
 
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);
@@ -443,6 +716,8 @@ fail:
  */
 int app_run(app_t *app)
 {
+    error_t error = ERR_OK;
+
     if (app == NULL)
         return ERR_INVALID_ARG;
 
@@ -454,9 +729,10 @@ int app_run(app_t *app)
 
     while (app->running) {
 
-        if (inotify_backend_poll(&backend_ctx,
-                                 handle_backend_event,
-                                 app) != ERR_OK) {
+        error = inotify_backend_poll(&backend_ctx,
+                                     handle_backend_event,
+                                     app);
+        if (error != ERR_OK) {
             break;
         }
     }
@@ -464,7 +740,7 @@ int app_run(app_t *app)
     logger_info(&app->logger,
                 "event loop terminated");
 
-    return ERR_OK;
+    return error;
 }
 
 /*
@@ -473,11 +749,16 @@ int app_run(app_t *app)
  *
  * Releases resources in an order that keeps logging available until the end.
  * The function accepts NULL for convenience in failure paths.
+ *
+ * Return: ERR_OK when cleanup did not observe an output failure, ERR_IO when
+ * the final structured output flush failed.
  */
-void app_shutdown(app_t *app)
+int app_shutdown(app_t *app)
 {
+    int shutdown_status = ERR_OK;
+
     if (app == NULL)
-        return;
+        return ERR_OK;
 
     logger_info(&app->logger,
                 "shutdown started");
@@ -485,6 +766,10 @@ void app_shutdown(app_t *app)
     inotify_backend_context_t backend_ctx;
     app_build_inotify_backend_context(app, &backend_ctx);
     inotify_backend_shutdown(&backend_ctx);
+
+    if (app_shutdown_output_pipeline(app) != 0) {
+        shutdown_status = ERR_IO;
+    }
 
     /*
      * Destroy the core before closing the logger. Future flush behavior may
@@ -504,4 +789,6 @@ void app_shutdown(app_t *app)
     logger_close(&app->logger);
 
     g_app = NULL;
+
+    return shutdown_status;
 }

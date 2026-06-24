@@ -13,6 +13,7 @@
 #define INOTIFY_BACKEND_H
 
 #include "alfred_correlator.h"
+#include "alfred_record.h"
 #include "inotify_config.h"
 #include "logger.h"
 #include "watcher.h"
@@ -100,19 +101,44 @@ typedef struct inotify_backend {
 } inotify_backend_t;
 
 /*
+ * inotify_backend_record_emit_fn - offer one diagnostic record upstream
+ * @record: borrowed Event Model v0 record built by the backend
+ * @userdata: opaque pointer supplied in inotify_backend_context_t
+ *
+ * The inotify backend may build diagnostic records such as WATCH_ADDED or
+ * WATCH_REMOVED, but it must not know app_t, output files, JSONL writers, or
+ * future sink topology. This callback is the narrow ownership boundary: the
+ * backend offers a borrowed record, and the application decides whether to
+ * clone/enqueue it, ignore it, or report an output failure.
+ *
+ * Return: 0 on success or intentionally disabled output, nonzero on failure.
+ */
+typedef int (*inotify_backend_record_emit_fn)(
+    const alfred_record_t *record,
+    void *userdata
+);
+
+/*
  * inotify_backend_context_t - borrowed dependencies for backend operations
  * @runtime: backend-owned runtime state to mutate
  * @config: application-owned inotify configuration read by backend helpers
  * @logger: application-owned logger used for backend diagnostics
+ * @emit_record: optional callback for structured backend diagnostic records
+ * @emit_record_userdata: opaque context passed to @emit_record
  *
  * The context does not own any pointed-to object. It exists to avoid passing
  * the whole app_t or top-level config_t into backend helpers that only need
- * fd/watchers, inotify-specific configuration fields, and logging.
+ * fd/watchers, inotify-specific configuration fields, logging, and an optional
+ * structured output boundary. Backend helpers must treat @emit_record as
+ * best-effort output plumbing: diagnostic correctness still comes from the
+ * watch table state and compatibility logs, not from JSONL being enabled.
  */
 typedef struct inotify_backend_context {
     inotify_backend_t *runtime;
     const inotify_config_t *config;
     logger_t *logger;
+    inotify_backend_record_emit_fn emit_record;
+    void *emit_record_userdata;
 } inotify_backend_context_t;
 
 /*

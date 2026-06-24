@@ -75,6 +75,32 @@ static void test_watch_stale_builds_watch_diagnostic(void)
     assert(record.os_error.message == NULL);
 }
 
+static void test_stale_event_dropped_builds_watch_diagnostic(void)
+{
+    const char *backend = "inotify";
+    const char *path = "/tmp/root/watched";
+    const char *event_mask = "IN_CREATE";
+    const char *event_name = "a.txt";
+    alfred_record_t record;
+
+    assert(alfred_record_build_stale_event_dropped(backend,
+                                                   7,
+                                                   path,
+                                                   event_mask,
+                                                   event_name,
+                                                   &record) == 0);
+
+    assert(record.schema_version == ALFRED_RECORD_SCHEMA_VERSION);
+    assert(record.layer == ALFRED_RECORD_LAYER_DIAGNOSTIC);
+    assert(record.category == ALFRED_RECORD_CATEGORY_WATCH);
+    assert(record.type == ALFRED_RECORD_TYPE_WATCH_STALE_EVENT_DROPPED);
+    assert(record.backend == backend);
+    assert(record.path == path);
+    assert(record.watch.watch_id == 7);
+    assert(record.watch.event_mask == event_mask);
+    assert(record.watch.event_name == event_name);
+}
+
 static void test_resync_failed_builds_recovery_diagnostic(void)
 {
     const char *backend = "inotify";
@@ -177,6 +203,7 @@ static void test_invalid_inputs_are_rejected(void)
 int main(void)
 {
     test_watch_stale_builds_watch_diagnostic();
+    test_stale_event_dropped_builds_watch_diagnostic();
     test_resync_failed_builds_recovery_diagnostic();
     test_resync_failed_can_carry_os_error();
     test_invalid_inputs_are_rejected();

@@ -18,11 +18,13 @@
 
 #include "config.h"
 #include "alfred_correlator.h"
+#include "alfred_record_output_pipeline.h"
 #include "core_logger.h"
 #include "inotify_backend.h"
 #include "logger.h"
 
 #include <signal.h>
+#include <stdio.h>
 
 /*
  * app_t - process-wide runtime context
@@ -57,6 +59,23 @@ typedef struct app {
 
     /* Raw, semantic, and error log sink. */
     logger_t logger;
+
+    /*
+     * Optional structured output pipeline. It is disabled by default and, when
+     * enabled, is additive to the compatibility raw/events/errors logs. The
+     * buffers are application-owned because the pipeline borrows writer storage.
+     */
+    alfred_record_output_pipeline_t output_pipeline;
+    FILE *output_stream;
+    char *output_format_buffer;
+    char *output_buffer;
+    /*
+     * Set after the optional structured output path fails. When output is
+     * explicitly enabled, Alfred treats a writer/pipeline failure as a fatal
+     * runtime condition so output.jsonl cannot silently become an incomplete
+     * ledger while the event loop keeps processing filesystem activity.
+     */
+    int output_failed;
 
     /*
      * Core correlator configuration, callback context, and engine.
@@ -102,7 +121,12 @@ int app_run(app_t *app);
  * @app: application context to release
  *
  * Releases resources owned by app_t. The function is safe to call with NULL.
+ * If structured output is enabled, the final JSONL flush is part of the
+ * runtime contract and a flush failure is reported to the caller.
+ *
+ * Return: ERR_OK when shutdown completed without output failure, ERR_IO when
+ * the final structured output flush failed.
  */
-void app_shutdown(app_t *app);
+int app_shutdown(app_t *app);
 
 #endif

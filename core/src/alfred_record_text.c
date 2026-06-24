@@ -229,6 +229,20 @@ static int format_diagnostic_text(const alfred_record_t *record,
     const char *error = record->watch.error;
     const char *state = record->watch.state;
 
+    if (record->type == ALFRED_RECORD_TYPE_WATCH_STALE_EVENT_DROPPED &&
+        record->watch.event_mask != NULL) {
+        return checked_snprintf(dst,
+                                dst_size,
+                                "%s wd=%d path=%s mask=%s name=%s",
+                                name,
+                                record->watch.watch_id,
+                                path,
+                                record->watch.event_mask,
+                                record->watch.event_name != NULL
+                                    ? record->watch.event_name
+                                    : "");
+    }
+
     if (record->type == ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN) {
         return checked_snprintf(dst,
                                 dst_size,

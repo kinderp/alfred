@@ -322,6 +322,116 @@ Non deve aggiungere timestamp, newline, livelli di log o scegliere il file di
 destinazione. Dopo la formattazione chiama `write(userdata, payload)`. Questo
 mantiene separati formatter e output device.
 
+### `alfred_record_jsonl_writer_t`
+
+Definizione:
+
+```c
+typedef struct {
+    alfred_record_jsonl_writer_write_fn write;
+    void *userdata;
+    char *format_buffer;
+    size_t format_buffer_size;
+    char *buffer;
+    size_t buffer_size;
+    size_t used;
+} alfred_record_jsonl_writer_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `write` | callback che riceve bytes JSONL gia' flushati | chi costruisce il writer | `alfred_record_jsonl_writer_flush()` |
+| `userdata` | contesto opaco della callback `write` | chi costruisce il writer | callback `write` |
+| `format_buffer` | scratch buffer per un singolo oggetto JSON | chi costruisce il writer | formatter JSONL |
+| `format_buffer_size` | dimensione di `format_buffer` | chi costruisce il writer | formatter JSONL |
+| `buffer` | buffer output che accumula righe JSONL complete | chi costruisce il writer | emit, flush |
+| `buffer_size` | dimensione di `buffer` | chi costruisce il writer | emit, flush |
+| `used` | bytes validi non ancora flushati | init, emit, flush | emit, flush, query |
+
+Il JSONL writer buffered non e' il formatter e non e' un backend. Il formatter
+produce un oggetto JSON senza newline; il writer aggiunge `\n`, accumula una o
+piu' righe e chiama la callback solo al flush o quando deve liberare spazio per
+una nuova riga.
+
+`used` ha una regola speciale: durante `emit()` e `flush()` puo' essere maggiore
+di zero, perche' questo e' lo stato normale di un writer buffered con dati
+pendenti. Durante `alfred_record_jsonl_writer_init()`, invece, deve essere zero.
+La funzione di init valida solo writer inattivi e non puo' cancellare bytes gia'
+accumulati. Se un chiamante prova a reinizializzare un writer con `used > 0`,
+la funzione fallisce e preserva buffer e contatore.
+
+Sequenza:
+
+```text
+alfred_record_jsonl_writer_emit(record)
+-> alfred_record_format_jsonl(record, format_buffer)
+-> copia format_buffer + '\n' dentro buffer
+-> se buffer non ha spazio, flush dei bytes gia' accumulati
+```
+
+Flush:
+
+```text
+alfred_record_jsonl_writer_flush()
+-> write(userdata, buffer, used)
+-> used = 0 solo se write ha successo
+```
+
+Questa scelta rende visibile la policy minima di buffering: non facciamo una
+write per ogni record e non perdiamo bytes buffered se la callback fallisce. Non
+esiste ancora thread, socket o file descriptor dentro questa struttura.
+
+### `alfred_record_output_pipeline_t`
+
+Definizione:
+
+```c
+typedef struct {
+    int enabled;
+    alfred_record_output_pipeline_format_t format;
+    size_t drain_batch_size;
+    alfred_record_queue_t queue;
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t sink_storage[1];
+    alfred_record_jsonl_writer_t writer;
+} alfred_record_output_pipeline_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `enabled` | abilita o spegne la pipeline | `alfred_record_output_pipeline_init()` | enqueue, drain, flush |
+| `format` | formato writer attivo, oggi JSONL | init | test, futuro runtime |
+| `drain_batch_size` | limite batch per ogni drain | init | `alfred_record_output_pipeline_drain_once()` |
+| `queue` | coda bounded owned | init, enqueue, drain, destroy | enqueue, drain, query |
+| `dispatcher` | routing verso sink registrati | init | drain |
+| `sink_storage[1]` | storage embedded per un solo sink v0 | init | dispatcher |
+| `writer` | JSONL buffered writer | init, drain, flush | drain, flush, query |
+
+La pipeline compone pezzi gia' separati:
+
+```text
+enqueue(record)
+-> clone owned nella queue
+drain_once()
+-> queue pop
+-> dispatcher
+-> JSONL writer buffer
+flush()
+-> callback write(data, size)
+```
+
+Se `enabled` e' falso, tutti questi passaggi sono no-op riusciti. Questo serve a
+modellare `output_enabled=false`: il nuovo percorso esiste come struttura
+testabile, ma non interferisce con `raw.log`, `events.log` ed `errors.log`.
+
+Questa struttura non possiede file descriptor, socket, thread o buffer allocati
+dal writer. Possiede solo la queue allocata da `alfred_record_queue_init()`; i
+buffer del writer sono caller-owned.
+
 ### `alfred_record_queue_t`
 
 Definizione:
@@ -443,6 +553,48 @@ while queue non vuota e batch non superato:
 `max_records` limita quanti record possono essere processati in una sola
 chiamata. Questo prepara il runtime futuro a lavorare per batch invece di
 svuotare sempre tutta la coda.
+
+### Runtime drain simulato
+
+Il livello successivo e':
+
+```text
+alfred_record_runtime_drain_once()
+```
+
+Questo helper non crea thread e non rende Alfred asincrono. Incapsula un solo
+giro di lavoro del futuro worker: prende un limite batch, chiama il drain basso
+livello e restituisce un riepilogo leggibile.
+
+```c
+typedef struct {
+    size_t max_records;
+    size_t dispatched;
+    size_t remaining;
+    int status;
+} alfred_record_runtime_drain_result_t;
+```
+
+Campi:
+
+| Campo | Significato | Scritto da | Letto da |
+| --- | --- | --- | --- |
+| `max_records` | limite batch richiesto dal chiamante | `alfred_record_runtime_drain_once()` | worker futuro, test, metriche |
+| `dispatched` | record consegnati con successo a tutti i sink | `alfred_record_runtime_drain_once()` | worker futuro, test, metriche |
+| `remaining` | record ancora presenti nella queue al ritorno | `alfred_record_runtime_drain_once()` | backpressure futura, test |
+| `status` | `0` successo, `-1` input non valido o fallimento sink | `alfred_record_runtime_drain_once()` | worker futuro, gestione errori |
+
+Differenza fra i due livelli:
+
+- `alfred_record_dispatcher_drain_queue()` esegue la meccanica:
+  pop, dispatch e destroy.
+- `alfred_record_runtime_drain_once()` nomina il passo runtime:
+  "prova a consumare un batch" e restituisce il risultato del tentativo.
+
+Questa separazione e' utile per gli studenti perche' mostra una tecnica comune:
+prima si rende testabile un passo sincrono e deterministico, poi in futuro lo si
+puo' mettere dentro un thread, un ciclo worker o una policy di backpressure
+senza cambiare il significato del passo.
 
 ### Stato attuale e stato futuro
 
@@ -771,15 +923,20 @@ configurazione specifiche dei backend. Il backend inotify non riceve piu' tutta
 ```mermaid
 flowchart TD
     A["config_t"] --> B["inotify_config_t"]
+    A --> O["output_config_t"]
     A --> E["raw_log / event_log / error_log"]
     A --> H["use_epoll / flush_immediately"]
 
     B --> C["recursive"]
     B --> D["watcher_capacity"]
     B --> M["watch_mask"]
+    O --> O1["enabled"]
+    O --> O2["format"]
+    O --> O3["buffer_size"]
 
     D --> F["watcher_init(capacity)"]
     M --> G["inotify_add_watch(mask | IN_ONLYDIR)"]
+    O3 --> W["JSONL writer buffer"]
 ```
 
 Campi rilevanti:
@@ -789,6 +946,29 @@ Campi rilevanti:
 | `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
 | `inotify.watch_mask` | maschera eventi inotify usata per aggiungere watch; il watch manager aggiunge poi `IN_ONLYDIR` come flag di installazione | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
+| `output.enabled` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` | `config_defaults()`, `config_load()` | `app_init_output_pipeline()` |
+| `output.format` | formato richiesto dal writer; `jsonl` e' il solo formato attivabile nel runtime v0 | `config_defaults()`, `config_load()` | `app_init_output_pipeline()` |
+| `output.buffer_size` | bytes per writer buffered come JSONL, minimo `8192` | `config_defaults()`, `config_load()` | `app_init_output_pipeline()`, JSONL writer runtime |
+
+`output_config_t` non e' configurazione del backend. Se `output.enabled` e'
+`false`, il runtime resta sul percorso compatibile:
+
+```text
+backend/core -> logger attuale -> raw.log / events.log / errors.log
+```
+
+Se `output.enabled` e' `true`, la configurazione descrive il percorso runtime
+opt-in:
+
+```text
+record -> queue -> runtime drain sincrono -> dispatcher -> JSONL writer
+```
+
+Nel codice corrente questa seconda forma e' collegata ad `app_run()` per i record
+gia' migrati alla pipeline. Non sostituisce i log compatibili: aggiunge
+`output_log` quando `output_enabled=true` e `output_format=jsonl`. Resta pero'
+una pipeline v0 sincrona, non ancora il runtime finale con worker thread, code
+per sink e backpressure reale.
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` delega a `inotify_config_defaults()`, questa prende il

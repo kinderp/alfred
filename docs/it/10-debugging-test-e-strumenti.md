@@ -1526,18 +1526,107 @@ Il comando:
 make perf-record-sinks
 ```
 
-compila ed esegue un micro-benchmark dei sink record. Non osserva eventi reali
-del filesystem e non usa inotify: genera record sintetici in memoria e li invia
-a tre sink:
+compila ed esegue un micro-benchmark dei sink record e del primo confine di
+coda. Non osserva eventi reali del filesystem e non usa inotify: genera record
+sintetici in memoria e li invia a sink o passaggi isolati:
 
 - `counter`: sink no-op/counter, senza formattazione e senza I/O;
 - `text`: sink testuale compatibile;
-- `jsonl`: sink JSONL v0.
+- `jsonl`: sink JSONL v0;
+- `queue-counter`: record borrowed, clone owned, push nella queue, pop dalla
+  queue, emit al counter sink e destroy del record owned;
+- `dispatcher-counter`: record borrowed, dispatcher e counter sink;
+- `dispatcher-text`: record borrowed, dispatcher e text sink;
+- `dispatcher-jsonl`: record borrowed, dispatcher e JSONL sink;
+- `dispatcher-counter-text-jsonl`: record borrowed, dispatcher e fan-out
+  sincrono verso counter, text e JSONL nello stesso passaggio;
+- `queue-dispatcher-counter`: queue, drain del dispatcher e counter sink;
+- `queue-dispatcher-text`: queue, drain del dispatcher e text sink;
+- `queue-dispatcher-jsonl`: queue, drain del dispatcher e JSONL sink;
+- `queue-dispatcher-counter-text-jsonl`: queue, drain del dispatcher e fan-out
+  sincrono verso counter, text e JSONL;
+- `output-pipeline-jsonl`: pipeline composta `record -> queue -> runtime drain
+  -> dispatcher -> JSONL buffered writer -> flush finale`.
 
-Questo benchmark serve a separare il costo del confine `record -> sink` dal
-costo dei writer. Se `counter` e' veloce ma `jsonl` e' lento, il costo e'
-probabilmente nella serializzazione JSONL o nel writer. Se anche `counter` e'
-lento, il problema e' piu' vicino a record, dispatcher, coda o chiamata sink.
+Questo benchmark serve a separare il costo del confine `record -> sink`, il
+costo della formattazione e il costo del primo confine `record -> queue -> sink`.
+Se `counter` e' veloce ma `jsonl` e' lento, il costo e' probabilmente nella
+serializzazione JSONL o nel writer. Se `queue-counter` e' molto piu' lento di
+`counter`, il costo e' nella deep copy owned, nella coda, nel pop o nella
+distruzione del record owned. Se anche `counter` e' lento, il problema e' piu'
+vicino a record, dispatcher, chiamata sink o macchina.
+
+Vista completa del percorso target:
+
+```mermaid
+flowchart LR
+    B["backend"]
+    A["adapter"]
+    R["record"]
+    Q["queue"]
+    D["dispatcher"]
+    C["counter"]
+    T["text"]
+    J["JSONL"]
+    BW["writer"]
+
+    B -->|"raw event"| A
+    A -->|"alfred_record_t"| R
+    R -->|"clone + push"| Q
+    Q -->|"pop"| D
+    D -->|"emit"| C
+    D -->|"emit"| T
+    D -->|"emit"| J
+    T --> BW
+    J --> BW
+```
+
+Funzioni principali nel percorso:
+
+| Passaggio | Funzione interessata | Dato |
+| --- | --- | --- |
+| backend -> adapter | `alfred_record_from_raw()` | `alfred_raw_event_t` -> `alfred_record_t` |
+| record -> sink | `alfred_record_sink_emit()` | record borrowed |
+| record -> queue | `alfred_record_queue_push()` | clone owned del record |
+| queue -> worker | `alfred_record_queue_pop()` | record owned trasferito |
+| cleanup owned | `alfred_record_destroy_owned()` | libera stringhe owned |
+| dispatcher -> sink | `alfred_record_dispatcher_dispatch_one()` | fan-out sincrono |
+| text sink | `alfred_record_text_sink_emit()` | payload testuale |
+| JSONL sink | `alfred_record_jsonl_sink_emit()` | payload JSONL |
+| counter sink | `alfred_record_counter_sink_emit()` | contatori numerici |
+
+Percorsi misurati:
+
+| Riga CSV | Percorso reale misurato | Cosa aggiunge |
+| --- | --- | --- |
+| `counter` | `record -> sink_emit -> counter_emit` | solo chiamata sink e incremento contatori |
+| `text` | `record -> sink_emit -> text formatter -> callback` | formattazione testuale e conteggio byte |
+| `jsonl` | `record -> sink_emit -> JSONL formatter -> callback` | serializzazione JSONL, escaping e conteggio byte |
+| `queue-counter` | `record borrowed -> queue_push -> clone owned -> queue_pop -> sink_emit -> counter_emit -> destroy owned` | deep copy delle stringhe, coda, trasferimento ownership e cleanup |
+| `dispatcher-counter` | `record -> dispatch_one -> sink_emit -> counter_emit` | costo di routing dispatcher verso un sink leggero |
+| `dispatcher-text` | `record -> dispatch_one -> sink_emit -> text formatter -> callback` | routing dispatcher piu' formattazione text |
+| `dispatcher-jsonl` | `record -> dispatch_one -> sink_emit -> JSONL formatter -> callback` | routing dispatcher piu' serializzazione JSONL |
+| `dispatcher-counter-text-jsonl` | `record -> dispatch_one -> counter + text + JSONL` | fan-out sincrono verso tre sink registrati |
+| `queue-dispatcher-counter` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> counter -> destroy` | percorso quasi runtime senza writer costoso |
+| `queue-dispatcher-text` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> text -> destroy` | queue piu' dispatcher piu' formattazione text |
+| `queue-dispatcher-jsonl` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> JSONL -> destroy` | queue piu' dispatcher piu' serializzazione JSONL |
+| `queue-dispatcher-counter-text-jsonl` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> counter + text + JSONL -> destroy` | percorso single-threaded piu' vicino al runtime target |
+| `output-pipeline-jsonl` | `record -> output_pipeline_enqueue -> queue -> output_pipeline_drain_once -> runtime_drain_once -> dispatcher -> JSONL buffered writer -> output_pipeline_flush` | percorso composto della Writer Runtime v0 senza `app_run()`, file I/O o thread |
+
+La riga `counter` e' la baseline piu' pura: dice quanto costa consegnare un
+record a un sink che non fa lavoro costoso. La riga `queue-counter` parte dallo
+stesso sink, ma aggiunge il confine di coda. Per questo e' la riga piu' utile
+per capire il costo del futuro passaggio:
+
+```text
+percorso caldo
+-> record owned in coda
+-> percorso fuori hot path
+```
+
+Il benchmark inizializza la coda prima di iniziare a misurare. Quindi
+`queue-counter` non misura l'allocazione iniziale del buffer della queue: misura
+il costo per record di clone, push, pop, emit e destroy.
 
 Di default esegue 100000 record sintetici e una run per sink:
 
@@ -1546,6 +1635,16 @@ sink,records,runs,min_us,avg_us,max_us,records_per_sec_avg,bytes_last,counter_to
 counter,100000,1,1200,1200.00,1200,83333333.33,0,100000
 text,100000,1,9000,9000.00,9000,11111111.11,4100000,0
 jsonl,100000,1,18000,18000.00,18000,5555555.55,12000000,0
+queue-counter,100000,1,14000,14000.00,14000,7142857.14,0,100000
+dispatcher-counter,100000,1,1500,1500.00,1500,66666666.67,0,100000
+dispatcher-text,100000,1,9500,9500.00,9500,10526315.79,4100000,0
+dispatcher-jsonl,100000,1,18500,18500.00,18500,5405405.41,12000000,0
+dispatcher-counter-text-jsonl,100000,1,28000,28000.00,28000,3571428.57,16100000,100000
+queue-dispatcher-counter,100000,1,15000,15000.00,15000,6666666.67,0,100000
+queue-dispatcher-text,100000,1,24000,24000.00,24000,4166666.67,4100000,0
+queue-dispatcher-jsonl,100000,1,33000,33000.00,33000,3030303.03,12000000,0
+queue-dispatcher-counter-text-jsonl,100000,1,43000,43000.00,43000,2325581.40,16100000,100000
+output-pipeline-jsonl,100000,1,34000,34000.00,34000,2941176.47,12100000,0
 ```
 
 I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
@@ -1553,14 +1652,22 @@ dal carico del sistema, dal compilatore e dalla configurazione.
 
 Significato delle colonne:
 
-- `sink`: sink misurato. I valori attuali sono `counter`, `text` e `jsonl`.
-  `counter` e' la baseline senza I/O; `text` usa il formatter compatibile con i
-  log leggibili; `jsonl` usa il formatter strutturato JSONL.
+- `sink`: sink o passaggio misurato. I valori attuali sono `counter`, `text`,
+  `jsonl`, `queue-counter`, le righe `dispatcher-*` e le righe
+  `queue-dispatcher-*`, piu' `output-pipeline-jsonl`. `counter` e' la baseline
+  senza I/O; `text` usa il formatter compatibile con i log leggibili; `jsonl`
+  usa il formatter strutturato JSONL; `queue-counter` misura il confine borrowed
+  -> owned -> queue -> pop -> counter -> destroy; `dispatcher-*` misura il
+  routing attraverso il dispatcher; `queue-dispatcher-*` misura queue e
+  dispatcher insieme; `output-pipeline-jsonl` misura l'oggetto pipeline che
+  compone queue, runtime drain, dispatcher e JSONL buffered writer.
 - `records`: numero di record sintetici inviati a quel sink in ogni run. Se vale
   `100000`, ogni run invia 100000 `alfred_record_t`.
 - `runs`: numero di misurazioni ripetute per quello stesso sink. Se `records` e'
   `100000` e `runs` e' `5`, allora il benchmark misura 5 volte `counter`, 5
-  volte `text` e 5 volte `jsonl`, sempre con 100000 record per run.
+  volte `text`, 5 volte `jsonl`, 5 volte `queue-counter`, 5 volte ogni riga
+  `dispatcher-*` e 5 volte ogni riga `queue-dispatcher-*`, sempre con 100000
+  record per run.
 - `min_us`: tempo della run piu' veloce, in microsecondi. E' il miglior caso
   osservato su quella macchina.
 - `avg_us`: media aritmetica dei tempi, in microsecondi. E' il valore piu' utile
@@ -1583,11 +1690,22 @@ records_per_sec_avg = records * 1000000 / avg_us
 
 - `bytes_last`: byte di payload osservati nell'ultima run. Per `text` e' la
   somma della lunghezza delle stringhe testuali prodotte. Per `jsonl` e' la
-  somma della lunghezza degli oggetti JSON prodotti. Per `counter` vale `0`
-  perche' il counter sink non produce payload.
+  somma della lunghezza degli oggetti JSON prodotti. Per
+  `dispatcher-counter-text-jsonl` e' la somma dei payload prodotti dai sink
+  testuali nello stesso fan-out. Per `counter`, `queue-counter` e
+  `dispatcher-counter` vale `0` perche' il counter sink non produce payload.
+  Per le righe `queue-dispatcher-*` vale la stessa regola del sink finale: zero
+  se passa solo dal counter, maggiore di zero se passa da text o JSONL. Per
+  `output-pipeline-jsonl` include anche il newline finale di ogni record, perche'
+  il writer buffered produce vere righe JSONL, non solo oggetti JSON senza
+  terminatore.
 - `counter_total_last`: record contati dal counter sink nell'ultima run. Per la
-  riga `counter` dovrebbe essere uguale a `records`. Per `text` e `jsonl` vale
-  `0`, perche' quei sink non aggiornano il counter.
+  riga `counter`, `queue-counter`, `dispatcher-counter` e
+  `dispatcher-counter-text-jsonl`, `queue-dispatcher-counter` e
+  `queue-dispatcher-counter-text-jsonl` dovrebbe essere uguale a `records`. Per
+  `text`, `jsonl`, `dispatcher-text`, `dispatcher-jsonl`,
+  `queue-dispatcher-text`, `queue-dispatcher-jsonl` e `output-pipeline-jsonl`
+  vale `0`, perche' quei sink o writer non aggiornano il counter.
 
 E' possibile passare un numero diverso di record e piu' run:
 
@@ -1638,6 +1756,141 @@ bug, perche' JSONL deve scrivere nomi dei campi, virgolette, escape, numeri,
 oggetti annidati e molti piu' byte. Il campo `bytes_last` mostra proprio il
 volume di testo prodotto nell'ultima run.
 
+Esempio dedicato alla coda:
+
+```text
+queue-counter,100000,5,13000,14000.00,15500,7142857.14,0,100000
+```
+
+Questa riga e' piu' lenta di `counter` per un motivo atteso: ogni record
+borrowed viene clonato in forma owned, inserito nella queue, estratto, inviato
+al counter e poi distrutto. Non misura JSONL, text log o I/O: misura il costo
+del primo confine che ci serve per spostare i writer fuori dal percorso caldo.
+Se in futuro questo valore cresce molto dopo una modifica, bisogna guardare
+queue, ownership, allocazioni e distruzione dei record prima di accusare JSONL o
+il filesystem.
+
+Confronto pratico:
+
+```text
+counter,100000,5,2800,3000.00,3400,33333333.33,0,100000
+queue-counter,100000,5,13000,14000.00,15500,7142857.14,0,100000
+```
+
+In questo esempio `queue-counter` ha `avg_us=14000`, mentre `counter` ha
+`avg_us=3000`. La differenza e':
+
+```text
+14000 - 3000 = 11000 microsecondi
+```
+
+Quegli 11000 microsecondi sono una stima molto grezza del costo aggiuntivo del
+confine di coda su 100000 record. Dividendo per il numero di record:
+
+```text
+11000 / 100000 = 0.11 microsecondi per record
+```
+
+Questa non e' una misura scientifica definitiva, perche' manca warmup, mancano
+percentili e la macchina puo' essere rumorosa. Pero' aiuta a ragionare: se
+introduciamo una modifica alla queue e questa differenza raddoppia o triplica,
+abbiamo probabilmente peggiorato ownership, allocazioni, push/pop o cleanup.
+
+Esempio dedicato al dispatcher:
+
+```text
+dispatcher-counter,100000,5,3200,3500.00,3900,28571428.57,0,100000
+dispatcher-counter-text-jsonl,100000,5,26000,28000.00,31000,3571428.57,16100000,100000
+```
+
+La prima riga misura solo:
+
+```text
+record
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+```
+
+Quindi serve a capire quanto costa attraversare il dispatcher verso un sink
+molto leggero. La seconda riga misura il fan-out sincrono verso tre sink:
+counter, text e JSONL. In questo caso `bytes_last` non e' zero perche' text e
+JSONL producono payload, mentre `counter_total_last` e' uguale a `records`
+perche' uno dei sink registrati e' il counter.
+
+Il dispatcher v0 chiama i sink in ordine di registrazione e, se un sink fallisce,
+si ferma e propaga errore. Il benchmark misura il caso positivo, senza errori:
+serve a capire il costo del routing, non la futura policy di retry, drop,
+requeue o backpressure.
+
+Esempio dedicato al percorso quasi completo:
+
+```text
+queue-dispatcher-counter,100000,5,14500,15000.00,16000,6666666.67,0,100000
+queue-dispatcher-counter-text-jsonl,100000,5,41000,43000.00,46000,2325581.40,16100000,100000
+```
+
+La prima riga misura:
+
+```text
+record borrowed
+-> alfred_record_queue_push()
+-> alfred_record_dispatcher_drain_queue()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+-> alfred_record_destroy_owned()
+```
+
+Questa e' la misura piu' vicina al percorso runtime che vogliamo ottenere prima
+di introdurre thread reali. La seconda riga usa lo stesso percorso, ma il
+dispatcher consegna ogni record a tre sink. Se questa riga cresce molto rispetto
+a `queue-dispatcher-counter`, il costo non e' solo nella queue o nel dispatcher:
+sta soprattutto nei sink text/JSONL e nel volume di payload prodotto.
+
+Esempio dedicato alla output pipeline:
+
+```text
+output-pipeline-jsonl,100000,5,33000,34000.00,36000,2941176.47,12100000,0
+```
+
+Questa riga misura:
+
+```text
+record borrowed
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_output_pipeline_flush()
+-> callback in memoria
+```
+
+La differenza principale rispetto a `queue-dispatcher-jsonl` e' che qui non
+misuriamo solo queue e dispatcher assemblati a mano nel benchmark: misuriamo
+l'oggetto `alfred_record_output_pipeline_t`, cioe' lo stesso contenitore che ora
+`app_run()` puo' usare dietro `output_enabled=true`.
+
+La riga include il flush finale verso una callback in memoria, ma non include:
+
+- scrittura su file;
+- `fflush()`;
+- socket;
+- thread;
+- lock;
+- wakeup;
+- backpressure reale;
+- rotazione log.
+
+Quindi se `output-pipeline-jsonl` e' vicino a `queue-dispatcher-jsonl`, la
+composizione della pipeline aggiunge poco overhead rispetto ai pezzi gia'
+misurati. Se invece cresce molto, bisogna guardare il wrapper pipeline,
+inizializzazione dello stato per run, chiamate aggiuntive, flush finale e writer
+buffered prima di collegarlo al runtime vero.
+
 Lettura pratica dei risultati:
 
 - se `counter` e' veloce ma `text` e `jsonl` sono lenti, il costo e'
@@ -1645,6 +1898,22 @@ Lettura pratica dei risultati:
 - se `counter` e' lento, il problema e' piu' vicino al ciclo del benchmark, alla
   creazione dei record, alla chiamata `alfred_record_sink_emit()` o al carico
   della macchina;
+- se `queue-counter` e' molto piu' lento di `counter`, il costo e' nel confine
+  borrowed -> owned -> queue -> pop -> destroy, cioe' nella parte che prepara il
+  futuro runtime asincrono dei writer;
+- se `dispatcher-counter` e' vicino a `counter`, il routing dispatcher verso un
+  sink leggero ha overhead contenuto;
+- se `dispatcher-counter-text-jsonl` e' molto piu' lento di
+  `dispatcher-counter`, il costo e' nel fan-out e soprattutto nei sink che
+  formattano payload;
+- se `queue-dispatcher-counter` e' vicino a `queue-counter`, aggiungere il
+  dispatcher dopo la queue non costa molto per un sink leggero;
+- se `queue-dispatcher-counter-text-jsonl` cresce molto rispetto a
+  `queue-dispatcher-counter`, il costo e' nei sink e nella serializzazione a
+  valle della queue, non nel solo confine queue/dispatcher;
+- se `output-pipeline-jsonl` cresce molto rispetto a `queue-dispatcher-jsonl`,
+  il costo e' nella composizione pipeline o nel writer buffered/flush finale,
+  non in inotify o nel filesystem;
 - se `jsonl` produce molti piu' byte di `text`, e' normale che sia piu' lento;
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.
@@ -1911,21 +2180,64 @@ La copertura iniziale include:
   borrowed e lo conservi come owned, che `pop()` rispetti l'ordine FIFO, che il
   wraparound del buffer circolare non cambi l'ordine, che l'overflow venga
   rifiutato e che `clear()`/`destroy()` rilascino i record ancora accodati. Anche
-  questo e' un test preparatorio: la coda non e' ancora collegata al backend
-  runtime o ai writer.
+  questo e' un test unitario del componente: il collegamento runtime avviene
+  tramite `alfred_record_output_pipeline_t`, non direttamente da questo test.
 - `test_record_dispatcher.sh`: compila `test_record_dispatcher.c` e verifica il
   primo dispatcher bounded di record. In questo caso bounded significa massimo
   numero di sink registrabili, non massimo numero di record. Il test controlla
   registrazione dei sink, ordine di fan-out, propagazione del primo errore,
   rifiuto di input invalidi, overflow del numero sink e riuso dello storage dopo
-  `clear()`. Anche questo non e' ancora collegato al runtime: serve a fissare il
-  contratto prima di introdurre thread, code per sink o policy di backpressure.
+  `clear()`. Anche questo e' un test unitario del componente: il runtime lo usa
+  tramite la output pipeline, mentre thread, code per sink e policy di
+  backpressure restano futuri.
 - `test_record_dispatcher_drain.sh`: compila
   `test_record_dispatcher_drain.c` e verifica il primo ciclo queue -> dispatcher
   -> sink -> destroy. Il test controlla drain di queue vuota, drain FIFO di piu'
   record, limite `max_records`, zero-record drain, stop al primo errore sink e
   conteggio dei record consegnati con successo. Lo scenario spiega che "drain"
   significa consumare la coda, non solo leggerla.
+- `test_record_runtime_drain.sh`: compila `test_record_runtime_drain.c` e
+  verifica il worker/drain simulato single-threaded. Il test usa
+  `alfred_record_runtime_drain_once()` sopra la queue e il dispatcher, poi
+  controlla il riepilogo `max_records`, `dispatched`, `remaining` e `status` su
+  coda vuota, batch limit, drain completo, errore sink e input invalidi. Non
+  introduce thread: serve a fissare il confine del futuro worker.
+- `test_record_jsonl_writer.sh`: compila `test_record_jsonl_writer.c` e
+  verifica il primo writer JSONL buffered. Il test distingue formatter, sink e
+  writer: il formatter produce un oggetto JSON, il writer aggiunge newline,
+  accumula righe in un buffer caller-owned e chiama la callback di output solo
+  con `flush()` esplicito o quando manca spazio per una nuova riga completa. La
+  copertura controlla batching di piu' record, auto-flush, errore di flush con
+  bytes preservati, rifiuto di una singola riga troppo grande, esposizione come
+  sink generico e configurazione invalida.
+- `test_output_config.sh`: compila `test_output_config.c` e verifica la
+  configurazione del runtime output. Il test non avvia Alfred e non scrive
+  JSONL: controlla default `output_enabled=false`, `output_format=jsonl`,
+  `output_buffer_size=65536`, `output_log=output.jsonl`, accettazione di `text`
+  e `jsonl`, rifiuto di formati non implementati e rifiuto di buffer troppo
+  piccoli o non numerici.
+- `test_record_output_pipeline.sh`: compila `test_record_output_pipeline.c` e
+  verifica la prima pipeline composta `record -> queue -> dispatcher -> JSONL
+  writer`. Il test non possiede file runtime: usa record sintetici per
+  controllare che una pipeline disabilitata sia un no-op, che una pipeline JSONL
+  abilitata accodi record owned, rispetti `drain_batch_size`, segnali queue
+  full, consegni record al writer solo tramite drain e chiami la callback di
+  output solo al flush.
+- `test_output_pipeline_runtime.sh`: avvia Alfred con `ALFRED_CONFIG` e
+  `output_enabled=true`, genera una creazione file e una creazione directory,
+  poi crea e rimuove una directory osservata per generare `WATCH_ADDED` e
+  `WATCH_STALE`/`WATCH_STALE_EVENT_DROPPED`/`WATCH_REMOVED`. Controlla
+  `raw.log`, `events.log` e `output.jsonl`. Il test dimostra che il collegamento
+  runtime e' aggiuntivo: i log compatibili restano presenti, mentre i raw record
+  normalizzati, gli eventi semantici core e la diagnostica watch base vengono
+  accodati nella pipeline JSONL.
+  Lo stesso test contiene anche uno scenario con path semantico lungo. La
+  directory profonda viene creata prima dello startup, cosi' i watch ricorsivi
+  coprono tutto il percorso; il file viene creato dopo l'avvio. Questo produce un
+  normale `FILE_CREATED` con una riga testuale piu' lunga del buffer compatibile
+  usato dal text sink del core logger. Il contratto verificato e' che
+  `output.jsonl` riceva comunque il record `FILE_CREATED`: il ledger strutturato
+  non deve dipendere dal successo del formatter testuale legacy.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
@@ -2074,6 +2386,10 @@ Esempio:
 ```bash
 cat > /tmp/alfred.conf <<'EOF'
 inotify_watch_mask=default,-IN_ATTRIB
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
 EOF
 
 ALFRED_CONFIG=/tmp/alfred.conf ./alfred /tmp/cartella-da-osservare
@@ -2089,9 +2405,77 @@ config_defaults()
 ```
 
 Quindi il file caricato da `ALFRED_CONFIG` puo' cambiare opzioni come
-`inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity` e i path
-dei log. `ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo
-il file per rifiutare esplicitamente valori vecchi come `shadow`.
+`inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity`,
+`output_enabled`, `output_format`, `output_buffer_size`, `output_log` e i path
+dei log.
+`ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo il file
+per rifiutare esplicitamente valori vecchi come `shadow`.
+
+### Provare la configurazione output JSONL
+
+Il gruppo `output_*` controlla il primo percorso writer runtime. Il default resta
+spento, quindi Alfred continua a produrre solo `raw.log`, `events.log` ed
+`errors.log`.
+
+Default:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+```
+
+Significato:
+
+| Chiave | Significato |
+| --- | --- |
+| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> JSONL writer` |
+| `output_format` | formato del writer; in v0 `jsonl` e' il solo formato attivabile nel runtime |
+| `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `8192` |
+| `output_log` | file JSONL append-only prodotto quando `output_enabled=true` |
+
+Esempio valido:
+
+```bash
+cat > /tmp/alfred-output.conf <<'EOF'
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+output_log=/tmp/alfred-output.jsonl
+EOF
+
+ALFRED_CONFIG=/tmp/alfred-output.conf ./alfred /tmp/cartella-da-osservare
+```
+
+Questa configurazione produce un file JSONL aggiuntivo. I log storici restano
+attivi: `output_enabled=true` non sostituisce ancora `raw.log`, `events.log` o
+`errors.log`. Il percorso e' ancora sincrono e copre i raw record normalizzati
+gia' migrati al record sink, gli eventi semantici core e la diagnostica watch
+base; thread, socket e backpressure reale restano futuri.
+
+Il test `test_output_pipeline_runtime.sh` controlla anche la policy di errore
+della pipeline. Usa `/dev/full` come device di output che fallisce in scrittura:
+quando `output_enabled=true`, Alfred deve fermarsi con stato non-zero e scrivere
+un errore in `errors.log`. Questo fissa il contratto didattico e pratico: JSONL
+abilitato non e' un canale best-effort silenzioso, ma un ledger che deve essere
+completo oppure fallire in modo visibile.
+
+Esempi invalidi:
+
+```text
+output_format=protobuf
+output_enabled=true
+output_format=text
+output_buffer_size=0
+output_buffer_size=4096
+output_buffer_size=8192kb
+```
+
+`protobuf` e i buffer invalidi falliscono durante il parsing della
+configurazione. `output_enabled=true` con `output_format=text` fallisce invece
+allo startup runtime: il parser conosce `text` come valore futuro, ma `app.c`
+abilita per ora solo JSONL.
 
 ### Provare gli eventi audit inotify
 

@@ -596,8 +596,9 @@ record owned estratto dalla queue
 -> ...
 ```
 
-Il dispatcher v0 non e' ancora collegato al runtime. Serve a fissare il
-contratto di fan-out:
+Il dispatcher v0 e' ora usato dal primo percorso JSONL opt-in tramite
+`alfred_record_output_pipeline_t`, ma resta volutamente piccolo e
+single-threaded. Serve a fissare il contratto di fan-out:
 
 - i sink vengono registrati in un array fornito dal chiamante;
 - il numero massimo di sink e' `capacity`;
@@ -1246,8 +1247,11 @@ Il primo micro-step esiste nel codice:
 - non usa librerie JSON esterne: l'escaping e' implementato nel formatter;
 - il formatter non apre file, non scrive socket, non fa flush e non aggiunge
   timestamp di log esterni;
-- il codice runtime non usa ancora questo sink: il JSONL v0 e' testabile, ma
-  non e' ancora collegato al percorso reale degli eventi.
+- il runtime usa JSONL nel percorso opt-in `output_enabled=true` per i raw
+  record normalizzati gia' migrati al record sink e per gli eventi semantici
+  core, piu' tutta la diagnostica watch base: `WATCH_ADDED`,
+  `WATCH_REMOVED`, `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`; non e' ancora
+  il formato unico di tutti gli eventi Alfred.
 
 Esempio semantico:
 
@@ -1260,6 +1264,16 @@ Esempio diagnostico:
 ```json
 {"schema_version":0,"layer":"diagnostic","category":"watch","type":"WATCH_STALE","backend":"inotify","path":"/tmp/root/watched","watch":{"watch_id":7,"state":"stale","reason":"IN_MOVE_SELF"}}
 ```
+
+Esempio diagnostico di evento droppato su watch stale:
+
+```json
+{"schema_version":0,"layer":"diagnostic","category":"watch","type":"WATCH_STALE_EVENT_DROPPED","backend":"inotify","path":"/tmp/root/watched","watch":{"watch_id":7,"event_mask":"IN_CREATE","event_name":"a.txt"}}
+```
+
+In questo caso `event_mask` e `event_name` non descrivono un evento semantico
+accettato dal core. Descrivono invece il fatto kernel che Alfred ha visto e ha
+scartato perche' il path del watch era stale.
 
 Il writer testuale corrente e il formatter JSONL ricevono lo stesso record
 strutturato. Non convertiamo testo in JSON: il testo e il JSONL sono due

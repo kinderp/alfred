@@ -105,8 +105,11 @@ CORE_SRCS := \
 	$(CORE_DIR)/src/alfred_record_dispatcher.c \
 	$(CORE_DIR)/src/alfred_record_jsonl.c \
 	$(CORE_DIR)/src/alfred_record_jsonl_sink.c \
+	$(CORE_DIR)/src/alfred_record_jsonl_writer.c \
 	$(CORE_DIR)/src/alfred_record_owned.c \
+	$(CORE_DIR)/src/alfred_record_output_pipeline.c \
 	$(CORE_DIR)/src/alfred_record_queue.c \
+	$(CORE_DIR)/src/alfred_record_runtime.c \
 	$(CORE_DIR)/src/alfred_record_sink.c \
 	$(CORE_DIR)/src/alfred_record_text.c \
 	$(CORE_DIR)/src/alfred_record_text_sink.c \
@@ -244,9 +247,9 @@ perf:
 	@printf "\n"
 	@printf "make perf-record-sinks\n"
 	@printf "  Measures synthetic alfred_record_t delivery to counter, text,\n"
-	@printf "  and JSONL sinks. It isolates record -> sink overhead from\n"
-	@printf "  inotify, filesystem I/O, sockets, flush policy, and\n"
-	@printf "  backpressure.\n"
+	@printf "  JSONL sinks, queue/dispatcher paths, and the single-writer\n"
+	@printf "  output pipeline. It isolates these costs from inotify,\n"
+	@printf "  filesystem I/O, sockets, threads, and real backpressure.\n"
 	@printf "\n"
 	@printf "make perf-lost-scope\n"
 	@printf "  Measures synthetic lost-scope recovery over generated\n"

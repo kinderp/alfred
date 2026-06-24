@@ -70,6 +70,19 @@ Run Alfred with a configuration file:
 ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch
 ```
 
+Minimal optional JSONL output configuration:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+```
+
+The default keeps the current logs unchanged. Setting `output_enabled=true`
+adds JSONL output for the currently wired record path while preserving the
+compatibility logs.
+
 Configuration details are documented in Italian for now:
 [application layer](docs/it/04-livello-applicazione.md) and
 [debugging, tests, and tools](docs/it/10-debugging-test-e-strumenti.md).

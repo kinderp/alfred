@@ -181,12 +181,17 @@ Questo percorso serve per capire dove sta andando il progetto.
 3. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
    descrive l'idea di una API comune per backend inotify, fanotify, audit, eBPF,
    Windows e macOS.
-4. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+4. [Writer API v0](32-writer-api-v0.md)
+   definisce writer, sink, ownership, queue, dispatcher e output strutturato.
+5. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
+   ordina i passi per spostare text, JSONL e futuri writer fuori dal percorso
+   caldo tramite coda, dispatcher e benchmark.
+6. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    collega Alfred all'obiettivo piu' ampio: runtime security per agenti AI.
-5. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
+7. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
-6. [Modello licenze](18-modello-licenze.md)
+8. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
 
@@ -220,7 +225,10 @@ minimo e poi scegliere i documenti pertinenti al task.
 8. [Writer API v0](32-writer-api-v0.md)
    va letto se il task tocca writer, JSONL, protobuf, MessagePack, socket,
    output strutturato, logger o percorso caldo.
-9. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+9. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
+   va letto se il task tocca queue, dispatcher, worker, backpressure, profili
+   output, benchmark dei sink o collegamento runtime dei writer.
+10. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    e' visione futura: va usata per orientare le scelte, non come autorizzazione
    automatica a implementare Agent Guard completo.
 
@@ -256,14 +264,14 @@ queste domande:
 | Fork e pull request | [11](11-come-contribuire.md) |
 | GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr) |
 | Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
-| Log | [22](22-contratto-log.md), [14](14-scenari-test.md) |
+| Log e copertura JSONL | [22](22-contratto-log.md#copertura-record-sink-e-output-jsonl), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Memoria C, lifetime, ownership e leak | [08](08-guida-c-usato-nel-progetto.md#lifetime-della-memoria), [29](29-event-model-v0.md#ownership-dei-campi), [32](32-writer-api-v0.md#ownership-e-record-accodati) |
-| Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
+| Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
-| Output strutturato futuro | [32](32-writer-api-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
-| Performance | [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
+| Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
+| Performance | [34](34-report-benchmark-prestazioni.md), [33](33-writer-runtime-roadmap-v0.md), [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |

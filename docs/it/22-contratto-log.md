@@ -98,6 +98,325 @@ corrisponde a `ALFRED_RAW_CLOSE_WRITE`; `mask=32` corrisponde a
 `ALFRED_RAW_MOVED_FROM`; `mask=64` corrisponde a `ALFRED_RAW_MOVED_TO`;
 `mask=128` corrisponde a `ALFRED_RAW_OVERFLOW`.
 
+## Copertura record sink e output JSONL
+
+Questa sezione fissa una distinzione che deve restare chiara durante la Writer
+Runtime v0:
+
+```text
+"rappresentabile come alfred_record_t"
+non significa automaticamente
+"puo' essere consegnato a un alfred_record_sink_t"
+e non significa automaticamente
+"scritto oggi in output.jsonl"
+```
+
+Alfred sta migrando gradualmente da log testuali storici a record strutturati.
+Per questo, nello stato corrente, alcune famiglie passano gia' dal record sink
+testuale, alcune sono solo rappresentabili come record, alcune sono ancora solo
+righe legacy, e `output.jsonl` contiene solo un sottoinsieme.
+
+Per evitare ambiguita', distinguiamo quattro stati:
+
+| Stato | Domanda | Significato |
+| --- | --- | --- |
+| `Record model` | Esiste un `alfred_record_t` per questo fatto? | Serve un adapter o builder che costruisca il record strutturato. |
+| `Sink-capable` | Questo record potrebbe attraversare `queue -> worker/drain -> dispatcher -> sink`? | Il record e' compatibile con `alfred_record_sink_t` e con i formatter/sink esistenti. E' una proprieta' del record e dei sink disponibili, non del routing attuale. |
+| `Runtime-routed` | Il runtime lo instrada gia' davvero verso una pipeline o un sink? | Il codice reale chiama gia' un percorso tipo `alfred_record_sink_emit()` oppure `alfred_record_output_pipeline_enqueue()` per questa famiglia. |
+| `output.jsonl` | Entra oggi nella pipeline JSONL opt-in? | Con `output_enabled=true`, il record viene scritto in `output_log`. |
+
+Quando `Runtime-routed` non e' un semplice `no`, la tabella deve indicare anche
+la destinazione reale: per esempio `text sink/events.log`, `text sink/raw.log`,
+`output pipeline JSONL`, oppure una combinazione di queste. Questo serve a
+evitare frasi ambigue come "passa dal sink" senza sapere quale sink riceve il
+record e quale file o writer produce output.
+
+Il caso piu' importante per capire la differenza era la semantica core:
+`FILE_CREATED` era gia' `Record model = si` e `Sink-capable = si` prima di
+entrare in JSONL. Ora e' anche `Runtime-routed = text sink/events.log + output
+pipeline JSONL`, quindi `output.jsonl = si` quando l'output strutturato e'
+abilitato.
+
+La tabella usa queste colonne:
+
+- `Log testuale oggi`: file in cui il fatto appare oggi.
+- `Record model`: se esiste gia' un adapter/builder C verso `alfred_record_t`.
+- `Sink-capable`: se il record e' gia' supportato dai sink/formatter generici.
+- `Runtime-routed`: se il runtime usa gia' un sink `alfred_record_sink_t` o una
+  output pipeline per questa famiglia.
+- `output.jsonl`: se il fatto entra oggi nella pipeline JSONL opt-in quando
+  `output_enabled=true`.
+- `Da fare`: migrazione necessaria per arrivare al contratto strutturato pieno.
+
+### Vista riassuntiva
+
+| Famiglia | Esempi | Log testuale oggi | Record model | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Fatti kernel/backend osservati | `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`, `IN_Q_OVERFLOW` | `raw.log` | parziale/futuro come `backend_observed` | no, manca ancora mapping/formatter pubblico | no | no | decidere se esporli come record `backend_observed` o mantenerli diagnostica raw backend |
+| Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | `raw.log` | previsto come `backend_observed + audit` | no, manca ancora tipo/formatter audit | no | no | aggiungere record audit solo se vogliamo output strutturato per audit read-only |
+| Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
+| Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
+| Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
+| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
+| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | inviare diagnostica strutturata alla pipeline senza perdere il canale error/event legacy |
+| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | stesso lavoro dei resync: dispatcher comune per diagnostica e policy error channel |
+| Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
+| Errori runtime generici | errori di config, I/O, allocazione, backend init | `errors.log` | non ancora uniforme | no | no | no | progettare `diagnostic/error` o `lifecycle/error` prima di serializzarli |
+| Trace/performance | tracepoint pipeline, benchmark, metriche | non runtime stabile | previsto | no | no | no | rimandato a layer `trace`/`pipeline` |
+| Security/policy future | allow, block, would-block, approval | non implementato | previsto | no | no | no | parte della roadmap Agent Guard |
+
+### Raw kernel/backend osservati
+
+Le righe `IN_*` nel `raw.log` sono fatti osservati dal backend inotify. Sono
+importanti per debug perche' conservano il linguaggio del kernel:
+
+```text
+IN_CREATE wd=3 path=/tmp/root name=a.txt
+IN_MOVED_FROM wd=3 path=/tmp/root name=old.txt cookie=42
+IN_MOVED_TO wd=3 path=/tmp/root name=new.txt cookie=42
+IN_Q_OVERFLOW wd=-1 path= name=
+```
+
+Queste righe oggi non passano da `alfred_record_sink_t` e non entrano in
+`output.jsonl`. Quando esiste anche una riga `RAW_*`, quella e' il fatto Alfred
+normalizzato corrispondente, non la stessa riga kernel riscritta in un altro
+formato.
+
+Decisione corrente:
+
+```text
+IN_* resta backend observed text per debug.
+RAW_* e' il primo livello Alfred strutturato.
+```
+
+Questa scelta evita di rendere `output.jsonl` troppo inotify-centrico prima di
+aver deciso come modellare `backend_observed` per fanotify, eBPF, Windows e
+macOS.
+
+### Audit inotify opt-in
+
+`IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` sono ancora solo raw log backend:
+
+```text
+IN_OPEN wd=3 path=/tmp/root name=file.txt
+IN_ACCESS wd=3 path=/tmp/root name=file.txt
+IN_CLOSE_NOWRITE wd=3 path=/tmp/root name=file.txt
+```
+
+Non diventano `ALFRED_RAW_*`, non entrano nel core, non producono semantica e
+non vengono scritti in `output.jsonl`. Il motivo e' semantico: sono eventi
+osservativi rumorosi e non vogliamo confonderli con modifica o file-ready.
+
+Migrazione futura possibile:
+
+```text
+backend_observed + audit + IN_OPEN
+backend_observed + audit + IN_ACCESS
+backend_observed + audit + IN_CLOSE_NOWRITE
+```
+
+ma solo quando avremo deciso che l'audit read-only deve diventare parte dello
+stream strutturato pubblico.
+
+### Raw Alfred normalizzati e sintetici
+
+Questi record sono oggi il sottoinsieme piu' avanzato:
+
+| Tipo record | Origine tipica | Sink-capable | `raw.log` compatibile | `output.jsonl` con `output_enabled=true` | Note |
+| --- | --- | --- | --- | --- | --- |
+| `RAW_CREATE` | `IN_CREATE` o scan sintetico directory | si | si | si | `ALFRED_RAW_ISDIR` resta in `raw_mask` |
+| `RAW_DELETE` | `IN_DELETE` | si | si | si | file/dir separati dal bit directory |
+| `RAW_ATTRIB` | `IN_ATTRIB` | si | si | si | nessuna semantica core definitiva per ora |
+| `RAW_MODIFY` | `IN_MODIFY` | si | si | si | il core puo' deduplicare/debounce prima di `FILE_MODIFIED` |
+| `RAW_CLOSE_WRITE` | `IN_CLOSE_WRITE` | si | si | si | input per `FILE_READY` |
+| `RAW_MOVED_FROM` | `IN_MOVED_FROM` | si | si | si | mezzo evento, non move semantico completo |
+| `RAW_MOVED_TO` | `IN_MOVED_TO` | si | si | si | correlato dal core tramite cookie |
+| `RAW_OVERFLOW` | `IN_Q_OVERFLOW` | si | si | si | path vuoto, riguarda integrita' dello stream |
+
+Qui `Sink-capable = si` significa che il record puo' essere consegnato a un
+`alfred_record_sink_t` generico: il text sink sa formattarlo per compatibilita'
+e il JSONL writer sa serializzarlo come record strutturato.
+
+Per "sintetico" intendiamo un raw Alfred costruito dal backend per descrivere un
+fatto scoperto fuori dalla finestra naturale del kernel. L'esempio corrente e'
+lo scan ricorsivo che scopre directory create troppo velocemente per avere gia'
+un watch sul parent. In quel caso il backend costruisce comunque un
+`alfred_raw_event_t` con `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR`: per il core e
+per il writer e' un normale raw Alfred normalizzato.
+
+Questa e' la regola didattica:
+
+```text
+sintetico non significa semantico.
+```
+
+Un raw sintetico resta raw: serve a dare al core un fatto di input coerente.
+Non deve diventare direttamente `DIR_CREATED` nel backend.
+
+### Eventi semantici core
+
+Gli eventi semantici sono gia' convertibili in record tramite
+`alfred_record_from_event()` e il runtime usa gia' un record sink testuale in
+`core_logger.c` per mantenere `events.log` compatibile:
+
+| Tipo semantico | Sink-capable | Runtime-routed | Log testuale | `output.jsonl` oggi | Note |
+| --- | --- | --- | --- | --- | --- |
+| `FILE_CREATED` | si | si | `events.log` | no | creato dal core, non dal backend |
+| `DIR_CREATED` | si | si | `events.log` | no | anche da raw sintetici create-dir |
+| `FILE_READY` | si | si | `events.log` | no | deriva da close-write |
+| `FILE_MODIFIED` | si | si | `events.log` | no | puo' essere deduplicato/debounced |
+| `FILE_DELETED` | si | si | `events.log` | no | semantica, distinta da `RAW_DELETE` |
+| `DIR_DELETED` | si | si | `events.log` | no | semantica, distinta da `WATCH_REMOVED` |
+| `FILE_RENAMED` | si | si | `events.log` | no | risultato di correlazione move pair |
+| `DIR_RENAMED` | si | si | `events.log` | no | risultato core, non self-event |
+| `FILE_MOVED` | si | si | `events.log` | no | semantica core |
+| `DIR_MOVED` | si | si | `events.log` | no | semantica core |
+| `FILE_RELOCATED` | si | si | `events.log` | no | scelta semantica approvata per moved/renamed a livello core |
+| `DIR_RELOCATED` | si | si | `events.log` | no | scelta semantica approvata per directory |
+| `OVERFLOW` | si | si | `events.log` | no | semantica stream-integrity del core |
+
+Questo e' il punto piu' importante dopo il collegamento runtime JSONL:
+
+```text
+events.log semantico passa gia' da record sink text.
+Gli stessi record sono gia' sink-capable anche per JSONL.
+output.jsonl riceve ora gli eventi semantici quando output_enabled=true.
+```
+
+Il prossimo passo strutturale non e' piu' "rendere la semantica JSONL-capable":
+lo e' gia'. Il lavoro rimasto e' allargare i test a piu' tipi semantici e
+decidere se introdurre un dispatcher applicativo comune per raw, semantic e
+diagnostic invece di avere piccoli bridge separati.
+
+### Diagnostica watch, resync e lost-scope
+
+I `WATCH_*` sono diagnostica operativa. Non sono eventi filesystem semantici.
+Molti di questi tipi sono gia' rappresentabili come record diagnostici tramite
+`alfred_record_build_watch_diagnostic()` o
+`alfred_record_build_watch_diagnostic_with_os_error()`, e i formatter text/JSONL
+conoscono i relativi `ALFRED_RECORD_TYPE_WATCH_*`.
+
+La copertura runtime pero' non e' ancora uniforme:
+
+| Famiglia diagnostica | Esempi | Log testuale oggi | Record builder | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Watch lifecycle | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si | si | si', verso text sink e JSONL | si' | famiglia watch base completa; resync/lost-scope restano separati |
+| Resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END` | `events.log`/`errors.log` | si | si | parziale | no | preservare canale error/event e aggiungere record output |
+| Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | parziale | no | stesso routing diagnostico comune |
+| Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | parziale | no | aggiungere output strutturato senza duplicare logica |
+| Lost-scope scan/recovery | `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`, coverage, reinstall, rollback, retry, gave-up, end | `events.log` | si | si | parziale | no | definire policy di output per diagnostica lunga/rumorosa |
+
+La ragione per cui non entrano ancora in `output.jsonl` e' pratica e
+architetturale: il primo collegamento JSONL vive nel callback raw di `app.c`.
+La diagnostica watch/resync nasce invece dentro il backend inotify, spesso
+vicino a error handling, resync, retry e log legacy. Prima di mandarla nella
+pipeline dobbiamo evitare di creare un secondo writer path direttamente dentro
+il backend.
+
+Regola da rispettare:
+
+```text
+il backend puo' costruire record diagnostici,
+ma non deve possedere la policy finale di output.
+```
+
+### Errori, lifecycle e trace
+
+Non tutte le righe informative devono diventare subito eventi pubblici:
+
+| Famiglia | Esempi | Stato |
+| --- | --- | --- |
+| Lifecycle app | `logger initialized`, `event loop started`, `shutdown started` | log umano in `events.log`, non ancora Event Model pubblico |
+| Errori generici | config invalida, allocazione fallita, open fallita | `errors.log`, non ancora schema error uniforme |
+| Trace/performance | eventi interni di pipeline, benchmark, metriche | roadmap, non runtime stabile |
+
+Queste famiglie vanno progettate con calma. Metterle troppo presto in JSONL
+rischia di creare uno schema pubblico rumoroso e instabile.
+
+### Regola di interpretazione per `output.jsonl`
+
+Nello stato corrente:
+
+```text
+output.jsonl = sottoinsieme strutturato opt-in
+```
+
+Non e':
+
+```text
+output.jsonl != copia completa di raw.log
+output.jsonl != copia completa di events.log
+output.jsonl != ledger completo di Alfred
+output.jsonl != contratto Agent Guard finale
+```
+
+Oggi `output.jsonl` e' utile per verificare tre percorsi:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> alfred_record_output_pipeline_enqueue()
+-> queue
+-> runtime drain
+-> dispatcher
+-> JSONL writer
+-> output_log
+```
+
+e:
+
+```text
+alfred_event_t
+-> alfred_record_from_event()
+-> alfred_record_output_pipeline_enqueue()
+-> queue
+-> runtime drain
+-> dispatcher
+-> JSONL writer
+-> output_log
+```
+
+Il terzo percorso collegato e' la diagnostica watch base:
+
+```text
+watch_manager_add() / watch_manager_remove()
+oppure evento kernel su watch stale
+-> alfred_record_build_watch_diagnostic()
+   oppure alfred_record_build_stale_event_dropped()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> events.log
+-> inotify_backend_context_t.emit_record()
+-> alfred_record_output_pipeline_enqueue()
+-> queue
+-> runtime drain
+-> dispatcher
+-> JSONL writer
+-> output_log
+```
+
+Questo percorso oggi copre `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+`WATCH_STALE_EVENT_DROPPED`. Sono record diagnostici, non eventi semantici
+filesystem: dicono che Alfred ha iniziato a osservare un path, ha smesso di
+osservarlo, non si fida piu' del mapping `wd -> path`, oppure ha visto un evento
+kernel su un watch stale e ha scelto di non inoltrarlo al core. Non significano
+direttamente che l'utente abbia creato, cancellato, spostato o rinominato una
+directory.
+
+`WATCH_STALE_EVENT_DROPPED` conserva due campi specifici nel payload `watch`:
+
+- `event_mask`: la mask testuale dell'evento kernel droppato, per esempio
+  `IN_CREATE` o `IN_IGNORED`;
+- `event_name`: il nome figlio portato dall'evento kernel, oppure stringa vuota
+  quando l'evento non ha nome.
+
+Questi campi spiegano cosa Alfred ha visto e perche' non lo ha trasformato in
+raw/core event.
+
+Il contratto completo arrivera' quando anche il resto della diagnostica,
+lifecycle e futuri record security avranno un routing esplicito verso lo stesso
+modello di writer.
+
 ## Raw log audit inotify
 
 Quando `inotify_audit_events` e' configurato, Alfred puo' chiedere al kernel

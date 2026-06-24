@@ -2,23 +2,35 @@
  * bench_record_sinks.c - manual record sink micro-benchmark
  *
  * This benchmark measures the isolated cost of delivering synthetic
- * alfred_record_t values to three sink implementations:
+ * alfred_record_t values to sink implementations and queue boundaries:
  *
  * - counter: no formatting, no I/O, counters only
  * - text: compatibility text formatter plus caller callback
  * - jsonl: JSONL formatter plus caller callback
+ * - queue-counter: clone borrowed records into the owned-record queue, pop
+ *   them back out, deliver them to the counter sink, then destroy them
+ * - dispatcher-*: route borrowed records through the bounded dispatcher before
+ *   they reach one or more registered sinks
+ * - queue-dispatcher-*: clone borrowed records into the queue, then drain the
+ *   queue through the bounded dispatcher into one or more registered sinks
+ * - output-pipeline-jsonl: clone borrowed records into the output pipeline
+ *   queue, drain through dispatcher and JSONL buffered writer, then flush the
+ *   writer once at the end of the run
  *
  * It intentionally does not use inotify, filesystem events, dispatcher threads,
  * file writes, socket sends, flush policy, or backpressure. The goal is to get
- * a first local baseline for record -> sink overhead before connecting writers
- * to the runtime path.
+ * a first local baseline for record -> sink, record -> dispatcher -> sink,
+ * record -> queue -> sink, and record -> queue -> dispatcher -> sink overhead
+ * before connecting writers to the runtime path.
  *
  * Output columns:
  *
- * - sink: counter, text, or jsonl.
+ * - sink: counter, text, jsonl, queue-counter, dispatcher-*,
+ *   queue-dispatcher-*, or output-pipeline-jsonl.
  *   This tells which sink implementation was measured. Counter is the no-op
- *   baseline, text is the compatibility formatter, and jsonl is the structured
- *   JSONL formatter.
+ *   baseline, text is the compatibility formatter, jsonl is the structured
+ *   JSONL formatter, queue-counter is the first queue-boundary baseline, and
+ *   dispatcher-* rows measure bounded fan-out without a queue.
  *
  * - records: number of synthetic records emitted in each run.
  *   If records is 100000 and runs is 5, each sink receives 5 independent runs
@@ -46,7 +58,8 @@
  *   lengths. Counter produces no payload and therefore reports 0.
  *
  * - counter_total_last: records observed by the counter sink in the last run.
- *   It should match records for the counter row. It is 0 for text and jsonl.
+ *   It should match records for the counter and queue-counter rows. It is 0
+ *   for text and jsonl.
  *
  * Interpretation examples:
  *
@@ -55,6 +68,19 @@
  *   field names, escaping, and nested objects.
  * - counter slow means the problem is close to record creation, sink dispatch,
  *   the benchmark loop, or the machine. It is not caused by JSON formatting.
+ * - queue-counter slower than counter is expected: it adds owned-string clone,
+ *   queue push, queue pop, and owned-record destroy. This is the cost we need
+ *   to know before moving writers out of the hot path.
+ * - dispatcher-* rows measure routing through the bounded dispatcher. A single
+ *   dispatcher row should stay close to the corresponding direct sink row,
+ *   while dispatcher-counter-text-jsonl measures synchronous fan-out to three
+ *   registered sinks.
+ * - queue-dispatcher-* rows measure the closest current approximation of the
+ *   future single-threaded runtime path: owned clone, queue push, queue drain,
+ *   dispatcher fan-out, sink delivery, and owned-record destruction.
+ * - output-pipeline-jsonl measures the composed single-writer output pipeline:
+ *   queue enqueue, runtime drain, dispatcher, JSONL buffered writer, and final
+ *   flush to an in-memory callback.
  * - jsonl slow while counter is fast means the cost is likely in serialization,
  *   escaping, and produced byte volume.
  *
@@ -63,7 +89,11 @@
  */
 
 #include "alfred_record_counter_sink.h"
+#include "alfred_record_dispatcher.h"
 #include "alfred_record_jsonl_sink.h"
+#include "alfred_record_owned.h"
+#include "alfred_record_output_pipeline.h"
+#include "alfred_record_queue.h"
 #include "alfred_record_sink.h"
 #include "alfred_record_text_sink.h"
 
@@ -77,7 +107,17 @@
 typedef enum {
     BENCH_SINK_COUNTER = 0,
     BENCH_SINK_TEXT,
-    BENCH_SINK_JSONL
+    BENCH_SINK_JSONL,
+    BENCH_SINK_QUEUE_COUNTER,
+    BENCH_SINK_DISPATCHER_COUNTER,
+    BENCH_SINK_DISPATCHER_TEXT,
+    BENCH_SINK_DISPATCHER_JSONL,
+    BENCH_SINK_DISPATCHER_ALL,
+    BENCH_SINK_QUEUE_DISPATCHER_COUNTER,
+    BENCH_SINK_QUEUE_DISPATCHER_TEXT,
+    BENCH_SINK_QUEUE_DISPATCHER_JSONL,
+    BENCH_SINK_QUEUE_DISPATCHER_ALL,
+    BENCH_SINK_OUTPUT_PIPELINE_JSONL
 } bench_sink_kind_t;
 
 typedef struct {
@@ -89,6 +129,27 @@ typedef struct {
     size_t bytes;
     size_t counter_total;
 } bench_run_result_t;
+
+typedef struct {
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t dispatcher_storage[3];
+    alfred_record_counter_sink_t counter_sink;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_jsonl_sink_t jsonl_sink;
+    alfred_record_sink_t counter_generic;
+    alfred_record_sink_t text_generic;
+    alfred_record_sink_t jsonl_generic;
+    byte_count_writer_t writer;
+    char text_buffer[512];
+    char jsonl_buffer[1024];
+} bench_dispatcher_context_t;
+
+typedef struct {
+    alfred_record_output_pipeline_t pipeline;
+    byte_count_writer_t writer;
+    char format_buffer[1024];
+    char output_buffer[64u * 1024u];
+} bench_output_pipeline_context_t;
 
 static uint64_t now_ns(void)
 {
@@ -108,6 +169,18 @@ static int count_payload_bytes(void *userdata, const char *payload)
     }
 
     writer->bytes += strlen(payload);
+    return 0;
+}
+
+static int count_raw_bytes(void *userdata, const char *data, size_t size)
+{
+    byte_count_writer_t *writer = userdata;
+
+    if (writer == NULL || data == NULL) {
+        return -1;
+    }
+
+    writer->bytes += size;
     return 0;
 }
 
@@ -162,9 +235,341 @@ static const char *sink_name(bench_sink_kind_t kind)
     case BENCH_SINK_COUNTER: return "counter";
     case BENCH_SINK_TEXT: return "text";
     case BENCH_SINK_JSONL: return "jsonl";
+    case BENCH_SINK_QUEUE_COUNTER: return "queue-counter";
+    case BENCH_SINK_DISPATCHER_COUNTER: return "dispatcher-counter";
+    case BENCH_SINK_DISPATCHER_TEXT: return "dispatcher-text";
+    case BENCH_SINK_DISPATCHER_JSONL: return "dispatcher-jsonl";
+    case BENCH_SINK_DISPATCHER_ALL: return "dispatcher-counter-text-jsonl";
+    case BENCH_SINK_QUEUE_DISPATCHER_COUNTER:
+        return "queue-dispatcher-counter";
+    case BENCH_SINK_QUEUE_DISPATCHER_TEXT:
+        return "queue-dispatcher-text";
+    case BENCH_SINK_QUEUE_DISPATCHER_JSONL:
+        return "queue-dispatcher-jsonl";
+    case BENCH_SINK_QUEUE_DISPATCHER_ALL:
+        return "queue-dispatcher-counter-text-jsonl";
+    case BENCH_SINK_OUTPUT_PIPELINE_JSONL:
+        return "output-pipeline-jsonl";
     default:
         return "unknown";
     }
+}
+
+static int add_sink_to_dispatcher(alfred_record_dispatcher_t *dispatcher,
+                                  const char *name,
+                                  const alfred_record_sink_t *sink)
+{
+    return alfred_record_dispatcher_add_sink(
+        dispatcher,
+        name,
+        ALFRED_RECORD_DISPATCHER_SINK_CRITICAL,
+        sink);
+}
+
+static int add_counter_sink(bench_dispatcher_context_t *ctx)
+{
+    if (alfred_record_counter_sink_init(&ctx->counter_sink,
+                                        &ctx->counter_generic) != 0) {
+        return -1;
+    }
+
+    return add_sink_to_dispatcher(&ctx->dispatcher,
+                                  "counter",
+                                  &ctx->counter_generic);
+}
+
+static int add_text_sink(bench_dispatcher_context_t *ctx)
+{
+    ctx->text_sink.write = count_payload_bytes;
+    ctx->text_sink.userdata = &ctx->writer;
+    ctx->text_sink.buffer = ctx->text_buffer;
+    ctx->text_sink.buffer_size = sizeof(ctx->text_buffer);
+    if (alfred_record_text_sink_init(&ctx->text_sink,
+                                     &ctx->text_generic) != 0) {
+        return -1;
+    }
+
+    return add_sink_to_dispatcher(&ctx->dispatcher, "text", &ctx->text_generic);
+}
+
+static int add_jsonl_sink(bench_dispatcher_context_t *ctx)
+{
+    ctx->jsonl_sink.write = count_payload_bytes;
+    ctx->jsonl_sink.userdata = &ctx->writer;
+    ctx->jsonl_sink.buffer = ctx->jsonl_buffer;
+    ctx->jsonl_sink.buffer_size = sizeof(ctx->jsonl_buffer);
+    if (alfred_record_jsonl_sink_init(&ctx->jsonl_sink,
+                                      &ctx->jsonl_generic) != 0) {
+        return -1;
+    }
+
+    return add_sink_to_dispatcher(&ctx->dispatcher,
+                                  "jsonl",
+                                  &ctx->jsonl_generic);
+}
+
+static int setup_dispatcher_context(bench_dispatcher_context_t *ctx,
+                                    bench_sink_kind_t kind)
+{
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    memset(ctx, 0, sizeof(*ctx));
+    if (alfred_record_dispatcher_init(
+            &ctx->dispatcher,
+            ctx->dispatcher_storage,
+            sizeof(ctx->dispatcher_storage) /
+                sizeof(ctx->dispatcher_storage[0])) != 0) {
+        return -1;
+    }
+
+    switch (kind) {
+    case BENCH_SINK_DISPATCHER_COUNTER:
+    case BENCH_SINK_QUEUE_DISPATCHER_COUNTER:
+        return add_counter_sink(ctx);
+    case BENCH_SINK_DISPATCHER_TEXT:
+    case BENCH_SINK_QUEUE_DISPATCHER_TEXT:
+        return add_text_sink(ctx);
+    case BENCH_SINK_DISPATCHER_JSONL:
+    case BENCH_SINK_QUEUE_DISPATCHER_JSONL:
+        return add_jsonl_sink(ctx);
+    case BENCH_SINK_DISPATCHER_ALL:
+    case BENCH_SINK_QUEUE_DISPATCHER_ALL:
+        if (add_counter_sink(ctx) != 0 || add_text_sink(ctx) != 0 ||
+            add_jsonl_sink(ctx) != 0) {
+            return -1;
+        }
+        return 0;
+    default:
+        return -1;
+    }
+}
+
+static int run_dispatcher_once(bench_sink_kind_t kind,
+                               size_t records,
+                               bench_run_result_t *result)
+{
+    bench_dispatcher_context_t ctx;
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(result, 0, sizeof(*result));
+    if (setup_dispatcher_context(&ctx, kind) != 0) {
+        return -1;
+    }
+
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_dispatcher_dispatch_one(&ctx.dispatcher, &record) != 0) {
+            return -1;
+        }
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = ctx.writer.bytes;
+    result->counter_total = ctx.counter_sink.total_records;
+
+    return 0;
+}
+
+static int run_queue_dispatcher_once(bench_sink_kind_t kind,
+                                     size_t records,
+                                     bench_run_result_t *result)
+{
+    bench_dispatcher_context_t ctx;
+    alfred_record_queue_t queue;
+    uint64_t start_ns;
+    uint64_t end_ns;
+    size_t dispatched = 0u;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&queue, 0, sizeof(queue));
+    memset(result, 0, sizeof(*result));
+
+    if (setup_dispatcher_context(&ctx, kind) != 0) {
+        return -1;
+    }
+    if (alfred_record_queue_init(&queue, records) != 0) {
+        return -1;
+    }
+
+    /*
+     * Allocation and sink registration are outside the timed region. This row
+     * measures the closest current approximation of the future runtime path:
+     * clone owned, enqueue, drain, dispatch, sink emit, and destroy owned.
+     */
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_queue_push(&queue, &record) != 0) {
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+    }
+
+    if (alfred_record_dispatcher_drain_queue(
+            &ctx.dispatcher,
+            &queue,
+            records,
+            &dispatched) != 0 || dispatched != records) {
+        alfred_record_queue_destroy(&queue);
+        return -1;
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = ctx.writer.bytes;
+    result->counter_total = ctx.counter_sink.total_records;
+
+    alfred_record_queue_destroy(&queue);
+    return 0;
+}
+
+static int run_queue_counter_once(size_t records, bench_run_result_t *result)
+{
+    alfred_record_queue_t queue;
+    alfred_record_counter_sink_t counter_sink;
+    alfred_record_sink_t sink;
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&queue, 0, sizeof(queue));
+    memset(&sink, 0, sizeof(sink));
+    memset(result, 0, sizeof(*result));
+
+    if (alfred_record_queue_init(&queue, records) != 0) {
+        return -1;
+    }
+
+    if (alfred_record_counter_sink_init(&counter_sink, &sink) != 0) {
+        alfred_record_queue_destroy(&queue);
+        return -1;
+    }
+
+    /*
+     * The allocation above is intentionally outside the timed region. This row
+     * measures the per-record boundary cost: clone owned, enqueue, dequeue,
+     * counter emit, and destroy owned.
+     */
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_queue_push(&queue, &record) != 0) {
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+    }
+
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record;
+
+        memset(&record, 0, sizeof(record));
+        if (alfred_record_queue_pop(&queue, &record) != 0) {
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+        if (alfred_record_sink_emit(&sink, &record) != 0) {
+            alfred_record_destroy_owned(&record);
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+        alfred_record_destroy_owned(&record);
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = 0u;
+    result->counter_total = counter_sink.total_records;
+
+    alfred_record_queue_destroy(&queue);
+    return 0;
+}
+
+static int run_output_pipeline_jsonl_once(size_t records,
+                                          bench_run_result_t *result)
+{
+    bench_output_pipeline_context_t ctx;
+    alfred_record_output_pipeline_config_t config;
+    alfred_record_runtime_drain_result_t drain_result;
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&ctx, 0, sizeof(ctx));
+    memset(&config, 0, sizeof(config));
+    memset(result, 0, sizeof(*result));
+
+    config.enabled = 1;
+    config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
+    config.queue_capacity = records;
+    config.drain_batch_size = records;
+    config.write = count_raw_bytes;
+    config.userdata = &ctx.writer;
+    config.format_buffer = ctx.format_buffer;
+    config.format_buffer_size = sizeof(ctx.format_buffer);
+    config.output_buffer = ctx.output_buffer;
+    config.output_buffer_size = sizeof(ctx.output_buffer);
+
+    if (alfred_record_output_pipeline_init(&ctx.pipeline, &config) != 0) {
+        return -1;
+    }
+
+    /*
+     * Pipeline setup is outside the timed region. The timed path measures the
+     * composed single-threaded runtime shape: enqueue owned records, drain them
+     * through dispatcher and JSONL writer, then flush buffered bytes to an
+     * in-memory callback once at the end.
+     */
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_output_pipeline_enqueue(&ctx.pipeline, &record) != 0) {
+            alfred_record_output_pipeline_destroy(&ctx.pipeline);
+            return -1;
+        }
+    }
+
+    if (alfred_record_output_pipeline_drain_once(&ctx.pipeline,
+                                                 &drain_result) != 0 ||
+        drain_result.dispatched != records ||
+        drain_result.remaining != 0u) {
+        alfred_record_output_pipeline_destroy(&ctx.pipeline);
+        return -1;
+    }
+
+    if (alfred_record_output_pipeline_flush(&ctx.pipeline) != 0) {
+        alfred_record_output_pipeline_destroy(&ctx.pipeline);
+        return -1;
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = ctx.writer.bytes;
+    result->counter_total = 0u;
+
+    alfred_record_output_pipeline_destroy(&ctx.pipeline);
+    return 0;
 }
 
 static int run_once(bench_sink_kind_t kind,
@@ -214,6 +619,20 @@ static int run_once(bench_sink_kind_t kind,
             return -1;
         }
         break;
+    case BENCH_SINK_QUEUE_COUNTER:
+        return run_queue_counter_once(records, result);
+    case BENCH_SINK_DISPATCHER_COUNTER:
+    case BENCH_SINK_DISPATCHER_TEXT:
+    case BENCH_SINK_DISPATCHER_JSONL:
+    case BENCH_SINK_DISPATCHER_ALL:
+        return run_dispatcher_once(kind, records, result);
+    case BENCH_SINK_QUEUE_DISPATCHER_COUNTER:
+    case BENCH_SINK_QUEUE_DISPATCHER_TEXT:
+    case BENCH_SINK_QUEUE_DISPATCHER_JSONL:
+    case BENCH_SINK_QUEUE_DISPATCHER_ALL:
+        return run_queue_dispatcher_once(kind, records, result);
+    case BENCH_SINK_OUTPUT_PIPELINE_JSONL:
+        return run_output_pipeline_jsonl_once(records, result);
     default:
         return -1;
     }
@@ -346,7 +765,17 @@ int main(int argc, char **argv)
 
     if (run_benchmark(BENCH_SINK_COUNTER, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_TEXT, records, runs) != 0 ||
-        run_benchmark(BENCH_SINK_JSONL, records, runs) != 0) {
+        run_benchmark(BENCH_SINK_JSONL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_TEXT, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_JSONL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_ALL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_TEXT, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_JSONL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_ALL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_OUTPUT_PIPELINE_JSONL, records, runs) != 0) {
         return 1;
     }
 

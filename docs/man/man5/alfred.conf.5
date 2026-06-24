@@ -44,6 +44,48 @@ an epoll loop.
 When true, log streams are flushed after writes. The default is true to improve
 visibility during development and failures.
 .TP
+.B output_enabled
+Opt-in flag for the record output runtime. The default is false.
+When false, Alfred keeps the current compatibility path through
+.BR raw.log ,
+.BR events.log ,
+and
+.BR errors.log .
+When true with
+.BR output_format=jsonl ,
+Alfred writes additive JSONL output through the
+.B record -> queue -> dispatcher -> writer
+path while preserving the compatibility logs.
+.TP
+.B output_format
+Writer format for the output runtime. Supported configuration values are
+.B text
+and
+.BR jsonl .
+The default is
+.BR jsonl .
+Unsupported values make configuration loading fail.
+The current runtime can enable only
+.BR jsonl ;
+.B text
+is reserved for disabled or future configurations.
+.TP
+.B output_buffer_size
+Buffer size, in bytes, for buffered writers such as JSONL. The
+default is
+.BR 65536 .
+Values smaller than
+.B 4096
+or non-numeric values make configuration loading fail.
+.TP
+.B output_log
+Append-only JSONL output path used when
+.B output_enabled=true
+and
+.BR output_format=jsonl .
+The default is
+.BR output.jsonl .
+.TP
 .B watcher_capacity
 Alias for
 .BR inotify_watcher_capacity .
@@ -141,6 +183,10 @@ inotify_recursive=true
 inotify_watcher_capacity=128
 inotify_audit_events=off
 event_engine=core
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
 raw_log=raw.log
 event_log=events.log
 error_log=errors.log
@@ -168,6 +214,22 @@ error_log=/tmp/alfred.errors.log
 Enable raw-log-only audit events:
 .EX
 inotify_audit_events=open,access,close-nowrite
+.EE
+.TP
+Keep optional JSONL output disabled:
+.EX
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+.EE
+.TP
+Enable additive JSONL output:
+.EX
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+output_log=/tmp/alfred.output.jsonl
 .EE
 .SH NOTES
 This file format is intentionally simple and does not yet have include

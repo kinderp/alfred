@@ -49,6 +49,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `30-backend-api-v0.md` |
 | Completo | `31-milestone-inotify-reference-backend.md` |
 | Parziale | `32-writer-api-v0.md` |
+| Parziale | `33-writer-runtime-roadmap-v0.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -331,6 +332,13 @@ passaggio tecnico successivo senza anticipare JSONL.
 brevi, la review architetturale periodica, i golden test JSONL e i tag
 architetturali cercabili nel codice.
 
+`00-regole-operative.md` e `11-come-contribuire.md` ora fissano anche la regola
+per i finding di review: i finding importanti vanno inseriti come commenti
+inline nella PR; il commit di fix deve citare PR e link al finding; dopo il fix
+bisogna rispondere al commento inline con lo SHA-1 del commit e una spiegazione
+in inglese della soluzione. In questo modo la review resta una traccia storica
+leggibile e collegata ai commit effettivi.
+
 ## Aggiornamento didattico lifetime e ownership C
 
 `08-guida-c-usato-nel-progetto.md` ora contiene una spiegazione estesa del
@@ -366,6 +374,14 @@ zero/`NULL`, assenza di `null` espliciti, path Linux non UTF-8 non lossless,
 sink sincrono, assenza di backpressure, assenza di framing file/socket e schema
 JSON non ancora formalizzato.
 
+Il contratto del JSONL buffered writer e' stato chiarito anche sul ciclo di
+vita: `alfred_record_jsonl_writer_init()` accetta solo writer inattivi con
+`used == 0`. Se il writer contiene bytes pendenti, `init()` fallisce e preserva
+buffer e contatore. La scelta evita che una reinit accidentale cancelli righe
+JSONL non ancora flushate. `32-writer-api-v0.md` e
+`16-mappa-codice-e-strutture.md` spiegano ora la differenza tra stato inattivo,
+stato buffered attivo e riuso corretto del writer.
+
 ## Aggiornamento counter sink v0
 
 `alfred_record_counter_sink_t` introduce il primo sink no-op/counter per misure
@@ -396,3 +412,182 @@ Il target `make perf` e' stato aggiunto come indice testuale dei benchmark
 manuali: non esegue misure, ma spiega in inglese cosa fanno
 `perf-record-sinks` e `perf-lost-scope`. Non contiene ancora riferimenti a man
 page perche' le pagine manuale dei benchmark non sono state scritte.
+
+Aggiornamento successivo: `make perf-record-sinks` produce ora anche la riga
+`queue-counter`. Questa riga misura il primo confine runtime documentato nella
+roadmap writer: record borrowed, clone owned, push nella queue, pop, emit al
+counter sink e destroy del record owned. Non misura text, JSONL, file, socket o
+flush. Serve a capire il costo del passaggio `record -> queue -> sink` prima di
+collegare worker, dispatcher runtime o JSONL buffered writer.
+
+Aggiornamento successivo: lo stesso benchmark produce ora anche le righe
+`dispatcher-counter`, `dispatcher-text`, `dispatcher-jsonl` e
+`dispatcher-counter-text-jsonl`. Queste righe misurano
+`alfred_record_dispatcher_dispatch_one()` verso sink registrati, senza coda,
+thread o I/O reale. La guida test contiene ora un diagramma Mermaid del percorso
+backend -> adapter -> record -> queue -> dispatcher -> sink/writer e una tabella
+che collega ogni riga CSV alle funzioni interessate.
+
+Aggiornamento successivo: il benchmark produce ora anche le righe
+`queue-dispatcher-counter`, `queue-dispatcher-text`,
+`queue-dispatcher-jsonl` e `queue-dispatcher-counter-text-jsonl`. Queste righe
+misurano `alfred_record_dispatcher_drain_queue()` con record owned in queue,
+pop, dispatch, sink emit e destroy del record owned. Sono la prima misura del
+percorso single-threaded piu' vicino al runtime writer target, ancora senza
+thread, socket, file flush o backpressure reale.
+
+Aggiornamento successivo: `alfred_record_runtime_drain_once()` introduce il
+worker/drain simulato single-threaded sopra queue e dispatcher. Il nuovo helper
+non crea thread e non collega writer runtime reali: chiama il drain basso
+livello e restituisce `max_records`, `dispatched`, `remaining` e `status`.
+`test_record_runtime_drain.sh` copre coda vuota, batch limit, drain completo,
+errore sink e input invalidi.
+
+Aggiornamento successivo: `alfred_record_jsonl_writer_t` introduce il primo
+writer JSONL buffered. Il writer resta fuori dal backend e fuori da thread reali:
+usa un buffer di formattazione per un singolo oggetto JSON, un buffer output per
+una o piu' righe JSONL complete e una callback `write(data, size)` chiamata solo
+al flush o quando serve spazio per una nuova riga. `test_record_jsonl_writer.sh`
+copre batching, flush esplicito, auto-flush, errore di flush con bytes
+preservati, riga singola troppo grande, esposizione come sink generico e input
+invalidi.
+
+Aggiornamento successivo: `config_t.output` introduce la configurazione minima
+del runtime output. I default sono `output_enabled=false`,
+`output_format=jsonl`, `output_buffer_size=65536` e `output_log=output.jsonl`;
+il parser accetta anche `text` per configurazioni disabilitate/future, rifiuta
+formati non implementati e rifiuta buffer sotto `8192` o malformati. La
+documentazione chiarisce che `enabled=false` mantiene solo il path compatibile
+`raw.log`/`events.log`/`errors.log`, mentre `enabled=true` collega in modo
+sincrono il primo percorso JSONL aggiuntivo per i raw record gia' migrati al
+record sink. `test_output_config.sh` copre default, valori validi e invalidi.
+
+Aggiornamento successivo: `alfred_record_output_pipeline_t` introduce la prima
+pipeline composta single-writer. La pipeline non crea thread: quando e'
+abilitata, fa `enqueue` di record owned nella queue, `drain_once` verso
+dispatcher e JSONL writer, e `flush` separato verso callback bytes. Quando e'
+disabilitata, tutti i passaggi sono no-op riusciti. Il test
+`test_record_output_pipeline.sh` copre disabled mode, pipeline JSONL abilitata,
+batch drain, queue full e flush failure con bytes preservati.
+
+Aggiornamento successivo: `app.c` e `core_logger.c` collegano la pipeline dietro
+`output_enabled=true` e `output_format=jsonl`. Il path e' ancora sincrono e
+aggiuntivo: i log compatibili restano attivi, mentre i raw record normalizzati
+gia' candidati al record sink e gli eventi semantici core vengono convertiti in
+`alfred_record_t`, scritti sui log compatibili tramite text sink e accodati nella
+pipeline JSONL per `output_log`. `test_output_pipeline_runtime.sh` verifica il
+comportamento end-to-end con `ALFRED_CONFIG`.
+
+Aggiornamento successivo: `inotify_backend_context_t` espone un callback
+generico `emit_record` per diagnostica backend strutturata. `watch_manager.c`
+lo usa per offrire `WATCH_ADDED` e `WATCH_REMOVED` alla stessa output pipeline
+JSONL dopo aver preservato `events.log`. Il watch manager continua a non
+conoscere `app_t`, file di output o writer: costruisce solo il record
+diagnostico e lo consegna al callback borrowed. `test_output_pipeline_runtime.sh`
+ha iniziato a controllare anche `WATCH_ADDED` e `WATCH_REMOVED` in
+`output.jsonl`.
+
+Aggiornamento successivo: `WATCH_STALE` usa lo stesso callback `emit_record`
+dopo aver preservato `events.log`, quindi entra in `output.jsonl` quando
+`output_enabled=true`. Il routing resta volutamente limitato: `WATCH_RESYNC_*`,
+`WATCH_LOST_*` e, in quel momento, `WATCH_STALE_EVENT_DROPPED` richiedevano
+ancora micro-step dedicati.
+
+Aggiornamento successivo: `WATCH_STALE_EVENT_DROPPED` completa la famiglia
+diagnostica watch base nel writer runtime. Il backend usa
+`alfred_record_build_stale_event_dropped()` per conservare in modo strutturato
+la mask e il nome dell'evento kernel scartato (`watch.event_mask` e
+`watch.event_name`), preserva prima `events.log`, poi offre il record borrowed
+alla output pipeline JSONL. Restano fuori dal writer runtime i diagnostici
+`WATCH_RESYNC_*` e `WATCH_LOST_*`.
+
+Aggiornamento successivo: la pipeline JSONL runtime adotta una policy
+fail-closed quando `output_enabled=true`. Se enqueue, drain o writer falliscono,
+`app_emit_output_record()` marca `app.output_failed` e il callback applicativo
+propaga `ERR_IO` verso `app_run()`. Questo evita che Alfred continui a processare
+eventi producendo un `output.jsonl` parziale e non affidabile. Il test runtime
+usa `/dev/full` per simulare un writer che fallisce durante il flush del buffer
+JSONL e verifica che Alfred termini con stato non-zero e diagnostica in
+`errors.log`.
+
+Aggiornamento successivo: il contratto fail-closed copre anche il flush finale
+di shutdown. Un record puo' restare nel buffer JSONL se il buffer non si riempie
+durante `app_run()`: in quel caso l'errore di I/O puo' comparire solo quando
+`app_shutdown()` chiama il flush conclusivo. `app_shutdown()` ora restituisce
+`ERR_IO` in quel caso e `main()` lo converte in exit non-zero quando il loop era
+terminato senza errori. `test_output_pipeline_runtime.sh` aggiunge uno scenario
+con pochi eventi e `output_log=/dev/full` per bloccare questa regressione.
+
+Aggiornamento successivo: la stessa policy e' stata estesa alla diagnostica
+watch base prodotta direttamente dal backend. `watch_manager_add()`,
+`watch_manager_remove()`, `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED` propagano
+ora il fallimento del callback `emit_record` invece di limitarsi a loggarlo. Il
+backend resta indipendente da JSONL e non decide la policy di processo: espone
+l'errore all'applicazione, che applica `output_enabled=true` come fail-closed.
+`test_watch_diagnostic_output_failure` verifica il caso `WATCH_ADDED` con
+rollback del watch appena installato.
+
+Aggiornamento successivo: il ramo `WATCH_STALE` ha ora una copertura dedicata.
+`WATCH_STALE` nasce durante il poll dei self-event (`IN_MOVE_SELF`,
+`IN_DELETE_SELF`, `IN_UNMOUNT`), non durante l'installazione del watch: per
+questo il test separato `test_watch_stale_output_failure` fa fallire solo il
+callback strutturato su quel tipo di record e verifica che il backend scriva il
+log compatibile, registri l'errore e restituisca fallimento al chiamante.
+
+Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
+copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
+inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,
+diagnostica watch/resync/lost-scope, lifecycle, errori, trace e security futura.
+La mappa chiarisce per ogni famiglia se oggi appare nei log testuali, se esiste
+un adapter/builder verso `alfred_record_t`, se il record e' sink-capable, se e'
+gia' runtime-routed verso un sink o una pipeline, e se entra in `output.jsonl`.
+La regola fissata e' che `output.jsonl` oggi e' un sottoinsieme strutturato
+opt-in, non una copia completa di Alfred.
+
+Aggiornamento successivo: `make perf-record-sinks` produce anche la riga
+`output-pipeline-jsonl`. Questa misura la pipeline composta con record sintetici:
+enqueue owned, runtime drain, dispatcher, JSONL buffered writer e flush finale
+verso callback in memoria. Non misura ancora file I/O, socket, thread, lock o
+backpressure reale. La guida test spiega come confrontarla con
+`queue-dispatcher-jsonl` per capire se il wrapper pipeline aggiunge overhead
+rilevante prima del collegamento ad `app_run()`.
+
+Aggiornamento successivo: `34-report-benchmark-prestazioni.md` raccoglie i run
+manuali gia' eseguiti, i valori CSV osservati, l'interpretazione delle righe
+`counter`, `queue-dispatcher-jsonl` e `output-pipeline-jsonl`, e le conclusioni
+provvisorie sul costo della pipeline. Il report chiarisce che i numeri sono
+indicativi, che `runs=1` non basta per dichiarazioni prestazionali definitive e
+che il risultato utile per ora e' l'assenza di overhead macroscopico del wrapper
+pipeline rispetto a queue + dispatcher + JSONL.
+
+Aggiornamento successivo: la documentazione Writer API v0 e la mappa codice sono
+state riallineate allo stato runtime corrente. JSONL non e' piu' descritto come
+formatter non collegato al runtime: oggi `app_run()` puo' instradare i record
+gia' migrati nella pipeline `record -> queue -> dispatcher -> JSONL writer`
+quando `output_enabled=true` e `output_format=jsonl`. Resta invece non
+implementato il writer asincrono finale con worker thread, code per sink,
+backpressure avanzata, target multipli e profili operativi.
+
+Aggiornamento successivo: il routing dei record semantici verso JSONL e' stato
+separato dal successo del text sink compatibile. La v0 resta sincrona, ma un
+record semantico strutturato valido viene ora offerto alla output pipeline prima
+del formatter testuale di `events.log`, cosi' un path molto lungo non puo' far
+perdere silenziosamente il record JSONL solo perche' la riga legacy supera il
+buffer umano. `test_output_pipeline_runtime.sh` copre questo caso con un path
+profondo creato prima dello startup e un file creato dopo l'avvio.
+
+## Aggiornamento Writer Runtime v0
+
+`33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
+dei writer. Il nuovo documento chiarisce che il percorso caldo deve fermarsi a
+`record -> enqueue`, mentre text, JSONL, protobuf, MessagePack, socket, Lab,
+flush, report e policy pesante devono stare fuori dal percorso caldo. La
+roadmap documenta lo stato corrente di sink, queue, dispatcher e benchmark,
+spiega il confine borrowed -> owned prima della coda, confronta coda comune e
+future code per sink, introduce le classi `critical`, `best_effort` e `debug`,
+descrive il problema della backpressure e fissa un ordine di micro-step:
+benchmark queue -> counter, dispatcher -> sink, queue -> dispatcher -> sink,
+worker simulato, JSONL buffered writer e solo dopo eventuali thread o code per
+sink. `README.md`, `27-guida-lettura-documentazione.md`,
+`31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
+stati aggiornati per rimandare al nuovo capitolo.

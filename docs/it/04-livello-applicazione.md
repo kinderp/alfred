@@ -306,6 +306,9 @@ watcher_capacity=256
 inotify_watcher_capacity=256
 inotify_watch_mask=default,-IN_ATTRIB
 inotify_audit_events=off
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
 event_engine=core
 raw_log=myraw.log
 ```
@@ -399,6 +402,146 @@ Con questa configurazione una lettura read-only puo' produrre righe come
 `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel `raw.log`. Non deve pero'
 produrre `FILE_MODIFIED` o `FILE_READY` nell'`events.log`, perche' non c'e'
 stata scrittura.
+
+### Configurazione output runtime
+
+La configurazione contiene anche una sezione per il primo output runtime
+strutturato:
+
+```c
+typedef struct {
+    int enabled;
+    output_format_t format;
+    size_t buffer_size;
+} output_config_t;
+```
+
+Questi campi vivono in `config_t.output`, non in `config_t.inotify`. Il motivo
+e' architetturale: il backend inotify osserva eventi del kernel, ma non deve
+decidere formato di output, buffering, writer o destinazioni di log.
+
+Campi minimi:
+
+| Campo | Default | Significato |
+| --- | --- | --- |
+| `output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
+| `output.format` | `jsonl` | formato richiesto; in v0 `jsonl` e' il solo formato attivabile |
+| `output.buffer_size` | `65536` | dimensione in bytes del buffer per writer buffered come JSONL |
+| `output_log` | `output.jsonl` | file JSONL append-only usato quando `output_enabled=true` |
+
+Con:
+
+```text
+output_enabled=false
+```
+
+Alfred usa il percorso compatibile corrente:
+
+```text
+evento OS
+-> backend inotify
+-> raw event Alfred
+-> core
+-> logger attuale
+-> raw.log / events.log / errors.log
+```
+
+In questo modo il nuovo writer runtime non cambia il comportamento pubblico:
+non usa la queue runtime, non usa il dispatcher runtime configurabile, non usa
+il JSONL buffered writer e non modifica i log esistenti.
+
+Con:
+
+```text
+output_enabled=true
+```
+
+la configurazione attiva il primo percorso JSONL runtime:
+
+```text
+record
+-> queue
+-> runtime drain sincrono
+-> dispatcher
+-> JSONL buffered writer
+-> output_log
+```
+
+Il collegamento corrente e' ancora conservativo: `app_run()` continua a produrre
+i log storici e aggiunge il file JSONL per i raw record normalizzati gia'
+migrati al record sink, per gli eventi semantici emessi dal core e per la
+diagnostica watch base `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/
+`WATCH_STALE_EVENT_DROPPED`. Non ci sono ancora worker thread, socket, code per
+sink o backpressure reale. I callback applicativi costruiscono il record una
+sola volta o ricevono un record borrowed dal backend/core, poi usano lo stesso
+`alfred_record_t` per il log compatibile e per la pipeline JSONL.
+
+Se la pipeline JSONL e' abilitata e l'emissione di un record fallisce,
+`app_emit_output_record()` marca `app.output_failed`. Da quel momento il callback
+applicativo restituisce un errore I/O e `app_run()` termina invece di continuare
+con un ledger JSONL parziale. Questa e' una scelta "fail closed": per debug
+sarebbe possibile immaginare un output best-effort, ma per un futuro log usato da
+test golden, audit e replay e' piu' sicuro fermarsi e rendere evidente il
+problema.
+
+La stessa regola vale anche alla fine del processo. Il writer JSONL e'
+bufferizzato: un record puo' essere gia' stato accettato dalla pipeline ma non
+ancora scritto sul file perche' il buffer non e' pieno. In quel caso l'errore di
+I/O puo' emergere solo durante il flush finale nello shutdown. Per questo
+`app_shutdown()` restituisce uno stato: se il flush finale fallisce, `main()`
+non deve restituire successo anche se `app_run()` era terminato normalmente.
+Senza questa propagazione Alfred potrebbe produrre un `output.jsonl` incompleto
+e uscire con codice `0`, cioe' con un segnale falso di riuscita.
+
+Questa regola vale anche quando il record nasce dentro il backend inotify come
+diagnostica watch. Il backend non decide di chiudere Alfred e non conosce JSONL:
+chiama solo il callback `emit_record` ricevuto nel `inotify_backend_context_t`.
+Se il callback fallisce, il backend propaga l'errore al chiamante; l'applicazione
+vede `app.output_failed` e applica la policy fail-closed. In questo modo la
+responsabilita' resta separata: il backend produce e propaga fatti, l'app decide
+la policy dell'output configurato.
+
+Il caso `WATCH_STALE` e' particolarmente importante per capire il confine fra
+backend e applicazione. Quando arriva `IN_MOVE_SELF`, `IN_DELETE_SELF` o
+`IN_UNMOUNT`, il backend marca il watch come stale per dire che il vecchio path
+non e' piu' affidabile. Quel record diagnostico passa prima dal log compatibile
+e poi dal callback `emit_record`. Se il callback fallisce, il backend non
+continua il poll in silenzio: restituisce errore I/O al livello applicativo, che
+ferma Alfred quando l'output strutturato e' stato richiesto dall'utente.
+
+`output_format` accetta per ora:
+
+```text
+output_format=jsonl
+output_format=text
+```
+
+`jsonl` e' il default perche' il nuovo percorso di output nasce per record
+strutturati e per futuri golden test, ledger e integrazioni. `text` resta utile
+per compatibilita', debug e didattica, ma non e' ancora attivabile con
+`output_enabled=true` dentro `app_run()`. Valori non implementati come
+`protobuf`, `messagepack` o `socket` sono rifiutati finche' non esiste un writer
+con contratto documentato.
+
+`output_buffer_size` deve essere almeno `8192`. Il default e' `65536`, cioe'
+64 KiB. Il minimo evita configurazioni inutilizzabili: il writer JSONL usa uno
+scratch buffer da 8192 bytes per formattare un singolo oggetto; il buffer output
+deve poter contenere almeno qualunque oggetto che entra in quello scratch buffer,
+piu' il newline finale della riga JSONL. Se fosse piu' piccolo, una configurazione
+formalmente valida potrebbe fallire al primo record lungo ma corretto.
+
+Esempio:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+```
+
+Questa configurazione e' valida e descrive il default corrente: il nuovo output
+runtime e' spento. Se l'utente cambia `output_enabled=true`, Alfred usa JSONL
+con buffer da 64 KiB e scrive sul file `output_log`.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile
