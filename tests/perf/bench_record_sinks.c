@@ -9,18 +9,22 @@
  * - jsonl: JSONL formatter plus caller callback
  * - queue-counter: clone borrowed records into the owned-record queue, pop
  *   them back out, deliver them to the counter sink, then destroy them
+ * - dispatcher-*: route borrowed records through the bounded dispatcher before
+ *   they reach one or more registered sinks
  *
  * It intentionally does not use inotify, filesystem events, dispatcher threads,
  * file writes, socket sends, flush policy, or backpressure. The goal is to get
- * a first local baseline for record -> sink and record -> queue -> sink
- * overhead before connecting writers to the runtime path.
+ * a first local baseline for record -> sink, record -> dispatcher -> sink, and
+ * record -> queue -> sink overhead before connecting writers to the runtime
+ * path.
  *
  * Output columns:
  *
- * - sink: counter, text, jsonl, or queue-counter.
+ * - sink: counter, text, jsonl, queue-counter, or dispatcher-*.
  *   This tells which sink implementation was measured. Counter is the no-op
  *   baseline, text is the compatibility formatter, jsonl is the structured
- *   JSONL formatter, and queue-counter is the first queue-boundary baseline.
+ *   JSONL formatter, queue-counter is the first queue-boundary baseline, and
+ *   dispatcher-* rows measure bounded fan-out without a queue.
  *
  * - records: number of synthetic records emitted in each run.
  *   If records is 100000 and runs is 5, each sink receives 5 independent runs
@@ -61,6 +65,10 @@
  * - queue-counter slower than counter is expected: it adds owned-string clone,
  *   queue push, queue pop, and owned-record destroy. This is the cost we need
  *   to know before moving writers out of the hot path.
+ * - dispatcher-* rows measure routing through the bounded dispatcher. A single
+ *   dispatcher row should stay close to the corresponding direct sink row,
+ *   while dispatcher-counter-text-jsonl measures synchronous fan-out to three
+ *   registered sinks.
  * - jsonl slow while counter is fast means the cost is likely in serialization,
  *   escaping, and produced byte volume.
  *
@@ -69,6 +77,7 @@
  */
 
 #include "alfred_record_counter_sink.h"
+#include "alfred_record_dispatcher.h"
 #include "alfred_record_jsonl_sink.h"
 #include "alfred_record_owned.h"
 #include "alfred_record_queue.h"
@@ -86,7 +95,11 @@ typedef enum {
     BENCH_SINK_COUNTER = 0,
     BENCH_SINK_TEXT,
     BENCH_SINK_JSONL,
-    BENCH_SINK_QUEUE_COUNTER
+    BENCH_SINK_QUEUE_COUNTER,
+    BENCH_SINK_DISPATCHER_COUNTER,
+    BENCH_SINK_DISPATCHER_TEXT,
+    BENCH_SINK_DISPATCHER_JSONL,
+    BENCH_SINK_DISPATCHER_ALL
 } bench_sink_kind_t;
 
 typedef struct {
@@ -172,9 +185,126 @@ static const char *sink_name(bench_sink_kind_t kind)
     case BENCH_SINK_TEXT: return "text";
     case BENCH_SINK_JSONL: return "jsonl";
     case BENCH_SINK_QUEUE_COUNTER: return "queue-counter";
+    case BENCH_SINK_DISPATCHER_COUNTER: return "dispatcher-counter";
+    case BENCH_SINK_DISPATCHER_TEXT: return "dispatcher-text";
+    case BENCH_SINK_DISPATCHER_JSONL: return "dispatcher-jsonl";
+    case BENCH_SINK_DISPATCHER_ALL: return "dispatcher-counter-text-jsonl";
     default:
         return "unknown";
     }
+}
+
+static int add_sink_to_dispatcher(alfred_record_dispatcher_t *dispatcher,
+                                  const char *name,
+                                  const alfred_record_sink_t *sink)
+{
+    return alfred_record_dispatcher_add_sink(
+        dispatcher,
+        name,
+        ALFRED_RECORD_DISPATCHER_SINK_CRITICAL,
+        sink);
+}
+
+static int run_dispatcher_once(bench_sink_kind_t kind,
+                               size_t records,
+                               bench_run_result_t *result)
+{
+    alfred_record_dispatcher_t dispatcher;
+    alfred_record_dispatcher_sink_t dispatcher_storage[3];
+    alfred_record_counter_sink_t counter_sink;
+    alfred_record_text_sink_t text_sink;
+    alfred_record_jsonl_sink_t jsonl_sink;
+    alfred_record_sink_t counter_generic;
+    alfred_record_sink_t text_generic;
+    alfred_record_sink_t jsonl_generic;
+    byte_count_writer_t writer;
+    char text_buffer[512];
+    char jsonl_buffer[1024];
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&dispatcher, 0, sizeof(dispatcher));
+    memset(dispatcher_storage, 0, sizeof(dispatcher_storage));
+    memset(&counter_generic, 0, sizeof(counter_generic));
+    memset(&text_generic, 0, sizeof(text_generic));
+    memset(&jsonl_generic, 0, sizeof(jsonl_generic));
+    memset(&counter_sink, 0, sizeof(counter_sink));
+    memset(&writer, 0, sizeof(writer));
+    memset(result, 0, sizeof(*result));
+
+    if (alfred_record_dispatcher_init(
+            &dispatcher,
+            dispatcher_storage,
+            sizeof(dispatcher_storage) / sizeof(dispatcher_storage[0])) != 0) {
+        return -1;
+    }
+
+    switch (kind) {
+    case BENCH_SINK_DISPATCHER_COUNTER:
+    case BENCH_SINK_DISPATCHER_ALL:
+        if (alfred_record_counter_sink_init(&counter_sink,
+                                            &counter_generic) != 0) {
+            return -1;
+        }
+        if (add_sink_to_dispatcher(&dispatcher,
+                                   "counter",
+                                   &counter_generic) != 0) {
+            return -1;
+        }
+        if (kind == BENCH_SINK_DISPATCHER_COUNTER) {
+            break;
+        }
+        /* fall through */
+    case BENCH_SINK_DISPATCHER_TEXT:
+        text_sink.write = count_payload_bytes;
+        text_sink.userdata = &writer;
+        text_sink.buffer = text_buffer;
+        text_sink.buffer_size = sizeof(text_buffer);
+        if (alfred_record_text_sink_init(&text_sink, &text_generic) != 0) {
+            return -1;
+        }
+        if (add_sink_to_dispatcher(&dispatcher, "text", &text_generic) != 0) {
+            return -1;
+        }
+        if (kind == BENCH_SINK_DISPATCHER_TEXT) {
+            break;
+        }
+        /* fall through */
+    case BENCH_SINK_DISPATCHER_JSONL:
+        jsonl_sink.write = count_payload_bytes;
+        jsonl_sink.userdata = &writer;
+        jsonl_sink.buffer = jsonl_buffer;
+        jsonl_sink.buffer_size = sizeof(jsonl_buffer);
+        if (alfred_record_jsonl_sink_init(&jsonl_sink, &jsonl_generic) != 0) {
+            return -1;
+        }
+        if (add_sink_to_dispatcher(&dispatcher, "jsonl", &jsonl_generic) != 0) {
+            return -1;
+        }
+        break;
+    default:
+        return -1;
+    }
+
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_dispatcher_dispatch_one(&dispatcher, &record) != 0) {
+            return -1;
+        }
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = writer.bytes;
+    result->counter_total = counter_sink.total_records;
+
+    return 0;
 }
 
 static int run_queue_counter_once(size_t records, bench_run_result_t *result)
@@ -291,6 +421,11 @@ static int run_once(bench_sink_kind_t kind,
         break;
     case BENCH_SINK_QUEUE_COUNTER:
         return run_queue_counter_once(records, result);
+    case BENCH_SINK_DISPATCHER_COUNTER:
+    case BENCH_SINK_DISPATCHER_TEXT:
+    case BENCH_SINK_DISPATCHER_JSONL:
+    case BENCH_SINK_DISPATCHER_ALL:
+        return run_dispatcher_once(kind, records, result);
     default:
         return -1;
     }
@@ -424,7 +559,11 @@ int main(int argc, char **argv)
     if (run_benchmark(BENCH_SINK_COUNTER, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_TEXT, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_JSONL, records, runs) != 0 ||
-        run_benchmark(BENCH_SINK_QUEUE_COUNTER, records, runs) != 0) {
+        run_benchmark(BENCH_SINK_QUEUE_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_COUNTER, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_TEXT, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_JSONL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_DISPATCHER_ALL, records, runs) != 0) {
         return 1;
     }
 

@@ -59,6 +59,7 @@ gcc \
     -I"$ROOT_DIR/core/include" \
     "$ROOT_DIR/tests/perf/bench_record_sinks.c" \
     "$ROOT_DIR/core/src/alfred_record_counter_sink.c" \
+    "$ROOT_DIR/core/src/alfred_record_dispatcher.c" \
     "$ROOT_DIR/core/src/alfred_record_jsonl.c" \
     "$ROOT_DIR/core/src/alfred_record_jsonl_sink.c" \
     "$ROOT_DIR/core/src/alfred_record_owned.c" \

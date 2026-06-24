@@ -405,6 +405,14 @@ counter sink e destroy del record owned. Non misura text, JSONL, file, socket o
 flush. Serve a capire il costo del passaggio `record -> queue -> sink` prima di
 collegare worker, dispatcher runtime o JSONL buffered writer.
 
+Aggiornamento successivo: lo stesso benchmark produce ora anche le righe
+`dispatcher-counter`, `dispatcher-text`, `dispatcher-jsonl` e
+`dispatcher-counter-text-jsonl`. Queste righe misurano
+`alfred_record_dispatcher_dispatch_one()` verso sink registrati, senza coda,
+thread o I/O reale. La guida test contiene ora un diagramma Mermaid del percorso
+backend -> adapter -> record -> queue -> dispatcher -> sink/writer e una tabella
+che collega ogni riga CSV alle funzioni interessate.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

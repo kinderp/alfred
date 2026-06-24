@@ -44,7 +44,7 @@ Il codice corrente ha gia' alcuni mattoni importanti:
 | `alfred_record_counter_sink_t` | implementato | sink no-op/counter per benchmark |
 | `alfred_record_queue_t` | implementato | coda bounded single-threaded di record owned |
 | `alfred_record_dispatcher_t` | implementato | fan-out bounded verso sink registrati |
-| `make perf-record-sinks` | implementato | benchmark counter/text/JSONL e queue-counter in memoria |
+| `make perf-record-sinks` | implementato | benchmark counter/text/JSONL, queue-counter e dispatcher in memoria |
 
 Questi componenti non significano ancora che Alfred abbia un runtime writer
 asincrono completo. Il runtime corrente usa ancora bridge sincroni in diversi
@@ -338,10 +338,12 @@ Ogni micro-step deve aggiornare documentazione e test. Se cambia ownership,
 queue, dispatcher o sink, bisogna aggiornare anche la documentazione C per gli
 studenti.
 
-I primi due punti sono ora coperti: questa roadmap esiste e
-`make perf-record-sinks` produce anche la riga `queue-counter`, che misura clone
-owned, push nella coda, pop, emit al counter e destroy del record owned. Il
-prossimo passo resta il benchmark dispatcher -> sink.
+I primi tre punti sono ora coperti: questa roadmap esiste,
+`make perf-record-sinks` produce la riga `queue-counter` per misurare clone
+owned, push nella coda, pop, emit al counter e destroy del record owned, e
+produce anche righe `dispatcher-*` per misurare routing verso counter, text,
+JSONL e fan-out sincrono combinato. Il prossimo passo resta
+`record -> queue -> dispatcher -> sink`.
 
 ## Cose da non fare ora
 

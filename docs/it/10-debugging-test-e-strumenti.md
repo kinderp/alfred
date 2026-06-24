@@ -1534,7 +1534,12 @@ sintetici in memoria e li invia a sink o passaggi isolati:
 - `text`: sink testuale compatibile;
 - `jsonl`: sink JSONL v0;
 - `queue-counter`: record borrowed, clone owned, push nella queue, pop dalla
-  queue, emit al counter sink e destroy del record owned.
+  queue, emit al counter sink e destroy del record owned;
+- `dispatcher-counter`: record borrowed, dispatcher e counter sink;
+- `dispatcher-text`: record borrowed, dispatcher e text sink;
+- `dispatcher-jsonl`: record borrowed, dispatcher e JSONL sink;
+- `dispatcher-counter-text-jsonl`: record borrowed, dispatcher e fan-out
+  sincrono verso counter, text e JSONL nello stesso passaggio.
 
 Questo benchmark serve a separare il costo del confine `record -> sink`, il
 costo della formattazione e il costo del primo confine `record -> queue -> sink`.
@@ -1544,6 +1549,45 @@ serializzazione JSONL o nel writer. Se `queue-counter` e' molto piu' lento di
 distruzione del record owned. Se anche `counter` e' lento, il problema e' piu'
 vicino a record, dispatcher, chiamata sink o macchina.
 
+Vista completa del percorso target:
+
+```mermaid
+flowchart LR
+    B["backend"]
+    A["adapter"]
+    R["record"]
+    Q["queue"]
+    D["dispatcher"]
+    C["counter"]
+    T["text"]
+    J["JSONL"]
+    BW["writer"]
+
+    B -->|"raw event"| A
+    A -->|"alfred_record_t"| R
+    R -->|"clone + push"| Q
+    Q -->|"pop"| D
+    D -->|"emit"| C
+    D -->|"emit"| T
+    D -->|"emit"| J
+    T --> BW
+    J --> BW
+```
+
+Funzioni principali nel percorso:
+
+| Passaggio | Funzione interessata | Dato |
+| --- | --- | --- |
+| backend -> adapter | `alfred_record_from_raw()` | `alfred_raw_event_t` -> `alfred_record_t` |
+| record -> sink | `alfred_record_sink_emit()` | record borrowed |
+| record -> queue | `alfred_record_queue_push()` | clone owned del record |
+| queue -> worker | `alfred_record_queue_pop()` | record owned trasferito |
+| cleanup owned | `alfred_record_destroy_owned()` | libera stringhe owned |
+| dispatcher -> sink | `alfred_record_dispatcher_dispatch_one()` | fan-out sincrono |
+| text sink | `alfred_record_text_sink_emit()` | payload testuale |
+| JSONL sink | `alfred_record_jsonl_sink_emit()` | payload JSONL |
+| counter sink | `alfred_record_counter_sink_emit()` | contatori numerici |
+
 Percorsi misurati:
 
 | Riga CSV | Percorso reale misurato | Cosa aggiunge |
@@ -1552,6 +1596,10 @@ Percorsi misurati:
 | `text` | `record -> sink_emit -> text formatter -> callback` | formattazione testuale e conteggio byte |
 | `jsonl` | `record -> sink_emit -> JSONL formatter -> callback` | serializzazione JSONL, escaping e conteggio byte |
 | `queue-counter` | `record borrowed -> queue_push -> clone owned -> queue_pop -> sink_emit -> counter_emit -> destroy owned` | deep copy delle stringhe, coda, trasferimento ownership e cleanup |
+| `dispatcher-counter` | `record -> dispatch_one -> sink_emit -> counter_emit` | costo di routing dispatcher verso un sink leggero |
+| `dispatcher-text` | `record -> dispatch_one -> sink_emit -> text formatter -> callback` | routing dispatcher piu' formattazione text |
+| `dispatcher-jsonl` | `record -> dispatch_one -> sink_emit -> JSONL formatter -> callback` | routing dispatcher piu' serializzazione JSONL |
+| `dispatcher-counter-text-jsonl` | `record -> dispatch_one -> counter + text + JSONL` | fan-out sincrono verso tre sink registrati |
 
 La riga `counter` e' la baseline piu' pura: dice quanto costa consegnare un
 record a un sink che non fa lavoro costoso. La riga `queue-counter` parte dallo
@@ -1576,6 +1624,10 @@ counter,100000,1,1200,1200.00,1200,83333333.33,0,100000
 text,100000,1,9000,9000.00,9000,11111111.11,4100000,0
 jsonl,100000,1,18000,18000.00,18000,5555555.55,12000000,0
 queue-counter,100000,1,14000,14000.00,14000,7142857.14,0,100000
+dispatcher-counter,100000,1,1500,1500.00,1500,66666666.67,0,100000
+dispatcher-text,100000,1,9500,9500.00,9500,10526315.79,4100000,0
+dispatcher-jsonl,100000,1,18500,18500.00,18500,5405405.41,12000000,0
+dispatcher-counter-text-jsonl,100000,1,28000,28000.00,28000,3571428.57,16100000,100000
 ```
 
 I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
@@ -1584,16 +1636,17 @@ dal carico del sistema, dal compilatore e dalla configurazione.
 Significato delle colonne:
 
 - `sink`: sink o passaggio misurato. I valori attuali sono `counter`, `text`,
-  `jsonl` e `queue-counter`. `counter` e' la baseline senza I/O; `text` usa il
-  formatter compatibile con i log leggibili; `jsonl` usa il formatter
-  strutturato JSONL; `queue-counter` misura il confine borrowed -> owned ->
-  queue -> pop -> counter -> destroy.
+  `jsonl`, `queue-counter` e le righe `dispatcher-*`. `counter` e' la baseline
+  senza I/O; `text` usa il formatter compatibile con i log leggibili; `jsonl`
+  usa il formatter strutturato JSONL; `queue-counter` misura il confine
+  borrowed -> owned -> queue -> pop -> counter -> destroy; `dispatcher-*`
+  misura il routing attraverso il dispatcher.
 - `records`: numero di record sintetici inviati a quel sink in ogni run. Se vale
   `100000`, ogni run invia 100000 `alfred_record_t`.
 - `runs`: numero di misurazioni ripetute per quello stesso sink. Se `records` e'
   `100000` e `runs` e' `5`, allora il benchmark misura 5 volte `counter`, 5
-  volte `text`, 5 volte `jsonl` e 5 volte `queue-counter`, sempre con 100000
-  record per run.
+  volte `text`, 5 volte `jsonl`, 5 volte `queue-counter` e 5 volte ogni riga
+  `dispatcher-*`, sempre con 100000 record per run.
 - `min_us`: tempo della run piu' veloce, in microsecondi. E' il miglior caso
   osservato su quella macchina.
 - `avg_us`: media aritmetica dei tempi, in microsecondi. E' il valore piu' utile
@@ -1616,12 +1669,15 @@ records_per_sec_avg = records * 1000000 / avg_us
 
 - `bytes_last`: byte di payload osservati nell'ultima run. Per `text` e' la
   somma della lunghezza delle stringhe testuali prodotte. Per `jsonl` e' la
-  somma della lunghezza degli oggetti JSON prodotti. Per `counter` e
-  `queue-counter` vale `0` perche' il counter sink non produce payload.
+  somma della lunghezza degli oggetti JSON prodotti. Per
+  `dispatcher-counter-text-jsonl` e' la somma dei payload prodotti dai sink
+  testuali nello stesso fan-out. Per `counter`, `queue-counter` e
+  `dispatcher-counter` vale `0` perche' il counter sink non produce payload.
 - `counter_total_last`: record contati dal counter sink nell'ultima run. Per la
-  riga `counter` e per la riga `queue-counter` dovrebbe essere uguale a
-  `records`. Per `text` e `jsonl` vale `0`, perche' quei sink non aggiornano il
-  counter.
+  riga `counter`, `queue-counter`, `dispatcher-counter` e
+  `dispatcher-counter-text-jsonl` dovrebbe essere uguale a `records`. Per
+  `text`, `jsonl`, `dispatcher-text` e `dispatcher-jsonl` vale `0`, perche' quei
+  sink non aggiornano il counter.
 
 E' possibile passare un numero diverso di record e piu' run:
 
@@ -1712,6 +1768,33 @@ percentili e la macchina puo' essere rumorosa. Pero' aiuta a ragionare: se
 introduciamo una modifica alla queue e questa differenza raddoppia o triplica,
 abbiamo probabilmente peggiorato ownership, allocazioni, push/pop o cleanup.
 
+Esempio dedicato al dispatcher:
+
+```text
+dispatcher-counter,100000,5,3200,3500.00,3900,28571428.57,0,100000
+dispatcher-counter-text-jsonl,100000,5,26000,28000.00,31000,3571428.57,16100000,100000
+```
+
+La prima riga misura solo:
+
+```text
+record
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+```
+
+Quindi serve a capire quanto costa attraversare il dispatcher verso un sink
+molto leggero. La seconda riga misura il fan-out sincrono verso tre sink:
+counter, text e JSONL. In questo caso `bytes_last` non e' zero perche' text e
+JSONL producono payload, mentre `counter_total_last` e' uguale a `records`
+perche' uno dei sink registrati e' il counter.
+
+Il dispatcher v0 chiama i sink in ordine di registrazione e, se un sink fallisce,
+si ferma e propaga errore. Il benchmark misura il caso positivo, senza errori:
+serve a capire il costo del routing, non la futura policy di retry, drop,
+requeue o backpressure.
+
 Lettura pratica dei risultati:
 
 - se `counter` e' veloce ma `text` e `jsonl` sono lenti, il costo e'
@@ -1722,6 +1805,11 @@ Lettura pratica dei risultati:
 - se `queue-counter` e' molto piu' lento di `counter`, il costo e' nel confine
   borrowed -> owned -> queue -> pop -> destroy, cioe' nella parte che prepara il
   futuro runtime asincrono dei writer;
+- se `dispatcher-counter` e' vicino a `counter`, il routing dispatcher verso un
+  sink leggero ha overhead contenuto;
+- se `dispatcher-counter-text-jsonl` e' molto piu' lento di
+  `dispatcher-counter`, il costo e' nel fan-out e soprattutto nei sink che
+  formattano payload;
 - se `jsonl` produce molti piu' byte di `text`, e' normale che sia piu' lento;
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.
