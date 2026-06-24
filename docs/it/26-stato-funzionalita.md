@@ -159,8 +159,8 @@ definitivamente una directory osservata rinominata o spostata.
 | Output pipeline benchmark | `make perf-record-sinks` | Prima baseline pipeline supportata | Misura output pipeline JSONL composta con enqueue, drain, dispatcher, writer buffered e flush finale in memoria |
 | Runtime drain single-threaded | `alfred_record_runtime_drain_once()` | Supportato come helper preparatorio | Nomina un batch drain sopra queue/dispatcher e restituisce max, dispatched, remaining e status |
 | JSONL buffered writer | `alfred_record_jsonl_writer_t` | Supportato come helper preparatorio | Accumula righe JSONL in buffer caller-owned e scrive solo su flush o auto-flush |
-| Output config minima | `config_t.output` | Supportata come configurazione preparatoria | Default spento; valida formato `text`/`jsonl` e buffer minimo senza collegare ancora il runtime writer |
-| Output pipeline single-writer | `alfred_record_output_pipeline_t` | Supportata come helper preparatorio | Compone queue, dispatcher, runtime drain e JSONL writer in modo single-threaded, non ancora collegato ad `app_run()` |
+| Output config minima | `config_t.output` + `output_log` | Supportata e collegata in opt-in JSONL | Default spento; quando `output_enabled=true` e `output_format=jsonl` scrive JSONL aggiuntivo su `output_log` |
+| Output pipeline single-writer | `alfred_record_output_pipeline_t` | Collegata in modo sincrono dietro configurazione | Compone queue, dispatcher, runtime drain e JSONL writer per i raw record normalizzati gia' migrati al record sink |
 | Backpressure/drop policy | futura | Rimandato | Da progettare insieme a Event Model, Backend API, Writer API e output strutturato |
 | Code per sink | futura | Rimandato | Necessarie per isolare writer lenti come text, JSONL, Lab o socket |
 

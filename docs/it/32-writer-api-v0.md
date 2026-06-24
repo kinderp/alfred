@@ -594,19 +594,22 @@ Il primo contratto configurabile del Writer Runtime v0 e' volutamente piccolo:
 output_enabled=false
 output_format=jsonl
 output_buffer_size=65536
+output_log=output.jsonl
 ```
 
-Questa configurazione non collega ancora il writer al runtime. Serve a fissare
-il linguaggio con cui l'utente, i test e il codice descriveranno il percorso
-output futuro.
+Questa configurazione collega il primo writer runtime solo quando
+`output_enabled=true` e `output_format=jsonl`. Il default resta spento per non
+cambiare il comportamento storico. Quando e' acceso, il percorso JSONL e'
+aggiuntivo: `raw.log`, `events.log` ed `errors.log` continuano a essere prodotti.
 
 Campi:
 
 | Chiave | Campo C | Default | Significato |
 | --- | --- | --- | --- |
-| `output_enabled` | `config.output.enabled` | `false` | abilita in futuro il percorso `record -> queue -> dispatcher -> writer` |
-| `output_format` | `config.output.format` | `jsonl` | formato richiesto: oggi `jsonl` o `text` |
+| `output_enabled` | `config.output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
+| `output_format` | `config.output.format` | `jsonl` | formato richiesto; `jsonl` e' il solo formato runtime abilitabile in v0 |
 | `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `4096` |
+| `output_log` | `config.output_log` | `output.jsonl` | file append-only usato dal primo writer JSONL runtime |
 
 Quando `output_enabled=false`, il path runtime resta quello compatibile:
 
@@ -621,28 +624,25 @@ Quando `output_enabled=true`, la configurazione descrive il path target:
 ```text
 record
 -> queue
--> runtime drain / worker
+-> runtime drain sincrono
 -> dispatcher
--> writer
+-> JSONL buffered writer
+-> output_log
 ```
 
-Nel codice corrente questo secondo path non e' ancora collegato ad `app_run()`.
-Il parser accetta e valida il valore per preparare il passo successivo, ma non
-deve far pensare che un file JSONL runtime venga gia' prodotto. Per questo gli
-esempi ufficiali restano con `output_enabled=false` finche' il collegamento non
-sara' implementato e testato.
+Nel codice corrente questo path e' collegato ad `app_run()` solo per i record raw
+normalizzati gia' migrati al record sink. Il collegamento e' volutamente
+sincrono: il callback applicativo adatta il raw una sola volta, scrive il log
+compatibile e, se la pipeline e' abilitata, accoda lo stesso record nella
+pipeline JSONL e drena subito il batch disponibile.
 
-Perche' non aggiungiamo ancora `output_path`, `output_target` o
-`flush_interval_ms`:
+Perche' non aggiungiamo ancora `output_target` o `flush_interval_ms`:
 
-- `output_path` richiede decisioni su open, append/truncate, permessi, errori e
-  rotazione;
 - `output_target` apre il tema di file, stdout, socket, unix socket e Lab;
 - `flush_interval_ms` richiede timer o worker thread reali.
 
-Queste scelte appartengono ai prossimi passi. In questo micro-step fissiamo solo
-le tre informazioni necessarie per non hardcodare formato e dimensione del
-buffer.
+Queste scelte appartengono ai prossimi passi. In questo micro-step il target e'
+solo un file JSONL in append mode.
 
 ## Output pipeline sperimentale
 
@@ -707,8 +707,9 @@ policy di backpressure. Se la queue e' piena, `enqueue()` fallisce. Se il flush
 fallisce, i bytes restano nel JSONL writer come gia' definito dal contratto del
 writer buffered.
 
-Questa e' ancora una pipeline sperimentale e testabile, non il percorso finale
-di `app_run()`.
+Questa e' ancora una pipeline v0 sincrona, non il percorso finale di `app_run()`.
+Serve a verificare il contratto `record -> queue -> dispatcher -> writer` prima
+di introdurre worker thread, code per sink e backpressure reale.
 
 ## Backpressure
 

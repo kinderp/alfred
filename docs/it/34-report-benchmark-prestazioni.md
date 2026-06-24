@@ -319,7 +319,7 @@ Le prossime misure utili sono:
 2. Aggiungere un benchmark con writer JSONL che scrive su file temporaneo.
 3. Confrontare flush finale, flush periodico e flush per record.
 4. Misurare buffer JSONL diversi: `4096`, `65536`, `262144`.
-5. Misurare il percorso collegato ad `app_run()` con `output_enabled=true`.
+5. Misurare il percorso ora collegato ad `app_run()` con `output_enabled=true`.
 6. Aggiungere un no-op pipeline sink per separare costo pipeline da costo JSONL.
 7. Misurare queue depth e dropped records quando introdurremo backpressure reale.
 8. Misurare un futuro writer binario, per esempio MessagePack o protocollo
@@ -327,9 +327,10 @@ Le prossime misure utili sono:
 
 ## Decisione pratica corrente
 
-Alla luce dei run attuali, il prossimo passo ragionevole e' collegare la pipeline
-al runtime in modo controllato dietro configurazione, mantenendo il percorso
-legacy come riferimento finche' i test e i benchmark non dimostrano equivalenza.
+Alla luce dei run attuali, la pipeline e' stata collegata al runtime in modo
+controllato dietro configurazione, mantenendo il percorso legacy come
+riferimento. Il prossimo passo prestazionale e' misurare questo collegamento
+end-to-end e confrontarlo con le baseline sintetiche.
 
 La pipeline non deve ancora diventare asincrona in questo micro-step. Prima
 conviene ottenere un percorso corretto, misurabile e disattivabile. Solo dopo ha

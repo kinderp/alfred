@@ -3,9 +3,9 @@
  *
  * This module composes the already tested record queue, dispatcher, runtime
  * drain helper, and JSONL buffered writer into one small pipeline object. It is
- * still single-threaded and it is not wired into app_run(). Its purpose is to
- * make the target runtime shape testable before Alfred introduces file output,
- * worker threads, per-sink queues, or backpressure policy.
+ * still single-threaded. app.c can wire it behind output_enabled=true as an
+ * additive JSONL path, while worker threads, per-sink queues, socket output, and
+ * real backpressure policy remain future work.
  * ========================================================================== */
 
 #ifndef ALFRED_RECORD_OUTPUT_PIPELINE_H
@@ -28,8 +28,8 @@ extern "C" {
  *
  * The first pipeline implementation supports only JSONL because the buffered
  * JSONL writer already has a documented and tested contract. Text remains a
- * valid top-level configuration value, but it is not wired through this helper
- * yet.
+ * valid top-level configuration value only for disabled/future configurations;
+ * app.c currently accepts JSONL when output_enabled=true.
  */
 typedef enum {
     ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL = 1

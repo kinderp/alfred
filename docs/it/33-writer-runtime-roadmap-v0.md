@@ -349,13 +349,15 @@ introdurre thread reali. `alfred_record_jsonl_writer_t` introduce un writer
 JSONL buffered isolato dal backend: formatta record, aggiunge newline, accumula
 bytes e li consegna solo al flush o quando deve liberare spazio.
 `config_t.output` introduce la configurazione minima, disabilitata di default:
-`output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536`.
-`alfred_record_output_pipeline_t` collega sperimentalmente, in modo
-single-threaded e fuori da `app_run()`, queue, dispatcher, runtime drain e JSONL
-writer. `make perf-record-sinks` misura ora anche `output-pipeline-jsonl`, cioe'
-la pipeline composta con flush finale verso callback in memoria. Il prossimo
-passo resta decidere se collegarla al runtime applicativo dietro
-`output_enabled=true` oppure raffinare ulteriormente benchmark e metriche.
+`output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536` e
+`output_log=output.jsonl`. `alfred_record_output_pipeline_t` collega queue,
+dispatcher, runtime drain e JSONL writer. `make perf-record-sinks` misura anche
+`output-pipeline-jsonl`, cioe' la pipeline composta con flush finale verso
+callback in memoria. Il runtime applicativo ora puo' inizializzare questa
+pipeline dietro `output_enabled=true` e scrivere JSONL aggiuntivo per i record
+raw normalizzati gia' migrati al record sink. Il prossimo passo resta rendere il
+percorso piu' completo e misurarlo end-to-end, non introdurre subito thread o
+backpressure reale.
 
 ## Cose da non fare ora
 

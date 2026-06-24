@@ -19,11 +19,12 @@
  *   "type":"FILE_CREATED","path":"/tmp/root/a.txt"}\n
  *
  * Meaning:
- * The pipeline is still single-threaded and is not wired into app_run(). It
- * proves that the future enabled output path can be assembled from the existing
- * queue, dispatcher, runtime drain and JSONL writer contracts. Disabled mode is
- * a no-op and represents output_enabled=false: Alfred keeps the compatibility
- * logs outside this pipeline.
+ * The pipeline is still single-threaded and intentionally free of worker
+ * threads, sockets, or real backpressure. app.c can now wire it behind
+ * output_enabled=true for additive JSONL output, while this unit test keeps the
+ * helper isolated from runtime file ownership. Disabled mode is a no-op and
+ * represents output_enabled=false: Alfred keeps the compatibility logs outside
+ * this pipeline.
  */
 
 #include "alfred_record_output_pipeline.h"

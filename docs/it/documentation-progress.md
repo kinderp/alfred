@@ -438,21 +438,30 @@ preservati, riga singola troppo grande, esposizione come sink generico e input
 invalidi.
 
 Aggiornamento successivo: `config_t.output` introduce la configurazione minima
-del futuro output runtime. I default sono `output_enabled=false`,
-`output_format=jsonl` e `output_buffer_size=65536`; il parser accetta anche
-`text`, rifiuta formati non implementati e rifiuta buffer sotto `4096` o
-malformati. La documentazione chiarisce che `enabled=false` mantiene il path
-compatibile `raw.log`/`events.log`/`errors.log`, mentre `enabled=true` e' solo
-un'intenzione validata per il futuro percorso `record -> queue -> dispatcher ->
-writer`. `test_output_config.sh` copre default, valori validi e invalidi.
+del runtime output. I default sono `output_enabled=false`,
+`output_format=jsonl`, `output_buffer_size=65536` e `output_log=output.jsonl`;
+il parser accetta anche `text` per configurazioni disabilitate/future, rifiuta
+formati non implementati e rifiuta buffer sotto `4096` o malformati. La
+documentazione chiarisce che `enabled=false` mantiene solo il path compatibile
+`raw.log`/`events.log`/`errors.log`, mentre `enabled=true` collega in modo
+sincrono il primo percorso JSONL aggiuntivo per i raw record gia' migrati al
+record sink. `test_output_config.sh` copre default, valori validi e invalidi.
 
 Aggiornamento successivo: `alfred_record_output_pipeline_t` introduce la prima
-pipeline composta single-writer. La pipeline e' ancora fuori da `app_run()` e
-non crea thread: quando e' abilitata, fa `enqueue` di record owned nella queue,
-`drain_once` verso dispatcher e JSONL writer, e `flush` separato verso callback
-bytes. Quando e' disabilitata, tutti i passaggi sono no-op riusciti. Il test
+pipeline composta single-writer. La pipeline non crea thread: quando e'
+abilitata, fa `enqueue` di record owned nella queue, `drain_once` verso
+dispatcher e JSONL writer, e `flush` separato verso callback bytes. Quando e'
+disabilitata, tutti i passaggi sono no-op riusciti. Il test
 `test_record_output_pipeline.sh` copre disabled mode, pipeline JSONL abilitata,
 batch drain, queue full e flush failure con bytes preservati.
+
+Aggiornamento successivo: `app.c` collega la pipeline dietro
+`output_enabled=true` e `output_format=jsonl`. Il path e' ancora sincrono e
+aggiuntivo: i log compatibili restano attivi, mentre i raw record normalizzati
+gia' candidati al record sink vengono adattati una sola volta, scritti su
+`raw.log` tramite text sink e accodati nella pipeline JSONL per `output_log`.
+`test_output_pipeline_runtime.sh` verifica il comportamento end-to-end con
+`ALFRED_CONFIG`.
 
 Aggiornamento successivo: `make perf-record-sinks` produce anche la riga
 `output-pipeline-jsonl`. Questa misura la pipeline composta con record sintetici:

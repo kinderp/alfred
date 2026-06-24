@@ -1871,8 +1871,8 @@ record borrowed
 
 La differenza principale rispetto a `queue-dispatcher-jsonl` e' che qui non
 misuriamo solo queue e dispatcher assemblati a mano nel benchmark: misuriamo
-l'oggetto `alfred_record_output_pipeline_t`, cioe' lo stesso contenitore che in
-futuro potra' essere collegato ad `app_run()` dietro `output_enabled=true`.
+l'oggetto `alfred_record_output_pipeline_t`, cioe' lo stesso contenitore che ora
+`app_run()` puo' usare dietro `output_enabled=true`.
 
 La riga include il flush finale verso una callback in memoria, ma non include:
 
@@ -2180,15 +2180,16 @@ La copertura iniziale include:
   borrowed e lo conservi come owned, che `pop()` rispetti l'ordine FIFO, che il
   wraparound del buffer circolare non cambi l'ordine, che l'overflow venga
   rifiutato e che `clear()`/`destroy()` rilascino i record ancora accodati. Anche
-  questo e' un test preparatorio: la coda non e' ancora collegata al backend
-  runtime o ai writer.
+  questo e' un test unitario del componente: il collegamento runtime avviene
+  tramite `alfred_record_output_pipeline_t`, non direttamente da questo test.
 - `test_record_dispatcher.sh`: compila `test_record_dispatcher.c` e verifica il
   primo dispatcher bounded di record. In questo caso bounded significa massimo
   numero di sink registrabili, non massimo numero di record. Il test controlla
   registrazione dei sink, ordine di fan-out, propagazione del primo errore,
   rifiuto di input invalidi, overflow del numero sink e riuso dello storage dopo
-  `clear()`. Anche questo non e' ancora collegato al runtime: serve a fissare il
-  contratto prima di introdurre thread, code per sink o policy di backpressure.
+  `clear()`. Anche questo e' un test unitario del componente: il runtime lo usa
+  tramite la output pipeline, mentre thread, code per sink e policy di
+  backpressure restano futuri.
 - `test_record_dispatcher_drain.sh`: compila
   `test_record_dispatcher_drain.c` e verifica il primo ciclo queue -> dispatcher
   -> sink -> destroy. Il test controlla drain di queue vuota, drain FIFO di piu'
@@ -2210,18 +2211,23 @@ La copertura iniziale include:
   bytes preservati, rifiuto di una singola riga troppo grande, esposizione come
   sink generico e configurazione invalida.
 - `test_output_config.sh`: compila `test_output_config.c` e verifica la
-  configurazione preparatoria del futuro output runtime. Il test non avvia
-  Alfred e non scrive JSONL: controlla default `output_enabled=false`,
-  `output_format=jsonl`, `output_buffer_size=65536`, accettazione di `text` e
-  `jsonl`, rifiuto di formati non implementati e rifiuto di buffer troppo
+  configurazione del runtime output. Il test non avvia Alfred e non scrive
+  JSONL: controlla default `output_enabled=false`, `output_format=jsonl`,
+  `output_buffer_size=65536`, `output_log=output.jsonl`, accettazione di `text`
+  e `jsonl`, rifiuto di formati non implementati e rifiuto di buffer troppo
   piccoli o non numerici.
 - `test_record_output_pipeline.sh`: compila `test_record_output_pipeline.c` e
   verifica la prima pipeline composta `record -> queue -> dispatcher -> JSONL
-  writer`. Il test non tocca `app_run()`: usa record sintetici per controllare
-  che una pipeline disabilitata sia un no-op, che una pipeline JSONL abilitata
-  accodi record owned, rispetti `drain_batch_size`, segnali queue full, consegni
-  record al writer solo tramite drain e chiami la callback di output solo al
-  flush.
+  writer`. Il test non possiede file runtime: usa record sintetici per
+  controllare che una pipeline disabilitata sia un no-op, che una pipeline JSONL
+  abilitata accodi record owned, rispetti `drain_batch_size`, segnali queue
+  full, consegni record al writer solo tramite drain e chiami la callback di
+  output solo al flush.
+- `test_output_pipeline_runtime.sh`: avvia Alfred con `ALFRED_CONFIG` e
+  `output_enabled=true`, genera una creazione file e una creazione directory,
+  poi controlla sia `raw.log` sia `output.jsonl`. Il test dimostra che il
+  collegamento runtime e' aggiuntivo: il log compatibile resta presente, mentre
+  lo stesso raw record normalizzato viene accodato nella pipeline JSONL.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
@@ -2373,6 +2379,7 @@ inotify_watch_mask=default,-IN_ATTRIB
 output_enabled=false
 output_format=jsonl
 output_buffer_size=65536
+output_log=output.jsonl
 EOF
 
 ALFRED_CONFIG=/tmp/alfred.conf ./alfred /tmp/cartella-da-osservare
@@ -2389,15 +2396,16 @@ config_defaults()
 
 Quindi il file caricato da `ALFRED_CONFIG` puo' cambiare opzioni come
 `inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity`,
-`output_enabled`, `output_format`, `output_buffer_size` e i path dei log.
+`output_enabled`, `output_format`, `output_buffer_size`, `output_log` e i path
+dei log.
 `ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo il file
 per rifiutare esplicitamente valori vecchi come `shadow`.
 
-### Provare la configurazione output futura
+### Provare la configurazione output JSONL
 
-Il nuovo gruppo `output_*` e' preparatorio. Serve a dichiarare il percorso
-writer runtime che vogliamo collegare nei prossimi passi, ma non cambia ancora
-il comportamento di `app_run()`.
+Il gruppo `output_*` controlla il primo percorso writer runtime. Il default resta
+spento, quindi Alfred continua a produrre solo `raw.log`, `events.log` ed
+`errors.log`.
 
 Default:
 
@@ -2405,43 +2413,51 @@ Default:
 output_enabled=false
 output_format=jsonl
 output_buffer_size=65536
+output_log=output.jsonl
 ```
 
 Significato:
 
 | Chiave | Significato |
 | --- | --- |
-| `output_enabled` | se `false`, Alfred continua con `raw.log`, `events.log` ed `errors.log`; se `true`, dichiara l'intenzione di usare il futuro percorso `record -> queue -> dispatcher -> writer` |
-| `output_format` | formato del futuro writer: per ora `jsonl` o `text` |
+| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> JSONL writer` |
+| `output_format` | formato del writer; in v0 `jsonl` e' il solo formato attivabile nel runtime |
 | `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `4096` |
+| `output_log` | file JSONL append-only prodotto quando `output_enabled=true` |
 
-Esempio valido ma ancora preparatorio:
+Esempio valido:
 
 ```bash
 cat > /tmp/alfred-output.conf <<'EOF'
 output_enabled=true
 output_format=jsonl
 output_buffer_size=65536
+output_log=/tmp/alfred-output.jsonl
 EOF
 
 ALFRED_CONFIG=/tmp/alfred-output.conf ./alfred /tmp/cartella-da-osservare
 ```
 
-Questa configurazione viene accettata, ma in questo micro-step non produce
-ancora un nuovo file JSONL runtime. Il collegamento reale verra' introdotto nel
-passo successivo della Writer Runtime v0.
+Questa configurazione produce un file JSONL aggiuntivo. I log storici restano
+attivi: `output_enabled=true` non sostituisce ancora `raw.log`, `events.log` o
+`errors.log`. Il percorso e' ancora sincrono e copre i raw record normalizzati
+gia' migrati al record sink; thread, socket e backpressure reale restano futuri.
 
 Esempi invalidi:
 
 ```text
 output_format=protobuf
+output_enabled=true
+output_format=text
 output_buffer_size=0
 output_buffer_size=1024
 output_buffer_size=8192kb
 ```
 
-Questi casi falliscono perche' Alfred non deve accettare formati o buffer che
-non sa ancora usare in modo documentato.
+`protobuf` e i buffer invalidi falliscono durante il parsing della
+configurazione. `output_enabled=true` con `output_format=text` fallisce invece
+allo startup runtime: il parser conosce `text` come valore futuro, ma `app.c`
+abilita per ora solo JSONL.
 
 ### Provare gli eventi audit inotify
 

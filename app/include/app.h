@@ -18,11 +18,13 @@
 
 #include "config.h"
 #include "alfred_correlator.h"
+#include "alfred_record_output_pipeline.h"
 #include "core_logger.h"
 #include "inotify_backend.h"
 #include "logger.h"
 
 #include <signal.h>
+#include <stdio.h>
 
 /*
  * app_t - process-wide runtime context
@@ -57,6 +59,16 @@ typedef struct app {
 
     /* Raw, semantic, and error log sink. */
     logger_t logger;
+
+    /*
+     * Optional structured output pipeline. It is disabled by default and, when
+     * enabled, is additive to the compatibility raw/events/errors logs. The
+     * buffers are application-owned because the pipeline borrows writer storage.
+     */
+    alfred_record_output_pipeline_t output_pipeline;
+    FILE *output_stream;
+    char *output_format_buffer;
+    char *output_buffer;
 
     /*
      * Core correlator configuration, callback context, and engine.

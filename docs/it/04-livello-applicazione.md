@@ -405,8 +405,8 @@ stata scrittura.
 
 ### Configurazione output runtime
 
-La configurazione contiene anche una sezione preparatoria per il futuro output
-runtime:
+La configurazione contiene anche una sezione per il primo output runtime
+strutturato:
 
 ```c
 typedef struct {
@@ -425,8 +425,9 @@ Campi minimi:
 | Campo | Default | Significato |
 | --- | --- | --- |
 | `output.enabled` | `false` | abilita in futuro il percorso `record -> queue -> dispatcher -> writer` |
-| `output.format` | `jsonl` | formato richiesto per il futuro writer runtime |
+| `output.format` | `jsonl` | formato richiesto; in v0 `jsonl` e' il solo formato attivabile |
 | `output.buffer_size` | `65536` | dimensione in bytes del buffer per writer buffered come JSONL |
+| `output_log` | `output.jsonl` | file JSONL append-only usato quando `output_enabled=true` |
 
 Con:
 
@@ -455,21 +456,22 @@ Con:
 output_enabled=true
 ```
 
-la configurazione descrive il percorso futuro:
+la configurazione attiva il primo percorso JSONL runtime:
 
 ```text
 record
 -> queue
--> runtime drain / worker
+-> runtime drain sincrono
 -> dispatcher
--> writer
+-> JSONL buffered writer
+-> output_log
 ```
 
-In questo micro-step il valore viene solo validato e memorizzato. Non attiva
-ancora il percorso runtime nuovo dentro `app_run()`: quel collegamento appartiene
-al passo successivo della Writer Runtime v0. Questa distinzione e' importante
-per non far credere che basti mettere `output_enabled=true` per ottenere gia'
-un file JSONL runtime.
+Il collegamento corrente e' ancora conservativo: `app_run()` continua a produrre
+i log storici e aggiunge il file JSONL solo per i raw record normalizzati gia'
+migrati al record sink. Non ci sono ancora worker thread, socket, code per sink o
+backpressure reale. Il callback applicativo adatta il raw una sola volta e usa lo
+stesso `alfred_record_t` per il log compatibile e per la pipeline JSONL.
 
 `output_format` accetta per ora:
 
@@ -480,7 +482,8 @@ output_format=text
 
 `jsonl` e' il default perche' il nuovo percorso di output nasce per record
 strutturati e per futuri golden test, ledger e integrazioni. `text` resta utile
-per compatibilita', debug e didattica. Valori non implementati come
+per compatibilita', debug e didattica, ma non e' ancora attivabile con
+`output_enabled=true` dentro `app_run()`. Valori non implementati come
 `protobuf`, `messagepack` o `socket` sono rifiutati finche' non esiste un writer
 con contratto documentato.
 
@@ -495,10 +498,12 @@ Esempio:
 output_enabled=false
 output_format=jsonl
 output_buffer_size=65536
+output_log=output.jsonl
 ```
 
 Questa configurazione e' valida e descrive il default corrente: il nuovo output
-runtime e' spento, ma quando verra' collegato usera' JSONL con buffer da 64 KiB.
+runtime e' spento. Se l'utente cambia `output_enabled=true`, Alfred usa JSONL
+con buffer da 64 KiB e scrive sul file `output_log`.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

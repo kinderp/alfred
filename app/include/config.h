@@ -25,11 +25,11 @@
 #define OUTPUT_BUFFER_SIZE_MIN 4096u
 
 /*
- * output_format_t - configured format for the future runtime writer path
+ * output_format_t - configured format for the runtime writer path
  *
  * The enum describes the writer format requested by configuration. It does not
- * mean the writer runtime is already wired into app_run(); output.enabled still
- * controls whether the future path should be active.
+ * mean every format is wired into app_run(): output.enabled controls whether
+ * the runtime writer path should be active, and app.c currently accepts JSONL.
  */
 typedef enum {
     OUTPUT_FORMAT_TEXT = 0,
@@ -38,9 +38,9 @@ typedef enum {
 
 /*
  * output_config_t - top-level output runtime configuration
- * @enabled: opt-in flag for the future record -> queue -> dispatcher -> writer
- *           path. When false, Alfred keeps the current compatibility log path.
- * @format: requested writer format for the future runtime output path
+ * @enabled: opt-in flag for the record -> queue -> dispatcher -> writer path.
+ *           When false, Alfred keeps only the current compatibility log path.
+ * @format: requested writer format for the runtime output path
  * @buffer_size: bytes reserved for buffered writers such as JSONL
  *
  * This is application-level configuration, not backend configuration. The
@@ -71,13 +71,14 @@ typedef struct {
     /* Linux inotify backend configuration. */
     inotify_config_t inotify;
 
-    /* Future record output runtime configuration. */
+    /* Optional record output runtime configuration. */
     output_config_t output;
 
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];
     char event_log[PATH_MAX];
     char error_log[PATH_MAX];
+    char output_log[PATH_MAX];
 
 } config_t;
 

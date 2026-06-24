@@ -9,11 +9,13 @@
  * - output.enabled = 0
  * - output.format = OUTPUT_FORMAT_JSONL
  * - output.buffer_size = OUTPUT_BUFFER_SIZE_DEFAULT
+ * - output_log = output.jsonl
  *
  * accepted config:
  * - output_enabled=true
  * - output_format=text or output_format=jsonl
  * - output_buffer_size >= OUTPUT_BUFFER_SIZE_MIN
+ * - output_log=custom-output.jsonl
  *
  * rejected config:
  * - output_format=protobuf
@@ -23,9 +25,10 @@
  *
  * Meaning:
  * output.enabled=true describes the future record -> queue -> dispatcher ->
- * writer path, but this micro-step only stores and validates the intent. With
- * output.enabled=false, Alfred keeps the current compatibility path through the
- * existing raw.log/events.log/errors.log loggers.
+ * writer path. With output.enabled=false, Alfred keeps only the compatibility
+ * path through the existing raw.log/events.log/errors.log loggers. With
+ * output.enabled=true, app.c currently accepts JSONL and writes additive
+ * structured output to output_log while preserving the legacy logs.
  */
 
 #include "config.h"
@@ -78,6 +81,7 @@ static void test_output_defaults_are_disabled(void)
     assert(cfg.output.enabled == 0);
     assert(cfg.output.format == OUTPUT_FORMAT_JSONL);
     assert(cfg.output.buffer_size == OUTPUT_BUFFER_SIZE_DEFAULT);
+    assert(strcmp(cfg.output_log, "output.jsonl") == 0);
 }
 
 static void test_output_config_accepts_jsonl(void)
@@ -88,13 +92,15 @@ static void test_output_config_accepts_jsonl(void)
     write_config_file(path,
                       "output_enabled=true\n"
                       "output_format=jsonl\n"
-                      "output_buffer_size=8192\n");
+                      "output_buffer_size=8192\n"
+                      "output_log=/tmp/alfred-custom-output.jsonl\n");
 
     config_defaults(&cfg);
     assert(config_load(&cfg, path) == ERR_OK);
     assert(cfg.output.enabled == 1);
     assert(cfg.output.format == OUTPUT_FORMAT_JSONL);
     assert(cfg.output.buffer_size == 8192u);
+    assert(strcmp(cfg.output_log, "/tmp/alfred-custom-output.jsonl") == 0);
     remove(path);
 }
 

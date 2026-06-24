@@ -596,8 +596,9 @@ record owned estratto dalla queue
 -> ...
 ```
 
-Il dispatcher v0 non e' ancora collegato al runtime. Serve a fissare il
-contratto di fan-out:
+Il dispatcher v0 e' ora usato dal primo percorso JSONL opt-in tramite
+`alfred_record_output_pipeline_t`, ma resta volutamente piccolo e
+single-threaded. Serve a fissare il contratto di fan-out:
 
 - i sink vengono registrati in un array fornito dal chiamante;
 - il numero massimo di sink e' `capacity`;
@@ -1246,8 +1247,9 @@ Il primo micro-step esiste nel codice:
 - non usa librerie JSON esterne: l'escaping e' implementato nel formatter;
 - il formatter non apre file, non scrive socket, non fa flush e non aggiunge
   timestamp di log esterni;
-- il codice runtime non usa ancora questo sink: il JSONL v0 e' testabile, ma
-  non e' ancora collegato al percorso reale degli eventi.
+- il runtime usa JSONL solo nel primo percorso opt-in `output_enabled=true` per
+  i raw record normalizzati gia' migrati al record sink; non e' ancora il formato
+  unico di tutti gli eventi Alfred.
 
 Esempio semantico:
 

@@ -53,6 +53,10 @@ void config_defaults(config_t *cfg)
     snprintf(cfg->error_log,
              sizeof(cfg->error_log),
              "errors.log");
+
+    snprintf(cfg->output_log,
+             sizeof(cfg->output_log),
+             "output.jsonl");
 }
 
 /* ============================================================================
@@ -244,6 +248,7 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
  *   use_epoll=false
  *   event_engine=core
  *   raw_log=myraw.log
+ *   output_log=output.jsonl
  *
  * Return: ERR_OK on success, ERR_INVALID_ARG for invalid input, or ERR_CONFIG
  * for file open and parse failures.
@@ -376,6 +381,14 @@ error_t config_load(config_t *cfg, const char *path)
 
             snprintf(cfg->error_log,
                      sizeof(cfg->error_log),
+                     "%s",
+                     value);
+        }
+
+        else if (strcmp(key, "output_log") == 0) {
+
+            snprintf(cfg->output_log,
+                     sizeof(cfg->output_log),
                      "%s",
                      value);
         }
