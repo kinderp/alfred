@@ -725,12 +725,16 @@ make perf-record-sinks
 ```
 
 Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con righe
-dirette, righe queue e righe dispatcher. Le righe `counter`, `text` e `jsonl`
-misurano l'emissione diretta verso un sink. La riga `queue-counter` misura il
-primo confine `record borrowed -> clone owned -> queue push -> queue pop ->
-counter sink -> destroy owned`, senza formattazione e senza I/O. Le righe
-`dispatcher-*` misurano `alfred_record_dispatcher_dispatch_one()` verso uno o
-piu' sink registrati, senza coda e senza thread. Lo script accetta anche:
+dirette, righe queue, righe dispatcher e righe queue-dispatcher. Le righe
+`counter`, `text` e `jsonl` misurano l'emissione diretta verso un sink. La riga
+`queue-counter` misura il primo confine `record borrowed -> clone owned ->
+queue push -> queue pop -> counter sink -> destroy owned`, senza formattazione e
+senza I/O. Le righe `dispatcher-*` misurano
+`alfred_record_dispatcher_dispatch_one()` verso uno o piu' sink registrati,
+senza coda e senza thread. Le righe `queue-dispatcher-*` misurano
+`alfred_record_dispatcher_drain_queue()`, cioe' il percorso single-threaded piu'
+vicino al runtime target prima di introdurre worker reali. Lo script accetta
+anche:
 
 ```bash
 cd tests/perf

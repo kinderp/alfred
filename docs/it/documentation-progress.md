@@ -413,6 +413,14 @@ thread o I/O reale. La guida test contiene ora un diagramma Mermaid del percorso
 backend -> adapter -> record -> queue -> dispatcher -> sink/writer e una tabella
 che collega ogni riga CSV alle funzioni interessate.
 
+Aggiornamento successivo: il benchmark produce ora anche le righe
+`queue-dispatcher-counter`, `queue-dispatcher-text`,
+`queue-dispatcher-jsonl` e `queue-dispatcher-counter-text-jsonl`. Queste righe
+misurano `alfred_record_dispatcher_drain_queue()` con record owned in queue,
+pop, dispatch, sink emit e destroy del record owned. Sono la prima misura del
+percorso single-threaded piu' vicino al runtime writer target, ancora senza
+thread, socket, file flush o backpressure reale.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

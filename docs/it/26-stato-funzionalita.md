@@ -150,11 +150,12 @@ definitivamente una directory osservata rinominata o spostata.
 | --- | --- | --- | --- |
 | Indice benchmark manuali | `make perf` | Supportato | Elenca i target disponibili e cosa misurano; non esegue benchmark |
 | Benchmark manuale lost-scope | `make perf-lost-scope` | Supportato come strumento manuale | Misura recovery sintetica con fake watch operations; non e' gate CI |
-| Benchmark manuale record sink | `make perf-record-sinks` | Supportato come strumento manuale | Misura record sintetici verso counter, text, JSONL, queue-counter e dispatcher; non e' gate CI |
+| Benchmark manuale record sink | `make perf-record-sinks` | Supportato come strumento manuale | Misura record sintetici verso counter, text, JSONL, queue-counter, dispatcher e queue-dispatcher; non e' gate CI |
 | Suite performance stabile | futura | Rimandato | Servono baseline, warmup, percentili, profili e benchmark end-to-end |
 | No-op/counter sink benchmark | `make perf-record-sinks` | Baseline supportata | Misura il costo del confine `record -> sink` senza I/O writer |
 | Queue-counter benchmark | `make perf-record-sinks` | Prima baseline queue supportata | Misura clone owned, push, pop, counter emit e destroy senza formattazione o I/O |
 | Dispatcher sink benchmark | `make perf-record-sinks` | Prima baseline dispatcher supportata | Misura routing dispatcher verso counter, text, JSONL e fan-out sincrono combinato |
+| Queue-dispatcher benchmark | `make perf-record-sinks` | Prima baseline runtime single-threaded supportata | Misura push queue, drain queue, dispatcher, sink emit e destroy owned senza worker thread |
 | Backpressure/drop policy | futura | Rimandato | Da progettare insieme a Event Model, Backend API, Writer API e output strutturato |
 | Code per sink | futura | Rimandato | Necessarie per isolare writer lenti come text, JSONL, Lab o socket |
 
