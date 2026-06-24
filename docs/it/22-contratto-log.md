@@ -157,7 +157,7 @@ La tabella usa queste colonne:
 | Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
-| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: alcune righe passano da builder/sink, altre restano legacy | no | uniformare tutte le righe `WATCH_*` su record builder e poi inviarle al writer runtime |
+| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: `WATCH_ADDED`/`WATCH_REMOVED` passano da text sink/events.log e output pipeline JSONL; altri tipi restano parziali | parziale: si' per `WATCH_ADDED`/`WATCH_REMOVED` quando `output_enabled=true` | collegare `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED` alla stessa output pipeline senza perdere il canale compatibile |
 | Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | inviare diagnostica strutturata alla pipeline senza perdere il canale error/event legacy |
 | Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale nel backend inotify | no | stesso lavoro dei resync: dispatcher comune per diagnostica e policy error channel |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
@@ -376,8 +376,31 @@ alfred_event_t
 -> output_log
 ```
 
-Il contratto completo arrivera' quando anche diagnostica, lifecycle e futuri
-record security avranno un routing esplicito verso lo stesso modello di writer.
+Il terzo percorso collegato e' la diagnostica watch semplice:
+
+```text
+watch_manager_add() / watch_manager_remove()
+-> alfred_record_build_watch_diagnostic()
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> events.log
+-> inotify_backend_context_t.emit_record()
+-> alfred_record_output_pipeline_enqueue()
+-> queue
+-> runtime drain
+-> dispatcher
+-> JSONL writer
+-> output_log
+```
+
+Questo percorso oggi copre solo `WATCH_ADDED` e `WATCH_REMOVED`. Sono record
+diagnostici, non eventi semantici filesystem: dicono che Alfred ha iniziato o
+smesso di osservare un path con un watch, non che l'utente abbia creato o
+cancellato una directory.
+
+Il contratto completo arrivera' quando anche il resto della diagnostica,
+lifecycle e futuri record security avranno un routing esplicito verso lo stesso
+modello di writer.
 
 ## Raw log audit inotify
 

@@ -1249,7 +1249,8 @@ Il primo micro-step esiste nel codice:
   timestamp di log esterni;
 - il runtime usa JSONL nel percorso opt-in `output_enabled=true` per i raw
   record normalizzati gia' migrati al record sink e per gli eventi semantici
-  core; non e' ancora il formato unico di tutti gli eventi Alfred.
+  core, piu' la diagnostica watch semplice `WATCH_ADDED` e `WATCH_REMOVED`;
+  non e' ancora il formato unico di tutti gli eventi Alfred.
 
 Esempio semantico:
 

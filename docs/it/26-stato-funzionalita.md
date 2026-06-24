@@ -160,7 +160,7 @@ definitivamente una directory osservata rinominata o spostata.
 | Runtime drain single-threaded | `alfred_record_runtime_drain_once()` | Supportato come helper preparatorio | Nomina un batch drain sopra queue/dispatcher e restituisce max, dispatched, remaining e status |
 | JSONL buffered writer | `alfred_record_jsonl_writer_t` | Supportato come helper preparatorio | Accumula righe JSONL in buffer caller-owned e scrive solo su flush o auto-flush |
 | Output config minima | `config_t.output` + `output_log` | Supportata e collegata in opt-in JSONL | Default spento; quando `output_enabled=true` e `output_format=jsonl` scrive JSONL aggiuntivo su `output_log` |
-| Output pipeline single-writer | `alfred_record_output_pipeline_t` | Collegata in modo sincrono dietro configurazione | Compone queue, dispatcher, runtime drain e JSONL writer per raw record normalizzati ed eventi semantici core |
+| Output pipeline single-writer | `alfred_record_output_pipeline_t` | Collegata in modo sincrono dietro configurazione | Compone queue, dispatcher, runtime drain e JSONL writer per raw record normalizzati, eventi semantici core e diagnostica watch `WATCH_ADDED`/`WATCH_REMOVED` |
 | Backpressure/drop policy | futura | Rimandato | Da progettare insieme a Event Model, Backend API, Writer API e output strutturato |
 | Code per sink | futura | Rimandato | Necessarie per isolare writer lenti come text, JSONL, Lab o socket |
 

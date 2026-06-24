@@ -93,8 +93,10 @@ static int watch_manager_write_event_payload(void *userdata,
  * the Event Model v0 sink boundary for watch-table state changes: build a
  * structured diagnostic record, emit it through the generic sink, let the text
  * sink format the compatibility payload, then let the existing logger add
- * timestamp/level/newline details. The fallback preserves the old payload if
- * record creation, sink setup, formatting, or logging fails.
+ * timestamp/level/newline details. When the application provides a structured
+ * output callback, the same borrowed record is then offered to the output
+ * pipeline. The fallback preserves the old payload if record creation, sink
+ * setup, formatting, or logging fails.
  */
 static void watch_manager_log_simple_watch_diagnostic(
     const inotify_backend_context_t *ctx,
@@ -131,6 +133,18 @@ static void watch_manager_log_simple_watch_diagnostic(
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
+            /*
+             * Keep events.log compatibility first, then expose the diagnostic
+             * record to optional structured output. Queue-based output must
+             * clone this borrowed record before returning.
+             */
+            if (ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit watch diagnostic output record");
+            }
+
             return;
         }
     }

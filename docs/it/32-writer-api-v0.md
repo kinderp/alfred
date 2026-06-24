@@ -631,11 +631,19 @@ record
 ```
 
 Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
-normalizzati gia' migrati al record sink e per gli eventi semantici emessi dal
-core. Il collegamento e' volutamente sincrono: il callback applicativo o il core
-logger costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
-pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
-subito il batch disponibile.
+normalizzati gia' migrati al record sink, per gli eventi semantici emessi dal
+core e per la diagnostica watch semplice `WATCH_ADDED`/`WATCH_REMOVED`. Il
+collegamento e' volutamente sincrono: il callback applicativo, il core logger o
+il watch manager costruiscono un `alfred_record_t`, scrivono il log compatibile
+e, se la pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e
+drenano subito il batch disponibile.
+
+Il watch manager non conosce `app_t` e non conosce il writer JSONL. Riceve nel
+`inotify_backend_context_t` un callback generico `emit_record`: il backend offre
+un record diagnostico borrowed, l'applicazione lo clona/enqueue nella pipeline
+se `output_enabled=true`, oppure lo ignora in modo riuscito se l'output
+strutturato e' disabilitato. Questa e' la stessa regola di ownership usata per
+gli eventi semantici del core.
 
 La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
 gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel

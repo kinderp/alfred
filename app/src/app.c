@@ -79,6 +79,8 @@ static void app_build_inotify_backend_context(
     ctx->runtime = &app->inotify;
     ctx->config = &app->config.inotify;
     ctx->logger = &app->logger;
+    ctx->emit_record = app_emit_output_record_callback;
+    ctx->emit_record_userdata = app;
 }
 
 /* ============================================================================

@@ -463,6 +463,14 @@ gia' candidati al record sink e gli eventi semantici core vengono convertiti in
 pipeline JSONL per `output_log`. `test_output_pipeline_runtime.sh` verifica il
 comportamento end-to-end con `ALFRED_CONFIG`.
 
+Aggiornamento successivo: `inotify_backend_context_t` espone un callback
+generico `emit_record` per diagnostica backend strutturata. `watch_manager.c`
+lo usa per offrire `WATCH_ADDED` e `WATCH_REMOVED` alla stessa output pipeline
+JSONL dopo aver preservato `events.log`. Il watch manager continua a non
+conoscere `app_t`, file di output o writer: costruisce solo il record
+diagnostico e lo consegna al callback borrowed. `test_output_pipeline_runtime.sh`
+ora controlla anche `WATCH_ADDED` e `WATCH_REMOVED` in `output.jsonl`.
+
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
 inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,
