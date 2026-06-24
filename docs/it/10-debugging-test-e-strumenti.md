@@ -769,6 +769,62 @@ Questa differenza e' importante: un test core deve proteggere cio' che
 l'applicazione espone come semantica; un test backend puo' proteggere anche
 dettagli tecnici necessari al resync, ai watch e alla diagnosi.
 
+### Contratto interno, contratto esterno e log testuali
+
+Con l'introduzione di `alfred_record_t`, queue, dispatcher, sink e JSONL,
+Alfred ha piu' livelli di contratto. Non tutti devono essere verificati con lo
+stesso tipo di test.
+
+Il contratto interno riguarda le promesse fra moduli dentro il processo:
+
+```text
+backend -> alfred_record_t -> queue -> dispatcher -> sink -> writer
+```
+
+Esempi:
+
+- `alfred_record_clone_owned()` deve fare copia profonda delle stringhe
+  borrowed
+- `alfred_record_queue_push()` deve accodare record owned e bounded
+- `alfred_record_queue_pop()` deve trasferire ownership al chiamante
+- il dispatcher deve chiamare i sink nell'ordine di registrazione
+- un writer non deve decidere la semantica di un evento
+
+Questi casi vanno coperti con test C unitari o di integrazione mirata, perche'
+verificano API, ownership, precondizioni e strutture dati interne. Un test
+end-to-end JSONL puo' dire che un record finale e' uscito, ma non basta a
+dimostrare che la coda, la copia owned o il dispatcher rispettino il loro
+contratto.
+
+Il contratto esterno riguarda invece cio' che Alfred promette a chi lo usa:
+
+```text
+azioni reali sul filesystem -> record osservabili in output.jsonl
+```
+
+Esempi:
+
+- creare un file produce un record `FILE_CREATED`
+- rinominare un file produce un record `FILE_RENAMED` o `FILE_RELOCATED`
+- una directory osservata diventata stale produce diagnostica `WATCH_STALE`
+- un record JSONL contiene campi pubblici coerenti come `layer`, `category`,
+  `type`, `path`, `watch`, `recovery` e `os_error`
+
+Questi casi vanno coperti progressivamente con golden test JSONL end-to-end.
+JSONL e' dati strutturati: permette di cambiare in futuro la forma dei log
+umani senza rompere il contratto principale.
+
+I log testuali restano comunque importanti:
+
+- `raw.log` conserva la vista storica e didattica dei fatti raw/backend
+- `events.log` conserva la vista umana degli eventi core e diagnostici
+- `errors.log` conserva la compatibilita' per errori leggibili
+
+Per questo, nella fase corrente, i test testuali e i test JSONL vivono in
+parallelo. Non duplichiamo ogni scenario byte per byte: usiamo i test testuali
+per compatibilita' e leggibilita', e i golden JSONL per fissare il contratto
+strutturato esterno dei comportamenti importanti.
+
 ## Leggere le regex nei test shell
 
 Molti test end-to-end di Alfred sono script Bash. Questi script non confrontano

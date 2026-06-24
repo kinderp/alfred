@@ -689,3 +689,12 @@ worker simulato, JSONL buffered writer e solo dopo eventuali thread o code per
 sink. `README.md`, `27-guida-lettura-documentazione.md`,
 `31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
 stati aggiornati per rimandare al nuovo capitolo.
+
+Aggiornamento successivo: `00-regole-operative.md` e
+`10-debugging-test-e-strumenti.md` chiariscono la regola di scelta dei test.
+I contratti interni fra moduli, ownership, queue, dispatcher, sink e writer
+vanno protetti con test C unitari o di integrazione mirata. I comportamenti
+pubblici end-to-end devono essere fissati progressivamente con golden test
+JSONL, perche' `output.jsonl` e' il contratto esterno strutturato. I test
+testuali su `raw.log`, `events.log` ed `errors.log` restano in parallelo come
+compatibilita' storica, debug umano e supporto didattico.

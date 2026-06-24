@@ -368,6 +368,16 @@ Modified files:
   `events.log` o nello stream di log usato dal test, le righe vietate e il
   significato dello scenario. Questo vale anche per test C che usano un logger
   temporaneo invece dei file `.log` del runtime.
+- Scegliere il tipo di test in base al contratto da proteggere:
+  - contratti interni fra moduli, strutture dati, ownership, queue,
+    dispatcher, sink e writer vanno coperti con test C unitari o di
+    integrazione mirata
+  - comportamenti pubblici end-to-end devono essere fissati progressivamente
+    con golden test JSONL, perche' `output.jsonl` e' il contratto esterno
+    strutturato
+  - i test testuali su `raw.log`, `events.log` ed `errors.log` restano in
+    parallelo come compatibilita' storica, debug umano e supporto didattico;
+    non devono essere l'unico contratto stabile dei nuovi comportamenti
 - Aggiornare `docs/commenting-style.md` e `docs/commenting-progress.md` se il
   passo riguarda commenti nel codice o stile dei commenti.
 - Quando si documentano flussi complessi, strutture dati o responsabilita' tra
