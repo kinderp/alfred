@@ -162,7 +162,7 @@ La tabella usa queste colonne:
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
 | Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
 | Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia resync completa; prossimo lavoro su lost-scope |
-| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: queue-level e scan/coverage verso output pipeline, reinstall/retry/end solo text sink legacy | parziale: queue-level e scan/coverage quando `output_enabled=true` | completare routing reinstall/retry/end lost-scope |
+| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia lost-scope completa |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
 | Errori runtime generici | errori di config, I/O, allocazione, backend init | `errors.log` | non ancora uniforme | no | no | no | progettare `diagnostic/error` o `lifecycle/error` prima di serializzarli |
 | Trace/performance | tracepoint pipeline, benchmark, metriche | non runtime stabile | previsto | no | no | no | rimandato a layer `trace`/`pipeline` |
@@ -308,7 +308,7 @@ La copertura runtime pero' non e' ancora uniforme:
 | Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | text sink legacy + output pipeline | si' | famiglia migrata; mantenere test text e JSONL |
 | Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | text sink legacy + output pipeline | si' | famiglia queue-level migrata; mantenere test text e JSONL |
 | Lost-scope scan/coverage | `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`, `WATCH_LOST_COVERAGE_*`, `WATCH_LOST_NOT_FOUND`, `WATCH_LOST_RECOVERY_FAILED` | `events.log` | si | si | text sink legacy + output pipeline | si' | famiglia scan/classificazione migrata; mantenere test text e JSONL |
-| Lost-scope reinstall/retry/end | `WATCH_LOST_REINSTALLED`, `WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`, `WATCH_LOST_RETRY_SCHEDULED`, `WATCH_LOST_RECOVERY_GAVE_UP`, `WATCH_LOST_RECOVERY_END` | `events.log` | si | si | solo text sink legacy | no | prossimo micro-step: completare output strutturato |
+| Lost-scope reinstall/retry/end | `WATCH_LOST_REINSTALLED`, `WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`, `WATCH_LOST_RETRY_SCHEDULED`, `WATCH_LOST_RECOVERY_GAVE_UP`, `WATCH_LOST_RECOVERY_END` | `events.log` | si | si | text sink legacy + output pipeline | si' | famiglia completion migrata; mantenere test text e JSONL |
 
 I resync ora entrano in `output.jsonl` quando l'output strutturato e' abilitato.
 Il punto importante non era lo schema: tipi, builder e formatter esistevano gia'.
@@ -330,12 +330,9 @@ Questa regola evita due errori: non crea un writer JSONL diretto nel backend e
 non cambia il contratto dei log testuali che i test esistenti continuano ad
 assertare.
 
-I `WATCH_LOST_*` queue-level e scan/coverage sono ora migrati alla output
-pipeline. Restano fuori da `output.jsonl`, per ora, i record che mutano la
-copertura o concludono/schedulano la recovery: `WATCH_LOST_REINSTALLED`,
-`WATCH_LOST_REINSTALL_FAILED`, `WATCH_LOST_ROLLBACK`,
-`WATCH_LOST_RETRY_SCHEDULED`, `WATCH_LOST_RECOVERY_GAVE_UP` e
-`WATCH_LOST_RECOVERY_END`.
+Tutti i `WATCH_LOST_*` sono ora migrati alla output pipeline. Ogni record
+continua a produrre prima la riga compatibile in `events.log` o `errors.log`,
+poi viene offerto come `alfred_record_t` borrowed a `emit_record`.
 
 Regola da rispettare:
 
@@ -805,11 +802,7 @@ lost-scope recovery
 `WATCH_LOST_QUEUE_FAILED` conserva il canale `error.log`; gli altri record
 `WATCH_LOST_*` restano diagnostici di `events.log`.
 
-Per i record queue-level (`WATCH_LOST_QUEUED`,
-`WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED`) e per i record di
-scan/classificazione (`WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`,
-`WATCH_LOST_PREFIX_UPDATED`, `WATCH_LOST_COVERAGE_*`,
-`WATCH_LOST_NOT_FOUND`, `WATCH_LOST_RECOVERY_FAILED`) il percorso e' ora anche:
+Per tutti i record lost-scope il percorso e' ora anche:
 
 ```text
 lost-scope queue handoff
@@ -823,9 +816,9 @@ lost-scope queue handoff
 ```
 
 Questo fissa sia il momento in cui Alfred decide che il probe locale non basta,
-sia la fase in cui cerca l'identita', aggiorna il prefisso e misura la copertura
-della subtree ritrovata. I record di reinstallazione, rollback, retry e fine
-recovery restano nel log compatibile fino al prossimo micro-step.
+sia la fase in cui cerca l'identita', aggiorna il prefisso, misura la copertura,
+reinstalla watch mancanti, fa rollback, schedula retry, abbandona una recovery o
+dichiara la subtree di nuovo `VALID`.
 
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |

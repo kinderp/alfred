@@ -615,6 +615,15 @@ campi strutturati principali. Restano text-only i record che installano o
 rimuovono watch durante recovery e quelli che schedulano/concludono la
 recovery: reinstall, rollback, retry scheduled, gave-up e recovery end.
 
+Aggiornamento successivo: il routing `WATCH_LOST_*` e' completo. Anche
+`WATCH_LOST_REINSTALLED`, `WATCH_LOST_REINSTALL_FAILED`,
+`WATCH_LOST_ROLLBACK`, `WATCH_LOST_RETRY_SCHEDULED`,
+`WATCH_LOST_RECOVERY_GAVE_UP` e `WATCH_LOST_RECOVERY_END` vengono offerti a
+`ctx->emit_record` dopo il log compatibile. Il test
+`tests/backend/test_lost_scope_completion_output_routing.c` verifica i campi
+strutturati della fase finale: path installato, watch rimosso in rollback,
+retry count, delay, pending count, stato finale e numero di watch validati.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
