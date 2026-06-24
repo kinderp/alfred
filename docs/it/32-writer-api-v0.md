@@ -724,8 +724,11 @@ Il primo harness manuale per questa misura e':
 make perf-record-sinks
 ```
 
-Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con tre righe:
-`counter`, `text` e `jsonl`. Lo script accetta anche:
+Il comando compila `tests/perf/bench_record_sinks.c` ed emette CSV con quattro
+righe: `counter`, `text`, `jsonl` e `queue-counter`. La riga `queue-counter`
+misura il primo confine `record borrowed -> clone owned -> queue push -> queue
+pop -> counter sink -> destroy owned`, senza formattazione e senza I/O. Lo
+script accetta anche:
 
 ```bash
 cd tests/perf
@@ -737,7 +740,7 @@ su una sola misura rumorosa. Questo non e' ancora un benchmark end-to-end di
 Alfred: non usa inotify, non legge eventi dal kernel, non scrive file e non
 misura backpressure. Misura solo record sintetici consegnati a sink isolati.
 La spiegazione campo per campo del CSV, con esempi pratici e interpretazioni,
-e' nella guida test: [make perf-record-sinks](10-debugging-test-e-strumenti.md#8-make-perf-record-sinks).
+e' nella guida test: [make perf-record-sinks](10-debugging-test-e-strumenti.md#9-make-perf-record-sinks).
 
 ## Ownership e record accodati
 

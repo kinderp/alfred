@@ -61,6 +61,8 @@ gcc \
     "$ROOT_DIR/core/src/alfred_record_counter_sink.c" \
     "$ROOT_DIR/core/src/alfred_record_jsonl.c" \
     "$ROOT_DIR/core/src/alfred_record_jsonl_sink.c" \
+    "$ROOT_DIR/core/src/alfred_record_owned.c" \
+    "$ROOT_DIR/core/src/alfred_record_queue.c" \
     "$ROOT_DIR/core/src/alfred_record_sink.c" \
     "$ROOT_DIR/core/src/alfred_record_text.c" \
     "$ROOT_DIR/core/src/alfred_record_text_sink.c" \

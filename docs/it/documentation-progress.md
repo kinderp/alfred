@@ -398,6 +398,13 @@ manuali: non esegue misure, ma spiega in inglese cosa fanno
 `perf-record-sinks` e `perf-lost-scope`. Non contiene ancora riferimenti a man
 page perche' le pagine manuale dei benchmark non sono state scritte.
 
+Aggiornamento successivo: `make perf-record-sinks` produce ora anche la riga
+`queue-counter`. Questa riga misura il primo confine runtime documentato nella
+roadmap writer: record borrowed, clone owned, push nella queue, pop, emit al
+counter sink e destroy del record owned. Non misura text, JSONL, file, socket o
+flush. Serve a capire il costo del passaggio `record -> queue -> sink` prima di
+collegare worker, dispatcher runtime o JSONL buffered writer.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

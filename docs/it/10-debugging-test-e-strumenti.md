@@ -1526,18 +1526,47 @@ Il comando:
 make perf-record-sinks
 ```
 
-compila ed esegue un micro-benchmark dei sink record. Non osserva eventi reali
-del filesystem e non usa inotify: genera record sintetici in memoria e li invia
-a tre sink:
+compila ed esegue un micro-benchmark dei sink record e del primo confine di
+coda. Non osserva eventi reali del filesystem e non usa inotify: genera record
+sintetici in memoria e li invia a sink o passaggi isolati:
 
 - `counter`: sink no-op/counter, senza formattazione e senza I/O;
 - `text`: sink testuale compatibile;
-- `jsonl`: sink JSONL v0.
+- `jsonl`: sink JSONL v0;
+- `queue-counter`: record borrowed, clone owned, push nella queue, pop dalla
+  queue, emit al counter sink e destroy del record owned.
 
-Questo benchmark serve a separare il costo del confine `record -> sink` dal
-costo dei writer. Se `counter` e' veloce ma `jsonl` e' lento, il costo e'
-probabilmente nella serializzazione JSONL o nel writer. Se anche `counter` e'
-lento, il problema e' piu' vicino a record, dispatcher, coda o chiamata sink.
+Questo benchmark serve a separare il costo del confine `record -> sink`, il
+costo della formattazione e il costo del primo confine `record -> queue -> sink`.
+Se `counter` e' veloce ma `jsonl` e' lento, il costo e' probabilmente nella
+serializzazione JSONL o nel writer. Se `queue-counter` e' molto piu' lento di
+`counter`, il costo e' nella deep copy owned, nella coda, nel pop o nella
+distruzione del record owned. Se anche `counter` e' lento, il problema e' piu'
+vicino a record, dispatcher, chiamata sink o macchina.
+
+Percorsi misurati:
+
+| Riga CSV | Percorso reale misurato | Cosa aggiunge |
+| --- | --- | --- |
+| `counter` | `record -> sink_emit -> counter_emit` | solo chiamata sink e incremento contatori |
+| `text` | `record -> sink_emit -> text formatter -> callback` | formattazione testuale e conteggio byte |
+| `jsonl` | `record -> sink_emit -> JSONL formatter -> callback` | serializzazione JSONL, escaping e conteggio byte |
+| `queue-counter` | `record borrowed -> queue_push -> clone owned -> queue_pop -> sink_emit -> counter_emit -> destroy owned` | deep copy delle stringhe, coda, trasferimento ownership e cleanup |
+
+La riga `counter` e' la baseline piu' pura: dice quanto costa consegnare un
+record a un sink che non fa lavoro costoso. La riga `queue-counter` parte dallo
+stesso sink, ma aggiunge il confine di coda. Per questo e' la riga piu' utile
+per capire il costo del futuro passaggio:
+
+```text
+percorso caldo
+-> record owned in coda
+-> percorso fuori hot path
+```
+
+Il benchmark inizializza la coda prima di iniziare a misurare. Quindi
+`queue-counter` non misura l'allocazione iniziale del buffer della queue: misura
+il costo per record di clone, push, pop, emit e destroy.
 
 Di default esegue 100000 record sintetici e una run per sink:
 
@@ -1546,6 +1575,7 @@ sink,records,runs,min_us,avg_us,max_us,records_per_sec_avg,bytes_last,counter_to
 counter,100000,1,1200,1200.00,1200,83333333.33,0,100000
 text,100000,1,9000,9000.00,9000,11111111.11,4100000,0
 jsonl,100000,1,18000,18000.00,18000,5555555.55,12000000,0
+queue-counter,100000,1,14000,14000.00,14000,7142857.14,0,100000
 ```
 
 I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
@@ -1553,14 +1583,17 @@ dal carico del sistema, dal compilatore e dalla configurazione.
 
 Significato delle colonne:
 
-- `sink`: sink misurato. I valori attuali sono `counter`, `text` e `jsonl`.
-  `counter` e' la baseline senza I/O; `text` usa il formatter compatibile con i
-  log leggibili; `jsonl` usa il formatter strutturato JSONL.
+- `sink`: sink o passaggio misurato. I valori attuali sono `counter`, `text`,
+  `jsonl` e `queue-counter`. `counter` e' la baseline senza I/O; `text` usa il
+  formatter compatibile con i log leggibili; `jsonl` usa il formatter
+  strutturato JSONL; `queue-counter` misura il confine borrowed -> owned ->
+  queue -> pop -> counter -> destroy.
 - `records`: numero di record sintetici inviati a quel sink in ogni run. Se vale
   `100000`, ogni run invia 100000 `alfred_record_t`.
 - `runs`: numero di misurazioni ripetute per quello stesso sink. Se `records` e'
   `100000` e `runs` e' `5`, allora il benchmark misura 5 volte `counter`, 5
-  volte `text` e 5 volte `jsonl`, sempre con 100000 record per run.
+  volte `text`, 5 volte `jsonl` e 5 volte `queue-counter`, sempre con 100000
+  record per run.
 - `min_us`: tempo della run piu' veloce, in microsecondi. E' il miglior caso
   osservato su quella macchina.
 - `avg_us`: media aritmetica dei tempi, in microsecondi. E' il valore piu' utile
@@ -1583,11 +1616,12 @@ records_per_sec_avg = records * 1000000 / avg_us
 
 - `bytes_last`: byte di payload osservati nell'ultima run. Per `text` e' la
   somma della lunghezza delle stringhe testuali prodotte. Per `jsonl` e' la
-  somma della lunghezza degli oggetti JSON prodotti. Per `counter` vale `0`
-  perche' il counter sink non produce payload.
+  somma della lunghezza degli oggetti JSON prodotti. Per `counter` e
+  `queue-counter` vale `0` perche' il counter sink non produce payload.
 - `counter_total_last`: record contati dal counter sink nell'ultima run. Per la
-  riga `counter` dovrebbe essere uguale a `records`. Per `text` e `jsonl` vale
-  `0`, perche' quei sink non aggiornano il counter.
+  riga `counter` e per la riga `queue-counter` dovrebbe essere uguale a
+  `records`. Per `text` e `jsonl` vale `0`, perche' quei sink non aggiornano il
+  counter.
 
 E' possibile passare un numero diverso di record e piu' run:
 
@@ -1638,6 +1672,46 @@ bug, perche' JSONL deve scrivere nomi dei campi, virgolette, escape, numeri,
 oggetti annidati e molti piu' byte. Il campo `bytes_last` mostra proprio il
 volume di testo prodotto nell'ultima run.
 
+Esempio dedicato alla coda:
+
+```text
+queue-counter,100000,5,13000,14000.00,15500,7142857.14,0,100000
+```
+
+Questa riga e' piu' lenta di `counter` per un motivo atteso: ogni record
+borrowed viene clonato in forma owned, inserito nella queue, estratto, inviato
+al counter e poi distrutto. Non misura JSONL, text log o I/O: misura il costo
+del primo confine che ci serve per spostare i writer fuori dal percorso caldo.
+Se in futuro questo valore cresce molto dopo una modifica, bisogna guardare
+queue, ownership, allocazioni e distruzione dei record prima di accusare JSONL o
+il filesystem.
+
+Confronto pratico:
+
+```text
+counter,100000,5,2800,3000.00,3400,33333333.33,0,100000
+queue-counter,100000,5,13000,14000.00,15500,7142857.14,0,100000
+```
+
+In questo esempio `queue-counter` ha `avg_us=14000`, mentre `counter` ha
+`avg_us=3000`. La differenza e':
+
+```text
+14000 - 3000 = 11000 microsecondi
+```
+
+Quegli 11000 microsecondi sono una stima molto grezza del costo aggiuntivo del
+confine di coda su 100000 record. Dividendo per il numero di record:
+
+```text
+11000 / 100000 = 0.11 microsecondi per record
+```
+
+Questa non e' una misura scientifica definitiva, perche' manca warmup, mancano
+percentili e la macchina puo' essere rumorosa. Pero' aiuta a ragionare: se
+introduciamo una modifica alla queue e questa differenza raddoppia o triplica,
+abbiamo probabilmente peggiorato ownership, allocazioni, push/pop o cleanup.
+
 Lettura pratica dei risultati:
 
 - se `counter` e' veloce ma `text` e `jsonl` sono lenti, il costo e'
@@ -1645,6 +1719,9 @@ Lettura pratica dei risultati:
 - se `counter` e' lento, il problema e' piu' vicino al ciclo del benchmark, alla
   creazione dei record, alla chiamata `alfred_record_sink_emit()` o al carico
   della macchina;
+- se `queue-counter` e' molto piu' lento di `counter`, il costo e' nel confine
+  borrowed -> owned -> queue -> pop -> destroy, cioe' nella parte che prepara il
+  futuro runtime asincrono dei writer;
 - se `jsonl` produce molti piu' byte di `text`, e' normale che sia piu' lento;
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.

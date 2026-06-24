@@ -2,23 +2,25 @@
  * bench_record_sinks.c - manual record sink micro-benchmark
  *
  * This benchmark measures the isolated cost of delivering synthetic
- * alfred_record_t values to three sink implementations:
+ * alfred_record_t values to sink implementations and queue boundaries:
  *
  * - counter: no formatting, no I/O, counters only
  * - text: compatibility text formatter plus caller callback
  * - jsonl: JSONL formatter plus caller callback
+ * - queue-counter: clone borrowed records into the owned-record queue, pop
+ *   them back out, deliver them to the counter sink, then destroy them
  *
  * It intentionally does not use inotify, filesystem events, dispatcher threads,
  * file writes, socket sends, flush policy, or backpressure. The goal is to get
- * a first local baseline for record -> sink overhead before connecting writers
- * to the runtime path.
+ * a first local baseline for record -> sink and record -> queue -> sink
+ * overhead before connecting writers to the runtime path.
  *
  * Output columns:
  *
- * - sink: counter, text, or jsonl.
+ * - sink: counter, text, jsonl, or queue-counter.
  *   This tells which sink implementation was measured. Counter is the no-op
- *   baseline, text is the compatibility formatter, and jsonl is the structured
- *   JSONL formatter.
+ *   baseline, text is the compatibility formatter, jsonl is the structured
+ *   JSONL formatter, and queue-counter is the first queue-boundary baseline.
  *
  * - records: number of synthetic records emitted in each run.
  *   If records is 100000 and runs is 5, each sink receives 5 independent runs
@@ -46,7 +48,8 @@
  *   lengths. Counter produces no payload and therefore reports 0.
  *
  * - counter_total_last: records observed by the counter sink in the last run.
- *   It should match records for the counter row. It is 0 for text and jsonl.
+ *   It should match records for the counter and queue-counter rows. It is 0
+ *   for text and jsonl.
  *
  * Interpretation examples:
  *
@@ -55,6 +58,9 @@
  *   field names, escaping, and nested objects.
  * - counter slow means the problem is close to record creation, sink dispatch,
  *   the benchmark loop, or the machine. It is not caused by JSON formatting.
+ * - queue-counter slower than counter is expected: it adds owned-string clone,
+ *   queue push, queue pop, and owned-record destroy. This is the cost we need
+ *   to know before moving writers out of the hot path.
  * - jsonl slow while counter is fast means the cost is likely in serialization,
  *   escaping, and produced byte volume.
  *
@@ -64,6 +70,8 @@
 
 #include "alfred_record_counter_sink.h"
 #include "alfred_record_jsonl_sink.h"
+#include "alfred_record_owned.h"
+#include "alfred_record_queue.h"
 #include "alfred_record_sink.h"
 #include "alfred_record_text_sink.h"
 
@@ -77,7 +85,8 @@
 typedef enum {
     BENCH_SINK_COUNTER = 0,
     BENCH_SINK_TEXT,
-    BENCH_SINK_JSONL
+    BENCH_SINK_JSONL,
+    BENCH_SINK_QUEUE_COUNTER
 } bench_sink_kind_t;
 
 typedef struct {
@@ -162,9 +171,75 @@ static const char *sink_name(bench_sink_kind_t kind)
     case BENCH_SINK_COUNTER: return "counter";
     case BENCH_SINK_TEXT: return "text";
     case BENCH_SINK_JSONL: return "jsonl";
+    case BENCH_SINK_QUEUE_COUNTER: return "queue-counter";
     default:
         return "unknown";
     }
+}
+
+static int run_queue_counter_once(size_t records, bench_run_result_t *result)
+{
+    alfred_record_queue_t queue;
+    alfred_record_counter_sink_t counter_sink;
+    alfred_record_sink_t sink;
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&queue, 0, sizeof(queue));
+    memset(&sink, 0, sizeof(sink));
+    memset(result, 0, sizeof(*result));
+
+    if (alfred_record_queue_init(&queue, records) != 0) {
+        return -1;
+    }
+
+    if (alfred_record_counter_sink_init(&counter_sink, &sink) != 0) {
+        alfred_record_queue_destroy(&queue);
+        return -1;
+    }
+
+    /*
+     * The allocation above is intentionally outside the timed region. This row
+     * measures the per-record boundary cost: clone owned, enqueue, dequeue,
+     * counter emit, and destroy owned.
+     */
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_queue_push(&queue, &record) != 0) {
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+    }
+
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record;
+
+        memset(&record, 0, sizeof(record));
+        if (alfred_record_queue_pop(&queue, &record) != 0) {
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+        if (alfred_record_sink_emit(&sink, &record) != 0) {
+            alfred_record_destroy_owned(&record);
+            alfred_record_queue_destroy(&queue);
+            return -1;
+        }
+        alfred_record_destroy_owned(&record);
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = 0u;
+    result->counter_total = counter_sink.total_records;
+
+    alfred_record_queue_destroy(&queue);
+    return 0;
 }
 
 static int run_once(bench_sink_kind_t kind,
@@ -214,6 +289,8 @@ static int run_once(bench_sink_kind_t kind,
             return -1;
         }
         break;
+    case BENCH_SINK_QUEUE_COUNTER:
+        return run_queue_counter_once(records, result);
     default:
         return -1;
     }
@@ -346,7 +423,8 @@ int main(int argc, char **argv)
 
     if (run_benchmark(BENCH_SINK_COUNTER, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_TEXT, records, runs) != 0 ||
-        run_benchmark(BENCH_SINK_JSONL, records, runs) != 0) {
+        run_benchmark(BENCH_SINK_JSONL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_QUEUE_COUNTER, records, runs) != 0) {
         return 1;
     }
 
