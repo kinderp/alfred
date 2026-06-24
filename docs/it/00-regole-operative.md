@@ -209,8 +209,9 @@ Quando una PR riceve finding tecnici, il flusso obbligatorio e':
    generale;
 2. risolvere ogni finding con un commit monoscopo quando possibile;
 3. dopo il fix, aggiungere una risposta al commento inline del finding;
-4. nella risposta indicare lo SHA-1 del commit che risolve il finding e
-   spiegare in inglese la soluzione applicata;
+4. nella risposta indicare il commit che risolve il finding come link Markdown
+   cliccabile alla pagina GitHub del commit, usando lo SHA breve come testo del
+   link, e spiegare in inglese la soluzione applicata;
 5. nel messaggio del commit corrispondente indicare che il commit risolve quel
    finding, citando la PR e il link al commento/finding.
 
@@ -226,6 +227,14 @@ Fixes review finding:
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
 
 Explain in English what the finding reported and how this commit fixes it.
+```
+
+Formato consigliato per la risposta al commento inline:
+
+```text
+Fixed in [d406dec3](https://github.com/kinderp/alfred/commit/d406dec30eae64eaa8ae737981fde6eafb8a4774).
+
+Explain in English what changed and why this closes the finding.
 ```
 
 ### Aggiornamento della descrizione PR dopo review multiple
@@ -247,9 +256,9 @@ Summary:
 
 Findings:
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: <commit-sha> - short explanation of the fix.
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: <commit-sha> - short explanation of the fix.
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
 ```
 
 La sezione `Review update #N` deve essere scritta in inglese, come il resto
@@ -259,7 +268,8 @@ della PR pubblica. Deve indicare:
 - il senso della review, cioe' che tipo di rischio o parte del codice e' stata
   controllata;
 - la lista puntata dei finding;
-- per ogni finding, il commit che lo risolve;
+- per ogni finding, il commit che lo risolve come link Markdown cliccabile alla
+  pagina GitHub del commit;
 - una spiegazione breve ma chiara del perche' il fix chiude il finding.
 
 Questa regola affianca, ma non sostituisce, i commenti inline: il commento
