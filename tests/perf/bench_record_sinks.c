@@ -13,6 +13,9 @@
  *   they reach one or more registered sinks
  * - queue-dispatcher-*: clone borrowed records into the queue, then drain the
  *   queue through the bounded dispatcher into one or more registered sinks
+ * - output-pipeline-jsonl: clone borrowed records into the output pipeline
+ *   queue, drain through dispatcher and JSONL buffered writer, then flush the
+ *   writer once at the end of the run
  *
  * It intentionally does not use inotify, filesystem events, dispatcher threads,
  * file writes, socket sends, flush policy, or backpressure. The goal is to get
@@ -22,7 +25,8 @@
  *
  * Output columns:
  *
- * - sink: counter, text, jsonl, queue-counter, or dispatcher-*.
+ * - sink: counter, text, jsonl, queue-counter, dispatcher-*,
+ *   queue-dispatcher-*, or output-pipeline-jsonl.
  *   This tells which sink implementation was measured. Counter is the no-op
  *   baseline, text is the compatibility formatter, jsonl is the structured
  *   JSONL formatter, queue-counter is the first queue-boundary baseline, and
@@ -74,6 +78,9 @@
  * - queue-dispatcher-* rows measure the closest current approximation of the
  *   future single-threaded runtime path: owned clone, queue push, queue drain,
  *   dispatcher fan-out, sink delivery, and owned-record destruction.
+ * - output-pipeline-jsonl measures the composed single-writer output pipeline:
+ *   queue enqueue, runtime drain, dispatcher, JSONL buffered writer, and final
+ *   flush to an in-memory callback.
  * - jsonl slow while counter is fast means the cost is likely in serialization,
  *   escaping, and produced byte volume.
  *
@@ -85,6 +92,7 @@
 #include "alfred_record_dispatcher.h"
 #include "alfred_record_jsonl_sink.h"
 #include "alfred_record_owned.h"
+#include "alfred_record_output_pipeline.h"
 #include "alfred_record_queue.h"
 #include "alfred_record_sink.h"
 #include "alfred_record_text_sink.h"
@@ -108,7 +116,8 @@ typedef enum {
     BENCH_SINK_QUEUE_DISPATCHER_COUNTER,
     BENCH_SINK_QUEUE_DISPATCHER_TEXT,
     BENCH_SINK_QUEUE_DISPATCHER_JSONL,
-    BENCH_SINK_QUEUE_DISPATCHER_ALL
+    BENCH_SINK_QUEUE_DISPATCHER_ALL,
+    BENCH_SINK_OUTPUT_PIPELINE_JSONL
 } bench_sink_kind_t;
 
 typedef struct {
@@ -135,6 +144,13 @@ typedef struct {
     char jsonl_buffer[1024];
 } bench_dispatcher_context_t;
 
+typedef struct {
+    alfred_record_output_pipeline_t pipeline;
+    byte_count_writer_t writer;
+    char format_buffer[1024];
+    char output_buffer[64u * 1024u];
+} bench_output_pipeline_context_t;
+
 static uint64_t now_ns(void)
 {
     struct timespec ts;
@@ -153,6 +169,18 @@ static int count_payload_bytes(void *userdata, const char *payload)
     }
 
     writer->bytes += strlen(payload);
+    return 0;
+}
+
+static int count_raw_bytes(void *userdata, const char *data, size_t size)
+{
+    byte_count_writer_t *writer = userdata;
+
+    if (writer == NULL || data == NULL) {
+        return -1;
+    }
+
+    writer->bytes += size;
     return 0;
 }
 
@@ -220,6 +248,8 @@ static const char *sink_name(bench_sink_kind_t kind)
         return "queue-dispatcher-jsonl";
     case BENCH_SINK_QUEUE_DISPATCHER_ALL:
         return "queue-dispatcher-counter-text-jsonl";
+    case BENCH_SINK_OUTPUT_PIPELINE_JSONL:
+        return "output-pipeline-jsonl";
     default:
         return "unknown";
     }
@@ -472,6 +502,76 @@ static int run_queue_counter_once(size_t records, bench_run_result_t *result)
     return 0;
 }
 
+static int run_output_pipeline_jsonl_once(size_t records,
+                                          bench_run_result_t *result)
+{
+    bench_output_pipeline_context_t ctx;
+    alfred_record_output_pipeline_config_t config;
+    alfred_record_runtime_drain_result_t drain_result;
+    uint64_t start_ns;
+    uint64_t end_ns;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&ctx, 0, sizeof(ctx));
+    memset(&config, 0, sizeof(config));
+    memset(result, 0, sizeof(*result));
+
+    config.enabled = 1;
+    config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
+    config.queue_capacity = records;
+    config.drain_batch_size = records;
+    config.write = count_raw_bytes;
+    config.userdata = &ctx.writer;
+    config.format_buffer = ctx.format_buffer;
+    config.format_buffer_size = sizeof(ctx.format_buffer);
+    config.output_buffer = ctx.output_buffer;
+    config.output_buffer_size = sizeof(ctx.output_buffer);
+
+    if (alfred_record_output_pipeline_init(&ctx.pipeline, &config) != 0) {
+        return -1;
+    }
+
+    /*
+     * Pipeline setup is outside the timed region. The timed path measures the
+     * composed single-threaded runtime shape: enqueue owned records, drain them
+     * through dispatcher and JSONL writer, then flush buffered bytes to an
+     * in-memory callback once at the end.
+     */
+    start_ns = now_ns();
+    for (size_t i = 0u; i < records; i++) {
+        alfred_record_t record = make_record(i);
+
+        if (alfred_record_output_pipeline_enqueue(&ctx.pipeline, &record) != 0) {
+            alfred_record_output_pipeline_destroy(&ctx.pipeline);
+            return -1;
+        }
+    }
+
+    if (alfred_record_output_pipeline_drain_once(&ctx.pipeline,
+                                                 &drain_result) != 0 ||
+        drain_result.dispatched != records ||
+        drain_result.remaining != 0u) {
+        alfred_record_output_pipeline_destroy(&ctx.pipeline);
+        return -1;
+    }
+
+    if (alfred_record_output_pipeline_flush(&ctx.pipeline) != 0) {
+        alfred_record_output_pipeline_destroy(&ctx.pipeline);
+        return -1;
+    }
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->bytes = ctx.writer.bytes;
+    result->counter_total = 0u;
+
+    alfred_record_output_pipeline_destroy(&ctx.pipeline);
+    return 0;
+}
+
 static int run_once(bench_sink_kind_t kind,
                     size_t records,
                     bench_run_result_t *result)
@@ -531,6 +631,8 @@ static int run_once(bench_sink_kind_t kind,
     case BENCH_SINK_QUEUE_DISPATCHER_JSONL:
     case BENCH_SINK_QUEUE_DISPATCHER_ALL:
         return run_queue_dispatcher_once(kind, records, result);
+    case BENCH_SINK_OUTPUT_PIPELINE_JSONL:
+        return run_output_pipeline_jsonl_once(records, result);
     default:
         return -1;
     }
@@ -672,7 +774,8 @@ int main(int argc, char **argv)
         run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_COUNTER, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_TEXT, records, runs) != 0 ||
         run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_JSONL, records, runs) != 0 ||
-        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_ALL, records, runs) != 0) {
+        run_benchmark(BENCH_SINK_QUEUE_DISPATCHER_ALL, records, runs) != 0 ||
+        run_benchmark(BENCH_SINK_OUTPUT_PIPELINE_JSONL, records, runs) != 0) {
         return 1;
     }
 

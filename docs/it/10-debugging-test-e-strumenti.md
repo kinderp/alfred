@@ -1544,7 +1544,9 @@ sintetici in memoria e li invia a sink o passaggi isolati:
 - `queue-dispatcher-text`: queue, drain del dispatcher e text sink;
 - `queue-dispatcher-jsonl`: queue, drain del dispatcher e JSONL sink;
 - `queue-dispatcher-counter-text-jsonl`: queue, drain del dispatcher e fan-out
-  sincrono verso counter, text e JSONL.
+  sincrono verso counter, text e JSONL;
+- `output-pipeline-jsonl`: pipeline composta `record -> queue -> runtime drain
+  -> dispatcher -> JSONL buffered writer -> flush finale`.
 
 Questo benchmark serve a separare il costo del confine `record -> sink`, il
 costo della formattazione e il costo del primo confine `record -> queue -> sink`.
@@ -1609,6 +1611,7 @@ Percorsi misurati:
 | `queue-dispatcher-text` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> text -> destroy` | queue piu' dispatcher piu' formattazione text |
 | `queue-dispatcher-jsonl` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> JSONL -> destroy` | queue piu' dispatcher piu' serializzazione JSONL |
 | `queue-dispatcher-counter-text-jsonl` | `record -> queue_push -> drain_queue -> pop -> dispatch_one -> counter + text + JSONL -> destroy` | percorso single-threaded piu' vicino al runtime target |
+| `output-pipeline-jsonl` | `record -> output_pipeline_enqueue -> queue -> output_pipeline_drain_once -> runtime_drain_once -> dispatcher -> JSONL buffered writer -> output_pipeline_flush` | percorso composto della Writer Runtime v0 senza `app_run()`, file I/O o thread |
 
 La riga `counter` e' la baseline piu' pura: dice quanto costa consegnare un
 record a un sink che non fa lavoro costoso. La riga `queue-counter` parte dallo
@@ -1641,6 +1644,7 @@ queue-dispatcher-counter,100000,1,15000,15000.00,15000,6666666.67,0,100000
 queue-dispatcher-text,100000,1,24000,24000.00,24000,4166666.67,4100000,0
 queue-dispatcher-jsonl,100000,1,33000,33000.00,33000,3030303.03,12000000,0
 queue-dispatcher-counter-text-jsonl,100000,1,43000,43000.00,43000,2325581.40,16100000,100000
+output-pipeline-jsonl,100000,1,34000,34000.00,34000,2941176.47,12100000,0
 ```
 
 I numeri sopra sono solo un esempio. Il risultato reale dipende dalla macchina,
@@ -1650,12 +1654,13 @@ Significato delle colonne:
 
 - `sink`: sink o passaggio misurato. I valori attuali sono `counter`, `text`,
   `jsonl`, `queue-counter`, le righe `dispatcher-*` e le righe
-  `queue-dispatcher-*`. `counter` e' la baseline senza I/O; `text` usa il
-  formatter compatibile con i log leggibili; `jsonl` usa il formatter
-  strutturato JSONL; `queue-counter` misura il confine borrowed -> owned ->
-  queue -> pop -> counter -> destroy; `dispatcher-*` misura il routing
-  attraverso il dispatcher; `queue-dispatcher-*` misura queue e dispatcher
-  insieme.
+  `queue-dispatcher-*`, piu' `output-pipeline-jsonl`. `counter` e' la baseline
+  senza I/O; `text` usa il formatter compatibile con i log leggibili; `jsonl`
+  usa il formatter strutturato JSONL; `queue-counter` misura il confine borrowed
+  -> owned -> queue -> pop -> counter -> destroy; `dispatcher-*` misura il
+  routing attraverso il dispatcher; `queue-dispatcher-*` misura queue e
+  dispatcher insieme; `output-pipeline-jsonl` misura l'oggetto pipeline che
+  compone queue, runtime drain, dispatcher e JSONL buffered writer.
 - `records`: numero di record sintetici inviati a quel sink in ogni run. Se vale
   `100000`, ogni run invia 100000 `alfred_record_t`.
 - `runs`: numero di misurazioni ripetute per quello stesso sink. Se `records` e'
@@ -1690,14 +1695,17 @@ records_per_sec_avg = records * 1000000 / avg_us
   testuali nello stesso fan-out. Per `counter`, `queue-counter` e
   `dispatcher-counter` vale `0` perche' il counter sink non produce payload.
   Per le righe `queue-dispatcher-*` vale la stessa regola del sink finale: zero
-  se passa solo dal counter, maggiore di zero se passa da text o JSONL.
+  se passa solo dal counter, maggiore di zero se passa da text o JSONL. Per
+  `output-pipeline-jsonl` include anche il newline finale di ogni record, perche'
+  il writer buffered produce vere righe JSONL, non solo oggetti JSON senza
+  terminatore.
 - `counter_total_last`: record contati dal counter sink nell'ultima run. Per la
   riga `counter`, `queue-counter`, `dispatcher-counter` e
   `dispatcher-counter-text-jsonl`, `queue-dispatcher-counter` e
   `queue-dispatcher-counter-text-jsonl` dovrebbe essere uguale a `records`. Per
   `text`, `jsonl`, `dispatcher-text`, `dispatcher-jsonl`,
-  `queue-dispatcher-text` e `queue-dispatcher-jsonl` vale `0`, perche' quei sink
-  non aggiornano il counter.
+  `queue-dispatcher-text`, `queue-dispatcher-jsonl` e `output-pipeline-jsonl`
+  vale `0`, perche' quei sink o writer non aggiornano il counter.
 
 E' possibile passare un numero diverso di record e piu' run:
 
@@ -1841,6 +1849,48 @@ dispatcher consegna ogni record a tre sink. Se questa riga cresce molto rispetto
 a `queue-dispatcher-counter`, il costo non e' solo nella queue o nel dispatcher:
 sta soprattutto nei sink text/JSONL e nel volume di payload prodotto.
 
+Esempio dedicato alla output pipeline:
+
+```text
+output-pipeline-jsonl,100000,5,33000,34000.00,36000,2941176.47,12100000,0
+```
+
+Questa riga misura:
+
+```text
+record borrowed
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_output_pipeline_flush()
+-> callback in memoria
+```
+
+La differenza principale rispetto a `queue-dispatcher-jsonl` e' che qui non
+misuriamo solo queue e dispatcher assemblati a mano nel benchmark: misuriamo
+l'oggetto `alfred_record_output_pipeline_t`, cioe' lo stesso contenitore che in
+futuro potra' essere collegato ad `app_run()` dietro `output_enabled=true`.
+
+La riga include il flush finale verso una callback in memoria, ma non include:
+
+- scrittura su file;
+- `fflush()`;
+- socket;
+- thread;
+- lock;
+- wakeup;
+- backpressure reale;
+- rotazione log.
+
+Quindi se `output-pipeline-jsonl` e' vicino a `queue-dispatcher-jsonl`, la
+composizione della pipeline aggiunge poco overhead rispetto ai pezzi gia'
+misurati. Se invece cresce molto, bisogna guardare il wrapper pipeline,
+inizializzazione dello stato per run, chiamate aggiuntive, flush finale e writer
+buffered prima di collegarlo al runtime vero.
+
 Lettura pratica dei risultati:
 
 - se `counter` e' veloce ma `text` e `jsonl` sono lenti, il costo e'
@@ -1861,6 +1911,9 @@ Lettura pratica dei risultati:
 - se `queue-dispatcher-counter-text-jsonl` cresce molto rispetto a
   `queue-dispatcher-counter`, il costo e' nei sink e nella serializzazione a
   valle della queue, non nel solo confine queue/dispatcher;
+- se `output-pipeline-jsonl` cresce molto rispetto a `queue-dispatcher-jsonl`,
+  il costo e' nella composizione pipeline o nel writer buffered/flush finale,
+  non in inotify o nel filesystem;
 - se `jsonl` produce molti piu' byte di `text`, e' normale che sia piu' lento;
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.

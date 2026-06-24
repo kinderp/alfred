@@ -454,6 +454,14 @@ bytes. Quando e' disabilitata, tutti i passaggi sono no-op riusciti. Il test
 `test_record_output_pipeline.sh` copre disabled mode, pipeline JSONL abilitata,
 batch drain, queue full e flush failure con bytes preservati.
 
+Aggiornamento successivo: `make perf-record-sinks` produce anche la riga
+`output-pipeline-jsonl`. Questa misura la pipeline composta con record sintetici:
+enqueue owned, runtime drain, dispatcher, JSONL buffered writer e flush finale
+verso callback in memoria. Non misura ancora file I/O, socket, thread, lock o
+backpressure reale. La guida test spiega come confrontarla con
+`queue-dispatcher-jsonl` per capire se il wrapper pipeline aggiunge overhead
+rilevante prima del collegamento ad `app_run()`.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

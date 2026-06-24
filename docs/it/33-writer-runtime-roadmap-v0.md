@@ -44,7 +44,7 @@ Il codice corrente ha gia' alcuni mattoni importanti:
 | `alfred_record_counter_sink_t` | implementato | sink no-op/counter per benchmark |
 | `alfred_record_queue_t` | implementato | coda bounded single-threaded di record owned |
 | `alfred_record_dispatcher_t` | implementato | fan-out bounded verso sink registrati |
-| `make perf-record-sinks` | implementato | benchmark counter/text/JSONL, queue-counter, dispatcher e queue-dispatcher in memoria |
+| `make perf-record-sinks` | implementato | benchmark counter/text/JSONL, queue-counter, dispatcher, queue-dispatcher e output pipeline JSONL in memoria |
 
 Questi componenti non significano ancora che Alfred abbia un runtime writer
 asincrono completo. Il runtime corrente usa ancora bridge sincroni in diversi
@@ -352,8 +352,10 @@ bytes e li consegna solo al flush o quando deve liberare spazio.
 `output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536`.
 `alfred_record_output_pipeline_t` collega sperimentalmente, in modo
 single-threaded e fuori da `app_run()`, queue, dispatcher, runtime drain e JSONL
-writer. Il prossimo passo resta misurare questa pipeline o decidere se collegarla
-al runtime applicativo dietro `output_enabled=true`.
+writer. `make perf-record-sinks` misura ora anche `output-pipeline-jsonl`, cioe'
+la pipeline composta con flush finale verso callback in memoria. Il prossimo
+passo resta decidere se collegarla al runtime applicativo dietro
+`output_enabled=true` oppure raffinare ulteriormente benchmark e metriche.
 
 ## Cose da non fare ora
 

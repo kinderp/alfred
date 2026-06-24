@@ -156,6 +156,7 @@ definitivamente una directory osservata rinominata o spostata.
 | Queue-counter benchmark | `make perf-record-sinks` | Prima baseline queue supportata | Misura clone owned, push, pop, counter emit e destroy senza formattazione o I/O |
 | Dispatcher sink benchmark | `make perf-record-sinks` | Prima baseline dispatcher supportata | Misura routing dispatcher verso counter, text, JSONL e fan-out sincrono combinato |
 | Queue-dispatcher benchmark | `make perf-record-sinks` | Prima baseline runtime single-threaded supportata | Misura push queue, drain queue, dispatcher, sink emit e destroy owned senza worker thread |
+| Output pipeline benchmark | `make perf-record-sinks` | Prima baseline pipeline supportata | Misura output pipeline JSONL composta con enqueue, drain, dispatcher, writer buffered e flush finale in memoria |
 | Runtime drain single-threaded | `alfred_record_runtime_drain_once()` | Supportato come helper preparatorio | Nomina un batch drain sopra queue/dispatcher e restituisce max, dispatched, remaining e status |
 | JSONL buffered writer | `alfred_record_jsonl_writer_t` | Supportato come helper preparatorio | Accumula righe JSONL in buffer caller-owned e scrive solo su flush o auto-flush |
 | Output config minima | `config_t.output` | Supportata come configurazione preparatoria | Default spento; valida formato `text`/`jsonl` e buffer minimo senza collegare ancora il runtime writer |
