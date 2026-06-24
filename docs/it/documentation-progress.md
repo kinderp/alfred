@@ -645,6 +645,15 @@ fallisce per buffer testuale insufficiente, i helper `WATCH_RESYNC_*` e
 forzano il fallback e verificano che il record strutturato attraversi ancora la
 output pipeline.
 
+Aggiornamento successivo: una seconda review della PR ha trovato lo stesso
+pattern nel helper generico `backend_log_watch_diagnostic_record()`, usato da
+`WATCH_STALE` e dal `WATCH_RESYNC_FAILED` semplice. Anche quel helper ora
+separa compatibilita' testuale e output strutturato: se il text sink fallisce
+per payload troppo lungo, viene scritto il fallback legacy e poi viene chiamato
+`emit_record`. I test `test_watch_stale_output_failure.c` e
+`test_resync_output_routing.c` includono casi con path lungo e callback
+fallito/riuscito per fissare il contratto.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

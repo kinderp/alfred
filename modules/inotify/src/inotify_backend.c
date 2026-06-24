@@ -295,7 +295,10 @@ static int backend_write_routed_payload(void *userdata, const char *payload)
  * WATCH_STALE and the plain WATCH_RESYNC_FAILED failure diagnostic are routed
  * to the optional structured output callback here. Richer WATCH_RESYNC_* and
  * WATCH_LOST_* recovery records use dedicated helpers because they need to
- * populate record.recovery before emission.
+ * populate record.recovery before emission. The text sink is not allowed to be
+ * the structured-output gate: when the formatter cannot render the compatibility
+ * payload, the helper writes the legacy fallback line and still offers the
+ * already-built record to emit_record.
  */
 static int backend_log_watch_diagnostic_record(
     inotify_backend_context_t *ctx,
@@ -314,6 +317,8 @@ static int backend_log_watch_diagnostic_record(
     alfred_record_text_sink_t text_sink;
     alfred_record_sink_t sink;
     char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
+    int record_built = 0;
+    int compat_logged = 0;
 
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
@@ -330,6 +335,7 @@ static int backend_log_watch_diagnostic_record(
             os_error_name,
             os_error_message,
             &record) == 0) {
+        record_built = 1;
         text_sink.write = backend_write_event_payload;
         text_sink.userdata = ctx->logger;
         text_sink.buffer = payload;
@@ -337,96 +343,92 @@ static int backend_log_watch_diagnostic_record(
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            /*
-             * Keep events.log compatibility first, then expose WATCH_STALE to
-             * optional structured output. Queue-based output must clone this
-             * borrowed record before returning.
-             */
-            if ((type == ALFRED_RECORD_TYPE_WATCH_STALE ||
-                 type == ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED) &&
-                ctx->emit_record != NULL &&
-                ctx->emit_record(&record,
-                                 ctx->emit_record_userdata) != 0) {
-                /*
-                 * WATCH_STALE is diagnostic backend state, but once the
-                 * application routes it to structured output the backend must
-                 * propagate callback failure. Otherwise output_enabled=true
-                 * could silently lose the stale-watch transition while the
-                 * event loop continues as if the ledger were complete.
-                 */
-                if (type == ALFRED_RECORD_TYPE_WATCH_STALE) {
-                    logger_error(ctx->logger,
-                                 "failed to emit watch stale output record");
-                } else {
-                    logger_error(ctx->logger,
-                                 "failed to emit watch resync output record");
-                }
-                return -1;
-            }
-
-            return 0;
-        }
-
-        if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
-            logger_event(ctx->logger, "%s", payload);
-            return 0;
+            compat_logged = 1;
         }
     }
 
     if (fallback_name == NULL)
         return -1;
 
-    if (reason != NULL && error != NULL) {
-        if (os_error_code != 0) {
-            if (os_error_message != NULL) {
+    if (!compat_logged) {
+        if (record_built &&
+            alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
+            logger_event(ctx->logger, "%s", payload);
+            compat_logged = 1;
+        } else if (reason != NULL && error != NULL) {
+            if (os_error_code != 0) {
+                if (os_error_message != NULL) {
+                    logger_event(
+                        ctx->logger,
+                        "%s wd=%d path=%s reason=%s error=%s errno=%d (%s)",
+                        fallback_name,
+                        wd,
+                        path != NULL ? path : "",
+                        reason,
+                        error,
+                        os_error_code,
+                        os_error_message);
+                    compat_logged = 1;
+                } else {
+                    logger_event(ctx->logger,
+                                 "%s wd=%d path=%s reason=%s error=%s errno=%d",
+                                 fallback_name,
+                                 wd,
+                                 path != NULL ? path : "",
+                                 reason,
+                                 error,
+                                 os_error_code);
+                    compat_logged = 1;
+                }
+            } else {
                 logger_event(ctx->logger,
-                             "%s wd=%d path=%s reason=%s error=%s errno=%d (%s)",
+                             "%s wd=%d path=%s reason=%s error=%s",
                              fallback_name,
                              wd,
                              path != NULL ? path : "",
                              reason,
-                             error,
-                             os_error_code,
-                             os_error_message);
-                return 0;
+                             error);
+                compat_logged = 1;
             }
-
+        } else if (reason != NULL) {
             logger_event(ctx->logger,
-                         "%s wd=%d path=%s reason=%s error=%s errno=%d",
+                         "%s wd=%d path=%s reason=%s",
                          fallback_name,
                          wd,
                          path != NULL ? path : "",
-                         reason,
-                         error,
-                         os_error_code);
-            return 0;
+                         reason);
+            compat_logged = 1;
+        } else {
+            logger_event(ctx->logger,
+                         "%s wd=%d path=%s",
+                         fallback_name,
+                         wd,
+                         path != NULL ? path : "");
+            compat_logged = 1;
         }
-
-        logger_event(ctx->logger,
-                     "%s wd=%d path=%s reason=%s error=%s",
-                     fallback_name,
-                     wd,
-                     path != NULL ? path : "",
-                     reason,
-                     error);
-        return 0;
     }
 
-    if (reason != NULL) {
-        logger_event(ctx->logger,
-                     "%s wd=%d path=%s reason=%s",
-                     fallback_name,
-                     wd,
-                     path != NULL ? path : "",
-                     reason);
-        return 0;
+    if (record_built &&
+        (type == ALFRED_RECORD_TYPE_WATCH_STALE ||
+         type == ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED) &&
+        ctx->emit_record != NULL &&
+        ctx->emit_record(&record, ctx->emit_record_userdata) != 0) {
+        /*
+         * WATCH_STALE and WATCH_RESYNC_FAILED are diagnostic backend state, but
+         * once the application routes them to structured output the backend
+         * must propagate callback failure. Otherwise output_enabled=true could
+         * silently lose a recovery transition while the event loop continues as
+         * if the ledger were complete.
+         */
+        if (type == ALFRED_RECORD_TYPE_WATCH_STALE) {
+            logger_error(ctx->logger,
+                         "failed to emit watch stale output record");
+        } else {
+            logger_error(ctx->logger,
+                         "failed to emit watch resync output record");
+        }
+        return -1;
     }
-
-    logger_event(ctx->logger,
-                 "%s wd=%d path=%s",
-                 fallback_name,
-                 wd,
-                 path != NULL ? path : "");
 
     return 0;
 }

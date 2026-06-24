@@ -764,6 +764,13 @@ fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
 continuare ignorando il fatto che il ledger strutturato ha perso proprio il
 record che segnala "questo path non e' piu' affidabile".
 
+`WATCH_STALE` e il `WATCH_RESYNC_FAILED` semplice passano dal helper generico
+`backend_log_watch_diagnostic_record()`. Anche qui il text sink non e' il gate
+di JSONL: se il buffer testuale non basta, il backend scrive il fallback legacy
+compatibile e poi chiama comunque `emit_record` con il record gia' costruito.
+Questo evita che un path molto lungo renda completo `events.log` ma incompleto
+`output.jsonl`.
+
 I diagnostici `WATCH_RESYNC_*` seguono la stessa migrazione. Sono record Event
 Model v0, usano `alfred_record_text_sink_t` per produrre le righe compatibili di
 `events.log` o `errors.log`, e vengono poi offerti a `emit_record`. Quindi:

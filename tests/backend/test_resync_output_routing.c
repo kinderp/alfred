@@ -38,6 +38,7 @@ typedef struct resync_emit_context {
     alfred_record_type_t fail_type;
     const char *expected_path;
     int expected_watch_id;
+    const char *expected_error;
 } resync_emit_context_t;
 
 /*
@@ -74,7 +75,8 @@ static int collect_or_fail_resync_record(const alfred_record_t *record,
 
     if (record->type == ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED) {
         assert(record->watch.error != NULL);
-        assert(strcmp(record->watch.error, "identity-mismatch") == 0);
+        assert(ctx->expected_error != NULL);
+        assert(strcmp(record->watch.error, ctx->expected_error) == 0);
     }
 
     ctx->calls++;
@@ -151,6 +153,7 @@ int main(void)
     emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
     emit_ctx.expected_path = path;
     emit_ctx.expected_watch_id = 77;
+    emit_ctx.expected_error = "identity-mismatch";
 
     inotify_backend_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -197,6 +200,7 @@ int main(void)
     emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
     emit_ctx.expected_path = long_path;
     emit_ctx.expected_watch_id = 88;
+    emit_ctx.expected_error = "identity-mismatch";
 
     assert(backend_log_resync_record(&ctx,
                                      ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
@@ -212,8 +216,25 @@ int main(void)
                                      0) == 0);
     assert(emit_ctx.calls == 4u);
 
+    /*
+     * Plain WATCH_RESYNC_FAILED uses backend_log_watch_diagnostic_record(),
+     * not the richer backend_log_resync_record() helper. The long path makes
+     * the text sink reject the compatibility payload; the backend must write
+     * the legacy fallback and still route the already-built structured record.
+     */
+    emit_ctx.expected_watch_id = 90;
+    emit_ctx.expected_error = "path-unreachable";
+    assert(backend_log_resync_failure(&ctx,
+                                      90,
+                                      long_path,
+                                      "IN_MOVE_SELF",
+                                      BACKEND_RESYNC_PROBE_PATH_UNREACHABLE,
+                                      0) == 0);
+    assert(emit_ctx.calls == 5u);
+
     emit_ctx.fail_type = ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN;
     emit_ctx.expected_watch_id = 89;
+    emit_ctx.expected_error = "identity-mismatch";
 
     assert(backend_log_resync_record(&ctx,
                                      ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
@@ -227,13 +248,27 @@ int main(void)
                                      0,
                                      0,
                                      0) == -1);
-    assert(emit_ctx.calls == 5u);
+    assert(emit_ctx.calls == 6u);
+
+    emit_ctx.fail_type = ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED;
+    emit_ctx.expected_watch_id = 91;
+    emit_ctx.expected_error = "path-unreachable";
+
+    assert(backend_log_resync_failure(&ctx,
+                                      91,
+                                      long_path,
+                                      "IN_MOVE_SELF",
+                                      BACKEND_RESYNC_PROBE_PATH_UNREACHABLE,
+                                      0) == -1);
+    assert(emit_ctx.calls == 7u);
 
     logger_close(&logger);
 
     assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=77"));
     assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=88"));
     assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=89"));
+    assert(file_contains(event_log, "WATCH_RESYNC_FAILED wd=90"));
+    assert(file_contains(event_log, "WATCH_RESYNC_FAILED wd=91"));
     assert(file_contains(event_log,
                          "WATCH_RESYNC_FAILED wd=77"));
     assert(file_contains(event_log, "error=identity-mismatch"));

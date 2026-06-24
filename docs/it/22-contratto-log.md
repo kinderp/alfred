@@ -836,6 +836,12 @@ legacy `logger_event()` o `logger_error()` per conservare `events.log` /
 costruito. Il formatter umano non e' quindi il gate di JSONL: e' solo uno dei
 modi per produrre la riga compatibile.
 
+La stessa regola vale per i diagnostici piu' piccoli gestiti dal helper
+generico del backend, in particolare `WATCH_STALE` e il `WATCH_RESYNC_FAILED`
+semplice. Anche se la riga testuale compatibile viene scritta dal fallback
+legacy, il record strutturato deve comunque attraversare `emit_record` quando
+l'output strutturato e' abilitato.
+
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |
