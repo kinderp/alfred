@@ -248,7 +248,7 @@ risolti.
 Formato consigliato da aggiungere alla descrizione della PR:
 
 ```text
-## Review update #N
+## Review round N
 
 Summary:
 - Brief English summary of what this review focused on.
@@ -261,8 +261,10 @@ Findings:
   Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
 ```
 
-La sezione `Review update #N` deve essere scritta in inglese, come il resto
-della PR pubblica. Deve indicare:
+La sezione `Review round N` deve essere scritta in inglese, come il resto della
+PR pubblica. Non usare forme come `Review update #1`: in Markdown GitHub
+trasforma automaticamente `#1`, `#2` e forme simili in link a issue o pull
+request, creando riferimenti ambigui e non intenzionali. Deve indicare:
 
 - il numero del round di review;
 - il senso della review, cioe' che tipo di rischio o parte del codice e' stata
