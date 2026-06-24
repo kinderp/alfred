@@ -437,6 +437,15 @@ copre batching, flush esplicito, auto-flush, errore di flush con bytes
 preservati, riga singola troppo grande, esposizione come sink generico e input
 invalidi.
 
+Aggiornamento successivo: `config_t.output` introduce la configurazione minima
+del futuro output runtime. I default sono `output_enabled=false`,
+`output_format=jsonl` e `output_buffer_size=65536`; il parser accetta anche
+`text`, rifiuta formati non implementati e rifiuta buffer sotto `4096` o
+malformati. La documentazione chiarisce che `enabled=false` mantiene il path
+compatibile `raw.log`/`events.log`/`errors.log`, mentre `enabled=true` e' solo
+un'intenzione validata per il futuro percorso `record -> queue -> dispatcher ->
+writer`. `test_output_config.sh` copre default, valori validi e invalidi.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

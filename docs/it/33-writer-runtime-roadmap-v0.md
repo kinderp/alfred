@@ -338,7 +338,7 @@ Ogni micro-step deve aggiornare documentazione e test. Se cambia ownership,
 queue, dispatcher o sink, bisogna aggiornare anche la documentazione C per gli
 studenti.
 
-I primi sei punti sono ora coperti: questa roadmap esiste,
+I primi sette punti sono ora coperti: questa roadmap esiste,
 `make perf-record-sinks` produce la riga `queue-counter` per misurare clone
 owned, push nella coda, pop, emit al counter e destroy del record owned,
 produce righe `dispatcher-*` per misurare routing verso counter, text, JSONL e
@@ -347,8 +347,11 @@ il percorso `record -> queue -> dispatcher -> sink` in forma single-threaded.
 `alfred_record_runtime_drain_once()` ora nomina il worker/drain simulato senza
 introdurre thread reali. `alfred_record_jsonl_writer_t` introduce un writer
 JSONL buffered isolato dal backend: formatta record, aggiunge newline, accumula
-bytes e li consegna solo al flush o quando deve liberare spazio. Il prossimo
-passo resta aggiungere configurazione output minima e disabilitata di default.
+bytes e li consegna solo al flush o quando deve liberare spazio.
+`config_t.output` introduce la configurazione minima, disabilitata di default:
+`output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536`.
+Il prossimo passo resta collegare sperimentalmente il runtime record queue a un
+solo writer.
 
 ## Cose da non fare ora
 

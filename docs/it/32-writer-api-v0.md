@@ -586,6 +586,64 @@ ufficiale, ledger, golden-test format o interfaccia per integrazioni esterne,
 questi punti dovranno essere risolti o trasformati in decisioni esplicite di
 schema v1.
 
+## Configurazione output minima
+
+Il primo contratto configurabile del Writer Runtime v0 e' volutamente piccolo:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+```
+
+Questa configurazione non collega ancora il writer al runtime. Serve a fissare
+il linguaggio con cui l'utente, i test e il codice descriveranno il percorso
+output futuro.
+
+Campi:
+
+| Chiave | Campo C | Default | Significato |
+| --- | --- | --- | --- |
+| `output_enabled` | `config.output.enabled` | `false` | abilita in futuro il percorso `record -> queue -> dispatcher -> writer` |
+| `output_format` | `config.output.format` | `jsonl` | formato richiesto: oggi `jsonl` o `text` |
+| `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `4096` |
+
+Quando `output_enabled=false`, il path runtime resta quello compatibile:
+
+```text
+backend/core
+-> logger attuale
+-> raw.log / events.log / errors.log
+```
+
+Quando `output_enabled=true`, la configurazione descrive il path target:
+
+```text
+record
+-> queue
+-> runtime drain / worker
+-> dispatcher
+-> writer
+```
+
+Nel codice corrente questo secondo path non e' ancora collegato ad `app_run()`.
+Il parser accetta e valida il valore per preparare il passo successivo, ma non
+deve far pensare che un file JSONL runtime venga gia' prodotto. Per questo gli
+esempi ufficiali restano con `output_enabled=false` finche' il collegamento non
+sara' implementato e testato.
+
+Perche' non aggiungiamo ancora `output_path`, `output_target` o
+`flush_interval_ms`:
+
+- `output_path` richiede decisioni su open, append/truncate, permessi, errori e
+  rotazione;
+- `output_target` apre il tema di file, stdout, socket, unix socket e Lab;
+- `flush_interval_ms` richiede timer o worker thread reali.
+
+Queste scelte appartengono ai prossimi passi. In questo micro-step fissiamo solo
+le tre informazioni necessarie per non hardcodare formato e dimensione del
+buffer.
+
 ## Backpressure
 
 Se un writer e' lento, Alfred deve avere una policy esplicita. Non deve

@@ -867,15 +867,20 @@ configurazione specifiche dei backend. Il backend inotify non riceve piu' tutta
 ```mermaid
 flowchart TD
     A["config_t"] --> B["inotify_config_t"]
+    A --> O["output_config_t"]
     A --> E["raw_log / event_log / error_log"]
     A --> H["use_epoll / flush_immediately"]
 
     B --> C["recursive"]
     B --> D["watcher_capacity"]
     B --> M["watch_mask"]
+    O --> O1["enabled"]
+    O --> O2["format"]
+    O --> O3["buffer_size"]
 
     D --> F["watcher_init(capacity)"]
     M --> G["inotify_add_watch(mask | IN_ONLYDIR)"]
+    O3 --> W["future JSONL writer buffer"]
 ```
 
 Campi rilevanti:
@@ -885,6 +890,26 @@ Campi rilevanti:
 | `inotify.recursive` | abilita watch ricorsivi | `inotify_config_defaults()`, `config_load()` | `inotify_backend_add_startup_watch()`, `backend_handle_dir_create()` |
 | `inotify.watcher_capacity` | capacita' iniziale della tabella watch | `inotify_config_defaults()`, `config_load()` | `watcher_init()` |
 | `inotify.watch_mask` | maschera eventi inotify usata per aggiungere watch; il watch manager aggiunge poi `IN_ONLYDIR` come flag di installazione | `inotify_config_defaults()`, `config_load()` | `watch_manager_add()` |
+| `output.enabled` | abilita il futuro percorso `record -> queue -> dispatcher -> writer` | `config_defaults()`, `config_load()` | futuro runtime writer |
+| `output.format` | formato richiesto dal futuro writer, oggi `text` o `jsonl` | `config_defaults()`, `config_load()` | futuro registry/dispatcher writer |
+| `output.buffer_size` | bytes per writer buffered come JSONL | `config_defaults()`, `config_load()` | futuro writer JSONL runtime |
+
+`output_config_t` non e' configurazione del backend. Se `output.enabled` e'
+`false`, il runtime resta sul percorso compatibile:
+
+```text
+backend/core -> logger attuale -> raw.log / events.log / errors.log
+```
+
+Se `output.enabled` e' `true`, la configurazione descrive il percorso futuro:
+
+```text
+record -> queue -> runtime drain / worker -> dispatcher -> writer
+```
+
+Nel codice corrente questa seconda forma e' solo memorizzata e validata. Non e'
+ancora collegata ad `app_run()`, quindi non cambia il path caldo e non attiva
+automaticamente il JSONL writer buffered.
 
 `watch_mask` e' un buon esempio di confine fra configurazione e backend:
 `config_defaults()` delega a `inotify_config_defaults()`, questa prende il

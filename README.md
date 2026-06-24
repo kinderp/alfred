@@ -70,6 +70,17 @@ Run Alfred with a configuration file:
 ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch
 ```
 
+Minimal preparatory output configuration:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+```
+
+This keeps the current logs unchanged while documenting the future structured
+writer path.
+
 Configuration details are documented in Italian for now:
 [application layer](docs/it/04-livello-applicazione.md) and
 [debugging, tests, and tools](docs/it/10-debugging-test-e-strumenti.md).

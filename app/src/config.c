@@ -36,6 +36,9 @@ void config_defaults(config_t *cfg)
 
     cfg->use_epoll          = 0;
     cfg->flush_immediately  = 1;
+    cfg->output.enabled     = 0;
+    cfg->output.format      = OUTPUT_FORMAT_JSONL;
+    cfg->output.buffer_size = OUTPUT_BUFFER_SIZE_DEFAULT;
 
     inotify_config_defaults(&cfg->inotify);
 
@@ -130,6 +133,72 @@ static size_t parse_size_or_default(const char *value, size_t fallback)
 }
 
 /*
+ * parse_size_min - parse a required size_t value with a lower bound
+ * @value: string value to parse
+ * @min_value: smallest accepted value
+ * @out: parsed result on success
+ *
+ * Unlike parse_size_or_default(), this helper is for configuration values where
+ * silently keeping the previous value would hide a broken runtime contract. The
+ * future output writer needs a usable buffer, so malformed values and values
+ * below the documented minimum are configuration errors.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int parse_size_min(const char *value, size_t min_value, size_t *out)
+{
+    char *end = NULL;
+    unsigned long parsed;
+
+    if (value == NULL || out == NULL || value[0] == '-')
+        return -1;
+
+    errno = 0;
+    parsed = strtoul(value, &end, 10);
+
+    if (errno != 0 || end == value || *end != '\0')
+        return -1;
+
+    if (parsed > (unsigned long)SIZE_MAX)
+        return -1;
+
+    if ((size_t)parsed < min_value)
+        return -1;
+
+    *out = (size_t)parsed;
+    return 0;
+}
+
+/*
+ * parse_output_format - parse the future writer output format
+ * @value: textual configuration value
+ * @format: parsed output format on success
+ *
+ * Only formats with a documented v0 contract are accepted. This prevents
+ * config files from advertising protobuf, MessagePack, sockets, or other future
+ * outputs before the corresponding writer API and tests exist.
+ *
+ * Return: 0 on success, -1 on unknown format.
+ */
+static int parse_output_format(const char *value, output_format_t *format)
+{
+    if (value == NULL || format == NULL)
+        return -1;
+
+    if (strcmp(value, "text") == 0) {
+        *format = OUTPUT_FORMAT_TEXT;
+        return 0;
+    }
+
+    if (strcmp(value, "jsonl") == 0) {
+        *format = OUTPUT_FORMAT_JSONL;
+        return 0;
+    }
+
+    return -1;
+}
+
+/*
  * config_set_event_engine - validate the event engine option
  * @cfg: configuration object to update
  * @value: expected value, currently only "core"
@@ -169,6 +238,9 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
  *   recursive=true
  *   inotify_recursive=true
  *   inotify_watch_mask=default,-IN_ATTRIB
+ *   output_enabled=false
+ *   output_format=jsonl
+ *   output_buffer_size=65536
  *   use_epoll=false
  *   event_engine=core
  *   raw_log=myraw.log
@@ -227,6 +299,30 @@ error_t config_load(config_t *cfg, const char *path)
 
             cfg->flush_immediately =
                 parse_bool(value);
+        }
+
+        else if (strcmp(key, "output_enabled") == 0) {
+
+            cfg->output.enabled =
+                parse_bool(value);
+        }
+
+        else if (strcmp(key, "output_format") == 0) {
+
+            if (parse_output_format(value, &cfg->output.format) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+        }
+
+        else if (strcmp(key, "output_buffer_size") == 0) {
+
+            if (parse_size_min(value,
+                               OUTPUT_BUFFER_SIZE_MIN,
+                               &cfg->output.buffer_size) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
         }
 
         else if (strcmp(key, "watcher_capacity") == 0 ||

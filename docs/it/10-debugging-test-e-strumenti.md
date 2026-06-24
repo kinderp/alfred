@@ -2156,6 +2156,12 @@ La copertura iniziale include:
   copertura controlla batching di piu' record, auto-flush, errore di flush con
   bytes preservati, rifiuto di una singola riga troppo grande, esposizione come
   sink generico e configurazione invalida.
+- `test_output_config.sh`: compila `test_output_config.c` e verifica la
+  configurazione preparatoria del futuro output runtime. Il test non avvia
+  Alfred e non scrive JSONL: controlla default `output_enabled=false`,
+  `output_format=jsonl`, `output_buffer_size=65536`, accettazione di `text` e
+  `jsonl`, rifiuto di formati non implementati e rifiuto di buffer troppo
+  piccoli o non numerici.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
@@ -2304,6 +2310,9 @@ Esempio:
 ```bash
 cat > /tmp/alfred.conf <<'EOF'
 inotify_watch_mask=default,-IN_ATTRIB
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
 EOF
 
 ALFRED_CONFIG=/tmp/alfred.conf ./alfred /tmp/cartella-da-osservare
@@ -2319,9 +2328,60 @@ config_defaults()
 ```
 
 Quindi il file caricato da `ALFRED_CONFIG` puo' cambiare opzioni come
-`inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity` e i path
-dei log. `ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo
-il file per rifiutare esplicitamente valori vecchi come `shadow`.
+`inotify_watch_mask`, `inotify_recursive`, `inotify_watcher_capacity`,
+`output_enabled`, `output_format`, `output_buffer_size` e i path dei log.
+`ALFRED_EVENT_ENGINE` resta un override separato e viene validato dopo il file
+per rifiutare esplicitamente valori vecchi come `shadow`.
+
+### Provare la configurazione output futura
+
+Il nuovo gruppo `output_*` e' preparatorio. Serve a dichiarare il percorso
+writer runtime che vogliamo collegare nei prossimi passi, ma non cambia ancora
+il comportamento di `app_run()`.
+
+Default:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+```
+
+Significato:
+
+| Chiave | Significato |
+| --- | --- |
+| `output_enabled` | se `false`, Alfred continua con `raw.log`, `events.log` ed `errors.log`; se `true`, dichiara l'intenzione di usare il futuro percorso `record -> queue -> dispatcher -> writer` |
+| `output_format` | formato del futuro writer: per ora `jsonl` o `text` |
+| `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `4096` |
+
+Esempio valido ma ancora preparatorio:
+
+```bash
+cat > /tmp/alfred-output.conf <<'EOF'
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+EOF
+
+ALFRED_CONFIG=/tmp/alfred-output.conf ./alfred /tmp/cartella-da-osservare
+```
+
+Questa configurazione viene accettata, ma in questo micro-step non produce
+ancora un nuovo file JSONL runtime. Il collegamento reale verra' introdotto nel
+passo successivo della Writer Runtime v0.
+
+Esempi invalidi:
+
+```text
+output_format=protobuf
+output_buffer_size=0
+output_buffer_size=1024
+output_buffer_size=8192kb
+```
+
+Questi casi falliscono perche' Alfred non deve accettare formati o buffer che
+non sa ancora usare in modo documentato.
 
 ### Provare gli eventi audit inotify
 

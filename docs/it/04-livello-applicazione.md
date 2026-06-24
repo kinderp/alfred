@@ -306,6 +306,9 @@ watcher_capacity=256
 inotify_watcher_capacity=256
 inotify_watch_mask=default,-IN_ATTRIB
 inotify_audit_events=off
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
 event_engine=core
 raw_log=myraw.log
 ```
@@ -399,6 +402,103 @@ Con questa configurazione una lettura read-only puo' produrre righe come
 `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel `raw.log`. Non deve pero'
 produrre `FILE_MODIFIED` o `FILE_READY` nell'`events.log`, perche' non c'e'
 stata scrittura.
+
+### Configurazione output runtime
+
+La configurazione contiene anche una sezione preparatoria per il futuro output
+runtime:
+
+```c
+typedef struct {
+    int enabled;
+    output_format_t format;
+    size_t buffer_size;
+} output_config_t;
+```
+
+Questi campi vivono in `config_t.output`, non in `config_t.inotify`. Il motivo
+e' architetturale: il backend inotify osserva eventi del kernel, ma non deve
+decidere formato di output, buffering, writer o destinazioni di log.
+
+Campi minimi:
+
+| Campo | Default | Significato |
+| --- | --- | --- |
+| `output.enabled` | `false` | abilita in futuro il percorso `record -> queue -> dispatcher -> writer` |
+| `output.format` | `jsonl` | formato richiesto per il futuro writer runtime |
+| `output.buffer_size` | `65536` | dimensione in bytes del buffer per writer buffered come JSONL |
+
+Con:
+
+```text
+output_enabled=false
+```
+
+Alfred usa il percorso compatibile corrente:
+
+```text
+evento OS
+-> backend inotify
+-> raw event Alfred
+-> core
+-> logger attuale
+-> raw.log / events.log / errors.log
+```
+
+In questo modo il nuovo writer runtime non cambia il comportamento pubblico:
+non usa la queue runtime, non usa il dispatcher runtime configurabile, non usa
+il JSONL buffered writer e non modifica i log esistenti.
+
+Con:
+
+```text
+output_enabled=true
+```
+
+la configurazione descrive il percorso futuro:
+
+```text
+record
+-> queue
+-> runtime drain / worker
+-> dispatcher
+-> writer
+```
+
+In questo micro-step il valore viene solo validato e memorizzato. Non attiva
+ancora il percorso runtime nuovo dentro `app_run()`: quel collegamento appartiene
+al passo successivo della Writer Runtime v0. Questa distinzione e' importante
+per non far credere che basti mettere `output_enabled=true` per ottenere gia'
+un file JSONL runtime.
+
+`output_format` accetta per ora:
+
+```text
+output_format=jsonl
+output_format=text
+```
+
+`jsonl` e' il default perche' il nuovo percorso di output nasce per record
+strutturati e per futuri golden test, ledger e integrazioni. `text` resta utile
+per compatibilita', debug e didattica. Valori non implementati come
+`protobuf`, `messagepack` o `socket` sono rifiutati finche' non esiste un writer
+con contratto documentato.
+
+`output_buffer_size` deve essere almeno `4096`. Il default e' `65536`, cioe'
+64 KiB. Il minimo evita configurazioni inutilizzabili: una singola riga JSONL
+puo' contenere path, errori OS e dettagli diagnostici, quindi un buffer troppo
+piccolo fallirebbe al primo record realistico.
+
+Esempio:
+
+```text
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+```
+
+Questa configurazione e' valida e descrive il default corrente: il nuovo output
+runtime e' spento, ma quando verra' collegato usera' JSONL con buffer da 64 KiB.
 
 La funzione restituisce codici `error_t`: `ERR_OK` quando il caricamento riesce,
 `ERR_INVALID_ARG` per argomenti non validi e `ERR_CONFIG` per file non leggibile

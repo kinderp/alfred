@@ -44,6 +44,35 @@ an epoll loop.
 When true, log streams are flushed after writes. The default is true to improve
 visibility during development and failures.
 .TP
+.B output_enabled
+Preparatory flag for the future record output runtime. The default is false.
+When false, Alfred keeps the current compatibility path through
+.BR raw.log ,
+.BR events.log ,
+and
+.BR errors.log .
+When true, the configuration declares the future
+.B record -> queue -> dispatcher -> writer
+path, but the current runtime does not yet wire that path into
+.BR app_run .
+.TP
+.B output_format
+Preparatory writer format for the future output runtime. Supported values are
+.B text
+and
+.BR jsonl .
+The default is
+.BR jsonl .
+Unsupported values make configuration loading fail.
+.TP
+.B output_buffer_size
+Preparatory buffer size, in bytes, for buffered writers such as JSONL. The
+default is
+.BR 65536 .
+Values smaller than
+.B 4096
+or non-numeric values make configuration loading fail.
+.TP
 .B watcher_capacity
 Alias for
 .BR inotify_watcher_capacity .
@@ -141,6 +170,9 @@ inotify_recursive=true
 inotify_watcher_capacity=128
 inotify_audit_events=off
 event_engine=core
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
 raw_log=raw.log
 event_log=events.log
 error_log=errors.log
@@ -168,6 +200,13 @@ error_log=/tmp/alfred.errors.log
 Enable raw-log-only audit events:
 .EX
 inotify_audit_events=open,access,close-nowrite
+.EE
+.TP
+Configure the future output runtime shape without changing current logs:
+.EX
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
 .EE
 .SH NOTES
 This file format is intentionally simple and does not yet have include
