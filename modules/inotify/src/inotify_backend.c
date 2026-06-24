@@ -280,9 +280,10 @@ static int backend_write_routed_payload(void *userdata, const char *payload)
  * syscall evidence while keeping Alfred's stable @error token separate.
  *
  * The output pipeline bridge is intentionally narrower than this helper:
- * WATCH_STALE is routed to the optional structured output callback, while
- * WATCH_RESYNC_* and WATCH_LOST_* stay text-only until their richer recovery
- * payloads are migrated in separate reviewable steps.
+ * WATCH_STALE and the plain WATCH_RESYNC_FAILED failure diagnostic are routed
+ * to the optional structured output callback here. Richer WATCH_RESYNC_* and
+ * WATCH_LOST_* recovery records use dedicated helpers because they need to
+ * populate record.recovery before emission.
  */
 static int backend_log_watch_diagnostic_record(
     inotify_backend_context_t *ctx,
@@ -329,7 +330,8 @@ static int backend_log_watch_diagnostic_record(
              * optional structured output. Queue-based output must clone this
              * borrowed record before returning.
              */
-            if (type == ALFRED_RECORD_TYPE_WATCH_STALE &&
+            if ((type == ALFRED_RECORD_TYPE_WATCH_STALE ||
+                 type == ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED) &&
                 ctx->emit_record != NULL &&
                 ctx->emit_record(&record,
                                  ctx->emit_record_userdata) != 0) {
@@ -340,8 +342,13 @@ static int backend_log_watch_diagnostic_record(
                  * could silently lose the stale-watch transition while the
                  * event loop continues as if the ledger were complete.
                  */
-                logger_error(ctx->logger,
-                             "failed to emit watch stale output record");
+                if (type == ALFRED_RECORD_TYPE_WATCH_STALE) {
+                    logger_error(ctx->logger,
+                                 "failed to emit watch stale output record");
+                } else {
+                    logger_error(ctx->logger,
+                                 "failed to emit watch resync output record");
+                }
                 return -1;
             }
 
@@ -595,7 +602,16 @@ typedef enum backend_resync_probe_result {
      * but the first limited watch reinstallation failed. The parent watch is
      * left STALE because the subtree coverage is known to be incomplete.
      */
-    BACKEND_RESYNC_PROBE_REINSTALL_FAILED
+    BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
+
+    /*
+     * A WATCH_RESYNC_* diagnostic could not be offered to the optional
+     * structured output callback after the compatibility text log was written.
+     * This is not a filesystem condition; it is the backend-side signal used to
+     * stop the poll path when the application selected a fail-closed output
+     * pipeline.
+     */
+    BACKEND_RESYNC_PROBE_OUTPUT_FAILED
 } backend_resync_probe_result_t;
 
 /* ============================================================================
@@ -641,9 +657,9 @@ static int backend_handle_delete_self(inotify_backend_context_t *ctx,
 static int backend_handle_unmount(inotify_backend_context_t *ctx,
                                   const struct inotify_event *ev);
 
-static void backend_resync_watch(inotify_backend_context_t *ctx,
-                                 int wd,
-                                 const char *reason);
+static int backend_resync_watch(inotify_backend_context_t *ctx,
+                                int wd,
+                                const char *reason);
 
 static backend_resync_probe_result_t backend_probe_stale_watch_identity(
     inotify_backend_context_t *ctx,
@@ -822,12 +838,12 @@ static const char *backend_lost_scope_recovery_result_name(
 static int backend_lost_scope_scan_for_identity(const fs_scan_entry_t *entry,
                                                 void *userdata);
 
-static void backend_log_resync_failure(inotify_backend_context_t *ctx,
-                                       int wd,
-                                       const char *path,
-                                       const char *reason,
-                                       backend_resync_probe_result_t result,
-                                       int saved_errno);
+static int backend_log_resync_failure(inotify_backend_context_t *ctx,
+                                      int wd,
+                                      const char *path,
+                                      const char *reason,
+                                      backend_resync_probe_result_t result,
+                                      int saved_errno);
 
 static int backend_log_resync_record(inotify_backend_context_t *ctx,
                                      alfred_record_type_t type,
@@ -2659,7 +2675,9 @@ static int backend_handle_move_self(inotify_backend_context_t *ctx,
         return ERR_IO;
     }
 
-    backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF");
+    if (backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF") != 0)
+        return ERR_IO;
+
     return ERR_OK;
 }
 
@@ -2771,23 +2789,24 @@ static int backend_handle_unmount(inotify_backend_context_t *ctx,
  * scanner-based resync can be added here as a second phase without burying
  * subtree scan policy inside the minimal identity check.
  */
-static void backend_resync_watch(inotify_backend_context_t *ctx,
-                                 int wd,
-                                 const char *reason)
+static int backend_resync_watch(inotify_backend_context_t *ctx,
+                                int wd,
+                                const char *reason)
 {
     if (ctx == NULL || reason == NULL)
-        return;
+        return -1;
 
     backend_resync_probe_result_t result =
         backend_probe_stale_watch_identity(ctx, wd, reason);
 
     if (!backend_resync_probe_result_needs_lost_scope(result))
-        return;
+        return result == BACKEND_RESYNC_PROBE_OUTPUT_FAILED ? -1 : 0;
 
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, wd);
 
     backend_enqueue_lost_scope(ctx, wd, path ? path : "", reason, result);
+    return 0;
 }
 
 /*
@@ -2824,51 +2843,61 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
         watcher_get_path(&ctx->runtime->watchers, wd);
 
     if (path == NULL) {
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   "",
-                                   reason,
-                                   BACKEND_RESYNC_PROBE_MISSING_WATCH,
-                                   0);
+        if (backend_log_resync_failure(
+                ctx,
+                wd,
+                "",
+                reason,
+                BACKEND_RESYNC_PROBE_MISSING_WATCH,
+                0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return BACKEND_RESYNC_PROBE_MISSING_WATCH;
     }
 
     if (watcher_get_state(&ctx->runtime->watchers, wd) !=
         WATCHER_STATE_STALE) {
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   BACKEND_RESYNC_PROBE_NOT_STALE,
-                                   0);
+        if (backend_log_resync_failure(
+                ctx,
+                wd,
+                path,
+                reason,
+                BACKEND_RESYNC_PROBE_NOT_STALE,
+                0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return BACKEND_RESYNC_PROBE_NOT_STALE;
     }
 
-    (void)backend_log_resync_record(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
-        wd,
-        path,
-        reason,
-        NULL,
-        NULL,
-        0,
-        0,
-        0,
-        0,
-        0);
+    if (backend_log_resync_record(ctx,
+                                  ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
+                                  wd,
+                                  path,
+                                  reason,
+                                  NULL,
+                                  NULL,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  0) != 0) {
+        return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+    }
 
     if (watcher_set_state(&ctx->runtime->watchers,
                           wd,
                           WATCHER_STATE_RESYNCING) != 0) {
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
-                                   0);
+        if (backend_log_resync_failure(
+                ctx,
+                wd,
+                path,
+                reason,
+                BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED,
+                0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return BACKEND_RESYNC_PROBE_SET_RESYNCING_FAILED;
     }
 
@@ -2882,21 +2911,26 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                               wd,
                               WATCHER_STATE_STALE) != 0) {
 
-            backend_log_resync_failure(ctx,
-                                       wd,
-                                       path,
-                                       reason,
-                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-                                       0);
+            if (backend_log_resync_failure(
+                    ctx,
+                    wd,
+                    path,
+                    reason,
+                    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                    0) != 0) {
+                return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+            }
             return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   result,
-                                   saved_errno);
+        if (backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       result,
+                                       saved_errno) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return result;
     }
 
@@ -2907,21 +2941,26 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                               wd,
                               WATCHER_STATE_STALE) != 0) {
 
-            backend_log_resync_failure(ctx,
-                                       wd,
-                                       path,
-                                       reason,
-                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-                                       0);
+            if (backend_log_resync_failure(
+                    ctx,
+                    wd,
+                    path,
+                    reason,
+                    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                    0) != 0) {
+                return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+            }
             return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   result,
-                                   0);
+        if (backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       result,
+                                       0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return result;
     }
 
@@ -2938,21 +2977,26 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                               wd,
                               WATCHER_STATE_STALE) != 0) {
 
-            backend_log_resync_failure(ctx,
-                                       wd,
-                                       path,
-                                       reason,
-                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-                                       0);
+            if (backend_log_resync_failure(
+                    ctx,
+                    wd,
+                    path,
+                    reason,
+                    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                    0) != 0) {
+                return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+            }
             return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   result,
-                                   0);
+        if (backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       result,
+                                       0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return result;
     }
 
@@ -2971,21 +3015,26 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                               wd,
                               WATCHER_STATE_STALE) != 0) {
 
-            backend_log_resync_failure(ctx,
-                                       wd,
-                                       path,
-                                       reason,
-                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-                                       0);
+            if (backend_log_resync_failure(
+                    ctx,
+                    wd,
+                    path,
+                    reason,
+                    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                    0) != 0) {
+                return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+            }
             return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   result,
-                                   0);
+        if (backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       result,
+                                       0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return result;
     }
 
@@ -3000,21 +3049,27 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                               wd,
                               WATCHER_STATE_STALE) != 0) {
 
-            backend_log_resync_failure(ctx,
-                                       wd,
-                                       path,
-                                       reason,
-                                       BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
-                                       0);
+            if (backend_log_resync_failure(
+                    ctx,
+                    wd,
+                    path,
+                    reason,
+                    BACKEND_RESYNC_PROBE_SET_STALE_FAILED,
+                    0) != 0) {
+                return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+            }
             return BACKEND_RESYNC_PROBE_SET_STALE_FAILED;
         }
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
-                                   0);
+        if (backend_log_resync_failure(
+                ctx,
+                wd,
+                path,
+                reason,
+                BACKEND_RESYNC_PROBE_REINSTALL_FAILED,
+                0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return BACKEND_RESYNC_PROBE_REINSTALL_FAILED;
     }
 
@@ -3022,28 +3077,31 @@ static backend_resync_probe_result_t backend_probe_stale_watch_identity(
                           wd,
                           WATCHER_STATE_VALID) != 0) {
 
-        backend_log_resync_failure(ctx,
-                                   wd,
-                                   path,
-                                   reason,
-                                   BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
-                                   0);
+        if (backend_log_resync_failure(ctx,
+                                       wd,
+                                       path,
+                                       reason,
+                                       BACKEND_RESYNC_PROBE_SET_VALID_FAILED,
+                                       0) != 0) {
+            return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+        }
         return BACKEND_RESYNC_PROBE_SET_VALID_FAILED;
     }
 
-    (void)backend_log_resync_record(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_RESYNC_END,
-        wd,
-        path,
-        reason,
-        "valid",
-        NULL,
-        0,
-        0,
-        0,
-        0,
-        0);
+    if (backend_log_resync_record(ctx,
+                                  ALFRED_RECORD_TYPE_WATCH_RESYNC_END,
+                                  wd,
+                                  path,
+                                  reason,
+                                  "valid",
+                                  NULL,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  0) != 0) {
+        return BACKEND_RESYNC_PROBE_OUTPUT_FAILED;
+    }
 
     return BACKEND_RESYNC_PROBE_VALID;
 }
@@ -3277,53 +3335,62 @@ static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                          &scan_context);
 
     if (rc != ERR_OK) {
-        (void)backend_log_resync_record(
+        if (backend_log_resync_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED,
+                wd,
+                path,
+                reason,
+                NULL,
+                NULL,
+                0,
+                rc,
+                0,
+                0,
+                0) != 0) {
+            backend_resync_scan_context_destroy(&scan_context);
+            return ERR_IO;
+        }
+        backend_resync_scan_context_destroy(&scan_context);
+        return rc;
+    }
+
+    if (backend_log_resync_record(
             ctx,
-            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
             wd,
             path,
             reason,
             NULL,
             NULL,
             0,
-            rc,
             0,
-            0,
-            0);
+            scan_context.directories_seen,
+            scan_context.directories_watched,
+            scan_context.directories_missing_watch) != 0) {
         backend_resync_scan_context_destroy(&scan_context);
-        return rc;
+        return ERR_IO;
     }
-
-    (void)backend_log_resync_record(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE,
-        wd,
-        path,
-        reason,
-        NULL,
-        NULL,
-        0,
-        0,
-        scan_context.directories_seen,
-        scan_context.directories_watched,
-        scan_context.directories_missing_watch);
 
     backend_resync_scan_class_t scan_class =
         backend_classify_resync_scan(&scan_context);
 
-    (void)backend_log_resync_record(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
-        wd,
-        path,
-        reason,
-        backend_resync_scan_class_name(scan_class),
-        NULL,
-        0,
-        0,
-        0,
-        0,
-        0);
+    if (backend_log_resync_record(
+            ctx,
+            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS,
+            wd,
+            path,
+            reason,
+            backend_resync_scan_class_name(scan_class),
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0) != 0) {
+        backend_resync_scan_context_destroy(&scan_context);
+        return ERR_IO;
+    }
 
     /*
      * Runtime recovery must mutate the real watcher table and kernel watches.
@@ -3453,31 +3520,9 @@ static error_t backend_resync_reinstall_missing_watches(
          * Log the candidate before mutation. If the following add fails, the
          * diagnostic still shows exactly which missing path broke the repair.
          */
-        (void)backend_log_resync_record(
-            ctx,
-            ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
-            wd,
-            path,
-            reason,
-            NULL,
-            missing_path,
-            0,
-            0,
-            0,
-            0,
-            0);
-
-        int new_wd = ops->add(ctx, missing_path);
-
-        if (new_wd < 0) {
-            /*
-             * The trusted scope is now known to be only partially covered.
-             * Roll back every watch installed in this attempt and report a
-             * backend error so the caller leaves the parent watch STALE.
-             */
-            (void)backend_log_resync_record(
+        if (backend_log_resync_record(
                 ctx,
-                ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
+                ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING,
                 wd,
                 path,
                 reason,
@@ -3487,22 +3532,59 @@ static error_t backend_resync_reinstall_missing_watches(
                 0,
                 0,
                 0,
-                0);
+                0) != 0) {
+            for (size_t j = 0; j < installed_count; j++)
+                (void)ops->remove(ctx, installed_wds[j]);
+            free(installed_wds);
+            return ERR_IO;
+        }
 
-            for (size_t j = 0; j < installed_count; j++) {
-                (void)backend_log_resync_record(
+        int new_wd = ops->add(ctx, missing_path);
+
+        if (new_wd < 0) {
+            /*
+             * The trusted scope is now known to be only partially covered.
+             * Roll back every watch installed in this attempt and report a
+             * backend error so the caller leaves the parent watch STALE.
+             */
+            if (backend_log_resync_record(
                     ctx,
-                    ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+                    ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED,
                     wd,
                     path,
                     reason,
                     NULL,
-                    NULL,
-                    installed_wds[j],
+                    missing_path,
                     0,
                     0,
                     0,
-                    0);
+                    0,
+                    0) != 0) {
+                for (size_t j = 0; j < installed_count; j++)
+                    (void)ops->remove(ctx, installed_wds[j]);
+                free(installed_wds);
+                return ERR_IO;
+            }
+
+            for (size_t j = 0; j < installed_count; j++) {
+                if (backend_log_resync_record(
+                        ctx,
+                        ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK,
+                        wd,
+                        path,
+                        reason,
+                        NULL,
+                        NULL,
+                        installed_wds[j],
+                        0,
+                        0,
+                        0,
+                        0) != 0) {
+                    for (size_t k = j; k < installed_count; k++)
+                        (void)ops->remove(ctx, installed_wds[k]);
+                    free(installed_wds);
+                    return ERR_IO;
+                }
 
                 (void)ops->remove(ctx, installed_wds[j]);
             }
@@ -3514,19 +3596,24 @@ static error_t backend_resync_reinstall_missing_watches(
         installed_wds[installed_count] = new_wd;
         installed_count++;
 
-        (void)backend_log_resync_record(
-            ctx,
-            ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
-            wd,
-            path,
-            reason,
-            NULL,
-            missing_path,
-            0,
-            0,
-            0,
-            0,
-            0);
+        if (backend_log_resync_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED,
+                wd,
+                path,
+                reason,
+                NULL,
+                missing_path,
+                0,
+                0,
+                0,
+                0,
+                0) != 0) {
+            for (size_t j = 0; j < installed_count; j++)
+                (void)ops->remove(ctx, installed_wds[j]);
+            free(installed_wds);
+            return ERR_IO;
+        }
     }
 
     free(installed_wds);
@@ -3896,6 +3983,8 @@ static const char *backend_resync_probe_result_name(
         return "identity-mismatch";
     case BACKEND_RESYNC_PROBE_REINSTALL_FAILED:
         return "reinstall-failed";
+    case BACKEND_RESYNC_PROBE_OUTPUT_FAILED:
+        return "output-failed";
     }
 
     return "unknown";
@@ -3918,11 +4007,12 @@ static const char *backend_resync_probe_result_name(
  *
  * Local resync diagnostics have richer payloads than plain WATCH_STALE but are
  * still backend diagnostics, not semantic filesystem events. This bridge builds
- * the Event Model v0 record, fills the recovery payload used by the text sink,
- * and keeps a compatibility fallback with the historical text shape.
- * WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel through a
- * routed sink callback; the other local resync diagnostics remain event-log
- * records.
+ * the Event Model v0 record, fills the recovery payload used by the sinks,
+ * writes the compatibility text log first, then offers the same borrowed record
+ * to ctx->emit_record. Queue-based output must clone the record before the
+ * callback returns. WATCH_RESYNC_SCAN_FAILED keeps the historical error-log
+ * channel through a routed text-sink callback; the other local resync
+ * diagnostics remain event-log records.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -3977,6 +4067,14 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
+            if (ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit watch resync output record");
+                return -1;
+            }
+
             return 0;
         }
     }
@@ -4371,14 +4469,14 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
  * evidence in record.os_error while preserving @result as Alfred's stable
  * diagnostic error token.
  */
-static void backend_log_resync_failure(inotify_backend_context_t *ctx,
-                                       int wd,
-                                       const char *path,
-                                       const char *reason,
-                                       backend_resync_probe_result_t result,
-                                       int saved_errno)
+static int backend_log_resync_failure(inotify_backend_context_t *ctx,
+                                      int wd,
+                                      const char *path,
+                                      const char *reason,
+                                      backend_resync_probe_result_t result,
+                                      int saved_errno)
 {
-    (void)backend_log_watch_diagnostic_record(
+    return backend_log_watch_diagnostic_record(
         ctx,
         ALFRED_RECORD_TYPE_WATCH_RESYNC_FAILED,
         wd,

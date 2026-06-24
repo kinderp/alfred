@@ -584,6 +584,15 @@ inotify. Non attraversano ancora `emit_record` e quindi non compaiono in
 `output.jsonl`. La documentazione ora distingue esplicitamente text sink legacy,
 output pipeline e prossimo routing fail-closed verso JSONL.
 
+Aggiornamento successivo: i diagnostici `WATCH_RESYNC_*` sono stati collegati
+alla output pipeline. Il backend inotify conserva prima la riga compatibile in
+`events.log` o `errors.log`, poi offre lo stesso record borrowed a
+`ctx->emit_record`. Se il callback fallisce, il percorso resync propaga errore
+e il poll puo' fallire chiuso quando l'utente ha abilitato l'output
+strutturato. `tests/backend/test_resync_output_routing.c` fissa il contratto per
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e il ramo di fallimento callback. I
+diagnostici `WATCH_LOST_*` restano il prossimo gruppo da migrare.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

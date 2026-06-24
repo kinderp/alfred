@@ -161,7 +161,7 @@ La tabella usa queste colonne:
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
 | Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
-| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', solo text sink legacy nel backend inotify | no | aggiungere `emit_record` dopo il text sink compatibile, propagando l'errore secondo la policy fail-closed |
+| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia resync completa; prossimo lavoro su lost-scope |
 | Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', solo text sink legacy nel backend inotify | no | stesso lavoro dei resync: output pipeline dopo il log compatibile e policy error channel invariata |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
 | Errori runtime generici | errori di config, I/O, allocazione, backend init | `errors.log` | non ancora uniforme | no | no | no | progettare `diagnostic/error` o `lifecycle/error` prima di serializzarli |
@@ -304,32 +304,33 @@ La copertura runtime pero' non e' ancora uniforme:
 | Famiglia diagnostica | Esempi | Log testuale oggi | Record builder | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Watch lifecycle | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si | si | si', verso text sink e JSONL | si' | famiglia watch base completa; resync/lost-scope restano separati |
-| Resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END` | `events.log`/`errors.log` | si | si | solo text sink legacy | no | preservare canale error/event e aggiungere record output |
-| Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | solo text sink legacy | no | stesso routing diagnostico comune |
+| Resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END` | `events.log`/`errors.log` | si | si | text sink legacy + output pipeline | si' | famiglia migrata; mantenere test text e JSONL |
+| Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | text sink legacy + output pipeline | si' | famiglia migrata; mantenere test text e JSONL |
 | Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | solo text sink legacy | no | aggiungere output strutturato senza duplicare logica |
 | Lost-scope scan/recovery | `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`, coverage, reinstall, rollback, retry, gave-up, end | `events.log` | si | si | solo text sink legacy | no | definire policy di output per diagnostica lunga/rumorosa |
 
-La ragione per cui i resync e i lost-scope non entrano ancora in `output.jsonl`
-non e' mancanza di schema: i tipi, i builder e i formatter esistono gia'. Il
-limite e' nel routing runtime. Questi record vengono costruiti nel backend
-inotify e passano da `alfred_record_text_sink_t` per conservare i log
-compatibili, ma il backend non chiama ancora `emit_record`. Di conseguenza il
-record e' sink-capable, ma non attraversa ancora la output pipeline
-configurabile.
+I resync ora entrano in `output.jsonl` quando l'output strutturato e' abilitato.
+Il punto importante non era lo schema: tipi, builder e formatter esistevano gia'.
+Il gap era il routing runtime. Il backend inotify costruiva i record e li
+mandava solo a `alfred_record_text_sink_t` per conservare i log compatibili.
+Ora, dopo il text sink, offre lo stesso record borrowed a `ctx->emit_record`.
 
-La migrazione corretta deve seguire questa sequenza:
+La migrazione implementata segue questa sequenza:
 
 1. costruire lo stesso `alfred_record_t` diagnostico usato per il text sink;
 2. emettere prima la riga compatibile su `events.log` o `errors.log`;
 3. offrire poi lo stesso record borrowed a `ctx->emit_record`;
 4. propagare l'errore se `emit_record` fallisce, come per la diagnostica watch
    base gia' migrata;
-5. aggiungere test runtime JSONL che verifichino almeno un record di successo,
-   un record di fallimento e un record di reinstallazione.
+5. mantenere test dedicati che verifichino sia il log compatibile sia il confine
+   `emit_record`.
 
 Questa regola evita due errori: non crea un writer JSONL diretto nel backend e
 non cambia il contratto dei log testuali che i test esistenti continuano ad
 assertare.
+
+I `WATCH_LOST_*` non sono ancora migrati alla output pipeline. Restano
+sink-capable e text-sink-routed, ma non compaiono ancora in `output.jsonl`.
 
 Regola da rispettare:
 
@@ -764,10 +765,12 @@ backend local resync
 `WATCH_RESYNC_SCAN_FAILED` conserva il canale `error.log`; gli altri record
 `WATCH_RESYNC_*` restano diagnostici di `events.log`.
 
-Attenzione al significato di "percorso strutturato" in questa sezione: oggi
-indica il percorso `alfred_record_t -> text sink -> log compatibile`. Non indica
-ancora il percorso `alfred_record_t -> emit_record -> output pipeline -> JSONL`.
-Il prossimo micro-step di integrazione deve colmare esattamente questo gap.
+Attenzione al significato di "percorso strutturato" in questa sezione: per i
+`WATCH_RESYNC_*` oggi indica sia il percorso
+`alfred_record_t -> text sink -> log compatibile`, sia il percorso
+`alfred_record_t -> emit_record -> output pipeline -> JSONL` quando l'output
+strutturato e' abilitato. Il log compatibile resta primo per non rompere i test
+storici, ma il record viene poi consegnato al confine strutturato.
 
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |

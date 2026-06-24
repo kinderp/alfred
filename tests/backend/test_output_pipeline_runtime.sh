@@ -11,6 +11,8 @@
 # - one JSONL diagnostic WATCH_STALE record for removed-dir
 # - one JSONL diagnostic WATCH_STALE_EVENT_DROPPED record for removed-dir
 # - one JSONL diagnostic WATCH_REMOVED record for removed-dir
+# - one JSONL recovery WATCH_RESYNC_BEGIN record for resync-dir
+# - one JSONL recovery WATCH_RESYNC_FAILED record for resync-dir
 # - raw.log compatibility lines are still present
 # - events.log compatibility lines are still present
 # - output_enabled=true with output_format=text is rejected at runtime
@@ -215,8 +217,10 @@ printf "hello\n" > "$TEST_ROOT/created-file.txt"
 printf "hello long path\n" > "$LONG_SEMANTIC_FILE"
 mkdir "$TEST_ROOT/created-dir"
 mkdir "$TEST_ROOT/removed-dir"
+mkdir "$TEST_ROOT/resync-dir"
 sleep 1
 rmdir "$TEST_ROOT/removed-dir"
+mv "$TEST_ROOT/resync-dir" "$TEST_ROOT/resync-dir-moved"
 sleep 1
 
 stop_alfred
@@ -285,6 +289,20 @@ if ! grep -Eq "WATCH_REMOVED wd=[0-9]+ path=.*/removed-dir" ./events.log; then
     exit 1
 fi
 
+if ! grep -Eq "WATCH_RESYNC_BEGIN wd=[0-9]+ path=.*/resync-dir reason=IN_MOVE_SELF" ./events.log; then
+    echo "FAIL: missing compatibility WATCH_RESYNC_BEGIN for moved directory"
+    echo "----- events.log -----"
+    cat ./events.log || true
+    exit 1
+fi
+
+if ! grep -Eq "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/resync-dir reason=IN_MOVE_SELF error=path-unreachable" ./events.log; then
+    echo "FAIL: missing compatibility WATCH_RESYNC_FAILED for moved directory"
+    echo "----- events.log -----"
+    cat ./events.log || true
+    exit 1
+fi
+
 if ! grep -Eq '"category":"filesystem".*"type":"RAW_CREATE".*"path":".*/created-file.txt"' "$OUTPUT_LOG"; then
     echo "FAIL: missing JSONL create record for created file"
     echo "----- output.jsonl -----"
@@ -343,6 +361,20 @@ fi
 
 if ! grep -Eq '"category":"watch".*"type":"WATCH_REMOVED".*"path":".*/removed-dir"' "$OUTPUT_LOG"; then
     echo "FAIL: missing JSONL WATCH_REMOVED record for removed directory"
+    echo "----- output.jsonl -----"
+    cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq '"category":"recovery".*"type":"WATCH_RESYNC_BEGIN".*"path":".*/resync-dir".*"reason":"IN_MOVE_SELF"' "$OUTPUT_LOG"; then
+    echo "FAIL: missing JSONL WATCH_RESYNC_BEGIN record for moved directory"
+    echo "----- output.jsonl -----"
+    cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq '"category":"recovery".*"type":"WATCH_RESYNC_FAILED".*"path":".*/resync-dir".*"reason":"IN_MOVE_SELF".*"error":"path-unreachable"' "$OUTPUT_LOG"; then
+    echo "FAIL: missing JSONL WATCH_RESYNC_FAILED record for moved directory"
     echo "----- output.jsonl -----"
     cat "$OUTPUT_LOG" || true
     exit 1
