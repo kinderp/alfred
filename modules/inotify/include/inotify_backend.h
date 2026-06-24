@@ -129,9 +129,10 @@ typedef int (*inotify_backend_record_emit_fn)(
  * The context does not own any pointed-to object. It exists to avoid passing
  * the whole app_t or top-level config_t into backend helpers that only need
  * fd/watchers, inotify-specific configuration fields, logging, and an optional
- * structured output boundary. Backend helpers must treat @emit_record as
- * best-effort output plumbing: diagnostic correctness still comes from the
- * watch table state and compatibility logs, not from JSONL being enabled.
+ * structured output boundary. The backend does not know JSONL or concrete
+ * writers, but helpers that call @emit_record must propagate callback failures:
+ * when the application installs this boundary for a fail-closed ledger, losing
+ * a structured diagnostic record is a runtime error, not best-effort logging.
  */
 typedef struct inotify_backend_context {
     inotify_backend_t *runtime;

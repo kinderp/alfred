@@ -820,6 +820,14 @@ sia la fase in cui cerca l'identita', aggiorna il prefisso, misura la copertura,
 reinstalla watch mancanti, fa rollback, schedula retry, abbandona una recovery o
 dichiara la subtree di nuovo `VALID`.
 
+La regola fail-closed vale anche per questi record. Se `emit_record` fallisce
+dopo che il log compatibile e' gia' stato scritto, il backend non deve
+continuare la recovery come se il ledger strutturato fosse completo. Il risultato
+interno `output-failed` non descrive il filesystem e non significa che lo scan
+sia fallito: significa che Alfred ha perso il confine strutturato del record.
+Nel runtime questo errore risale al poll, che deve fermarsi invece di produrre un
+`output.jsonl` incompleto.
+
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |

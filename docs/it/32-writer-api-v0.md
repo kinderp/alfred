@@ -786,6 +786,16 @@ il log compatibile e vengono poi offerti a `emit_record`, quindi compaiono in
 queue-level, scan, found, prefix update, coverage, reinstallazione, rollback,
 retry, gave-up, recovery failed e recovery end.
 
+Questo richiede una regola importante di ownership logica, non solo di memoria:
+il chiamante runtime deve controllare il valore di ritorno del helper che emette
+il diagnostico. Prima della migrazione molti call-site potevano ignorare il
+ritorno perche' stavano solo scrivendo log umani. Dopo la migrazione, ignorarlo
+vorrebbe dire poter perdere un record JSONL mentre la recovery prosegue. Per
+questo la recovery lost-scope distingue il risultato interno `output-failed` da
+`scan-failed`: `scan-failed` riguarda una ricerca o una riparazione non
+affidabile; `output-failed` riguarda il ledger strutturato e deve fermare il
+poll quando `emit_record` e' stato installato dall'applicazione.
+
 La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
 righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:
 questo e' voluto per non trasformare il percorso corrente in una scrittura file

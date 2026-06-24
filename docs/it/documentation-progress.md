@@ -624,6 +624,17 @@ Aggiornamento successivo: il routing `WATCH_LOST_*` e' completo. Anche
 strutturati della fase finale: path installato, watch rimosso in rollback,
 retry count, delay, pending count, stato finale e numero di watch validati.
 
+Aggiornamento successivo: la review della PR sui `WATCH_LOST_*` ha chiarito il
+contratto di errore del confine `emit_record`. I call-site della recovery
+lost-scope non possono piu' ignorare il valore di ritorno del helper
+diagnostico: se il log compatibile e' stato scritto ma il record strutturato
+viene rifiutato da `emit_record`, il backend propaga `output-failed` e il poll
+runtime si ferma. Questo evita che `events.log` sembri completo mentre
+`output.jsonl` perde un record diagnostico della recovery. Il test
+`tests/backend/test_lost_scope_recovery.c` copre il caso in cui
+`WATCH_LOST_FOUND` viene rifiutato dal callback e la recovery si interrompe
+prima di `WATCH_LOST_RECOVERY_END`.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

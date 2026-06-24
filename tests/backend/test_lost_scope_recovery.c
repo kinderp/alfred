@@ -25,6 +25,7 @@
  * - WATCH_LOST_SCAN_BEGIN root=<root>
  * - WATCH_LOST_SCAN_BEGIN root=<root>/fallback-root
  * - WATCH_LOST_SCAN_BEGIN root=<root>/runtime-no-roots-root
+ * - WATCH_LOST_FOUND followed by a simulated structured-output failure
  *
  * Forbidden events:
  * - FILE_*
@@ -48,6 +49,9 @@
  * root before spending retry budget. The runtime wrapper also processes a
  * self-contained entry with scan_root even when no configured roots are
  * registered, because the configured root list is only needed for fallback.
+ * The output-failure scenario proves that a WATCH_LOST_* emit_record failure is
+ * not swallowed by the recovery call-site after the compatibility log is
+ * written.
  */
 
 #include <assert.h>
@@ -66,6 +70,11 @@ typedef struct fake_lost_scope_watch_ops_state {
     int removed_wds[8];
     const char *added_paths[8];
 } fake_lost_scope_watch_ops_state_t;
+
+typedef struct fail_lost_scope_emit_state {
+    alfred_record_type_t fail_type;
+    unsigned calls;
+} fail_lost_scope_emit_state_t;
 
 static fake_lost_scope_watch_ops_state_t fake_watch_state;
 
@@ -137,6 +146,34 @@ static const backend_resync_watch_ops_t FAKE_LOST_SCOPE_WATCH_OPS = {
     .add = fake_lost_scope_watch_add,
     .remove = fake_lost_scope_watch_remove
 };
+
+/*
+ * fail_selected_lost_scope_record - simulate output pipeline failure
+ * @record: borrowed diagnostic record offered by lost-scope recovery
+ * @userdata: fail_lost_scope_emit_state_t selecting the rejected type
+ *
+ * The callback models app.c installing a fail-closed structured output
+ * boundary. The compatibility log has already been written when this callback
+ * runs; returning -1 must therefore stop the recovery caller instead of letting
+ * Alfred continue with an incomplete structured ledger.
+ *
+ * Return: -1 for the configured type, 0 for all other records.
+ */
+static int fail_selected_lost_scope_record(const alfred_record_t *record,
+                                           void *userdata)
+{
+    fail_lost_scope_emit_state_t *state = userdata;
+
+    assert(record != NULL);
+    assert(state != NULL);
+
+    state->calls++;
+
+    if (record->type == state->fail_type)
+        return -1;
+
+    return 0;
+}
 
 /*
  * make_backend_context - build minimal backend state for lost-scope helpers
@@ -389,6 +426,80 @@ static void test_renamed_directory_is_found_by_identity(
     assert_event_log_contains(ctx->logger, "watches=3");
     assert_event_log_contains(ctx->logger, "old_path=");
     assert_event_log_contains(ctx->logger, "new_path=");
+}
+
+/*
+ * test_emit_failure_stops_lost_scope_recovery - fail closed on output loss
+ * @ctx: backend context with initialized queue and logger
+ * @root: monitored root used as bounded scan scope
+ *
+ * The recovery helper writes the compatibility log first and then offers the
+ * same WATCH_LOST_* record to emit_record. If that structured output callback
+ * fails, the caller must not keep repairing the subtree as if the ledger were
+ * complete. This test rejects WATCH_LOST_FOUND and verifies that recovery stops
+ * before WATCH_LOST_RECOVERY_END.
+ */
+static void test_emit_failure_stops_lost_scope_recovery(
+    inotify_backend_context_t *ctx,
+    const char *root
+)
+{
+    char original[PATH_MAX];
+    char renamed[PATH_MAX];
+    char found[PATH_MAX];
+    struct stat st;
+    fail_lost_scope_emit_state_t emit_state;
+
+    reset_event_log(ctx->logger);
+
+    join_path(original, sizeof(original), root, "output-fail-original");
+    join_path(renamed, sizeof(renamed), root, "output-fail-renamed");
+
+    assert(mkdir(original, 0700) == 0);
+    assert(stat(original, &st) == 0);
+    assert(watcher_store_identity(&ctx->runtime->watchers,
+                                  41,
+                                  original,
+                                  st.st_dev,
+                                  st.st_ino) == 0);
+    assert(watcher_set_state(&ctx->runtime->watchers,
+                             41,
+                             WATCHER_STATE_STALE) == 0);
+    assert(rename(original, renamed) == 0);
+
+    assert(backend_lost_scope_queue_enqueue(&ctx->runtime->lost_scopes,
+                                            41,
+                                            original,
+                                            st.st_dev,
+                                            st.st_ino,
+                                            root,
+                                            "IN_MOVE_SELF",
+                                            5000,
+                                            5000) == 0);
+
+    memset(&emit_state, 0, sizeof(emit_state));
+    emit_state.fail_type = ALFRED_RECORD_TYPE_WATCH_LOST_FOUND;
+    ctx->emit_record = fail_selected_lost_scope_record;
+    ctx->emit_record_userdata = &emit_state;
+
+    fake_watch_state_reset(0);
+
+    assert(backend_lost_scope_recover_next_with_ops(ctx,
+                                                    root,
+                                                    found,
+                                                    sizeof(found),
+                                                    &FAKE_LOST_SCOPE_WATCH_OPS) ==
+           BACKEND_LOST_SCOPE_RECOVERY_OUTPUT_FAILED);
+    assert(strcmp(found, renamed) == 0);
+    assert(emit_state.calls == 2u);
+    assert(watcher_get_state(&ctx->runtime->watchers, 41) ==
+           WATCHER_STATE_STALE);
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_SCAN_BEGIN");
+    assert_event_log_contains(ctx->logger, "WATCH_LOST_FOUND");
+    assert_event_log_not_contains(ctx->logger, "WATCH_LOST_RECOVERY_END");
+
+    ctx->emit_record = NULL;
+    ctx->emit_record_userdata = NULL;
 }
 
 /*
@@ -965,7 +1076,7 @@ static void test_runtime_uses_entry_scan_root_without_configured_roots(
 
     assert(backend_lost_scope_process_due_runtime_with_ops(
                ctx,
-               &FAKE_LOST_SCOPE_WATCH_OPS) == 1);
+               &FAKE_LOST_SCOPE_WATCH_OPS) == 0);
     assert(backend_lost_scope_queue_count(&ctx->runtime->lost_scopes) == 0);
     assert(strcmp(watcher_get_path(&ctx->runtime->watchers, 33),
                   renamed) == 0);
@@ -1016,6 +1127,7 @@ int main(int argc, char **argv)
         make_backend_context(&runtime, &logger);
 
     test_renamed_directory_is_found_by_identity(&ctx, root);
+    test_emit_failure_stops_lost_scope_recovery(&ctx, root);
     test_reinstall_failure_rolls_back_partial_lost_scope(&ctx, root);
     test_deleted_directory_is_not_found(&ctx, root);
     test_process_due_skips_future_head(&ctx, root);
