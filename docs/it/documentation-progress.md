@@ -510,6 +510,15 @@ usa `/dev/full` per simulare un writer che fallisce durante il flush del buffer
 JSONL e verifica che Alfred termini con stato non-zero e diagnostica in
 `errors.log`.
 
+Aggiornamento successivo: la stessa policy e' stata estesa alla diagnostica
+watch base prodotta direttamente dal backend. `watch_manager_add()`,
+`watch_manager_remove()`, `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED` propagano
+ora il fallimento del callback `emit_record` invece di limitarsi a loggarlo. Il
+backend resta indipendente da JSONL e non decide la policy di processo: espone
+l'errore all'applicazione, che applica `output_enabled=true` come fail-closed.
+`test_watch_diagnostic_output_failure` verifica il caso `WATCH_ADDED` con
+rollback del watch appena installato.
+
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
 inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,

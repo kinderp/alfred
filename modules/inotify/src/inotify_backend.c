@@ -416,12 +416,12 @@ static int backend_log_watch_diagnostic_record(
  * shared record/sink/formatter/fallback work to
  * backend_log_watch_diagnostic_record().
  */
-static void backend_log_watch_stale(inotify_backend_context_t *ctx,
-                                    int wd,
-                                    const char *path,
-                                    const char *reason)
+static int backend_log_watch_stale(inotify_backend_context_t *ctx,
+                                   int wd,
+                                   const char *path,
+                                   const char *reason)
 {
-    (void)backend_log_watch_diagnostic_record(
+    return backend_log_watch_diagnostic_record(
         ctx,
         ALFRED_RECORD_TYPE_WATCH_STALE,
         wd,
@@ -450,11 +450,11 @@ static void backend_log_watch_stale(inotify_backend_context_t *ctx,
  * structured watch payload, then follows the same compatibility-first policy as
  * the other watch diagnostics.
  */
-static void backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
-                                            int wd,
-                                            const char *path,
-                                            const char *event_mask,
-                                            const char *event_name)
+static int backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
+                                           int wd,
+                                           const char *path,
+                                           const char *event_mask,
+                                           const char *event_name)
 {
     alfred_record_t record;
     alfred_record_text_sink_t text_sink;
@@ -462,7 +462,7 @@ static void backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
     char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
 
     if (ctx == NULL || ctx->logger == NULL)
-        return;
+        return -1;
 
     if (alfred_record_build_stale_event_dropped("inotify",
                                                 wd,
@@ -482,14 +482,15 @@ static void backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
                                  ctx->emit_record_userdata) != 0) {
                 logger_error(ctx->logger,
                              "failed to emit stale dropped output record");
+                return -1;
             }
 
-            return;
+            return 0;
         }
 
         if (alfred_record_format_text(&record, payload, sizeof(payload)) > 0) {
             logger_event(ctx->logger, "%s", payload);
-            return;
+            return 0;
         }
     }
 
@@ -499,6 +500,7 @@ static void backend_log_stale_event_dropped(inotify_backend_context_t *ctx,
                  path != NULL ? path : "",
                  event_mask != NULL ? event_mask : "",
                  event_name != NULL ? event_name : "");
+    return 0;
 }
 
 /*
@@ -592,10 +594,10 @@ typedef enum backend_resync_probe_result {
  * Local Declarations
  * ========================================================================== */
 
-static void backend_handle_dir_create(inotify_backend_context_t *ctx,
-                                      const struct inotify_event *ev,
-                                      inotify_backend_event_fn on_event,
-                                      void *userdata);
+static int backend_handle_dir_create(inotify_backend_context_t *ctx,
+                                     const struct inotify_event *ev,
+                                     inotify_backend_event_fn on_event,
+                                     void *userdata);
 
 static int backend_init(inotify_backend_context_t *ctx);
 
@@ -619,17 +621,17 @@ static void backend_shutdown(inotify_backend_context_t *ctx);
 static int backend_process_scanned_dir_create(const fs_scan_entry_t *entry,
                                               void *userdata);
 
-static void backend_handle_ignored(inotify_backend_context_t *ctx,
-                                   const struct inotify_event *ev);
+static int backend_handle_ignored(inotify_backend_context_t *ctx,
+                                  const struct inotify_event *ev);
 
-static void backend_handle_move_self(inotify_backend_context_t *ctx,
-                                     const struct inotify_event *ev);
+static int backend_handle_move_self(inotify_backend_context_t *ctx,
+                                    const struct inotify_event *ev);
 
-static void backend_handle_delete_self(inotify_backend_context_t *ctx,
-                                       const struct inotify_event *ev);
+static int backend_handle_delete_self(inotify_backend_context_t *ctx,
+                                      const struct inotify_event *ev);
 
-static void backend_handle_unmount(inotify_backend_context_t *ctx,
-                                   const struct inotify_event *ev);
+static int backend_handle_unmount(inotify_backend_context_t *ctx,
+                                  const struct inotify_event *ev);
 
 static void backend_resync_watch(inotify_backend_context_t *ctx,
                                  int wd,
@@ -2538,11 +2540,13 @@ static int backend_poll(inotify_backend_context_t *ctx,
              * Until resync proves a trustworthy path again, forwarding a raw
              * event would give the core a path that may now be false.
              */
-            backend_log_stale_event_dropped(ctx,
-                                            ev->wd,
-                                            parent,
-                                            mask_str,
-                                            ev->len ? ev->name : "");
+            if (backend_log_stale_event_dropped(ctx,
+                                                ev->wd,
+                                                parent,
+                                                mask_str,
+                                                ev->len ? ev->name : "") != 0) {
+                return ERR_IO;
+            }
         }
 
         int callback_status =
@@ -2551,15 +2555,20 @@ static int backend_poll(inotify_backend_context_t *ctx,
         if (callback_status != ERR_OK)
             return callback_status;
 
-        backend_handle_move_self(ctx, ev);
+        if (backend_handle_move_self(ctx, ev) != ERR_OK)
+            return ERR_IO;
 
-        backend_handle_delete_self(ctx, ev);
+        if (backend_handle_delete_self(ctx, ev) != ERR_OK)
+            return ERR_IO;
 
-        backend_handle_unmount(ctx, ev);
+        if (backend_handle_unmount(ctx, ev) != ERR_OK)
+            return ERR_IO;
 
-        backend_handle_ignored(ctx, ev);
+        if (backend_handle_ignored(ctx, ev) != ERR_OK)
+            return ERR_IO;
 
-        backend_handle_dir_create(ctx, ev, on_event, userdata);
+        if (backend_handle_dir_create(ctx, ev, on_event, userdata) != ERR_OK)
+            return ERR_IO;
 
         ptr += sizeof(struct inotify_event) + ev->len;
     }
@@ -2580,16 +2589,19 @@ static int backend_poll(inotify_backend_context_t *ctx,
  * not turn it into a user-facing semantic event.
  *
  */
-static void backend_handle_ignored(inotify_backend_context_t *ctx,
-                                   const struct inotify_event *ev)
+static int backend_handle_ignored(inotify_backend_context_t *ctx,
+                                  const struct inotify_event *ev)
 {
     if (ctx == NULL || ev == NULL)
-        return;
+        return ERR_OK;
 
     if ((ev->mask & IN_IGNORED) == 0)
-        return;
+        return ERR_OK;
 
-    watch_manager_remove(ctx, ev->wd);
+    if (watch_manager_remove(ctx, ev->wd) != 0)
+        return ERR_IO;
+
+    return ERR_OK;
 }
 
 /*
@@ -2609,14 +2621,14 @@ static void backend_handle_ignored(inotify_backend_context_t *ctx,
  * the loss of path reliability while the wd -> path mapping is still available
  * for diagnostics.
  */
-static void backend_handle_move_self(inotify_backend_context_t *ctx,
-                                     const struct inotify_event *ev)
+static int backend_handle_move_self(inotify_backend_context_t *ctx,
+                                    const struct inotify_event *ev)
 {
     if (ctx == NULL || ev == NULL)
-        return;
+        return ERR_OK;
 
     if ((ev->mask & IN_MOVE_SELF) == 0)
-        return;
+        return ERR_OK;
 
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, ev->wd);
@@ -2629,15 +2641,18 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
                      "failed to mark watch stale wd=%d reason=IN_MOVE_SELF",
                      ev->wd);
 
-        return;
+        return ERR_IO;
     }
 
-    backend_log_watch_stale(ctx,
-                            ev->wd,
-                            path,
-                            "IN_MOVE_SELF");
+    if (backend_log_watch_stale(ctx,
+                                ev->wd,
+                                path,
+                                "IN_MOVE_SELF") != 0) {
+        return ERR_IO;
+    }
 
     backend_resync_watch(ctx, ev->wd, "IN_MOVE_SELF");
+    return ERR_OK;
 }
 
 /*
@@ -2655,14 +2670,14 @@ static void backend_handle_move_self(inotify_backend_context_t *ctx,
  * VALID -> STALE because the watched path disappeared, then STALE -> REMOVED
  * when the kernel confirms that the watch is gone.
  */
-static void backend_handle_delete_self(inotify_backend_context_t *ctx,
-                                       const struct inotify_event *ev)
+static int backend_handle_delete_self(inotify_backend_context_t *ctx,
+                                      const struct inotify_event *ev)
 {
     if (ctx == NULL || ev == NULL)
-        return;
+        return ERR_OK;
 
     if ((ev->mask & IN_DELETE_SELF) == 0)
-        return;
+        return ERR_OK;
 
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, ev->wd);
@@ -2675,13 +2690,17 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
                      "failed to mark watch stale wd=%d reason=IN_DELETE_SELF",
                      ev->wd);
 
-        return;
+        return ERR_IO;
     }
 
-    backend_log_watch_stale(ctx,
-                            ev->wd,
-                            path,
-                            "IN_DELETE_SELF");
+    if (backend_log_watch_stale(ctx,
+                                ev->wd,
+                                path,
+                                "IN_DELETE_SELF") != 0) {
+        return ERR_IO;
+    }
+
+    return ERR_OK;
 }
 
 /*
@@ -2700,14 +2719,14 @@ static void backend_handle_delete_self(inotify_backend_context_t *ctx,
  * watched filesystem is not available through the current mount namespace, so
  * an identity scan would spend work on a scope that cannot be trusted.
  */
-static void backend_handle_unmount(inotify_backend_context_t *ctx,
-                                   const struct inotify_event *ev)
+static int backend_handle_unmount(inotify_backend_context_t *ctx,
+                                  const struct inotify_event *ev)
 {
     if (ctx == NULL || ev == NULL)
-        return;
+        return ERR_OK;
 
     if ((ev->mask & IN_UNMOUNT) == 0)
-        return;
+        return ERR_OK;
 
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, ev->wd);
@@ -2720,13 +2739,17 @@ static void backend_handle_unmount(inotify_backend_context_t *ctx,
                      "failed to mark watch stale wd=%d reason=IN_UNMOUNT",
                      ev->wd);
 
-        return;
+        return ERR_IO;
     }
 
-    backend_log_watch_stale(ctx,
-                            ev->wd,
-                            path,
-                            "IN_UNMOUNT");
+    if (backend_log_watch_stale(ctx,
+                                ev->wd,
+                                path,
+                                "IN_UNMOUNT") != 0) {
+        return ERR_IO;
+    }
+
+    return ERR_OK;
 }
 
 /*
@@ -4384,35 +4407,35 @@ static void backend_log_resync_failure(inotify_backend_context_t *ctx,
  * final event semantics. No generic create deduplication policy is implemented
  * yet; if a duplicate appears, that policy must be designed explicitly.
  */
-static void backend_handle_dir_create(inotify_backend_context_t *ctx,
-                                      const struct inotify_event *ev,
-                                      inotify_backend_event_fn on_event,
-                                      void *userdata)
+static int backend_handle_dir_create(inotify_backend_context_t *ctx,
+                                     const struct inotify_event *ev,
+                                     inotify_backend_event_fn on_event,
+                                     void *userdata)
 {
     if (ctx == NULL || ev == NULL)
-        return;
+        return ERR_OK;
 
     if (!ctx->config->recursive)
-        return;
+        return ERR_OK;
 
     if ((ev->mask & IN_CREATE) == 0 ||
         (ev->mask & IN_ISDIR) == 0) {
-        return;
+        return ERR_OK;
     }
 
     const char *base =
         watcher_get_path(&ctx->runtime->watchers, ev->wd);
 
     if (base == NULL)
-        return;
+        return ERR_OK;
 
     if (watcher_is_stale(&ctx->runtime->watchers, ev->wd))
-        return;
+        return ERR_OK;
 
     char full[PATH_MAX];
 
     if (path_join(full, sizeof(full), base, ev->name) != 0)
-        return;
+        return ERR_OK;
 
     backend_emit_context_t context;
 
@@ -4422,7 +4445,7 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
     context.failed = 0;
 
     if (watch_manager_add(ctx, full) < 0)
-        return;
+        return ERR_IO;
 
     fs_scan_options_t opts;
 
@@ -4439,7 +4462,10 @@ static void backend_handle_dir_create(inotify_backend_context_t *ctx,
         logger_error(ctx->logger,
                      "recursive directory discovery failed path=%s",
                      full);
+        return ERR_IO;
     }
+
+    return ERR_OK;
 }
 
 /*

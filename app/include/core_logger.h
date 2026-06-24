@@ -39,12 +39,15 @@ typedef struct {
  * @ev: semantic event emitted by the core
  * @userdata: core_logger_context_t pointer supplied when the core is created
  *
- * Converts @ev to an Event Model v0 record, emits it through the compatibility
- * text sink, and writes the resulting plain-text payload through the
- * application logger. When @emit_record is configured, the same borrowed record
- * is also offered to the application-owned structured output path. The callback
- * does not take ownership of @ev or of the path strings inside it; those values
- * are valid only for the duration of the callback.
+ * Converts @ev to an Event Model v0 record and, when @emit_record is
+ * configured, offers that structured record to the application-owned output
+ * path before compatibility text formatting. The compatibility text sink then
+ * writes the human-readable payload through the application logger.
+ *
+ * The ordering is intentional: a fixed-size text payload buffer must not decide
+ * whether structured JSONL output receives a valid semantic record. The
+ * callback does not take ownership of @ev or of the path strings inside it;
+ * those values are valid only for the duration of the callback.
  */
 void core_logger_on_event(const alfred_event_t *ev, void *userdata);
 

@@ -484,6 +484,14 @@ sarebbe possibile immaginare un output best-effort, ma per un futuro log usato d
 test golden, audit e replay e' piu' sicuro fermarsi e rendere evidente il
 problema.
 
+Questa regola vale anche quando il record nasce dentro il backend inotify come
+diagnostica watch. Il backend non decide di chiudere Alfred e non conosce JSONL:
+chiama solo il callback `emit_record` ricevuto nel `inotify_backend_context_t`.
+Se il callback fallisce, il backend propaga l'errore al chiamante; l'applicazione
+vede `app.output_failed` e applica la policy fail-closed. In questo modo la
+responsabilita' resta separata: il backend produce e propaga fatti, l'app decide
+la policy dell'output configurato.
+
 `output_format` accetta per ora:
 
 ```text

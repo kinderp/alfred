@@ -747,6 +747,14 @@ lo clona/enqueue nella pipeline se `output_enabled=true`, oppure lo ignora in
 modo riuscito se l'output strutturato e' disabilitato. Questa e' la stessa
 regola di ownership usata per gli eventi semantici del core.
 
+Se `emit_record` fallisce, il backend non deve decidere una policy locale come
+"continua comunque" o "termina il processo". Deve propagare l'errore al proprio
+chiamante. La scelta fail-closed appartiene all'applicazione perche'
+l'applicazione possiede la configurazione `output_enabled`, la pipeline e il
+file `output_log`. Per questo `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
+`WATCH_STALE_EVENT_DROPPED` devono fermare startup o poll se il loro record
+strutturato non puo' attraversare la callback configurata.
+
 La copertura completa e aggiornata di cosa puo' passare da un sink, cosa passa
 gia' da un sink nel runtime e cosa entra davvero in JSONL e' nel
 [Contratto dei log](22-contratto-log.md#copertura-record-sink-e-output-jsonl).
