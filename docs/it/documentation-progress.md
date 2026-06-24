@@ -462,6 +462,14 @@ backpressure reale. La guida test spiega come confrontarla con
 `queue-dispatcher-jsonl` per capire se il wrapper pipeline aggiunge overhead
 rilevante prima del collegamento ad `app_run()`.
 
+Aggiornamento successivo: `34-report-benchmark-prestazioni.md` raccoglie i run
+manuali gia' eseguiti, i valori CSV osservati, l'interpretazione delle righe
+`counter`, `queue-dispatcher-jsonl` e `output-pipeline-jsonl`, e le conclusioni
+provvisorie sul costo della pipeline. Il report chiarisce che i numeri sono
+indicativi, che `runs=1` non basta per dichiarazioni prestazionali definitive e
+che il risultato utile per ora e' l'assenza di overhead macroscopico del wrapper
+pipeline rispetto a queue + dispatcher + JSONL.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime
