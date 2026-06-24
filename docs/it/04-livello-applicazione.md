@@ -501,6 +501,14 @@ vede `app.output_failed` e applica la policy fail-closed. In questo modo la
 responsabilita' resta separata: il backend produce e propaga fatti, l'app decide
 la policy dell'output configurato.
 
+Il caso `WATCH_STALE` e' particolarmente importante per capire il confine fra
+backend e applicazione. Quando arriva `IN_MOVE_SELF`, `IN_DELETE_SELF` o
+`IN_UNMOUNT`, il backend marca il watch come stale per dire che il vecchio path
+non e' piu' affidabile. Quel record diagnostico passa prima dal log compatibile
+e poi dal callback `emit_record`. Se il callback fallisce, il backend non
+continua il poll in silenzio: restituisce errore I/O al livello applicativo, che
+ferma Alfred quando l'output strutturato e' stato richiesto dall'utente.
+
 `output_format` accetta per ora:
 
 ```text

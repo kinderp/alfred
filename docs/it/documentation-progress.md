@@ -527,6 +527,13 @@ l'errore all'applicazione, che applica `output_enabled=true` come fail-closed.
 `test_watch_diagnostic_output_failure` verifica il caso `WATCH_ADDED` con
 rollback del watch appena installato.
 
+Aggiornamento successivo: il ramo `WATCH_STALE` ha ora una copertura dedicata.
+`WATCH_STALE` nasce durante il poll dei self-event (`IN_MOVE_SELF`,
+`IN_DELETE_SELF`, `IN_UNMOUNT`), non durante l'installazione del watch: per
+questo il test separato `test_watch_stale_output_failure` fa fallire solo il
+callback strutturato su quel tipo di record e verifica che il backend scriva il
+log compatibile, registri l'errore e restituisca fallimento al chiamante.
+
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
 inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,

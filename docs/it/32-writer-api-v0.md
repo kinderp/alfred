@@ -755,6 +755,15 @@ file `output_log`. Per questo `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
 `WATCH_STALE_EVENT_DROPPED` devono fermare startup o poll se il loro record
 strutturato non puo' attraversare la callback configurata.
 
+`WATCH_STALE` merita una nota separata perche' nasce in un punto diverso da
+`WATCH_ADDED`: non durante l'installazione del watch, ma mentre il backend sta
+processando un self-event come `IN_MOVE_SELF`, `IN_DELETE_SELF` o `IN_UNMOUNT`.
+Il backend prima scrive il record compatibile in `events.log`, poi offre lo
+stesso `alfred_record_t` borrowed al callback `emit_record`. Se il callback
+fallisce, `backend_log_watch_stale()` deve tornare errore: il poll non puo'
+continuare ignorando il fatto che il ledger strutturato ha perso proprio il
+record che segnala "questo path non e' piu' affidabile".
+
 La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
 righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:
 questo e' voluto per non trasformare il percorso corrente in una scrittura file

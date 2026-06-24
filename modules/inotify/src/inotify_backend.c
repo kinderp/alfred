@@ -333,8 +333,16 @@ static int backend_log_watch_diagnostic_record(
                 ctx->emit_record != NULL &&
                 ctx->emit_record(&record,
                                  ctx->emit_record_userdata) != 0) {
+                /*
+                 * WATCH_STALE is diagnostic backend state, but once the
+                 * application routes it to structured output the backend must
+                 * propagate callback failure. Otherwise output_enabled=true
+                 * could silently lose the stale-watch transition while the
+                 * event loop continues as if the ledger were complete.
+                 */
                 logger_error(ctx->logger,
                              "failed to emit watch stale output record");
+                return -1;
             }
 
             return 0;
