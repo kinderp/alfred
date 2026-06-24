@@ -332,6 +332,13 @@ passaggio tecnico successivo senza anticipare JSONL.
 brevi, la review architetturale periodica, i golden test JSONL e i tag
 architetturali cercabili nel codice.
 
+`00-regole-operative.md` e `11-come-contribuire.md` ora fissano anche la regola
+per i finding di review: i finding importanti vanno inseriti come commenti
+inline nella PR; il commit di fix deve citare PR e link al finding; dopo il fix
+bisogna rispondere al commento inline con lo SHA-1 del commit e una spiegazione
+in inglese della soluzione. In questo modo la review resta una traccia storica
+leggibile e collegata ai commit effettivi.
+
 ## Aggiornamento didattico lifetime e ownership C
 
 `08-guida-c-usato-nel-progetto.md` ora contiene una spiegazione estesa del

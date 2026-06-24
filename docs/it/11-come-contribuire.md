@@ -691,6 +691,59 @@ Il processo corretto e':
 4. eventuali commenti vengono risolti con nuovi commit sullo stesso branch
 5. quando test e review sono ok, il maintainer fa merge
 
+### Come gestire i finding della review
+
+Un finding e' un problema tecnico individuato durante la review: bug, contratto
+ambiguo, test mancante, rischio di regressione, documentazione insufficiente o
+responsabilita' architetturale nel modulo sbagliato.
+
+Per Alfred i finding importanti devono essere lasciati come commenti inline sul
+codice della PR. Un commento inline e' preferibile a un riepilogo generico
+perche' collega il problema alla riga, al file e al diff preciso che lo ha
+generato.
+
+Quando un finding viene risolto, il commit di fix deve essere tracciabile dalla
+PR:
+
+```text
+finding inline nella PR
+-> commit che applica il fix
+-> risposta al finding con SHA-1 del commit e spiegazione
+```
+
+Il messaggio del commit deve dire esplicitamente quale finding risolve. Nel body
+del commit includere:
+
+```text
+Fixes review finding:
+- PR: https://github.com/kinderp/alfred/pull/N
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+```
+
+Subito dopo il commit, aggiungere una risposta al commento inline del finding.
+La risposta deve essere in inglese e deve contenere:
+
+- SHA-1 del commit di fix;
+- spiegazione sintetica del problema;
+- spiegazione della soluzione applicata;
+- test o documentazione aggiornati, se rilevanti.
+
+Esempio:
+
+```text
+Fixed in 31cb28f87117b8fe7bcc5395d50e2bf855d65754.
+
+The fix makes init fail closed when the writer still has pending buffered
+bytes. This prevents accidental JSONL ledger loss during reinitialization.
+
+I also added a regression test that seeds pending bytes, calls init, and
+verifies that the buffer and used counter are preserved.
+```
+
+Questa procedura rende la review una fonte storica consultabile: dopo mesi si
+puo' leggere il finding, vedere il commit che lo ha risolto e capire perche' la
+soluzione e' stata scelta.
+
 Se devi aggiornare la PR dopo una review:
 
 ```bash

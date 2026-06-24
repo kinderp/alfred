@@ -201,6 +201,33 @@ I commit devono seguire sempre queste regole:
 - non committare file locali non tracciati, log generati o esperimenti fuori
   task
 
+### Commit che risolvono finding di review
+
+Quando una PR riceve finding tecnici, il flusso obbligatorio e':
+
+1. inserire i finding come commenti inline nella PR, non solo come riepilogo
+   generale;
+2. risolvere ogni finding con un commit monoscopo quando possibile;
+3. dopo il fix, aggiungere una risposta al commento inline del finding;
+4. nella risposta indicare lo SHA-1 del commit che risolve il finding e
+   spiegare in inglese la soluzione applicata;
+5. nel messaggio del commit corrispondente indicare che il commit risolve quel
+   finding, citando la PR e il link al commento/finding.
+
+Questa regola serve a trasformare la review in documentazione storica: chi legge
+la PR deve poter partire dal finding, arrivare al commit che lo risolve e capire
+perche' la soluzione e' corretta.
+
+Formato consigliato nel body del commit:
+
+```text
+Fixes review finding:
+- PR: https://github.com/kinderp/alfred/pull/N
+- Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
+
+Explain in English what the finding reported and how this commit fixes it.
+```
+
 Le regole di stile del messaggio seguono le pratiche raccolte in
 `Git Commit Best Practices`:
 
