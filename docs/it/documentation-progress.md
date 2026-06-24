@@ -593,6 +593,17 @@ strutturato. `tests/backend/test_resync_output_routing.c` fissa il contratto per
 `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e il ramo di fallimento callback. I
 diagnostici `WATCH_LOST_*` restano il prossimo gruppo da migrare.
 
+Aggiornamento successivo: il primo sottoinsieme `WATCH_LOST_*` e' stato
+collegato alla output pipeline. `WATCH_LOST_QUEUED`,
+`WATCH_LOST_QUEUE_SKIPPED` e `WATCH_LOST_QUEUE_FAILED` conservano il log
+compatibile e poi attraversano `ctx->emit_record`, quindi possono comparire in
+`output.jsonl` quando l'output strutturato e' abilitato. Il test mirato
+`tests/backend/test_lost_scope_queue_output_routing.c` copre successi e
+fallimento callback; `test_output_pipeline_runtime.sh` verifica il record
+`WATCH_LOST_QUEUED` nel runtime end-to-end. I record lost-scope di scan,
+coverage, reinstallazione, retry e fine recovery restano text-only fino al
+prossimo micro-step.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

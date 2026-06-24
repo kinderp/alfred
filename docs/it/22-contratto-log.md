@@ -162,7 +162,7 @@ La tabella usa queste colonne:
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
 | Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
 | Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia resync completa; prossimo lavoro su lost-scope |
-| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', solo text sink legacy nel backend inotify | no | stesso lavoro dei resync: output pipeline dopo il log compatibile e policy error channel invariata |
+| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | parziale: queue-level verso output pipeline, scan/recovery solo text sink legacy | parziale: queue-level quando `output_enabled=true` | completare routing scan/recovery lost-scope |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
 | Errori runtime generici | errori di config, I/O, allocazione, backend init | `errors.log` | non ancora uniforme | no | no | no | progettare `diagnostic/error` o `lifecycle/error` prima di serializzarli |
 | Trace/performance | tracepoint pipeline, benchmark, metriche | non runtime stabile | previsto | no | no | no | rimandato a layer `trace`/`pipeline` |
@@ -306,7 +306,7 @@ La copertura runtime pero' non e' ancora uniforme:
 | Watch lifecycle | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si | si | si', verso text sink e JSONL | si' | famiglia watch base completa; resync/lost-scope restano separati |
 | Resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END` | `events.log`/`errors.log` | si | si | text sink legacy + output pipeline | si' | famiglia migrata; mantenere test text e JSONL |
 | Resync reinstall | `WATCH_RESYNC_SCAN_MISSING`, `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_REINSTALL_FAILED`, `WATCH_RESYNC_ROLLBACK` | `events.log` | si | si | text sink legacy + output pipeline | si' | famiglia migrata; mantenere test text e JSONL |
-| Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | solo text sink legacy | no | aggiungere output strutturato senza duplicare logica |
+| Lost-scope queue | `WATCH_LOST_QUEUED`, `WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED` | `events.log`/`errors.log` | si | si | text sink legacy + output pipeline | si' | famiglia queue-level migrata; mantenere test text e JSONL |
 | Lost-scope scan/recovery | `WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_PREFIX_UPDATED`, coverage, reinstall, rollback, retry, gave-up, end | `events.log` | si | si | solo text sink legacy | no | definire policy di output per diagnostica lunga/rumorosa |
 
 I resync ora entrano in `output.jsonl` quando l'output strutturato e' abilitato.
@@ -329,8 +329,10 @@ Questa regola evita due errori: non crea un writer JSONL diretto nel backend e
 non cambia il contratto dei log testuali che i test esistenti continuano ad
 assertare.
 
-I `WATCH_LOST_*` non sono ancora migrati alla output pipeline. Restano
-sink-capable e text-sink-routed, ma non compaiono ancora in `output.jsonl`.
+I `WATCH_LOST_*` queue-level sono ora migrati alla output pipeline. Restano
+fuori da `output.jsonl`, per ora, i record di scan/recovery lost-scope come
+`WATCH_LOST_SCAN_BEGIN`, `WATCH_LOST_FOUND`, `WATCH_LOST_COVERAGE_*`,
+`WATCH_LOST_REINSTALLED`, `WATCH_LOST_ROLLBACK`, retry, gave-up e recovery end.
 
 Regola da rispettare:
 
@@ -799,6 +801,24 @@ lost-scope recovery
 
 `WATCH_LOST_QUEUE_FAILED` conserva il canale `error.log`; gli altri record
 `WATCH_LOST_*` restano diagnostici di `events.log`.
+
+Per i soli record queue-level (`WATCH_LOST_QUEUED`,
+`WATCH_LOST_QUEUE_SKIPPED`, `WATCH_LOST_QUEUE_FAILED`) il percorso e' ora anche:
+
+```text
+lost-scope queue handoff
+-> alfred_record_build_watch_diagnostic(...)
+-> fill record.recovery.pending_count
+-> alfred_record_sink_emit()
+-> alfred_record_text_sink_emit()
+-> logger_event() oppure logger_error()
+-> inotify_backend_context_t.emit_record()
+-> output pipeline JSONL quando output_enabled=true
+```
+
+Questo fissa il momento in cui Alfred decide che il probe locale non basta e
+che serve recovery ampia posticipata. I record successivi dello scan lost-scope
+restano nel log compatibile fino al prossimo micro-step.
 
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |

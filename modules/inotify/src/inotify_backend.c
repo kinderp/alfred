@@ -671,11 +671,11 @@ static int backend_resync_probe_result_needs_lost_scope(
     backend_resync_probe_result_t result
 );
 
-static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
-                                       int wd,
-                                       const char *path,
-                                       const char *reason,
-                                       backend_resync_probe_result_t result);
+static int backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                      int wd,
+                                      const char *path,
+                                      const char *reason,
+                                      backend_resync_probe_result_t result);
 
 static error_t backend_resync_watch_subtree_dirs(inotify_backend_context_t *ctx,
                                                 int wd,
@@ -2805,7 +2805,9 @@ static int backend_resync_watch(inotify_backend_context_t *ctx,
     const char *path =
         watcher_get_path(&ctx->runtime->watchers, wd);
 
-    backend_enqueue_lost_scope(ctx, wd, path ? path : "", reason, result);
+    if (backend_enqueue_lost_scope(ctx, wd, path ? path : "", reason, result) != 0)
+        return -1;
+
     return 0;
 }
 
@@ -3145,14 +3147,14 @@ static int backend_resync_probe_result_needs_lost_scope(
  * helper keeps the old local-path fallback so diagnostic recovery state is
  * still self-contained instead of dropping the entry.
  */
-static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
-                                       int wd,
-                                       const char *path,
-                                       const char *reason,
-                                       backend_resync_probe_result_t result)
+static int backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
+                                      int wd,
+                                      const char *path,
+                                      const char *reason,
+                                      backend_resync_probe_result_t result)
 {
     if (ctx == NULL || path == NULL || reason == NULL)
-        return;
+        return -1;
 
     dev_t device_id;
     ino_t inode_id;
@@ -3161,27 +3163,29 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                              wd,
                              &device_id,
                              &inode_id) != 0) {
-        (void)backend_log_lost_scope_record(
-            ctx,
-            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
-            wd,
-            path,
-            NULL,
-            NULL,
-            reason,
-            NULL,
-            "missing-identity",
-            NULL,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0);
-        return;
+        if (backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED,
+                wd,
+                path,
+                NULL,
+                NULL,
+                reason,
+                NULL,
+                "missing-identity",
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0) != 0) {
+            return -1;
+        }
+        return 0;
     }
 
     uint64_t now_ns = backend_now_ns();
@@ -3200,9 +3204,34 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
                                          reason,
                                          now_ns,
                                          now_ns) != 0) {
-        (void)backend_log_lost_scope_record(
+        if (backend_log_lost_scope_record(
+                ctx,
+                ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+                wd,
+                path,
+                NULL,
+                NULL,
+                reason,
+                NULL,
+                backend_resync_probe_result_name(result),
+                NULL,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0) != 0) {
+            return -1;
+        }
+        return 0;
+    }
+
+    if (backend_log_lost_scope_record(
             ctx,
-            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED,
+            ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
             wd,
             path,
             NULL,
@@ -3215,34 +3244,15 @@ static void backend_enqueue_lost_scope(inotify_backend_context_t *ctx,
             0,
             0,
             0,
+            backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
             0,
             0,
             0,
-            0,
-            0);
-        return;
+            0) != 0) {
+        return -1;
     }
 
-    (void)backend_log_lost_scope_record(
-        ctx,
-        ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED,
-        wd,
-        path,
-        NULL,
-        NULL,
-        reason,
-        NULL,
-        backend_resync_probe_result_name(result),
-        NULL,
-        0,
-        0,
-        0,
-        0,
-        backend_lost_scope_queue_count(&ctx->runtime->lost_scopes),
-        0,
-        0,
-        0,
-        0);
+    return 0;
 }
 
 /*
@@ -4197,8 +4207,11 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
  * This is the lost-scope counterpart of backend_log_resync_record(). It builds
  * an Event Model v0 record, fills the recovery payload, emits the record
  * through the text sink, and falls back to the same text shape if the sink path
- * fails. WATCH_LOST_QUEUE_FAILED keeps the historical error-log channel through
- * the same routed sink callback used by local resync failures.
+ * fails. Queue-level records are also offered to ctx->emit_record after the
+ * compatibility log succeeds; scan/recovery records remain text-only until
+ * their own migration step. WATCH_LOST_QUEUE_FAILED keeps the historical
+ * error-log channel through the same routed sink callback used by local resync
+ * failures.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -4272,6 +4285,17 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
+            if ((type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED ||
+                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED) &&
+                ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit watch lost queue output record");
+                return -1;
+            }
+
             return 0;
         }
     }
