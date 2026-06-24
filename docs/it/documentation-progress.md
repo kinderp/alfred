@@ -635,6 +635,16 @@ runtime si ferma. Questo evita che `events.log` sembri completo mentre
 `WATCH_LOST_FOUND` viene rifiutato dal callback e la recovery si interrompe
 prima di `WATCH_LOST_RECOVERY_END`.
 
+Aggiornamento successivo: la stessa review ha evidenziato che il text sink non
+puo' essere il gate del ledger strutturato. Se `alfred_record_text_sink_emit()`
+fallisce per buffer testuale insufficiente, i helper `WATCH_RESYNC_*` e
+`WATCH_LOST_*` scrivono comunque il fallback legacy su `events.log` /
+`errors.log` e poi chiamano `emit_record` con il record gia' costruito. I test
+`tests/backend/test_resync_output_routing.c` e
+`tests/backend/test_lost_scope_scan_output_routing.c` coprono path lunghi che
+forzano il fallback e verificano che il record strutturato attraversi ancora la
+output pipeline.
+
 ## Aggiornamento Writer Runtime v0
 
 `33-writer-runtime-roadmap-v0.md` separa la Writer API v0 dalla roadmap runtime

@@ -828,6 +828,14 @@ sia fallito: significa che Alfred ha perso il confine strutturato del record.
 Nel runtime questo errore risale al poll, che deve fermarsi invece di produrre un
 `output.jsonl` incompleto.
 
+Questo contratto resta valido anche quando il text sink fallisce prima di
+scrivere la riga compatibile, per esempio perche' un path molto lungo non entra
+nel buffer del formatter testuale. In quel caso il backend usa il fallback
+legacy `logger_event()` o `logger_error()` per conservare `events.log` /
+`errors.log`, poi chiama comunque `emit_record` con il record strutturato gia'
+costruito. Il formatter umano non e' quindi il gate di JSONL: e' solo uno dei
+modi per produrre la riga compatibile.
+
 | Log | Quando appare | Significato | Cosa non significa |
 | --- | --- | --- | --- |
 | `WATCH_LOST_QUEUED wd=N path=P reason=R error=E pending=K` | il probe locale fallisce ma il backend ha ancora identita' salvata utile | Alfred ha accodato lo scope per una recovery ampia posticipata; `K` e' il numero di scope pending nella queue | non significa che il path sia stato ritrovato; non e' evento raw/core e non cambia semantica utente |

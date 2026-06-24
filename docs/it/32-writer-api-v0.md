@@ -780,6 +780,16 @@ compatibile e poi offre lo stesso record borrowed al callback `emit_record`. Se
 essere ignorato. Questa scelta mantiene JSONL come ledger affidabile senza
 trasformare il backend in un writer JSONL diretto.
 
+Il log compatibile e il ledger strutturato non devono pero' dipendere dallo
+stesso successo interno. Il text sink usa un buffer fisso per produrre la riga
+umana di `events.log` o `errors.log`; se un path molto lungo non entra in quel
+buffer, il backend usa ancora il vecchio fallback `logger_event()` /
+`logger_error()` per preservare il log storico. Dopo quel fallback deve comunque
+offrire il record gia' costruito a `emit_record`. In altre parole: un fallimento
+del formatter testuale umano puo' cambiare il modo in cui si scrive la riga
+compatibile, ma non puo' impedire al record strutturato di arrivare alla output
+pipeline.
+
 I diagnostici `WATCH_LOST_*` seguono ora la stessa regola completa. Conservano
 il log compatibile e vengono poi offerti a `emit_record`, quindi compaiono in
 `output.jsonl` quando l'output strutturato e' abilitato. Questo include
@@ -795,6 +805,12 @@ questo la recovery lost-scope distingue il risultato interno `output-failed` da
 `scan-failed`: `scan-failed` riguarda una ricerca o una riparazione non
 affidabile; `output-failed` riguarda il ledger strutturato e deve fermare il
 poll quando `emit_record` e' stato installato dall'applicazione.
+
+Anche per `WATCH_LOST_*` vale la stessa separazione tra compatibilita' testuale
+e output strutturato. Se il text sink non riesce a formattare una riga molto
+lunga, il backend scrive la forma legacy equivalente e poi chiama comunque
+`emit_record`. Se invece fallisce `emit_record`, la recovery non puo'
+proseguire come se `output.jsonl` fosse completo.
 
 La policy fail-closed non finisce con `app_run()`. Il writer JSONL accumula
 righe in un buffer caller-owned e non chiama la callback bytes dopo ogni record:

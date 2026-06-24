@@ -4105,9 +4105,12 @@ static const char *backend_resync_probe_result_name(
  * the Event Model v0 record, fills the recovery payload used by the sinks,
  * writes the compatibility text log first, then offers the same borrowed record
  * to ctx->emit_record. Queue-based output must clone the record before the
- * callback returns. WATCH_RESYNC_SCAN_FAILED keeps the historical error-log
- * channel through a routed text-sink callback; the other local resync
- * diagnostics remain event-log records.
+ * callback returns. The text sink is not allowed to gate structured output: if
+ * its fixed buffer cannot render the compatibility payload, the helper writes
+ * the legacy logger fallback and still calls ctx->emit_record with the already
+ * built record. WATCH_RESYNC_SCAN_FAILED keeps the historical error-log channel
+ * through a routed text-sink callback or the equivalent fallback; the other
+ * local resync diagnostics remain event-log records.
  *
  * Return: 0 after writing a diagnostic, -1 on unsupported type or invalid ctx.
  */
@@ -4130,6 +4133,8 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
     alfred_record_sink_t sink;
     char payload[BACKEND_RECORD_TEXT_BUFFER_SIZE];
     const char *safe_path = path != NULL ? path : "";
+    int record_built = 0;
+    int compat_logged = 0;
 
     if (ctx == NULL || ctx->logger == NULL || reason == NULL)
         return -1;
@@ -4145,6 +4150,7 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
                                                            NULL,
                                                            NULL,
                                                            &record) == 0) {
+        record_built = 1;
         record.recovery.directories_seen = directories_seen;
         record.recovery.directories_watched = directories_watched;
         record.recovery.directories_missing = directories_missing;
@@ -4162,109 +4168,124 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            if (ctx->emit_record != NULL &&
-                ctx->emit_record(&record,
-                                 ctx->emit_record_userdata) != 0) {
-                logger_error(ctx->logger,
-                             "failed to emit watch resync output record");
-                return -1;
-            }
-
-            return 0;
+            compat_logged = 1;
         }
     }
 
-    switch (type) {
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
-                     wd,
-                     safe_path,
-                     reason);
-        return 0;
+    if (!compat_logged) {
+        switch (type) {
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_BEGIN wd=%d path=%s reason=%s",
+                         wd,
+                         safe_path,
+                         reason);
+            compat_logged = 1;
+            break;
 
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED:
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_FAILED:
+            logger_error(ctx->logger,
+                         "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s "
+                         "rc=%d",
+                         wd,
+                         safe_path,
+                         reason,
+                         result_code);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s "
+                         "dirs=%zu watched=%zu missing=%zu",
+                         wd,
+                         safe_path,
+                         reason,
+                         directories_seen,
+                         directories_watched,
+                         directories_missing);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s "
+                         "result=%s",
+                         wd,
+                         safe_path,
+                         reason,
+                         state != NULL ? state : "");
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s "
+                         "missing_path=%s",
+                         wd,
+                         safe_path,
+                         reason,
+                         detail_path != NULL ? detail_path : "");
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s "
+                         "reason=%s missing_path=%s",
+                         wd,
+                         safe_path,
+                         reason,
+                         detail_path != NULL ? detail_path : "");
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s "
+                         "removed_wd=%d",
+                         wd,
+                         safe_path,
+                         reason,
+                         related_watch_id);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s "
+                         "installed_path=%s",
+                         wd,
+                         safe_path,
+                         reason,
+                         detail_path != NULL ? detail_path : "");
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_RESYNC_END:
+            logger_event(ctx->logger,
+                         "WATCH_RESYNC_END wd=%d path=%s reason=%s result=%s",
+                         wd,
+                         safe_path,
+                         reason,
+                         state != NULL ? state : "");
+            compat_logged = 1;
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    if (record_built &&
+        ctx->emit_record != NULL &&
+        ctx->emit_record(&record, ctx->emit_record_userdata) != 0) {
         logger_error(ctx->logger,
-                     "WATCH_RESYNC_SCAN_FAILED wd=%d path=%s reason=%s rc=%d",
-                     wd,
-                     safe_path,
-                     reason,
-                     result_code);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_DONE:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_DONE wd=%d path=%s reason=%s "
-                     "dirs=%zu watched=%zu missing=%zu",
-                     wd,
-                     safe_path,
-                     reason,
-                     directories_seen,
-                     directories_watched,
-                     directories_missing);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_CLASS:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_CLASS wd=%d path=%s reason=%s result=%s",
-                     wd,
-                     safe_path,
-                     reason,
-                     state != NULL ? state : "");
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_SCAN_MISSING:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_SCAN_MISSING wd=%d path=%s reason=%s "
-                     "missing_path=%s",
-                     wd,
-                     safe_path,
-                     reason,
-                     detail_path != NULL ? detail_path : "");
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALL_FAILED:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_REINSTALL_FAILED wd=%d path=%s reason=%s "
-                     "missing_path=%s",
-                     wd,
-                     safe_path,
-                     reason,
-                     detail_path != NULL ? detail_path : "");
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_ROLLBACK:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_ROLLBACK wd=%d path=%s reason=%s "
-                     "removed_wd=%d",
-                     wd,
-                     safe_path,
-                     reason,
-                     related_watch_id);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_REINSTALLED:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_REINSTALLED wd=%d path=%s reason=%s "
-                     "installed_path=%s",
-                     wd,
-                     safe_path,
-                     reason,
-                     detail_path != NULL ? detail_path : "");
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_RESYNC_END:
-        logger_event(ctx->logger,
-                     "WATCH_RESYNC_END wd=%d path=%s reason=%s result=%s",
-                     wd,
-                     safe_path,
-                     reason,
-                     state != NULL ? state : "");
-        return 0;
-
-    default:
+                     "failed to emit watch resync output record");
         return -1;
     }
+
+    return 0;
 }
 
 /*
@@ -4293,8 +4314,9 @@ static int backend_log_resync_record(inotify_backend_context_t *ctx,
  * an Event Model v0 record, fills the recovery payload, emits the record
  * through the text sink, and falls back to the same text shape if the sink path
  * fails. WATCH_LOST_* records are also offered to ctx->emit_record after the
- * compatibility log succeeds, so the structured output pipeline can observe
- * the same recovery diagnostics as events.log/errors.log. WATCH_LOST_QUEUE_
+ * compatibility log succeeds, even when that compatibility line had to use the
+ * legacy logger fallback because the text-sink buffer was too small. This keeps
+ * structured output independent from the human text formatter. WATCH_LOST_QUEUE_
  * FAILED keeps the historical error-log channel through the same routed sink
  * callback used by local resync failures.
  *
@@ -4332,6 +4354,8 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
     const char *safe_state = state != NULL ? state : "";
     const char *safe_error = error != NULL ? error : "";
     const char *safe_detail_path = detail_path != NULL ? detail_path : "";
+    int record_built = 0;
+    int compat_logged = 0;
 
     if (ctx == NULL || ctx->logger == NULL)
         return -1;
@@ -4347,6 +4371,7 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
                                                            NULL,
                                                            NULL,
                                                            &record) == 0) {
+        record_built = 1;
         record.old_path = old_path;
         record.new_path = new_path;
         record.watch.retry_count = retry_count;
@@ -4370,211 +4395,219 @@ static int backend_log_lost_scope_record(inotify_backend_context_t *ctx,
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
-            if ((type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_FOUND ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED ||
-                 type == ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END) &&
-                ctx->emit_record != NULL &&
-                ctx->emit_record(&record,
-                                 ctx->emit_record_userdata) != 0) {
-                logger_error(ctx->logger,
-                             "failed to emit watch lost queue output record");
-                return -1;
-            }
-
-            return 0;
+            compat_logged = 1;
         }
     }
 
-    switch (type) {
-    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s "
-                     "pending=%zu",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_error,
-                     pending_count);
-        return 0;
+    if (!compat_logged) {
+        switch (type) {
+        case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_QUEUED wd=%d path=%s reason=%s error=%s "
+                         "pending=%zu",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_error,
+                         pending_count);
+            compat_logged = 1;
+            break;
 
-    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s "
-                     "error=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_error);
-        return 0;
+        case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_SKIPPED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_QUEUE_SKIPPED wd=%d path=%s reason=%s "
+                         "error=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_error);
+            compat_logged = 1;
+            break;
 
-    case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED:
+        case ALFRED_RECORD_TYPE_WATCH_LOST_QUEUE_FAILED:
+            logger_error(ctx->logger,
+                         "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s "
+                         "error=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_error);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
+                         safe_path,
+                         pending_count);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_FOUND:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s "
+                         "reason=%s",
+                         wd,
+                         safe_old_path,
+                         safe_new_path,
+                         safe_reason);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s "
+                         "new_prefix=%s children=%zu",
+                         wd,
+                         safe_old_path,
+                         safe_new_path,
+                         children_count);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s "
+                         "dirs=%zu watched=%zu missing=%zu",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         directories_seen,
+                         directories_watched,
+                         directories_missing);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s "
+                         "missing_path=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_detail_path);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s "
+                         "result=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_state);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s "
+                         "installed_path=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_detail_path);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s "
+                         "missing_path=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_detail_path);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s "
+                         "removed_wd=%d",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         related_watch_id);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s "
+                         "retry=%u",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         retry_count);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s "
+                         "reason=%s result=%s retry=%u delay_ms=%llu "
+                         "pending=%zu",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_state,
+                         retry_count,
+                         (unsigned long long)delay_ms,
+                         pending_count);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s "
+                         "reason=%s result=%s retries=%u",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_state,
+                         retry_count);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s "
+                         "error=%s",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_error);
+            compat_logged = 1;
+            break;
+
+        case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END:
+            logger_event(ctx->logger,
+                         "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s "
+                         "result=%s watches=%zu",
+                         wd,
+                         safe_path,
+                         safe_reason,
+                         safe_state,
+                         watches_count);
+            compat_logged = 1;
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    if (record_built &&
+        ctx->emit_record != NULL &&
+        ctx->emit_record(&record, ctx->emit_record_userdata) != 0) {
         logger_error(ctx->logger,
-                     "WATCH_LOST_QUEUE_FAILED wd=%d path=%s reason=%s "
-                     "error=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_error);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_SCAN_BEGIN:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_SCAN_BEGIN root=%s pending=%zu",
-                     safe_path,
-                     pending_count);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_FOUND:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_FOUND wd=%d old_path=%s new_path=%s reason=%s",
-                     wd,
-                     safe_old_path,
-                     safe_new_path,
-                     safe_reason);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_PREFIX_UPDATED wd=%d old_prefix=%s "
-                     "new_prefix=%s children=%zu",
-                     wd,
-                     safe_old_path,
-                     safe_new_path,
-                     children_count);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_DONE wd=%d path=%s reason=%s "
-                     "dirs=%zu watched=%zu missing=%zu",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     directories_seen,
-                     directories_watched,
-                     directories_missing);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_MISSING:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_MISSING wd=%d path=%s reason=%s "
-                     "missing_path=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_detail_path);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_CLASS:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_COVERAGE_CLASS wd=%d path=%s reason=%s "
-                     "result=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_state);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALLED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_REINSTALLED wd=%d path=%s reason=%s "
-                     "installed_path=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_detail_path);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_REINSTALL_FAILED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_REINSTALL_FAILED wd=%d path=%s reason=%s "
-                     "missing_path=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_detail_path);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_ROLLBACK:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_ROLLBACK wd=%d path=%s reason=%s removed_wd=%d",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     related_watch_id);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_NOT_FOUND:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_NOT_FOUND wd=%d path=%s reason=%s retry=%u",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     retry_count);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_RETRY_SCHEDULED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RETRY_SCHEDULED wd=%d path=%s reason=%s "
-                     "result=%s retry=%u delay_ms=%llu pending=%zu",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_state,
-                     retry_count,
-                     (unsigned long long)delay_ms,
-                     pending_count);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_GAVE_UP wd=%d path=%s reason=%s "
-                     "result=%s retries=%u",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_state,
-                     retry_count);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_FAILED:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_FAILED wd=%d path=%s reason=%s "
-                     "error=%s",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_error);
-        return 0;
-
-    case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_END:
-        logger_event(ctx->logger,
-                     "WATCH_LOST_RECOVERY_END wd=%d path=%s reason=%s "
-                     "result=%s watches=%zu",
-                     wd,
-                     safe_path,
-                     safe_reason,
-                     safe_state,
-                     watches_count);
-        return 0;
-
-    default:
+                     "failed to emit watch lost queue output record");
         return -1;
     }
+
+    return 0;
 }
 
 /*

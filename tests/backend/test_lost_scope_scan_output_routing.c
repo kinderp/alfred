@@ -45,6 +45,8 @@
 typedef struct lost_scan_emit_context {
     unsigned calls;
     alfred_record_type_t fail_type;
+    const char *expected_coverage_path;
+    int expected_watch_id;
 } lost_scan_emit_context_t;
 
 /*
@@ -78,7 +80,7 @@ static int collect_or_fail_lost_scan_record(const alfred_record_t *record,
         break;
 
     case ALFRED_RECORD_TYPE_WATCH_LOST_FOUND:
-        assert(record->watch.watch_id == 77);
+        assert(record->watch.watch_id == ctx->expected_watch_id);
         assert(record->old_path != NULL);
         assert(record->new_path != NULL);
         assert(strcmp(record->old_path, "/tmp/alfred-lost-old") == 0);
@@ -88,7 +90,7 @@ static int collect_or_fail_lost_scan_record(const alfred_record_t *record,
         break;
 
     case ALFRED_RECORD_TYPE_WATCH_LOST_PREFIX_UPDATED:
-        assert(record->watch.watch_id == 77);
+        assert(record->watch.watch_id == ctx->expected_watch_id);
         assert(record->old_path != NULL);
         assert(record->new_path != NULL);
         assert(strcmp(record->old_path, "/tmp/alfred-lost-old") == 0);
@@ -98,7 +100,8 @@ static int collect_or_fail_lost_scan_record(const alfred_record_t *record,
 
     case ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE:
         assert(record->path != NULL);
-        assert(strcmp(record->path, "/tmp/alfred-lost-new") == 0);
+        assert(ctx->expected_coverage_path != NULL);
+        assert(strcmp(record->path, ctx->expected_coverage_path) == 0);
         assert(record->recovery.directories_seen == 5u);
         assert(record->recovery.directories_watched == 3u);
         assert(record->recovery.directories_missing == 2u);
@@ -134,6 +137,27 @@ static int collect_or_fail_lost_scan_record(const alfred_record_t *record,
         return -1;
 
     return 0;
+}
+
+/*
+ * fill_long_path - build a path that cannot fit the backend text sink buffer
+ * @dst: destination buffer
+ * @dst_size: size of @dst in bytes
+ *
+ * The record still points to a valid borrowed path, but text formatting must
+ * fail with truncation. The test then proves the helper writes the legacy
+ * compatibility fallback and still offers the structured WATCH_LOST_* record to
+ * emit_record.
+ */
+static void fill_long_path(char *dst, size_t dst_size)
+{
+    assert(dst != NULL);
+    assert(dst_size > 8u);
+
+    strcpy(dst, "/tmp/");
+    memset(dst + 5, 'y', dst_size - 7u);
+    dst[dst_size - 2u] = 'z';
+    dst[dst_size - 1u] = '\0';
 }
 
 /*
@@ -327,6 +351,8 @@ int main(void)
     lost_scan_emit_context_t emit_ctx;
     memset(&emit_ctx, 0, sizeof(emit_ctx));
     emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
+    emit_ctx.expected_coverage_path = "/tmp/alfred-lost-new";
+    emit_ctx.expected_watch_id = 77;
 
     inotify_backend_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -382,12 +408,68 @@ int main(void)
                0) == -1);
     assert(emit_ctx.calls == 9u);
 
+    char long_path[BACKEND_RECORD_TEXT_BUFFER_SIZE + 128u];
+
+    fill_long_path(long_path, sizeof(long_path));
+    emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
+    emit_ctx.expected_coverage_path = long_path;
+    emit_ctx.expected_watch_id = 88;
+
+    assert(backend_log_lost_scope_record(
+               &ctx,
+               ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+               88,
+               long_path,
+               NULL,
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               NULL,
+               NULL,
+               0,
+               5,
+               3,
+               2,
+               0,
+               0,
+               0,
+               0,
+               0) == 0);
+    assert(emit_ctx.calls == 10u);
+
+    emit_ctx.fail_type = ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE;
+    emit_ctx.expected_watch_id = 89;
+
+    assert(backend_log_lost_scope_record(
+               &ctx,
+               ALFRED_RECORD_TYPE_WATCH_LOST_COVERAGE_DONE,
+               89,
+               long_path,
+               NULL,
+               NULL,
+               "IN_MOVE_SELF",
+               NULL,
+               NULL,
+               NULL,
+               0,
+               5,
+               3,
+               2,
+               0,
+               0,
+               0,
+               0,
+               0) == -1);
+    assert(emit_ctx.calls == 11u);
+
     logger_close(&logger);
 
     assert(file_contains(event_log, "WATCH_LOST_SCAN_BEGIN"));
     assert(file_contains(event_log, "WATCH_LOST_FOUND wd=77"));
     assert(file_contains(event_log, "WATCH_LOST_PREFIX_UPDATED wd=77"));
     assert(file_contains(event_log, "WATCH_LOST_COVERAGE_DONE wd=77"));
+    assert(file_contains(event_log, "WATCH_LOST_COVERAGE_DONE wd=88"));
+    assert(file_contains(event_log, "WATCH_LOST_COVERAGE_DONE wd=89"));
     assert(file_contains(event_log, "WATCH_LOST_COVERAGE_MISSING wd=77"));
     assert(file_contains(event_log, "WATCH_LOST_COVERAGE_CLASS wd=77"));
     assert(file_contains(event_log, "WATCH_LOST_NOT_FOUND wd=77"));

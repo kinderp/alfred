@@ -36,6 +36,8 @@
 typedef struct resync_emit_context {
     unsigned calls;
     alfred_record_type_t fail_type;
+    const char *expected_path;
+    int expected_watch_id;
 } resync_emit_context_t;
 
 /*
@@ -61,9 +63,9 @@ static int collect_or_fail_resync_record(const alfred_record_t *record,
     assert(record->backend != NULL);
     assert(strcmp(record->backend, "inotify") == 0);
     assert(record->path != NULL);
-    assert(strcmp(record->path,
-                  "/tmp/alfred-resync-output-routing") == 0);
-    assert(record->watch.watch_id == 77);
+    assert(ctx->expected_path != NULL);
+    assert(strcmp(record->path, ctx->expected_path) == 0);
+    assert(record->watch.watch_id == ctx->expected_watch_id);
     assert(record->watch.reason != NULL);
     assert(strcmp(record->watch.reason, "IN_MOVE_SELF") == 0);
 
@@ -81,6 +83,28 @@ static int collect_or_fail_resync_record(const alfred_record_t *record,
         return -1;
 
     return 0;
+}
+
+/*
+ * fill_long_path - build a path that cannot fit the backend text sink buffer
+ * @dst: destination buffer
+ * @dst_size: size of @dst in bytes
+ *
+ * The backend record still borrows a valid NUL-terminated string, but the
+ * compatibility text sink must reject the formatted payload because the path is
+ * longer than BACKEND_RECORD_TEXT_BUFFER_SIZE. That forces the helper through
+ * the legacy logger fallback and proves emit_record is not gated by the human
+ * text formatter.
+ */
+static void fill_long_path(char *dst, size_t dst_size)
+{
+    assert(dst != NULL);
+    assert(dst_size > 8u);
+
+    strcpy(dst, "/tmp/");
+    memset(dst + 5, 'x', dst_size - 7u);
+    dst[dst_size - 2u] = 'z';
+    dst[dst_size - 1u] = '\0';
 }
 
 /*
@@ -125,6 +149,8 @@ int main(void)
     resync_emit_context_t emit_ctx;
     memset(&emit_ctx, 0, sizeof(emit_ctx));
     emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
+    emit_ctx.expected_path = path;
+    emit_ctx.expected_watch_id = 77;
 
     inotify_backend_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -165,9 +191,49 @@ int main(void)
                0) == -1);
     assert(emit_ctx.calls == 3u);
 
+    char long_path[BACKEND_RECORD_TEXT_BUFFER_SIZE + 128u];
+
+    fill_long_path(long_path, sizeof(long_path));
+    emit_ctx.fail_type = ALFRED_RECORD_TYPE_UNKNOWN;
+    emit_ctx.expected_path = long_path;
+    emit_ctx.expected_watch_id = 88;
+
+    assert(backend_log_resync_record(&ctx,
+                                     ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
+                                     88,
+                                     long_path,
+                                     "IN_MOVE_SELF",
+                                     NULL,
+                                     NULL,
+                                     0,
+                                     0,
+                                     0,
+                                     0,
+                                     0) == 0);
+    assert(emit_ctx.calls == 4u);
+
+    emit_ctx.fail_type = ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN;
+    emit_ctx.expected_watch_id = 89;
+
+    assert(backend_log_resync_record(&ctx,
+                                     ALFRED_RECORD_TYPE_WATCH_RESYNC_BEGIN,
+                                     89,
+                                     long_path,
+                                     "IN_MOVE_SELF",
+                                     NULL,
+                                     NULL,
+                                     0,
+                                     0,
+                                     0,
+                                     0,
+                                     0) == -1);
+    assert(emit_ctx.calls == 5u);
+
     logger_close(&logger);
 
     assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=77"));
+    assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=88"));
+    assert(file_contains(event_log, "WATCH_RESYNC_BEGIN wd=89"));
     assert(file_contains(event_log,
                          "WATCH_RESYNC_FAILED wd=77"));
     assert(file_contains(event_log, "error=identity-mismatch"));
