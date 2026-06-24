@@ -471,6 +471,12 @@ conoscere `app_t`, file di output o writer: costruisce solo il record
 diagnostico e lo consegna al callback borrowed. `test_output_pipeline_runtime.sh`
 ora controlla anche `WATCH_ADDED` e `WATCH_REMOVED` in `output.jsonl`.
 
+Aggiornamento successivo: `WATCH_STALE` usa lo stesso callback `emit_record`
+dopo aver preservato `events.log`, quindi entra in `output.jsonl` quando
+`output_enabled=true`. Il routing resta volutamente limitato: `WATCH_RESYNC_*`,
+`WATCH_LOST_*` e `WATCH_STALE_EVENT_DROPPED` non sono ancora collegati al writer
+runtime e richiedono micro-step dedicati.
+
 Aggiornamento successivo: `22-contratto-log.md` contiene ora una mappa di
 copertura per tutte le famiglie loggabili: fatti kernel/backend `IN_*`, audit
 inotify, raw Alfred normalizzati, raw sintetici, eventi semantici core,

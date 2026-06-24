@@ -278,6 +278,11 @@ static int backend_write_routed_payload(void *userdata, const char *payload)
  * limited reason+result cases handled by the formatter. OS error fields remain
  * optional: callers pass them only for diagnostics that need to preserve
  * syscall evidence while keeping Alfred's stable @error token separate.
+ *
+ * The output pipeline bridge is intentionally narrower than this helper:
+ * WATCH_STALE is routed to the optional structured output callback, while
+ * WATCH_RESYNC_* and WATCH_LOST_* stay text-only until their richer recovery
+ * payloads are migrated in separate reviewable steps.
  */
 static int backend_log_watch_diagnostic_record(
     inotify_backend_context_t *ctx,
@@ -319,6 +324,19 @@ static int backend_log_watch_diagnostic_record(
 
         if (alfred_record_text_sink_init(&text_sink, &sink) == 0 &&
             alfred_record_sink_emit(&sink, &record) == 0) {
+            /*
+             * Keep events.log compatibility first, then expose WATCH_STALE to
+             * optional structured output. Queue-based output must clone this
+             * borrowed record before returning.
+             */
+            if (type == ALFRED_RECORD_TYPE_WATCH_STALE &&
+                ctx->emit_record != NULL &&
+                ctx->emit_record(&record,
+                                 ctx->emit_record_userdata) != 0) {
+                logger_error(ctx->logger,
+                             "failed to emit watch stale output record");
+            }
+
             return 0;
         }
 

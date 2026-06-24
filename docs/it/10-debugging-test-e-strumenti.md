@@ -2226,10 +2226,11 @@ La copertura iniziale include:
 - `test_output_pipeline_runtime.sh`: avvia Alfred con `ALFRED_CONFIG` e
   `output_enabled=true`, genera una creazione file e una creazione directory,
   poi crea e rimuove una directory osservata per generare `WATCH_ADDED` e
-  `WATCH_REMOVED`. Controlla `raw.log`, `events.log` e `output.jsonl`. Il test
-  dimostra che il collegamento runtime e' aggiuntivo: i log compatibili restano
-  presenti, mentre i raw record normalizzati, gli eventi semantici core e la
-  diagnostica watch semplice vengono accodati nella pipeline JSONL.
+  `WATCH_STALE`/`WATCH_REMOVED`. Controlla `raw.log`, `events.log` e
+  `output.jsonl`. Il test dimostra che il collegamento runtime e' aggiuntivo:
+  i log compatibili restano presenti, mentre i raw record normalizzati, gli
+  eventi semantici core e la diagnostica watch semplice vengono accodati nella
+  pipeline JSONL.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
