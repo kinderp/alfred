@@ -1533,6 +1533,39 @@ rifiuta `DIR_DELETED`, perche' una cancellazione file non deve essere confusa
 con una cancellazione directory. Questo scenario e' utile per fissare il
 contratto pubblico della fine del ciclo di vita di un file.
 
+Lo scenario `test_delete_dir_jsonl.sh` copre invece la cancellazione directory:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_CREATE
+layer=diagnostic category=watch type=WATCH_ADDED
+layer=normalized_raw category=filesystem type=RAW_DELETE
+layer=semantic category=filesystem type=DIR_DELETED
+layer=diagnostic category=watch type=WATCH_REMOVED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/delete-dir"
+rmdir "$TEST_ROOT/delete-dir"
+```
+
+Il `mkdir` produce `RAW_CREATE` con `raw_mask=257`, cioe' create piu' bit
+directory, e il core lo trasforma in `DIR_CREATED`. Poiche' Alfred installa
+watch ricorsivi sulle nuove directory, lo stesso scenario produce anche un
+record diagnostico `WATCH_ADDED`: non e' semantica filesystem, ma stato interno
+del backend.
+
+Il comando `rmdir` produce `RAW_DELETE` con `raw_mask=258`, cioe' delete piu'
+bit directory, e il core lo trasforma in `DIR_DELETED`. Quando la directory
+osservata non esiste piu', anche il watch relativo deve sparire: questo produce
+`WATCH_REMOVED`. La distinzione e' fondamentale per leggere i log:
+`DIR_DELETED` dice che l'oggetto directory e' stato cancellato; `WATCH_REMOVED`
+dice che il backend ha rimosso lo stato di osservazione associato a quella
+directory. Il test JSONL verifica entrambi i fatti e rifiuta `FILE_DELETED`,
+perche' una cancellazione directory non deve essere confusa con una
+cancellazione file.
+
 Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
 correlato:
 
@@ -2595,6 +2628,14 @@ La copertura iniziale include:
   verifica `RAW_CREATE`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_DELETE`,
   `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY` e `FILE_DELETED`, e rifiuta
   `DIR_DELETED`.
+- `tests/jsonl/test_delete_dir_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `delete-dir`, aspetta l'installazione del watch
+  ricorsivo e poi rimuove la directory. Il test verifica `RAW_CREATE` con mask
+  `257`, `RAW_DELETE` con mask `258`, `DIR_CREATED`, `DIR_DELETED`,
+  `WATCH_ADDED` e `WATCH_REMOVED`. La parte didattica importante e' che
+  `WATCH_REMOVED` non e' una seconda cancellazione semantica: e' diagnostica di
+  backend che indica la pulizia del watch associato alla directory cancellata.
+  Il test rifiuta `FILE_DELETED`.
 - `tests/jsonl/test_rename_file_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `old-jsonl.txt` e poi lo rinomina in
   `new-jsonl.txt`. Il test verifica che i log compatibili continuino a mostrare
