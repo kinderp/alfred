@@ -16,6 +16,8 @@
 # - root B scan emits WATCH_LOST_FOUND with old_path=rootA/lost and
 #   new_path=rootB/lost
 # - successful recovery emits WATCH_LOST_RECOVERY_END with watch.state=valid
+# - the parent-level move pair emits exactly one semantic DIR_MOVED with
+#   old_path=rootA/lost and new_path=rootB/lost before the child-watch recovery
 # - creating proof.txt after recovery emits RAW_CREATE and FILE_CREATED under
 #   the recovered root-B path
 # - no FILE_CREATED is emitted for proof.txt under the stale root-A path
@@ -23,6 +25,7 @@
 # Compatibility logs expected in parallel:
 # - raw.log still contains the watched child IN_CREATE and child IN_MOVE_SELF
 # - events.log still contains the same watch/resync/lost-scope diagnostics
+# - events.log still contains DIR_MOVED for rootA/lost -> rootB/lost
 # - events.log still contains FILE_CREATED for rootB/lost/proof.txt
 #
 # Meaning:
@@ -150,6 +153,9 @@ assert_compat_contains \
     "WATCH_ADDED wd=[0-9]+ path=${OLD_PATH_RE}$" \
     ./events.log
 assert_compat_contains \
+    "DIR_MOVED from=${OLD_PATH_RE} to=${NEW_PATH_RE}" \
+    ./events.log
+assert_compat_contains \
     "WATCH_STALE wd=[0-9]+ path=${OLD_PATH_RE} reason=IN_MOVE_SELF" \
     ./events.log
 assert_compat_contains \
@@ -274,6 +280,23 @@ root_a_added_idx, _ = find_diag("WATCH_ADDED", path=root_a, category="watch")
 root_b_added_idx, _ = find_diag("WATCH_ADDED", path=root_b, category="watch")
 child_added_idx, _ = find_diag("WATCH_ADDED", path=old_path, category="watch")
 
+dir_moves = [
+    record
+    for record in records
+    if record.get("layer") == "semantic"
+    and record.get("category") == "filesystem"
+    and record.get("type") == "DIR_MOVED"
+    and record.get("old_path") == old_path
+    and record.get("new_path") == new_path
+]
+if len(dir_moves) != 1:
+    raise SystemExit(
+        "expected exactly one semantic DIR_MOVED record with "
+        f"old_path={old_path!r} and new_path={new_path!r}, "
+        f"found {len(dir_moves)}"
+    )
+dir_moved_idx = records.index(dir_moves[0])
+
 stale_idx, stale = find_diag("WATCH_STALE", path=old_path, category="watch")
 require_watch_field(stale, "reason", "IN_MOVE_SELF")
 
@@ -386,6 +409,8 @@ for forbidden_type in {
 require_order(root_a_added_idx, child_added_idx)
 require_order(root_b_added_idx, queued_idx)
 require_order(child_added_idx, stale_idx)
+require_order(child_added_idx, dir_moved_idx)
+require_order(dir_moved_idx, stale_idx)
 require_order(stale_idx, resync_failed_idx)
 require_order(resync_failed_idx, queued_idx)
 require_order(queued_idx, scan_a_idx)
