@@ -162,17 +162,25 @@ if attrib_count != 1:
         f"normalized_raw/filesystem/RAW_ATTRIB expected 1, got {attrib_count}"
     )
 
-for forbidden_type in (
-    "FILE_CREATED",
-    "FILE_MODIFIED",
-    "FILE_READY",
-    "FILE_ATTRIB",
-    "FILE_METADATA_CHANGED",
-    "DIR_METADATA_CHANGED",
-):
-    actual = count_records("semantic", "filesystem", forbidden_type)
-    if actual != 0:
-        failures.append(f"unexpected {forbidden_type} records: {actual}")
+semantic_filesystem_records = [
+    record
+    for record in records
+    if record.get("layer") == "semantic"
+    and record.get("category") == "filesystem"
+    and record.get("path") == path
+]
+if semantic_filesystem_records:
+    unexpected_types = sorted(
+        {
+            str(record.get("type"))
+            for record in semantic_filesystem_records
+        }
+    )
+    failures.append(
+        "chmod unexpectedly produced semantic filesystem records: "
+        f"{len(semantic_filesystem_records)} "
+        f"types={','.join(unexpected_types)}"
+    )
 
 if failures:
     raise SystemExit("; ".join(failures))
