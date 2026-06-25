@@ -115,11 +115,11 @@ if ! grep -Eq "DIR_RELOCATED from=.*/src/before to=.*/dst/after" ./events.log; t
     fail_with_all_logs "missing compatibility DIR_RELOCATED for relocation"
 fi
 
-if grep -Eq "DIR_MOVED from=.*/src/before to=.*/dst/after" ./events.log; then
+if grep -Eq "^DIR_MOVED " ./events.log; then
     fail_with_all_logs "relocation unexpectedly produced DIR_MOVED"
 fi
 
-if grep -Eq "DIR_RENAMED from=.*/src/before to=.*/dst/after" ./events.log; then
+if grep -Eq "^DIR_RENAMED " ./events.log; then
     fail_with_all_logs "relocation unexpectedly produced DIR_RENAMED"
 fi
 
