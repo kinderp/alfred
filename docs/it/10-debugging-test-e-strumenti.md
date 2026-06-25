@@ -1543,6 +1543,35 @@ semantica. Per questo il test rifiuta `FILE_MODIFIED`, `FILE_READY` e possibili
 nomi semantici futuri legati ai metadati: quando quella semantica verra'
 progettata, il golden dovra' essere aggiornato in modo esplicito.
 
+Lo scenario `test_overflow_raw_jsonl.sh` fissa invece il caso globale di
+overflow della coda inotify:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_OVERFLOW
+```
+
+La sequenza logica non e' un comando shell come `chmod` o `rm`, perche'
+`IN_Q_OVERFLOW` dipende dalla pressione sulla coda del kernel, dal timing e
+dalla configurazione della macchina. Provare a produrlo davvero renderebbe il
+test fragile e poco adatto alla CI. Per questo il golden usa un helper C che
+costruisce un evento sintetico:
+
+```text
+struct inotify_event(IN_Q_OVERFLOW, wd=-1)
+-> backend_build_overflow_raw()
+-> alfred_record_from_raw()
+-> alfred_record_format_jsonl()
+```
+
+Il campo `wd=-1` e' il punto importante: il kernel sta dicendo che l'intera
+istanza inotify ha perso eventi, non che un singolo watch o un singolo path ha
+cambiato stato. Di conseguenza Alfred deve emettere un record raw strutturato
+con `path=""`. Il test verifica `raw_mask=128`, cioe'
+`ALFRED_RAW_OVERFLOW`, e rifiuta campi inattesi come `cookie`, `pid`,
+`old_path` o `new_path`. Questo mantiene il contratto pulito: l'overflow e' un
+fatto di integrita' dello stream, non una creazione, cancellazione o modifica di
+un oggetto filesystem.
+
 Lo scenario `test_delete_file_jsonl.sh` parte dallo stesso ciclo di scrittura e
 aggiunge una cancellazione file:
 
@@ -2662,6 +2691,12 @@ La copertura iniziale include:
   in `output.jsonl`, ma controlla anche che `events.log` non cresca dopo il
   `chmod 600`. Questo fissa il contratto corrente: il cambio metadati e'
   osservato come raw, ma non produce ancora semantica core.
+- `tests/jsonl/test_overflow_raw_jsonl.sh`: compila un helper C sintetico che
+  costruisce `IN_Q_OVERFLOW` con `wd=-1`, passa da
+  `backend_build_overflow_raw()`, converte il raw in `alfred_record_t` e lo
+  formatta in JSONL. Il test verifica `RAW_OVERFLOW` con `raw_mask=128` e
+  `path=""`. Non forza un overflow reale del kernel, perche' sarebbe
+  dipendente dal timing e quindi instabile in CI.
 - `tests/jsonl/test_delete_file_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, scrive `delete-me.txt` e poi lo cancella. Il test
   verifica `RAW_CREATE`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_DELETE`,

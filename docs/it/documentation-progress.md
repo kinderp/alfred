@@ -802,3 +802,10 @@ il modo iniziale `0644` e poi usa `chmod 600` dopo lo startup per generare
 `output.jsonl`, e controlla che `events.log` non cresca dopo il `chmod 600`. La
 documentazione chiarisce che il cambio attributi e' osservato come fatto
 raw/backend, ma non produce ancora una semantica core ufficiale.
+
+Aggiornamento successivo: `test_overflow_raw_jsonl.sh` aggiunge il golden JSONL
+per `RAW_OVERFLOW`. Lo scenario non prova a generare un overflow reale del
+kernel: compila un helper C che costruisce un `IN_Q_OVERFLOW` sintetico con
+`wd=-1`, passa da `backend_build_overflow_raw()`, converte in `alfred_record_t`
+e formatta JSONL. Il test verifica `raw_mask=128` e `path=""`, chiarendo che
+l'overflow riguarda l'intera istanza inotify e non un singolo path osservato.
