@@ -770,3 +770,11 @@ file con cookie comune e mask `32`/`64`, e richiede esattamente un
 `FILE_RELOCATED`. Il test rifiuta `FILE_MOVED` e `FILE_RENAMED` sia nei log
 compatibili sia nel contratto JSONL, completando la triade file rename, move e
 relocation.
+
+Aggiornamento successivo: `test_modify_file_jsonl.sh` aggiunge il golden JSONL
+per il ciclo modify / close-write. Lo scenario scrive `editable.txt` una prima
+volta e poi lo modifica con una seconda append. Il test verifica una
+`RAW_CREATE`, due `RAW_MODIFY` con mask `4`, due `RAW_CLOSE_WRITE` con mask
+`16`, una `FILE_CREATED`, due `FILE_MODIFIED` e due `FILE_READY`. La
+documentazione chiarisce che `FILE_MODIFIED` indica contenuto cambiato, mentre
+`FILE_READY` indica chiusura dopo scrittura e non e' un duplicato del modify.

@@ -1481,6 +1481,36 @@ Per i record raw lo scenario controlla anche `raw_mask`, per esempio `1` per
 directory. Questo evita che `output.jsonl` abbia tipo e path corretti ma perda
 la mask strutturata.
 
+Lo scenario `test_modify_file_jsonl.sh` fissa invece il ciclo di scrittura di un
+file:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MODIFY
+layer=normalized_raw category=filesystem type=RAW_CLOSE_WRITE
+layer=semantic category=filesystem type=FILE_MODIFIED
+layer=semantic category=filesystem type=FILE_READY
+```
+
+La sequenza e':
+
+```bash
+printf "initial\n" > "$TEST_ROOT/editable.txt"
+printf "second\n" >> "$TEST_ROOT/editable.txt"
+```
+
+La prima scrittura crea il file e scrive contenuto; la seconda scrittura aggiunge
+altro contenuto. In entrambi i casi inotify produce un `IN_MODIFY` mentre i byte
+vengono scritti e un `IN_CLOSE_WRITE` quando lo scrittore chiude il file. Alfred
+normalizza questi fatti raw come `RAW_MODIFY` con `raw_mask=4` e
+`RAW_CLOSE_WRITE` con `raw_mask=16`. Il core produce poi `FILE_MODIFIED` dal raw
+modify e `FILE_READY` dal raw close-write.
+
+Il test richiede due `FILE_MODIFIED` e due `FILE_READY`, uno per ciascuna
+scrittura. Questa distinzione e' importante: `FILE_MODIFIED` indica che il
+contenuto e' cambiato, mentre `FILE_READY` indica che lo scrittore ha chiuso il
+file dopo la scrittura. Un consumer puo' usare `FILE_MODIFIED` per sapere che un
+file e' sporco e `FILE_READY` per sapere quando ha senso leggerlo o indicizzarlo.
+
 Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
 correlato:
 
@@ -2533,6 +2563,11 @@ La copertura iniziale include:
   `DIR_CREATED` e `WATCH_ADDED`. Questo test e' volutamente piccolo: non vuole
   duplicare tutta la suite testuale, ma fissare il formato dati pubblico su uno
   scenario rappresentativo.
+- `tests/jsonl/test_modify_file_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `editable.txt` con una prima scrittura e poi lo
+  modifica con una seconda scrittura. Il test verifica `RAW_MODIFY`,
+  `RAW_CLOSE_WRITE`, `FILE_MODIFIED` e `FILE_READY` due volte, distinguendo la
+  modifica del contenuto dalla chiusura in scrittura.
 - `tests/jsonl/test_rename_file_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `old-jsonl.txt` e poi lo rinomina in
   `new-jsonl.txt`. Il test verifica che i log compatibili continuino a mostrare
