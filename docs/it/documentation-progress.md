@@ -794,3 +794,11 @@ l'installazione del watch ricorsivo e poi rimuove la directory. Il test verifica
 `DIR_DELETED`, `WATCH_ADDED` e `WATCH_REMOVED`. La documentazione chiarisce che
 `WATCH_REMOVED` e' diagnostica di backend sulla pulizia del watch, non una
 seconda cancellazione semantica, e il test rifiuta `FILE_DELETED`.
+
+Aggiornamento successivo: `test_attrib_raw_jsonl.sh` aggiunge il golden JSONL
+per `RAW_ATTRIB`. Lo scenario prepara `metadata.txt` prima dello startup e poi
+usa `chmod 600` per generare `IN_ATTRIB`. Il test verifica `RAW_ATTRIB` con mask
+`8` nei log compatibili e in `output.jsonl`, e controlla che `events.log` non
+cresca dopo il `chmod`. La documentazione chiarisce che il cambio attributi e'
+osservato come fatto raw/backend, ma non produce ancora una semantica core
+ufficiale.

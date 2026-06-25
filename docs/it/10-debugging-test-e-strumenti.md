@@ -1511,6 +1511,35 @@ contenuto e' cambiato, mentre `FILE_READY` indica che lo scrittore ha chiuso il
 file dopo la scrittura. Un consumer puo' usare `FILE_MODIFIED` per sapere che un
 file e' sporco e `FILE_READY` per sapere quando ha senso leggerlo o indicizzarlo.
 
+Lo scenario `test_attrib_raw_jsonl.sh` fissa invece il caso dei metadati:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_ATTRIB
+```
+
+La sequenza e':
+
+```bash
+printf "metadata\n" > "$TEST_ROOT/metadata.txt"
+chmod 600 "$TEST_ROOT/metadata.txt"
+```
+
+Il test crea `metadata.txt` prima di avviare Alfred. Questa scelta evita che la
+scrittura iniziale venga osservata come `FILE_CREATED`, `FILE_MODIFIED` o
+`FILE_READY`: dopo lo startup l'unica operazione osservata e' il `chmod`. Il
+test misura quindi le righe di `events.log` prima del `chmod` e poi verifica che
+il `chmod` non aggiunga eventi semantici o diagnostici. Il raw backend deve
+invece vedere `IN_ATTRIB` e Alfred deve normalizzarlo come `RAW_ATTRIB` con
+`raw_mask=8`.
+
+Questo scenario e' importante per capire una regola generale del contratto:
+non tutti i raw osservati dal backend diventano subito semantica core. Per ora
+`RAW_ATTRIB` e' un fatto raw pubblico nel JSONL, ma Alfred non ha ancora scelto
+se introdurre `FILE_METADATA_CHANGED`, `DIR_METADATA_CHANGED` o un'altra
+semantica. Per questo il test rifiuta `FILE_MODIFIED`, `FILE_READY` e possibili
+nomi semantici futuri legati ai metadati: quando quella semantica verra'
+progettata, il golden dovra' essere aggiornato in modo esplicito.
+
 Lo scenario `test_delete_file_jsonl.sh` parte dallo stesso ciclo di scrittura e
 aggiunge una cancellazione file:
 
@@ -2623,6 +2652,13 @@ La copertura iniziale include:
   modifica con una seconda scrittura. Il test verifica `RAW_MODIFY`,
   `RAW_CLOSE_WRITE`, `FILE_MODIFIED` e `FILE_READY` due volte, distinguendo la
   modifica del contenuto dalla chiusura in scrittura.
+- `tests/jsonl/test_attrib_raw_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, prepara `metadata.txt` prima dello startup e poi usa
+  `chmod 600` per generare `IN_ATTRIB`. Il test verifica `RAW_ATTRIB` con mask
+  `8` nei log compatibili e in `output.jsonl`, ma controlla anche che
+  `events.log` non cresca dopo il `chmod`. Questo fissa il contratto corrente:
+  il cambio metadati e' osservato come raw, ma non produce ancora semantica
+  core.
 - `tests/jsonl/test_delete_file_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, scrive `delete-me.txt` e poi lo cancella. Il test
   verifica `RAW_CREATE`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_DELETE`,
