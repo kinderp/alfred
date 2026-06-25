@@ -118,7 +118,7 @@ if [[ ! -s "$OUTPUT_LOG" ]]; then
     fail_with_all_logs "output.jsonl is empty"
 fi
 
-python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
+if ! python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
 import json
 import sys
 
@@ -206,5 +206,8 @@ if semantic_moves:
         "self move unexpectedly produced semantic directory move records"
     )
 PY
+then
+    fail_with_all_logs "JSONL structural validation failed"
+fi
 
 echo "PASS jsonl golden self move recovery"

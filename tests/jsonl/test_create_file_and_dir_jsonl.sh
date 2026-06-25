@@ -3,9 +3,10 @@
 # Expected output.jsonl contract:
 # - every line in output.jsonl is valid JSON
 # - every checked record uses schema_version=0
-# - one normalized raw RAW_CREATE record exists for file-jsonl.txt
+# - one normalized raw RAW_CREATE record exists for file-jsonl.txt with
+#   raw_mask=1
 # - one semantic FILE_CREATED record exists for file-jsonl.txt
-# - one normalized raw RAW_CREATE record exists for dir-jsonl
+# - one normalized raw RAW_CREATE record exists for dir-jsonl with raw_mask=257
 # - one semantic DIR_CREATED record exists for dir-jsonl
 # - one diagnostic WATCH_ADDED record exists for dir-jsonl
 #
@@ -103,7 +104,7 @@ if [[ ! -s "$OUTPUT_LOG" ]]; then
     fail_with_all_logs "output.jsonl is empty"
 fi
 
-python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
+if ! python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
 import json
 import sys
 
@@ -128,7 +129,7 @@ with open(output_log, "r", encoding="utf-8") as handle:
         records.append(record)
 
 
-def has_record(layer, category, record_type, path_suffix):
+def has_record(layer, category, record_type, path_suffix, raw_mask=None):
     expected_path = f"{root}/{path_suffix}"
     for record in records:
         if (
@@ -137,26 +138,31 @@ def has_record(layer, category, record_type, path_suffix):
             and record.get("type") == record_type
             and record.get("path") == expected_path
         ):
+            if raw_mask is not None and record.get("raw_mask") != raw_mask:
+                continue
             return True
     return False
 
 
 required = [
-    ("normalized_raw", "filesystem", "RAW_CREATE", "file-jsonl.txt"),
-    ("semantic", "filesystem", "FILE_CREATED", "file-jsonl.txt"),
-    ("normalized_raw", "filesystem", "RAW_CREATE", "dir-jsonl"),
-    ("semantic", "filesystem", "DIR_CREATED", "dir-jsonl"),
-    ("diagnostic", "watch", "WATCH_ADDED", "dir-jsonl"),
+    ("normalized_raw", "filesystem", "RAW_CREATE", "file-jsonl.txt", 1),
+    ("semantic", "filesystem", "FILE_CREATED", "file-jsonl.txt", None),
+    ("normalized_raw", "filesystem", "RAW_CREATE", "dir-jsonl", 257),
+    ("semantic", "filesystem", "DIR_CREATED", "dir-jsonl", None),
+    ("diagnostic", "watch", "WATCH_ADDED", "dir-jsonl", None),
 ]
 
 missing = [
     f"{layer}/{category}/{record_type}/{path_suffix}"
-    for layer, category, record_type, path_suffix in required
-    if not has_record(layer, category, record_type, path_suffix)
+    for layer, category, record_type, path_suffix, raw_mask in required
+    if not has_record(layer, category, record_type, path_suffix, raw_mask)
 ]
 
 if missing:
     raise SystemExit("missing JSONL records: " + ", ".join(missing))
 PY
+then
+    fail_with_all_logs "JSONL structural validation failed"
+fi
 
 echo "PASS jsonl golden create file and directory"

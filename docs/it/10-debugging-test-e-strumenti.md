@@ -1476,6 +1476,11 @@ layer=semantic category=filesystem type=DIR_CREATED
 layer=diagnostic category=watch type=WATCH_ADDED
 ```
 
+Per i record raw lo scenario controlla anche `raw_mask`, per esempio `1` per
+`RAW_CREATE` di un file e `257` per `RAW_CREATE | ALFRED_RAW_ISDIR` di una
+directory. Questo evita che `output.jsonl` abbia tipo e path corretti ma perda
+la mask strutturata.
+
 Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
 correlato:
 
@@ -1486,9 +1491,10 @@ layer=semantic category=filesystem type=FILE_RENAMED
 ```
 
 Il test controlla anche che i due raw move abbiano un cookie non nullo e uguale.
-Questo e' importante perche' `RAW_MOVED_FROM` e `RAW_MOVED_TO` sono due mezzi
-eventi raw: il core li correla tramite cookie e produce un solo
-`FILE_RENAMED` semantico con `old_path` e `new_path`.
+Controlla inoltre `raw_mask=32` per `RAW_MOVED_FROM` e `raw_mask=64` per
+`RAW_MOVED_TO`. Questo e' importante perche' `RAW_MOVED_FROM` e
+`RAW_MOVED_TO` sono due mezzi eventi raw: il core li correla tramite cookie e
+produce un solo `FILE_RENAMED` semantico con `old_path` e `new_path`.
 
 Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
 diagnostica recovery:

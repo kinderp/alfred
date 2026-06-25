@@ -4,8 +4,11 @@
 # - every line in output.jsonl is valid JSON
 # - every checked record uses schema_version=0
 # - one normalized raw RAW_CREATE record exists for old-jsonl.txt
-# - one normalized raw RAW_MOVED_FROM record exists for old-jsonl.txt
-# - one normalized raw RAW_MOVED_TO record exists for new-jsonl.txt
+#   with raw_mask=1
+# - one normalized raw RAW_MOVED_FROM record exists for old-jsonl.txt with
+#   raw_mask=32
+# - one normalized raw RAW_MOVED_TO record exists for new-jsonl.txt with
+#   raw_mask=64
 # - RAW_MOVED_FROM and RAW_MOVED_TO expose a non-zero matching cookie
 # - one semantic FILE_RENAMED record exists with old_path=old-jsonl.txt and
 #   new_path=new-jsonl.txt
@@ -104,7 +107,7 @@ if [[ ! -s "$OUTPUT_LOG" ]]; then
     fail_with_all_logs "output.jsonl is empty"
 fi
 
-python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
+if ! python3 - "$OUTPUT_LOG" "$TEST_ROOT" <<'PY'
 import json
 import sys
 
@@ -147,9 +150,16 @@ def find_record(layer, category, record_type, path):
     return matches[0]
 
 
-find_record("normalized_raw", "filesystem", "RAW_CREATE", old_path)
+raw_create = find_record("normalized_raw", "filesystem", "RAW_CREATE", old_path)
 raw_from = find_record("normalized_raw", "filesystem", "RAW_MOVED_FROM", old_path)
 raw_to = find_record("normalized_raw", "filesystem", "RAW_MOVED_TO", new_path)
+
+if raw_create.get("raw_mask") != 1:
+    raise SystemExit(f"RAW_CREATE raw_mask={raw_create.get('raw_mask')!r}")
+if raw_from.get("raw_mask") != 32:
+    raise SystemExit(f"RAW_MOVED_FROM raw_mask={raw_from.get('raw_mask')!r}")
+if raw_to.get("raw_mask") != 64:
+    raise SystemExit(f"RAW_MOVED_TO raw_mask={raw_to.get('raw_mask')!r}")
 
 from_cookie = raw_from.get("cookie")
 to_cookie = raw_to.get("cookie")
@@ -175,5 +185,8 @@ if not renames:
         "missing semantic FILE_RENAMED record with expected old_path/new_path"
     )
 PY
+then
+    fail_with_all_logs "JSONL structural validation failed"
+fi
 
 echo "PASS jsonl golden rename file"
