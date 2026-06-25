@@ -13,12 +13,13 @@
 #
 # Meaning:
 # chmod changes file metadata, not file contents. The test creates metadata.txt
-# before Alfred starts, so startup does not observe a file creation or write.
-# Alfred keeps the later IN_ATTRIB visible as a normalized raw/backend fact, but
-# the core does not define a public semantic metadata event yet. This golden
-# test locks down that boundary: RAW_ATTRIB is part of JSONL v0, while
-# FILE_MODIFIED, FILE_READY and future metadata semantics must not appear until
-# the core contract explicitly changes.
+# and forces an initial 0644 mode before Alfred starts, so startup does not
+# observe file creation, writes, or the setup chmod. Alfred only observes the
+# later chmod 600 transition. That keeps IN_ATTRIB visible as a normalized
+# raw/backend fact, while the core does not define a public semantic metadata
+# event yet. This golden test locks down that boundary: RAW_ATTRIB is part of
+# JSONL v0, while FILE_MODIFIED, FILE_READY and future metadata semantics must
+# not appear until the core contract explicitly changes.
 
 set -euo pipefail
 
@@ -72,6 +73,7 @@ trap cleanup_jsonl_attrib_raw EXIT
 reset_env
 : > "$OUTPUT_LOG"
 printf "metadata\n" > "$TEST_ROOT/metadata.txt"
+chmod 644 "$TEST_ROOT/metadata.txt"
 
 cat > "$CONFIG_FILE" <<EOF
 output_enabled=true
