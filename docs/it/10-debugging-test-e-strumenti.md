@@ -1496,6 +1496,29 @@ Controlla inoltre `raw_mask=32` per `RAW_MOVED_FROM` e `raw_mask=64` per
 `RAW_MOVED_TO` sono due mezzi eventi raw: il core li correla tramite cookie e
 produce un solo `FILE_RENAMED` semantico con `old_path` e `new_path`.
 
+Lo scenario `test_dir_renamed_jsonl.sh` applica la stessa idea a una directory
+che resta nello stesso parent e cambia solo basename:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=DIR_RENAMED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/old-dir"
+mv "$TEST_ROOT/old-dir" "$TEST_ROOT/new-dir"
+```
+
+Il kernel produce due mezzi eventi raw con lo stesso cookie e con il bit
+directory. Per questo il golden controlla `raw_mask=288` su `RAW_MOVED_FROM` e
+`raw_mask=320` su `RAW_MOVED_TO`. Poiche' il parent non cambia e cambia solo il
+nome finale (`old-dir` -> `new-dir`), il core deve produrre esattamente un
+`DIR_RENAMED`. Il test rifiuta qualunque `DIR_MOVED` o `DIR_RELOCATED`, sia nel
+log compatibile sia in `output.jsonl`.
+
 Lo scenario `test_dir_relocated_jsonl.sh` usa lo stesso principio di
 correlazione, ma su una directory che cambia sia directory padre sia basename:
 
@@ -1523,7 +1546,7 @@ che non vengano prodotti `DIR_MOVED` o `DIR_RENAMED` per la stessa operazione.
 Per i raw controlla `raw_mask=288` su `RAW_MOVED_FROM` e `raw_mask=320` su
 `RAW_MOVED_TO`, cioe' i bit di move piu' `ALFRED_RAW_ISDIR`.
 
-Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
+Lo scenario `test_self_move_recovery_jsonl.sh` fissa invece il primo caso di
 diagnostica recovery:
 
 ```text
@@ -2441,6 +2464,11 @@ La copertura iniziale include:
   `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
   il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
   record semantico deve esporre `old_path` e `new_path`.
+- `tests/jsonl/test_dir_renamed_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `old-dir` e poi lo rinomina in `new-dir` nello
+  stesso parent. Il test verifica raw move da directory, cookie uguale,
+  `DIR_RENAMED` esattamente una volta, e assenza di `DIR_MOVED` o
+  `DIR_RELOCATED`.
 - `tests/jsonl/test_dir_relocated_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `src`, `dst` e `src/before`, poi sposta e rinomina
   la directory in `dst/after`. Il test verifica i raw `RAW_MOVED_FROM` e

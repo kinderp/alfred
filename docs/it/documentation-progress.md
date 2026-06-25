@@ -739,3 +739,10 @@ non nullo, controlla le mask da directory `288` e `320`, e fissa il contratto
 semantico pubblico `DIR_RELOCATED` con `old_path` e `new_path`. Lo stesso test
 controlla anche che l'operazione non venga degradata o duplicata come
 `DIR_MOVED` o `DIR_RENAMED`.
+
+Aggiornamento successivo: `test_dir_renamed_jsonl.sh` aggiunge il golden JSONL
+per rename directory nello stesso parent. Lo scenario crea `old-dir`, lo
+rinomina in `new-dir`, verifica i due raw move da directory con cookie comune e
+mask `288`/`320`, e richiede esattamente un `DIR_RENAMED`. Il test rifiuta
+`DIR_MOVED` e `DIR_RELOCATED` sia nei log compatibili sia nel contratto JSONL,
+per proteggere la distinzione semantica parent uguale + basename diverso.
