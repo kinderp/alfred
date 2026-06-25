@@ -689,3 +689,44 @@ worker simulato, JSONL buffered writer e solo dopo eventuali thread o code per
 sink. `README.md`, `27-guida-lettura-documentazione.md`,
 `31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
 stati aggiornati per rimandare al nuovo capitolo.
+
+Aggiornamento successivo: `00-regole-operative.md` e
+`10-debugging-test-e-strumenti.md` chiariscono la regola di scelta dei test.
+I contratti interni fra moduli, ownership, queue, dispatcher, sink e writer
+vanno protetti con test C unitari o di integrazione mirata. I comportamenti
+pubblici end-to-end devono essere fissati progressivamente con golden test
+JSONL, perche' `output.jsonl` e' il contratto esterno strutturato. I test
+testuali su `raw.log`, `events.log` ed `errors.log` restano in parallelo come
+compatibilita' storica, debug umano e supporto didattico.
+
+Aggiornamento successivo: nasce la prima suite golden JSONL end-to-end in
+`tests/jsonl`. Il target `make test-jsonl` compila Alfred e lancia
+`test_create_file_and_dir_jsonl.sh`, che abilita `output_enabled=true`, crea un
+file e una directory, verifica i log compatibili e poi fa parsing reale di
+`output.jsonl` con la libreria standard Python `json`. Il test fissa il primo
+contratto esterno strutturato per `RAW_CREATE`, `FILE_CREATED`, `DIR_CREATED` e
+`WATCH_ADDED`. La GitHub Action esegue ora anche `make test-jsonl` e carica i
+log/JSONL della suite in caso di fallimento.
+
+Aggiornamento successivo: la suite JSONL contiene ora anche
+`test_rename_file_jsonl.sh`. Lo scenario crea `old-jsonl.txt`, lo rinomina in
+`new-jsonl.txt` e verifica il contratto strutturato di `RAW_MOVED_FROM`,
+`RAW_MOVED_TO` e `FILE_RENAMED`. Il test controlla che i due raw move espongano
+lo stesso cookie non nullo e che il record semantico usi `old_path` e
+`new_path`, fissando il primo caso di correlazione raw -> semantica nel formato
+JSONL pubblico.
+
+Aggiornamento successivo: `test_self_move_recovery_jsonl.sh` aggiunge il primo
+golden JSONL per diagnostica recovery. Lo scenario sposta una directory
+osservata fuori dal vecchio path e verifica `WATCH_STALE`,
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` con `watch.error=path-unreachable`
+e `WATCH_LOST_QUEUED` con `recovery.pending_count`. Il test controlla anche che
+non vengano prodotti record semantici `DIR_MOVED`, `DIR_RENAMED` o
+`DIR_RELOCATED`, perche' `IN_MOVE_SELF` non contiene il nuovo path.
+
+Aggiornamento successivo: il golden self-move recovery ora controlla anche gli
+eventi figli ricevuti su un watch stale. Lo scenario crea
+`proof-after-move.txt` dopo lo spostamento della directory osservata e verifica
+due lati del contratto: Alfred deve produrre diagnostica
+`WATCH_STALE_EVENT_DROPPED`, ma non deve emettere record filesystem
+`normalized_raw` o `semantic` per quel file usando il vecchio path stale.

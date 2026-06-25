@@ -769,6 +769,62 @@ Questa differenza e' importante: un test core deve proteggere cio' che
 l'applicazione espone come semantica; un test backend puo' proteggere anche
 dettagli tecnici necessari al resync, ai watch e alla diagnosi.
 
+### Contratto interno, contratto esterno e log testuali
+
+Con l'introduzione di `alfred_record_t`, queue, dispatcher, sink e JSONL,
+Alfred ha piu' livelli di contratto. Non tutti devono essere verificati con lo
+stesso tipo di test.
+
+Il contratto interno riguarda le promesse fra moduli dentro il processo:
+
+```text
+backend -> alfred_record_t -> queue -> dispatcher -> sink -> writer
+```
+
+Esempi:
+
+- `alfred_record_clone_owned()` deve fare copia profonda delle stringhe
+  borrowed
+- `alfred_record_queue_push()` deve accodare record owned e bounded
+- `alfred_record_queue_pop()` deve trasferire ownership al chiamante
+- il dispatcher deve chiamare i sink nell'ordine di registrazione
+- un writer non deve decidere la semantica di un evento
+
+Questi casi vanno coperti con test C unitari o di integrazione mirata, perche'
+verificano API, ownership, precondizioni e strutture dati interne. Un test
+end-to-end JSONL puo' dire che un record finale e' uscito, ma non basta a
+dimostrare che la coda, la copia owned o il dispatcher rispettino il loro
+contratto.
+
+Il contratto esterno riguarda invece cio' che Alfred promette a chi lo usa:
+
+```text
+azioni reali sul filesystem -> record osservabili in output.jsonl
+```
+
+Esempi:
+
+- creare un file produce un record `FILE_CREATED`
+- rinominare un file produce un record `FILE_RENAMED` o `FILE_RELOCATED`
+- una directory osservata diventata stale produce diagnostica `WATCH_STALE`
+- un record JSONL contiene campi pubblici coerenti come `layer`, `category`,
+  `type`, `path`, `watch`, `recovery` e `os_error`
+
+Questi casi vanno coperti progressivamente con golden test JSONL end-to-end.
+JSONL e' dati strutturati: permette di cambiare in futuro la forma dei log
+umani senza rompere il contratto principale.
+
+I log testuali restano comunque importanti:
+
+- `raw.log` conserva la vista storica e didattica dei fatti raw/backend
+- `events.log` conserva la vista umana degli eventi core e diagnostici
+- `errors.log` conserva la compatibilita' per errori leggibili
+
+Per questo, nella fase corrente, i test testuali e i test JSONL vivono in
+parallelo. Non duplichiamo ogni scenario byte per byte: usiamo i test testuali
+per compatibilita' e leggibilita', e i golden JSONL per fissare il contratto
+strutturato esterno dei comportamenti importanti.
+
 ## Leggere le regex nei test shell
 
 Molti test end-to-end di Alfred sono script Bash. Questi script non confrontano
@@ -1269,6 +1325,7 @@ git diff --check
 make
 make test
 make test-backend-diagnostics
+make test-jsonl
 make test-scanner
 make test-watcher
 ```
@@ -1279,6 +1336,15 @@ backend che non fa parte dello stream semantico. `make test-scanner` e'
 separato perche' verifica il componente di attraversamento filesystem, non il
 runtime inotify -> core. `make test-watcher` e' ancora piu' mirato: controlla la
 tabella `wd -> path` e lo stato di affidabilita' dei watch senza avviare Alfred.
+`make test-jsonl` e' separato perche' protegge il contratto esterno
+strutturato di `output.jsonl`, non la compatibilita' testuale storica.
+
+Nota importante: non lanciare in parallelo, dallo stesso checkout, suite che
+avviano Alfred e scrivono `raw.log`, `events.log`, `errors.log` o
+`output.jsonl`. Per esempio `make test` e `make test-backend-diagnostics`
+devono essere eseguiti in sequenza. Se girano insieme nella stessa directory,
+possono cancellare o sovrascrivere i log l'una dell'altra e produrre falsi
+fallimenti. La CI li esegue infatti come step separati e sequenziali.
 
 ### 1. `git diff --check`
 
@@ -1370,7 +1436,102 @@ Questo passo risponde alla domanda:
 il backend inotify mantiene correttamente il proprio stato interno?
 ```
 
-### 5. `make test-scanner`
+### 5. `make test-jsonl`
+
+Il comando:
+
+```bash
+make test-jsonl
+```
+
+ricostruisce il binario core-only ed esegue la suite in:
+
+```text
+tests/jsonl/
+```
+
+Questa suite e' il primo posto in cui fissiamo il contratto esterno strutturato
+di Alfred. A differenza dei test testuali, che cercano righe in `raw.log` o
+`events.log`, questi test leggono `output.jsonl` prodotto con:
+
+```text
+output_enabled=true
+output_format=jsonl
+```
+
+Il primo scenario, `test_create_file_and_dir_jsonl.sh`, crea un file e una
+directory dentro una root osservata. Il test verifica due cose in parallelo:
+
+- i log compatibili restano presenti in `raw.log` ed `events.log`
+- `output.jsonl` contiene record JSON validi con campi strutturati attesi
+
+Lo script usa Python solo con la libreria standard `json`: non serve una
+dipendenza esterna come `jq`. Ogni riga viene parsata come JSON, viene
+controllato `schema_version=0` e poi vengono cercati record con:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_CREATE
+layer=semantic category=filesystem type=FILE_CREATED
+layer=semantic category=filesystem type=DIR_CREATED
+layer=diagnostic category=watch type=WATCH_ADDED
+```
+
+Per i record raw lo scenario controlla anche `raw_mask`, per esempio `1` per
+`RAW_CREATE` di un file e `257` per `RAW_CREATE | ALFRED_RAW_ISDIR` di una
+directory. Questo evita che `output.jsonl` abbia tipo e path corretti ma perda
+la mask strutturata.
+
+Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
+correlato:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=FILE_RENAMED
+```
+
+Il test controlla anche che i due raw move abbiano un cookie non nullo e uguale.
+Controlla inoltre `raw_mask=32` per `RAW_MOVED_FROM` e `raw_mask=64` per
+`RAW_MOVED_TO`. Questo e' importante perche' `RAW_MOVED_FROM` e
+`RAW_MOVED_TO` sono due mezzi eventi raw: il core li correla tramite cookie e
+produce un solo `FILE_RENAMED` semantico con `old_path` e `new_path`.
+
+Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
+diagnostica recovery:
+
+```text
+layer=diagnostic category=watch type=WATCH_STALE
+layer=diagnostic category=recovery type=WATCH_RESYNC_BEGIN
+layer=diagnostic category=recovery type=WATCH_RESYNC_FAILED
+layer=diagnostic category=recovery type=WATCH_LOST_QUEUED
+```
+
+Lo scenario sposta una directory osservata fuori dal vecchio path. Il kernel
+emette `IN_MOVE_SELF`, ma non fornisce il nuovo path. Per questo Alfred non deve
+inventare un `DIR_MOVED`, `DIR_RENAMED` o `DIR_RELOCATED` semantico. Deve invece
+marcare il watch come stale, tentare il resync locale, fallire con
+`path-unreachable` e accodare una recovery lost-scope. Il test controlla questi
+fatti come record JSONL e verifica anche `watch.reason`, `watch.error` e
+`recovery.pending_count`.
+
+Lo scenario crea anche `proof-after-move.txt` dentro la directory gia' spostata.
+Questo serve a verificare un punto delicato: il watch inotify segue ancora
+l'oggetto directory, ma Alfred conosce solo il vecchio path, ormai stale. In
+questa situazione il backend puo' produrre diagnostica
+`WATCH_STALE_EVENT_DROPPED`, per dire "ho visto un evento figlio ma non posso
+fidarmi del path". Non deve invece produrre record filesystem `RAW_CREATE`,
+`FILE_CREATED` o simili per `proof-after-move.txt`, perche' sarebbero fatti
+costruiti con un path vecchio e quindi falso.
+
+Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
+umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
+dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
+
+La suite JSONL non deve duplicare tutti i test core e backend. Va ampliata per
+scenari rappresentativi del contratto pubblico: rename/move, recovery, errori
+strutturati e, in futuro, sessione agente o policy.
+
+### 6. `make test-scanner`
 
 Il comando:
 
@@ -1410,7 +1571,7 @@ Poi verifica che lo scanner:
 Questo target serve alla futura progettazione resync e indicizzazione. Non
 sostituisce `make test` o `make test-backend-diagnostics`.
 
-### 6. `make test-watcher`
+### 7. `make test-watcher`
 
 Il comando:
 
@@ -2238,6 +2399,30 @@ La copertura iniziale include:
   usato dal text sink del core logger. Il contratto verificato e' che
   `output.jsonl` riceva comunque il record `FILE_CREATED`: il ledger strutturato
   non deve dipendere dal successo del formatter testuale legacy.
+- `tests/jsonl/test_create_file_and_dir_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true` e controlla il primo golden end-to-end del contratto
+  JSONL. Lo scenario crea `file-jsonl.txt` e `dir-jsonl`, poi verifica che
+  `raw.log` ed `events.log` continuino a contenere le righe compatibili e che
+  `output.jsonl` contenga record JSON validi per `RAW_CREATE`, `FILE_CREATED`,
+  `DIR_CREATED` e `WATCH_ADDED`. Questo test e' volutamente piccolo: non vuole
+  duplicare tutta la suite testuale, ma fissare il formato dati pubblico su uno
+  scenario rappresentativo.
+- `tests/jsonl/test_rename_file_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `old-jsonl.txt` e poi lo rinomina in
+  `new-jsonl.txt`. Il test verifica che i log compatibili continuino a mostrare
+  `RAW_MOVED_FROM`, `RAW_MOVED_TO` e `FILE_RENAMED`, poi fa parsing di
+  `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
+  il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
+  record semantico deve esporre `old_path` e `new_path`.
+- `tests/jsonl/test_self_move_recovery_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea una directory `lost-jsonl` e poi la sposta fuori
+  dal vecchio path. Il test verifica la compatibilita' testuale e il contratto
+  JSONL per `WATCH_STALE`, `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e
+  `WATCH_LOST_QUEUED`. Questo scenario e' diagnostico: conferma che
+  `IN_MOVE_SELF` non viene trasformato in una semantica directory falsa quando
+  il nuovo path non e' noto. Lo scenario crea anche un file figlio dopo lo
+  spostamento e controlla che venga loggato come `WATCH_STALE_EVENT_DROPPED`,
+  non come record filesystem raw o semantico basato sul vecchio path stale.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

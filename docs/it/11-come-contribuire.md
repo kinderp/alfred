@@ -193,6 +193,7 @@ Prima di aprire una PR, esegui almeno:
 make
 make test
 make test-backend-diagnostics
+make test-jsonl
 ```
 
 `make` verifica che il progetto compili.
@@ -205,8 +206,13 @@ per esempio aggiunta e rimozione dei watch. Questi eventi non sono semantica
 utente, ma sono importanti per capire se il backend mantiene correttamente lo
 stato di osservazione.
 
+`make test-jsonl` controlla il contratto esterno strutturato di `output.jsonl`.
+Questa suite non sostituisce i test testuali: verifica che i record pubblici
+importanti siano JSON validi e abbiano campi stabili.
+
 Se modifichi solo documentazione, `make` puo' bastare. Se modifichi codice,
-Makefile, test o semantica eventi, esegui anche entrambe le suite.
+Makefile, test o semantica eventi, esegui anche le suite collegate al contratto
+toccato.
 
 ## Aggiungere un test
 
@@ -338,6 +344,7 @@ Esempio compilato:
 - [x] make
 - [x] make test
 - [x] make test-backend-diagnostics
+- [x] make test-jsonl
 
 ## Documentation
 
@@ -361,6 +368,7 @@ La CI esegue:
 make
 make test
 make test-backend-diagnostics
+make test-jsonl
 ```
 
 Se la CI fallisce, la PR non va mergiata finche' il problema non e' stato
@@ -415,6 +423,9 @@ jobs:
 
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
+
+      - name: Run JSONL golden tests
+        run: make test-jsonl
 
       - name: Upload test logs on failure
         if: failure()

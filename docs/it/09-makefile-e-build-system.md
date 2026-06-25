@@ -1244,6 +1244,24 @@ diagnostico del backend inotify, per esempio `WATCH_ADDED` e `WATCH_REMOVED`.
 Sono righe utili per capire se la tabella dei watch viene aggiornata
 correttamente, ma non devono essere confuse con eventi semantici del core.
 
+### test-jsonl
+
+```bash
+make test-jsonl
+```
+
+Il target ricostruisce il binario core-only e lancia:
+
+```text
+tests/jsonl/
+```
+
+Questa suite controlla il contratto esterno strutturato di `output.jsonl`.
+Non sostituisce `test-core` e non sostituisce `test-backend-diagnostics`: vive
+in parallelo ai test testuali. Il suo scopo e' verificare che i comportamenti
+pubblici importanti siano rappresentati come record JSONL parseabili e stabili,
+mentre i log compatibili continuano a essere prodotti per debug e didattica.
+
 ### test
 
 ```bash
@@ -1278,6 +1296,7 @@ Nel progetto sono phony target come:
 - `test`
 - `test-core`
 - `test-backend-diagnostics`
+- `test-jsonl`
 - `test-scanner`
 - `test-watcher`
 - `format`

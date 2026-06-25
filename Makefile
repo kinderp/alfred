@@ -223,6 +223,7 @@ run: all
 # TEST
 # test-core is the official core end-to-end suite.
 # test-backend-diagnostics checks backend health logs that are not semantics.
+# test-jsonl checks the structured external output contract.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
 
@@ -235,6 +236,10 @@ test-core:
 test-backend-diagnostics:
 	$(MAKE) all
 	cd tests/backend && bash run_all.sh
+
+test-jsonl:
+	$(MAKE) all
+	cd tests/jsonl && bash run_all.sh
 
 test-scanner:
 	cd tests/scanner && bash run_all.sh
@@ -344,6 +349,7 @@ banner:
 	run \
 	test \
 	test-core \
+	test-jsonl \
 	test-scanner \
 	test-watcher \
 	test-backend-diagnostics \
