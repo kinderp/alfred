@@ -778,3 +778,11 @@ volta e poi lo modifica con una seconda append. Il test verifica una
 `16`, una `FILE_CREATED`, due `FILE_MODIFIED` e due `FILE_READY`. La
 documentazione chiarisce che `FILE_MODIFIED` indica contenuto cambiato, mentre
 `FILE_READY` indica chiusura dopo scrittura e non e' un duplicato del modify.
+
+Aggiornamento successivo: `test_delete_file_jsonl.sh` aggiunge il golden JSONL
+per cancellazione file. Lo scenario scrive `delete-me.txt`, aspetta il ciclo
+write, poi cancella il file. Il test verifica `RAW_CREATE`, `RAW_MODIFY`,
+`RAW_CLOSE_WRITE`, `RAW_DELETE` con mask `2`, `FILE_CREATED`,
+`FILE_MODIFIED`, `FILE_READY` e `FILE_DELETED`. Il test rifiuta `DIR_DELETED`
+per mantenere esplicita la distinzione tra cancellazione file e cancellazione
+directory.

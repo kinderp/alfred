@@ -1511,6 +1511,28 @@ contenuto e' cambiato, mentre `FILE_READY` indica che lo scrittore ha chiuso il
 file dopo la scrittura. Un consumer puo' usare `FILE_MODIFIED` per sapere che un
 file e' sporco e `FILE_READY` per sapere quando ha senso leggerlo o indicizzarlo.
 
+Lo scenario `test_delete_file_jsonl.sh` parte dallo stesso ciclo di scrittura e
+aggiunge una cancellazione file:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_DELETE
+layer=semantic category=filesystem type=FILE_DELETED
+```
+
+La sequenza e':
+
+```bash
+printf "temporary\n" > "$TEST_ROOT/delete-me.txt"
+rm "$TEST_ROOT/delete-me.txt"
+```
+
+La scrittura iniziale produce `RAW_CREATE`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
+`FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`. Il comando `rm` produce poi
+`RAW_DELETE` con `raw_mask=2` e il core lo trasforma in `FILE_DELETED`. Il test
+rifiuta `DIR_DELETED`, perche' una cancellazione file non deve essere confusa
+con una cancellazione directory. Questo scenario e' utile per fissare il
+contratto pubblico della fine del ciclo di vita di un file.
+
 Il secondo scenario, `test_rename_file_jsonl.sh`, fissa invece il primo caso
 correlato:
 
@@ -2568,6 +2590,11 @@ La copertura iniziale include:
   modifica con una seconda scrittura. Il test verifica `RAW_MODIFY`,
   `RAW_CLOSE_WRITE`, `FILE_MODIFIED` e `FILE_READY` due volte, distinguendo la
   modifica del contenuto dalla chiusura in scrittura.
+- `tests/jsonl/test_delete_file_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, scrive `delete-me.txt` e poi lo cancella. Il test
+  verifica `RAW_CREATE`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`, `RAW_DELETE`,
+  `FILE_CREATED`, `FILE_MODIFIED`, `FILE_READY` e `FILE_DELETED`, e rifiuta
+  `DIR_DELETED`.
 - `tests/jsonl/test_rename_file_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `old-jsonl.txt` e poi lo rinomina in
   `new-jsonl.txt`. Il test verifica che i log compatibili continuino a mostrare
