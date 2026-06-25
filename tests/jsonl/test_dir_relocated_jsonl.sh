@@ -218,11 +218,12 @@ wrong_semantics = [
     if record.get("layer") == "semantic"
     and record.get("category") == "filesystem"
     and record.get("type") in {"DIR_MOVED", "DIR_RENAMED"}
-    and record.get("old_path") == old_path
-    and record.get("new_path") == new_path
 ]
 if wrong_semantics:
-    raise SystemExit("directory relocation produced move/rename semantics")
+    raise SystemExit(
+        "directory relocation produced unexpected DIR_MOVED/DIR_RENAMED "
+        f"records: {len(wrong_semantics)}"
+    )
 PY
 then
     fail_with_all_logs "JSONL structural validation failed"
