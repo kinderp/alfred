@@ -1519,6 +1519,31 @@ nome finale (`old-dir` -> `new-dir`), il core deve produrre esattamente un
 `DIR_RENAMED`. Il test rifiuta qualunque `DIR_MOVED` o `DIR_RELOCATED`, sia nel
 log compatibile sia in `output.jsonl`.
 
+Lo scenario `test_dir_moved_jsonl.sh` copre invece una directory che cambia
+parent ma conserva lo stesso basename:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=DIR_MOVED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+mkdir "$TEST_ROOT/src/item"
+mv "$TEST_ROOT/src/item" "$TEST_ROOT/dst/item"
+```
+
+Anche qui il kernel produce due mezzi eventi raw con lo stesso cookie e con il
+bit directory. Il golden controlla `raw_mask=288` su `RAW_MOVED_FROM` e
+`raw_mask=320` su `RAW_MOVED_TO`. Poiche' cambia il parent (`src` -> `dst`) ma
+il nome finale resta `item`, il core deve produrre esattamente un `DIR_MOVED`.
+Il test rifiuta qualunque `DIR_RENAMED` o `DIR_RELOCATED`, sia nel log
+compatibile sia in `output.jsonl`.
+
 Lo scenario `test_dir_relocated_jsonl.sh` usa lo stesso principio di
 correlazione, ma su una directory che cambia sia directory padre sia basename:
 
@@ -2468,6 +2493,11 @@ La copertura iniziale include:
   `output_enabled=true`, crea `old-dir` e poi lo rinomina in `new-dir` nello
   stesso parent. Il test verifica raw move da directory, cookie uguale,
   `DIR_RENAMED` esattamente una volta, e assenza di `DIR_MOVED` o
+  `DIR_RELOCATED`.
+- `tests/jsonl/test_dir_moved_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `src`, `dst` e `src/item`, poi sposta la
+  directory in `dst/item`. Il test verifica raw move da directory, cookie
+  uguale, `DIR_MOVED` esattamente una volta, e assenza di `DIR_RENAMED` o
   `DIR_RELOCATED`.
 - `tests/jsonl/test_dir_relocated_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `src`, `dst` e `src/before`, poi sposta e rinomina

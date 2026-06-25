@@ -746,3 +746,11 @@ rinomina in `new-dir`, verifica i due raw move da directory con cookie comune e
 mask `288`/`320`, e richiede esattamente un `DIR_RENAMED`. Il test rifiuta
 `DIR_MOVED` e `DIR_RELOCATED` sia nei log compatibili sia nel contratto JSONL,
 per proteggere la distinzione semantica parent uguale + basename diverso.
+
+Aggiornamento successivo: `test_dir_moved_jsonl.sh` aggiunge il golden JSONL
+per move directory con basename invariato. Lo scenario crea `src`, `dst` e
+`src/item`, poi sposta la directory in `dst/item`. Il test verifica i due raw
+move da directory con cookie comune e mask `288`/`320`, e richiede esattamente
+un `DIR_MOVED`. Il test rifiuta `DIR_RENAMED` e `DIR_RELOCATED` sia nei log
+compatibili sia nel contratto JSONL, per proteggere la distinzione semantica
+parent diverso + basename uguale.
