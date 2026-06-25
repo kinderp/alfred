@@ -471,6 +471,10 @@ Gli scenari runtime end-to-end gia' coperti sono:
 - `tests/jsonl/test_dir_relocated_jsonl.sh`: `DIR_RELOCATED`;
 - `tests/jsonl/test_self_move_recovery_jsonl.sh`: `WATCH_STALE`,
   `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED`, `WATCH_LOST_QUEUED`.
+- `tests/jsonl/test_lost_scope_runtime_recovery_jsonl.sh`: recovery
+  lost-scope completa da root A a root B, con `WATCH_LOST_SCAN_BEGIN`,
+  `WATCH_LOST_NOT_FOUND`, `WATCH_LOST_FOUND`, `WATCH_LOST_RECOVERY_END` e
+  nuovo `FILE_CREATED` sul path recuperato.
 
 Lo scenario sintetico gia' coperto e':
 
@@ -495,8 +499,6 @@ dalla configurazione del kernel e dal timing della macchina.
 
 Gap noti da coprire in futuro:
 
-- golden JSONL runtime per recovery lost-scope completa, non solo il primo
-  handoff `WATCH_LOST_QUEUED`;
 - golden JSONL per record di errore strutturati quando avremo deciso lo schema
   pubblico degli errori;
 - eventuale golden per semantica `OVERFLOW`, se sceglieremo un helper stabile
