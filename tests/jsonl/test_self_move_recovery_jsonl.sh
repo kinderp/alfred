@@ -114,6 +114,10 @@ if ! grep -Eq "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/lost-jsonl reason=IN_MOVE_SEL
     fail_with_all_logs "missing compatibility WATCH_LOST_QUEUED for lost-jsonl"
 fi
 
+if ! grep -Eq "WATCH_STALE_EVENT_DROPPED wd=[0-9]+ path=.*/lost-jsonl .*name=proof-after-move.txt" ./events.log; then
+    fail_with_all_logs "missing compatibility WATCH_STALE_EVENT_DROPPED for proof-after-move.txt"
+fi
+
 if grep -Eq "DIR_MOVED|DIR_RENAMED|DIR_RELOCATED" ./events.log; then
     fail_with_all_logs "self move unexpectedly produced semantic directory move"
 fi
