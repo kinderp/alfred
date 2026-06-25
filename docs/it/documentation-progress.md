@@ -754,3 +754,19 @@ move da directory con cookie comune e mask `288`/`320`, e richiede esattamente
 un `DIR_MOVED`. Il test rifiuta `DIR_RENAMED` e `DIR_RELOCATED` sia nei log
 compatibili sia nel contratto JSONL, per proteggere la distinzione semantica
 parent diverso + basename uguale.
+
+Aggiornamento successivo: `test_file_moved_jsonl.sh` aggiunge il golden JSONL
+per move file con basename invariato. Lo scenario crea `src`, `dst` e
+`src/item.txt`, poi sposta il file in `dst/item.txt`. Il test verifica i due raw
+move da file con cookie comune e mask `32`/`64`, e richiede esattamente un
+`FILE_MOVED`. Il test rifiuta `FILE_RENAMED` e `FILE_RELOCATED` sia nei log
+compatibili sia nel contratto JSONL, per estendere anche ai file la distinzione
+parent diverso + basename uguale gia' fissata per le directory.
+
+Aggiornamento successivo: `test_file_relocated_jsonl.sh` aggiunge il golden
+JSONL per relocated file. Lo scenario crea `src`, `dst` e `src/before.txt`, poi
+sposta e rinomina il file in `dst/after.txt`. Il test verifica i due raw move da
+file con cookie comune e mask `32`/`64`, e richiede esattamente un
+`FILE_RELOCATED`. Il test rifiuta `FILE_MOVED` e `FILE_RENAMED` sia nei log
+compatibili sia nel contratto JSONL, completando la triade file rename, move e
+relocation.
