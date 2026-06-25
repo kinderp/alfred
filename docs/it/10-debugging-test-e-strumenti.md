@@ -1795,6 +1795,60 @@ fidarmi del path". Non deve invece produrre record filesystem `RAW_CREATE`,
 `FILE_CREATED` o simili per `proof-after-move.txt`, perche' sarebbero fatti
 costruiti con un path vecchio e quindi falso.
 
+Lo scenario `test_lost_scope_runtime_recovery_jsonl.sh` copre il caso completo
+in cui la recovery ampia ritrova davvero la directory spostata:
+
+```text
+root A/lost  ->  root B/lost
+```
+
+Alfred viene avviato con due root configurate. La directory `lost` nasce sotto
+root A, quindi riceve un watch proprio. Poi viene spostata sotto root B. In
+questo scenario accadono due cose diverse:
+
+- il parent di origine e il parent di destinazione sono entrambi osservati, per
+  cui il core puo' vedere la coppia `RAW_MOVED_FROM` / `RAW_MOVED_TO` e
+  produrre `DIR_MOVED`;
+- il watch installato direttamente su `lost` riceve anche `IN_MOVE_SELF`, quindi
+  il backend deve marcare quel watch `STALE`, fallire il resync locale sul
+  vecchio path e avviare la lost-scope recovery.
+
+Il golden controlla due percorsi strutturati nello stesso scenario. Il primo e'
+il percorso semantico visto dai parent osservati:
+
+```text
+RAW_MOVED_FROM path=A/lost cookie=C
+RAW_MOVED_TO path=B/lost cookie=C
+DIR_MOVED from=A/lost to=B/lost
+```
+
+Questo percorso descrive l'operazione filesystem: la directory `lost` e' stata
+spostata da root A a root B. Non ripara pero' il watch installato direttamente
+su `lost`.
+
+Il secondo percorso e' la recovery del watch figlio che ha ricevuto
+`IN_MOVE_SELF`:
+
+```text
+WATCH_STALE
+WATCH_RESYNC_FAILED
+WATCH_LOST_QUEUED
+WATCH_LOST_SCAN_BEGIN root=A
+WATCH_LOST_NOT_FOUND
+WATCH_LOST_SCAN_BEGIN root=B
+WATCH_LOST_FOUND old_path=A/lost new_path=B/lost
+WATCH_LOST_RECOVERY_END state=valid
+RAW_CREATE path=B/lost/proof.txt
+FILE_CREATED path=B/lost/proof.txt
+```
+
+Questo secondo percorso fissa il significato della recovery completa: Alfred non
+usa il vecchio path stale per inventare eventi successivi, ma cerca la stessa
+identita' filesystem nelle root configurate, aggiorna il path del watch e solo
+dopo emette nuovi eventi filesystem dal path recuperato. Il test rifiuta quindi
+`FILE_CREATED` sul vecchio `root A/lost/proof.txt` e richiede invece
+`FILE_CREATED` sul nuovo `root B/lost/proof.txt`.
+
 Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
 umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
 dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
@@ -2751,6 +2805,14 @@ La copertura iniziale include:
   il nuovo path non e' noto. Lo scenario crea anche un file figlio dopo lo
   spostamento e controlla che venga loggato come `WATCH_STALE_EVENT_DROPPED`,
   non come record filesystem raw o semantico basato sul vecchio path stale.
+- `tests/jsonl/test_lost_scope_runtime_recovery_jsonl.sh`: avvia Alfred reale
+  con due root e `output_enabled=true`, sposta una directory watched da root A a
+  root B e verifica la recovery completa in JSONL: `WATCH_LOST_SCAN_BEGIN`,
+  `WATCH_LOST_NOT_FOUND`, `WATCH_LOST_FOUND`, `WATCH_LOST_RECOVERY_END` e poi
+  `RAW_CREATE`/`FILE_CREATED` sul path recuperato. Il test mostra anche perche'
+  `DIR_MOVED` e recovery non sono duplicati: il primo descrive la semantica
+  vista dai parent watched, la seconda ripara il watch figlio colpito da
+  `IN_MOVE_SELF`.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

@@ -823,3 +823,18 @@ lost-scope completa, errori strutturati, eventuale semantic `OVERFLOW`,
 lifecycle/app, trace/performance e security/policy. Anche
 `26-stato-funzionalita.md` e' stato aggiornato per chiarire che i raw principali
 passano dal record sink e che `RAW_OVERFLOW` e' coperto come golden sintetico.
+
+Aggiornamento successivo: `test_lost_scope_runtime_recovery_jsonl.sh` aggiunge
+il golden JSONL runtime per la recovery lost-scope completa. Lo scenario avvia
+Alfred con due root configurate, crea una directory watched sotto root A, la
+sposta sotto root B, lascia che il watch figlio riceva `IN_MOVE_SELF`, poi
+verifica la sequenza strutturata `WATCH_STALE`,
+`WATCH_RESYNC_FAILED`, `WATCH_LOST_QUEUED`, scan root A,
+`WATCH_LOST_NOT_FOUND`, scan root B, `WATCH_LOST_FOUND` e
+`WATCH_LOST_RECOVERY_END`. Il test fissa anche il comportamento successivo:
+`proof.txt` creato dopo la recovery deve uscire come `RAW_CREATE` e
+`FILE_CREATED` sul path recuperato root B, non sul vecchio path root A ormai
+stale. La documentazione chiarisce che, poiche' entrambe le root sono osservate,
+puo' esistere anche un `DIR_MOVED` semantico da parent-level move pair; questo
+non sostituisce la recovery del watch figlio, che resta necessaria per riparare
+la watcher table.
