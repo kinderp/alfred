@@ -1522,6 +1522,31 @@ directory. Poiche' cambia il parent (`src` -> `dst`) ma il basename resta
 `output.jsonl`, per evitare che il contratto pubblico confonda move, rename e
 relocation.
 
+Lo scenario `test_file_relocated_jsonl.sh` completa la triade file con il caso
+in cui cambiano sia directory padre sia basename:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=FILE_RELOCATED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+printf "hello file relocation jsonl\n" > "$TEST_ROOT/src/before.txt"
+mv "$TEST_ROOT/src/before.txt" "$TEST_ROOT/dst/after.txt"
+```
+
+Anche in questo caso i due raw move sono collegati dal cookie e usano mask file
+`32` e `64`. La differenza semantica e' nel confronto fra vecchio e nuovo path:
+il parent cambia (`src` -> `dst`) e cambia anche il basename (`before.txt` ->
+`after.txt`). Per questo il core deve produrre `FILE_RELOCATED`. Il test rifiuta
+`FILE_MOVED` e `FILE_RENAMED`, cosi' il contratto JSONL conserva una distinzione
+netta fra rename puro, move puro e relocation.
+
 Lo scenario `test_dir_renamed_jsonl.sh` applica la stessa idea a una directory
 che resta nello stesso parent e cambia solo basename:
 
@@ -2520,6 +2545,11 @@ La copertura iniziale include:
   in `dst/item.txt`. Il test verifica raw move da file, cookie uguale,
   `FILE_MOVED` esattamente una volta, e assenza di `FILE_RENAMED` o
   `FILE_RELOCATED`.
+- `tests/jsonl/test_file_relocated_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `src`, `dst` e `src/before.txt`, poi sposta e
+  rinomina il file in `dst/after.txt`. Il test verifica raw move da file,
+  cookie uguale, `FILE_RELOCATED` esattamente una volta, e assenza di
+  `FILE_MOVED` o `FILE_RENAMED`.
 - `tests/jsonl/test_dir_renamed_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `old-dir` e poi lo rinomina in `new-dir` nello
   stesso parent. Il test verifica raw move da directory, cookie uguale,
