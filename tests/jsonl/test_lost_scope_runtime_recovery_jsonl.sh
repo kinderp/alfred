@@ -46,6 +46,16 @@ CONFIG_FILE="./jsonl-lost-scope-runtime.conf"
 OUTPUT_LOG="./output.jsonl"
 ALFRED_PID=""
 
+regex_escape() {
+    printf '%s' "$1" | sed -e 's/[][\\.^$*+?{}()|]/\\&/g'
+}
+
+TEST_ROOT_RE="$(regex_escape "$TEST_ROOT")"
+SECOND_ROOT_RE="$(regex_escape "$SECOND_ROOT")"
+OLD_PATH_RE="${TEST_ROOT_RE}/lost"
+NEW_PATH_RE="${SECOND_ROOT_RE}/lost"
+PROOF_PATH_RE="${NEW_PATH_RE}/proof.txt"
+
 source ../core/test_lib.sh
 
 cleanup_jsonl_lost_scope_runtime() {
@@ -124,56 +134,56 @@ stop_alfred
 ALFRED_PID=""
 
 assert_compat_contains \
-    "IN_CREATE IN_ISDIR .*path=.*/alfred_jsonl_lost_scope_root_a name=lost" \
+    "IN_CREATE IN_ISDIR .*path=${TEST_ROOT_RE} name=lost" \
     ./raw.log
 assert_compat_contains \
-    "IN_MOVE_SELF .*path=.*/alfred_jsonl_lost_scope_root_a/lost name=" \
+    "IN_MOVE_SELF .*path=${OLD_PATH_RE} name=" \
     ./raw.log
 
 assert_compat_contains \
-    "WATCH_ADDED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a$" \
+    "WATCH_ADDED wd=[0-9]+ path=${TEST_ROOT_RE}$" \
     ./events.log
 assert_compat_contains \
-    "WATCH_ADDED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_b$" \
+    "WATCH_ADDED wd=[0-9]+ path=${SECOND_ROOT_RE}$" \
     ./events.log
 assert_compat_contains \
-    "WATCH_ADDED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost$" \
+    "WATCH_ADDED wd=[0-9]+ path=${OLD_PATH_RE}$" \
     ./events.log
 assert_compat_contains \
-    "WATCH_STALE wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost reason=IN_MOVE_SELF" \
+    "WATCH_STALE wd=[0-9]+ path=${OLD_PATH_RE} reason=IN_MOVE_SELF" \
     ./events.log
 assert_compat_contains \
-    "WATCH_RESYNC_FAILED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost reason=IN_MOVE_SELF error=path-unreachable" \
+    "WATCH_RESYNC_FAILED wd=[0-9]+ path=${OLD_PATH_RE} reason=IN_MOVE_SELF error=path-unreachable" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost reason=IN_MOVE_SELF error=path-unreachable pending=1" \
+    "WATCH_LOST_QUEUED wd=[0-9]+ path=${OLD_PATH_RE} reason=IN_MOVE_SELF error=path-unreachable pending=1" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_SCAN_BEGIN root=.*/alfred_jsonl_lost_scope_root_a pending=0" \
+    "WATCH_LOST_SCAN_BEGIN root=${TEST_ROOT_RE} pending=0" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_NOT_FOUND wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost reason=IN_MOVE_SELF retry=0" \
+    "WATCH_LOST_NOT_FOUND wd=[0-9]+ path=${OLD_PATH_RE} reason=IN_MOVE_SELF retry=0" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_SCAN_BEGIN root=.*/alfred_jsonl_lost_scope_root_b pending=0" \
+    "WATCH_LOST_SCAN_BEGIN root=${SECOND_ROOT_RE} pending=0" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_FOUND wd=[0-9]+ old_path=.*/alfred_jsonl_lost_scope_root_a/lost new_path=.*/alfred_jsonl_lost_scope_root_b/lost reason=IN_MOVE_SELF" \
+    "WATCH_LOST_FOUND wd=[0-9]+ old_path=${OLD_PATH_RE} new_path=${NEW_PATH_RE} reason=IN_MOVE_SELF" \
     ./events.log
 assert_compat_contains \
-    "WATCH_LOST_RECOVERY_END wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_b/lost reason=IN_MOVE_SELF result=valid" \
+    "WATCH_LOST_RECOVERY_END wd=[0-9]+ path=${NEW_PATH_RE} reason=IN_MOVE_SELF result=valid" \
     ./events.log
 assert_compat_contains \
-    "FILE_CREATED path=.*/alfred_jsonl_lost_scope_root_b/lost/proof.txt" \
+    "FILE_CREATED path=${PROOF_PATH_RE}" \
     ./events.log
 assert_compat_not_contains \
-    "FILE_CREATED path=.*/alfred_jsonl_lost_scope_root_a/lost/proof.txt" \
+    "FILE_CREATED path=${OLD_PATH_RE}/proof.txt" \
     ./events.log
 assert_compat_not_contains \
-    "WATCH_LOST_RETRY_SCHEDULED wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost" \
+    "WATCH_LOST_RETRY_SCHEDULED wd=[0-9]+ path=${OLD_PATH_RE}" \
     ./events.log
 assert_compat_not_contains \
-    "WATCH_LOST_RECOVERY_GAVE_UP wd=[0-9]+ path=.*/alfred_jsonl_lost_scope_root_a/lost" \
+    "WATCH_LOST_RECOVERY_GAVE_UP wd=[0-9]+ path=${OLD_PATH_RE}" \
     ./events.log
 
 if [[ ! -s "$OUTPUT_LOG" ]]; then
