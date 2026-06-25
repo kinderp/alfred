@@ -715,3 +715,11 @@ Aggiornamento successivo: la suite JSONL contiene ora anche
 lo stesso cookie non nullo e che il record semantico usi `old_path` e
 `new_path`, fissando il primo caso di correlazione raw -> semantica nel formato
 JSONL pubblico.
+
+Aggiornamento successivo: `test_self_move_recovery_jsonl.sh` aggiunge il primo
+golden JSONL per diagnostica recovery. Lo scenario sposta una directory
+osservata fuori dal vecchio path e verifica `WATCH_STALE`,
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` con `watch.error=path-unreachable`
+e `WATCH_LOST_QUEUED` con `recovery.pending_count`. Il test controlla anche che
+non vengano prodotti record semantici `DIR_MOVED`, `DIR_RENAMED` o
+`DIR_RELOCATED`, perche' `IN_MOVE_SELF` non contiene il nuovo path.

@@ -161,7 +161,7 @@ definitivamente una directory osservata rinominata o spostata.
 | JSONL buffered writer | `alfred_record_jsonl_writer_t` | Supportato come helper preparatorio | Accumula righe JSONL in buffer caller-owned e scrive solo su flush o auto-flush |
 | Output config minima | `config_t.output` + `output_log` | Supportata e collegata in opt-in JSONL | Default spento; quando `output_enabled=true` e `output_format=jsonl` scrive JSONL aggiuntivo su `output_log` |
 | Output pipeline single-writer | `alfred_record_output_pipeline_t` | Collegata in modo sincrono dietro configurazione | Compone queue, dispatcher, runtime drain e JSONL writer per raw record normalizzati, eventi semantici core e diagnostica watch base `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_STALE_EVENT_DROPPED` |
-| Golden test JSONL end-to-end | `make test-jsonl` | Primi scenari supportati | Verifica `output.jsonl` con parsing JSON reale per create file, create directory, `WATCH_ADDED`, rename file, raw move cookie e `FILE_RENAMED`; da estendere a move/relocate, recovery ed errori |
+| Golden test JSONL end-to-end | `make test-jsonl` | Primi scenari supportati | Verifica `output.jsonl` con parsing JSON reale per create file, create directory, `WATCH_ADDED`, rename file, raw move cookie, `FILE_RENAMED` e diagnostica recovery base `WATCH_STALE`/`WATCH_RESYNC_FAILED`/`WATCH_LOST_QUEUED`; da estendere a move/relocate, recovery completa ed errori |
 | Backpressure/drop policy | futura | Rimandato | Da progettare insieme a Event Model, Backend API, Writer API e output strutturato |
 | Code per sink | futura | Rimandato | Necessarie per isolare writer lenti come text, JSONL, Lab o socket |
 

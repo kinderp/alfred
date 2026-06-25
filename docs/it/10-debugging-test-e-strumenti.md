@@ -1490,6 +1490,24 @@ Questo e' importante perche' `RAW_MOVED_FROM` e `RAW_MOVED_TO` sono due mezzi
 eventi raw: il core li correla tramite cookie e produce un solo
 `FILE_RENAMED` semantico con `old_path` e `new_path`.
 
+Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
+diagnostica recovery:
+
+```text
+layer=diagnostic category=watch type=WATCH_STALE
+layer=diagnostic category=recovery type=WATCH_RESYNC_BEGIN
+layer=diagnostic category=recovery type=WATCH_RESYNC_FAILED
+layer=diagnostic category=recovery type=WATCH_LOST_QUEUED
+```
+
+Lo scenario sposta una directory osservata fuori dal vecchio path. Il kernel
+emette `IN_MOVE_SELF`, ma non fornisce il nuovo path. Per questo Alfred non deve
+inventare un `DIR_MOVED`, `DIR_RENAMED` o `DIR_RELOCATED` semantico. Deve invece
+marcare il watch come stale, tentare il resync locale, fallire con
+`path-unreachable` e accodare una recovery lost-scope. Il test controlla questi
+fatti come record JSONL e verifica anche `watch.reason`, `watch.error` e
+`recovery.pending_count`.
+
 Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
 umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
 dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
@@ -2381,6 +2399,13 @@ La copertura iniziale include:
   `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
   il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
   record semantico deve esporre `old_path` e `new_path`.
+- `tests/jsonl/test_self_move_recovery_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea una directory `lost-jsonl` e poi la sposta fuori
+  dal vecchio path. Il test verifica la compatibilita' testuale e il contratto
+  JSONL per `WATCH_STALE`, `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e
+  `WATCH_LOST_QUEUED`. Questo scenario e' diagnostico: conferma che
+  `IN_MOVE_SELF` non viene trasformato in una semantica directory falsa quando
+  il nuovo path non e' noto.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia
