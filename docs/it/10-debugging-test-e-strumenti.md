@@ -1496,6 +1496,33 @@ Controlla inoltre `raw_mask=32` per `RAW_MOVED_FROM` e `raw_mask=64` per
 `RAW_MOVED_TO` sono due mezzi eventi raw: il core li correla tramite cookie e
 produce un solo `FILE_RENAMED` semantico con `old_path` e `new_path`.
 
+Lo scenario `test_dir_relocated_jsonl.sh` usa lo stesso principio di
+correlazione, ma su una directory che cambia sia directory padre sia basename:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=DIR_RELOCATED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+mkdir "$TEST_ROOT/src/before"
+mv "$TEST_ROOT/src/before" "$TEST_ROOT/dst/after"
+```
+
+Il kernel produce due mezzi eventi raw con lo stesso cookie. Poiche' il path
+passa da `src/before` a `dst/after`, cambiano sia il parent (`src` -> `dst`) sia
+il nome finale (`before` -> `after`). Per la semantica del core non e' una
+semplice rename e non e' una semplice move: e' una relocation. Il golden JSONL
+controlla quindi `DIR_RELOCATED` con `old_path` e `new_path`, e controlla anche
+che non vengano prodotti `DIR_MOVED` o `DIR_RENAMED` per la stessa operazione.
+Per i raw controlla `raw_mask=288` su `RAW_MOVED_FROM` e `raw_mask=320` su
+`RAW_MOVED_TO`, cioe' i bit di move piu' `ALFRED_RAW_ISDIR`.
+
 Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
 diagnostica recovery:
 
@@ -2414,6 +2441,11 @@ La copertura iniziale include:
   `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
   il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
   record semantico deve esporre `old_path` e `new_path`.
+- `tests/jsonl/test_dir_relocated_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `src`, `dst` e `src/before`, poi sposta e rinomina
+  la directory in `dst/after`. Il test verifica i raw `RAW_MOVED_FROM` e
+  `RAW_MOVED_TO` con cookie uguale e mask da directory, e controlla che il core
+  produca `DIR_RELOCATED`, non `DIR_MOVED` o `DIR_RENAMED`.
 - `tests/jsonl/test_self_move_recovery_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea una directory `lost-jsonl` e poi la sposta fuori
   dal vecchio path. Il test verifica la compatibilita' testuale e il contratto
