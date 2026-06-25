@@ -809,3 +809,17 @@ kernel: compila un helper C che costruisce un `IN_Q_OVERFLOW` sintetico con
 `wd=-1`, passa da `backend_build_overflow_raw()`, converte in `alfred_record_t`
 e formatta JSONL. Il test verifica `raw_mask=128` e `path=""`, chiarendo che
 l'overflow riguarda l'intera istanza inotify e non un singolo path osservato.
+
+Aggiornamento successivo: `22-contratto-log.md` e' stato riallineato allo stato
+corrente della suite JSONL golden. La tabella
+degli eventi semantici non descrive piu' `output.jsonl` come assente per
+`FILE_CREATED`, `DIR_CREATED`, `FILE_MODIFIED`, `FILE_READY`, delete, rename,
+move e relocated: questi record sono runtime-routed verso la pipeline JSONL
+quando `output_enabled=true`. Il documento distingue ora esplicitamente tra
+`runtime-routed`, cioe' un record che il codice puo' portare alla pipeline, e
+`golden JSONL`, cioe' uno scenario stabile che blocca quel contratto. La stessa
+sezione elenca gli scenari `tests/jsonl` coperti e i gap rimasti: recovery
+lost-scope completa, errori strutturati, eventuale semantic `OVERFLOW`,
+lifecycle/app, trace/performance e security/policy. Anche
+`26-stato-funzionalita.md` e' stato aggiornato per chiarire che i raw principali
+passano dal record sink e che `RAW_OVERFLOW` e' coperto come golden sintetico.

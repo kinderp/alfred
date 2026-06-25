@@ -113,8 +113,11 @@ e non significa automaticamente
 
 Alfred sta migrando gradualmente da log testuali storici a record strutturati.
 Per questo, nello stato corrente, alcune famiglie passano gia' dal record sink
-testuale, alcune sono solo rappresentabili come record, alcune sono ancora solo
-righe legacy, e `output.jsonl` contiene solo un sottoinsieme.
+testuale e dalla pipeline JSONL, alcune sono solo rappresentabili come record,
+alcune sono ancora solo righe legacy. `output.jsonl` non e' la copia completa
+di tutti i log storici: e' il sottoinsieme strutturato opt-in che oggi copre i
+raw Alfred normalizzati, la semantica core supportata e la diagnostica watch /
+resync / lost-scope gia' instradata.
 
 Per evitare ambiguita', distinguiamo quattro stati:
 
@@ -159,9 +162,9 @@ La tabella usa queste colonne:
 | Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | `raw.log` | previsto come `backend_observed + audit` | no, manca ancora tipo/formatter audit | no | no | aggiungere record audit solo se vogliamo output strutturato per audit read-only |
 | Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
-| Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | estendere i test JSONL a piu' tipi semantici e decidere se introdurre un dispatcher applicativo comune |
-| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; prossimi passi su resync/lost-scope |
-| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia resync completa; prossimo lavoro su lost-scope |
+| Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | mantenere golden rappresentativi e decidere se introdurre un dispatcher applicativo comune |
+| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | `events.log` | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', tutti i record watch base passano da text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | famiglia watch base completa; mantenere test text e JSONL |
+| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia resync completa; mantenere test text e JSONL |
 | Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | `events.log` o `errors.log` per errori | si', builder diagnostico | si', text e JSONL formatter conoscono i tipi | si', text sink legacy + output pipeline tramite `emit_record` | si', quando `output_enabled=true` | famiglia lost-scope completa |
 | Lifecycle/app | startup, shutdown, config, logger initialized | `events.log`/`errors.log` | non ancora | no | no | no | decidere se servono record `lifecycle` o se restano log applicativi umani |
 | Errori runtime generici | errori di config, I/O, allocazione, backend init | `errors.log` | non ancora uniforme | no | no | no | progettare `diagnostic/error` o `lifecycle/error` prima di serializzarli |
@@ -264,19 +267,19 @@ Gli eventi semantici sono gia' convertibili in record tramite
 
 | Tipo semantico | Sink-capable | Runtime-routed | Log testuale | `output.jsonl` oggi | Note |
 | --- | --- | --- | --- | --- | --- |
-| `FILE_CREATED` | si | si | `events.log` | no | creato dal core, non dal backend |
-| `DIR_CREATED` | si | si | `events.log` | no | anche da raw sintetici create-dir |
-| `FILE_READY` | si | si | `events.log` | no | deriva da close-write |
-| `FILE_MODIFIED` | si | si | `events.log` | no | puo' essere deduplicato/debounced |
-| `FILE_DELETED` | si | si | `events.log` | no | semantica, distinta da `RAW_DELETE` |
-| `DIR_DELETED` | si | si | `events.log` | no | semantica, distinta da `WATCH_REMOVED` |
-| `FILE_RENAMED` | si | si | `events.log` | no | risultato di correlazione move pair |
-| `DIR_RENAMED` | si | si | `events.log` | no | risultato core, non self-event |
-| `FILE_MOVED` | si | si | `events.log` | no | semantica core |
-| `DIR_MOVED` | si | si | `events.log` | no | semantica core |
-| `FILE_RELOCATED` | si | si | `events.log` | no | scelta semantica approvata per moved/renamed a livello core |
-| `DIR_RELOCATED` | si | si | `events.log` | no | scelta semantica approvata per directory |
-| `OVERFLOW` | si | si | `events.log` | no | semantica stream-integrity del core |
+| `FILE_CREATED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | creato dal core, non dal backend |
+| `DIR_CREATED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | anche da raw sintetici create-dir |
+| `FILE_READY` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | deriva da close-write |
+| `FILE_MODIFIED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | puo' essere deduplicato/debounced |
+| `FILE_DELETED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | semantica, distinta da `RAW_DELETE` |
+| `DIR_DELETED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | semantica, distinta da `WATCH_REMOVED` |
+| `FILE_RENAMED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | risultato di correlazione move pair |
+| `DIR_RENAMED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | risultato core, non self-event |
+| `FILE_MOVED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | semantica core |
+| `DIR_MOVED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | semantica core |
+| `FILE_RELOCATED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | scelta semantica approvata per moved/renamed a livello core |
+| `DIR_RELOCATED` | si | text sink/events.log + output pipeline JSONL | `events.log` | si' | scelta semantica approvata per directory |
+| `OVERFLOW` | si | text sink/events.log + output pipeline JSONL se il core riceve `RAW_OVERFLOW` runtime | `events.log` | si' | semantica stream-integrity del core; golden JSONL corrente copre il raw sintetico, non un overflow kernel reale |
 
 Questo e' il punto piu' importante dopo il collegamento runtime JSONL:
 
@@ -287,9 +290,10 @@ output.jsonl riceve ora gli eventi semantici quando output_enabled=true.
 ```
 
 Il prossimo passo strutturale non e' piu' "rendere la semantica JSONL-capable":
-lo e' gia'. Il lavoro rimasto e' allargare i test a piu' tipi semantici e
-decidere se introdurre un dispatcher applicativo comune per raw, semantic e
-diagnostic invece di avere piccoli bridge separati.
+lo e' gia'. Il lavoro rimasto e' mantenere i golden rappresentativi, completare
+gli scenari di recovery piu' complessi e decidere se introdurre un dispatcher
+applicativo comune per raw, semantic e diagnostic invece di avere piccoli
+bridge separati.
 
 ### Diagnostica watch, resync e lost-scope
 
@@ -299,7 +303,8 @@ Molti di questi tipi sono gia' rappresentabili come record diagnostici tramite
 `alfred_record_build_watch_diagnostic_with_os_error()`, e i formatter text/JSONL
 conoscono i relativi `ALFRED_RECORD_TYPE_WATCH_*`.
 
-La copertura runtime pero' non e' ancora uniforme:
+La copertura runtime e' documentata per famiglia, perche' ogni fase porta
+campi diversi e rischi diversi:
 
 | Famiglia diagnostica | Esempi | Log testuale oggi | Record builder | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -437,6 +442,67 @@ raw/core event.
 Il contratto completo arrivera' quando anche il resto della diagnostica,
 lifecycle e futuri record security avranno un routing esplicito verso lo stesso
 modello di writer.
+
+### Copertura golden JSONL corrente
+
+`make test-jsonl` non e' una copia uno-a-uno di tutti i test testuali storici.
+La suite JSONL fissa il contratto pubblico strutturato con scenari
+rappresentativi: usa Alfred reale quando il comportamento e' stabile end-to-end
+e usa helper sintetici quando il trigger reale dipende troppo dal timing del
+kernel o dalla macchina.
+
+Gli scenari runtime end-to-end gia' coperti sono:
+
+- `tests/jsonl/test_create_file_and_dir_jsonl.sh`: `RAW_CREATE`,
+  `FILE_CREATED`, `DIR_CREATED`, `WATCH_ADDED`;
+- `tests/jsonl/test_modify_file_jsonl.sh`: `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
+  `FILE_MODIFIED`, `FILE_READY`;
+- `tests/jsonl/test_attrib_raw_jsonl.sh`: `RAW_ATTRIB` senza evento
+  semantico;
+- `tests/jsonl/test_delete_file_jsonl.sh`: `RAW_DELETE`, `FILE_DELETED`;
+- `tests/jsonl/test_delete_dir_jsonl.sh`: `RAW_DELETE | ALFRED_RAW_ISDIR`,
+  `DIR_DELETED`, `WATCH_REMOVED`;
+- `tests/jsonl/test_rename_file_jsonl.sh`: `RAW_MOVED_FROM`,
+  `RAW_MOVED_TO`, `FILE_RENAMED`;
+- `tests/jsonl/test_file_moved_jsonl.sh`: `FILE_MOVED`;
+- `tests/jsonl/test_file_relocated_jsonl.sh`: `FILE_RELOCATED`;
+- `tests/jsonl/test_dir_renamed_jsonl.sh`: `DIR_RENAMED`;
+- `tests/jsonl/test_dir_moved_jsonl.sh`: `DIR_MOVED`;
+- `tests/jsonl/test_dir_relocated_jsonl.sh`: `DIR_RELOCATED`;
+- `tests/jsonl/test_self_move_recovery_jsonl.sh`: `WATCH_STALE`,
+  `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED`, `WATCH_LOST_QUEUED`.
+
+Lo scenario sintetico gia' coperto e':
+
+- `tests/jsonl/test_overflow_raw_jsonl.sh`: costruisce un
+  `IN_Q_OVERFLOW` sintetico con `wd=-1`, passa da
+  `backend_build_overflow_raw()`, `alfred_record_from_raw()` e
+  `alfred_record_format_jsonl()`, poi verifica `RAW_OVERFLOW` con
+  `raw_mask=128` e `path=""`.
+
+La distinzione e' importante:
+
+```text
+runtime-routed = il codice oggi puo' portare quel record alla pipeline JSONL
+golden JSONL = esiste gia' un test stabile che blocca quel contratto
+```
+
+Per esempio la semantica `OVERFLOW` e' sink-capable e runtime-routed se il core
+riceve un `RAW_OVERFLOW` durante l'esecuzione reale. Il golden attuale pero'
+copre in modo esplicito solo `RAW_OVERFLOW`, perche' generare un overflow reale
+della coda inotify in CI sarebbe fragile e dipenderebbe dalla pressione eventi,
+dalla configurazione del kernel e dal timing della macchina.
+
+Gap noti da coprire in futuro:
+
+- golden JSONL runtime per recovery lost-scope completa, non solo il primo
+  handoff `WATCH_LOST_QUEUED`;
+- golden JSONL per record di errore strutturati quando avremo deciso lo schema
+  pubblico degli errori;
+- eventuale golden per semantica `OVERFLOW`, se sceglieremo un helper stabile
+  che attraversi anche il core e non solo l'adapter raw;
+- lifecycle/app, trace/performance e security/policy quando diventeranno parte
+  del contratto pubblico.
 
 ## Raw log audit inotify
 
