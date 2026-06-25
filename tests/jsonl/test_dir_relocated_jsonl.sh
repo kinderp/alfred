@@ -206,9 +206,10 @@ relocations = [
     and record.get("old_path") == old_path
     and record.get("new_path") == new_path
 ]
-if not relocations:
+if len(relocations) != 1:
     raise SystemExit(
-        "missing semantic DIR_RELOCATED record with expected old_path/new_path"
+        "expected exactly one semantic DIR_RELOCATED record with "
+        f"expected old_path/new_path, found {len(relocations)}"
     )
 
 wrong_semantics = [
