@@ -730,3 +730,12 @@ eventi figli ricevuti su un watch stale. Lo scenario crea
 due lati del contratto: Alfred deve produrre diagnostica
 `WATCH_STALE_EVENT_DROPPED`, ma non deve emettere record filesystem
 `normalized_raw` o `semantic` per quel file usando il vecchio path stale.
+
+Aggiornamento successivo: la suite JSONL copre ora anche il caso di directory
+relocated con `test_dir_relocated_jsonl.sh`. Lo scenario crea `src`, `dst` e
+`src/before`, poi sposta e rinomina la directory in `dst/after`. Il test
+verifica i due record raw `RAW_MOVED_FROM` e `RAW_MOVED_TO` con lo stesso cookie
+non nullo, controlla le mask da directory `288` e `320`, e fissa il contratto
+semantico pubblico `DIR_RELOCATED` con `old_path` e `new_path`. Lo stesso test
+controlla anche che l'operazione non venga degradata o duplicata come
+`DIR_MOVED` o `DIR_RENAMED`.
