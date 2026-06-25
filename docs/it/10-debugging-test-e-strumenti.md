@@ -1813,7 +1813,21 @@ questo scenario accadono due cose diverse:
   il backend deve marcare quel watch `STALE`, fallire il resync locale sul
   vecchio path e avviare la lost-scope recovery.
 
-Il golden controlla il percorso strutturato:
+Il golden controlla due percorsi strutturati nello stesso scenario. Il primo e'
+il percorso semantico visto dai parent osservati:
+
+```text
+RAW_MOVED_FROM path=A/lost cookie=C
+RAW_MOVED_TO path=B/lost cookie=C
+DIR_MOVED from=A/lost to=B/lost
+```
+
+Questo percorso descrive l'operazione filesystem: la directory `lost` e' stata
+spostata da root A a root B. Non ripara pero' il watch installato direttamente
+su `lost`.
+
+Il secondo percorso e' la recovery del watch figlio che ha ricevuto
+`IN_MOVE_SELF`:
 
 ```text
 WATCH_STALE
@@ -1828,10 +1842,10 @@ RAW_CREATE path=B/lost/proof.txt
 FILE_CREATED path=B/lost/proof.txt
 ```
 
-Questo fissa il significato della recovery completa: Alfred non usa il vecchio
-path stale per inventare eventi successivi, ma cerca la stessa identita'
-filesystem nelle root configurate, aggiorna il path del watch e solo dopo emette
-nuovi eventi filesystem dal path recuperato. Il test rifiuta quindi
+Questo secondo percorso fissa il significato della recovery completa: Alfred non
+usa il vecchio path stale per inventare eventi successivi, ma cerca la stessa
+identita' filesystem nelle root configurate, aggiorna il path del watch e solo
+dopo emette nuovi eventi filesystem dal path recuperato. Il test rifiuta quindi
 `FILE_CREATED` sul vecchio `root A/lost/proof.txt` e richiede invece
 `FILE_CREATED` sul nuovo `root B/lost/proof.txt`.
 
