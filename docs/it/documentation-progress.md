@@ -786,3 +786,11 @@ write, poi cancella il file. Il test verifica `RAW_CREATE`, `RAW_MODIFY`,
 `FILE_MODIFIED`, `FILE_READY` e `FILE_DELETED`. Il test rifiuta `DIR_DELETED`
 per mantenere esplicita la distinzione tra cancellazione file e cancellazione
 directory.
+
+Aggiornamento successivo: `test_delete_dir_jsonl.sh` aggiunge il golden JSONL
+per cancellazione directory. Lo scenario crea `delete-dir`, aspetta
+l'installazione del watch ricorsivo e poi rimuove la directory. Il test verifica
+`RAW_CREATE` con mask `257`, `RAW_DELETE` con mask `258`, `DIR_CREATED`,
+`DIR_DELETED`, `WATCH_ADDED` e `WATCH_REMOVED`. La documentazione chiarisce che
+`WATCH_REMOVED` e' diagnostica di backend sulla pulizia del watch, non una
+seconda cancellazione semantica, e il test rifiuta `FILE_DELETED`.
