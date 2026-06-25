@@ -1546,7 +1546,7 @@ che non vengano prodotti `DIR_MOVED` o `DIR_RENAMED` per la stessa operazione.
 Per i raw controlla `raw_mask=288` su `RAW_MOVED_FROM` e `raw_mask=320` su
 `RAW_MOVED_TO`, cioe' i bit di move piu' `ALFRED_RAW_ISDIR`.
 
-Il terzo scenario, `test_self_move_recovery_jsonl.sh`, fissa il primo caso di
+Lo scenario `test_self_move_recovery_jsonl.sh` fissa invece il primo caso di
 diagnostica recovery:
 
 ```text
