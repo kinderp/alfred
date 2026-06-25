@@ -723,3 +723,10 @@ osservata fuori dal vecchio path e verifica `WATCH_STALE`,
 e `WATCH_LOST_QUEUED` con `recovery.pending_count`. Il test controlla anche che
 non vengano prodotti record semantici `DIR_MOVED`, `DIR_RENAMED` o
 `DIR_RELOCATED`, perche' `IN_MOVE_SELF` non contiene il nuovo path.
+
+Aggiornamento successivo: il golden self-move recovery ora controlla anche gli
+eventi figli ricevuti su un watch stale. Lo scenario crea
+`proof-after-move.txt` dopo lo spostamento della directory osservata e verifica
+due lati del contratto: Alfred deve produrre diagnostica
+`WATCH_STALE_EVENT_DROPPED`, ma non deve emettere record filesystem
+`normalized_raw` o `semantic` per quel file usando il vecchio path stale.

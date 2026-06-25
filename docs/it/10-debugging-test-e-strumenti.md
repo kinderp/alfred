@@ -1514,6 +1514,15 @@ marcare il watch come stale, tentare il resync locale, fallire con
 fatti come record JSONL e verifica anche `watch.reason`, `watch.error` e
 `recovery.pending_count`.
 
+Lo scenario crea anche `proof-after-move.txt` dentro la directory gia' spostata.
+Questo serve a verificare un punto delicato: il watch inotify segue ancora
+l'oggetto directory, ma Alfred conosce solo il vecchio path, ormai stale. In
+questa situazione il backend puo' produrre diagnostica
+`WATCH_STALE_EVENT_DROPPED`, per dire "ho visto un evento figlio ma non posso
+fidarmi del path". Non deve invece produrre record filesystem `RAW_CREATE`,
+`FILE_CREATED` o simili per `proof-after-move.txt`, perche' sarebbero fatti
+costruiti con un path vecchio e quindi falso.
+
 Questo e' diverso da un semplice `grep`: il test non sta cercando una frase
 umana, ma campi dati. Per questo un futuro cambiamento del formato testuale non
 dovrebbe rompere questa suite, finche' il contratto JSONL resta stabile.
@@ -2411,7 +2420,9 @@ La copertura iniziale include:
   JSONL per `WATCH_STALE`, `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e
   `WATCH_LOST_QUEUED`. Questo scenario e' diagnostico: conferma che
   `IN_MOVE_SELF` non viene trasformato in una semantica directory falsa quando
-  il nuovo path non e' noto.
+  il nuovo path non e' noto. Lo scenario crea anche un file figlio dopo lo
+  spostamento e controlla che venga loggato come `WATCH_STALE_EVENT_DROPPED`,
+  non come record filesystem raw o semantico basato sul vecchio path stale.
 - `test_record_counter_sink.sh`: compila `test_record_counter_sink.c` e verifica
   il sink no-op/counter. Il test non confronta righe di log perche' questo sink
   non scrive nulla: riceve record e aggiorna solo contatori. Lo scenario invia

@@ -11,10 +11,14 @@
 #   watch.error=path-unreachable
 # - one diagnostic WATCH_LOST_QUEUED record exists for lost-jsonl with
 #   watch.error=path-unreachable and recovery.pending_count >= 1
+# - one diagnostic WATCH_STALE_EVENT_DROPPED record exists for the child event
+#   named proof-after-move.txt
+# - no normalized raw or semantic filesystem record exists for
+#   proof-after-move.txt, because the old watched path is stale
 #
 # Compatibility logs expected in parallel:
 # - events.log still contains WATCH_ADDED, WATCH_STALE, WATCH_RESYNC_BEGIN,
-#   WATCH_RESYNC_FAILED and WATCH_LOST_QUEUED
+#   WATCH_RESYNC_FAILED, WATCH_LOST_QUEUED and WATCH_STALE_EVENT_DROPPED
 #
 # Meaning:
 # This golden test fixes the structured diagnostic contract for a watched
@@ -193,6 +197,33 @@ if not isinstance(pending_count, int) or pending_count < 1:
     raise SystemExit(
         f"WATCH_LOST_QUEUED recovery.pending_count={pending_count!r}, "
         "expected an integer >= 1"
+    )
+
+stale_child_drops = [
+    record
+    for record in records
+    if record.get("layer") == "diagnostic"
+    and record.get("category") == "watch"
+    and record.get("type") == "WATCH_STALE_EVENT_DROPPED"
+    and record.get("path") == lost_path
+    and isinstance(record.get("watch"), dict)
+    and record["watch"].get("event_name") == "proof-after-move.txt"
+]
+if not stale_child_drops:
+    raise SystemExit(
+        "missing WATCH_STALE_EVENT_DROPPED for proof-after-move.txt"
+    )
+
+stale_child_filesystem_records = [
+    record
+    for record in records
+    if record.get("layer") in {"normalized_raw", "semantic"}
+    and record.get("category") == "filesystem"
+    and "proof-after-move.txt" in str(record.get("path", ""))
+]
+if stale_child_filesystem_records:
+    raise SystemExit(
+        "stale child event unexpectedly produced filesystem records"
     )
 
 semantic_moves = [
