@@ -1496,6 +1496,32 @@ Controlla inoltre `raw_mask=32` per `RAW_MOVED_FROM` e `raw_mask=64` per
 `RAW_MOVED_TO` sono due mezzi eventi raw: il core li correla tramite cookie e
 produce un solo `FILE_RENAMED` semantico con `old_path` e `new_path`.
 
+Lo scenario `test_file_moved_jsonl.sh` usa gli stessi due mezzi eventi raw, ma
+su un file che cambia directory padre e conserva lo stesso basename:
+
+```text
+layer=normalized_raw category=filesystem type=RAW_MOVED_FROM
+layer=normalized_raw category=filesystem type=RAW_MOVED_TO
+layer=semantic category=filesystem type=FILE_MOVED
+```
+
+La sequenza e':
+
+```bash
+mkdir "$TEST_ROOT/src"
+mkdir "$TEST_ROOT/dst"
+printf "hello file move jsonl\n" > "$TEST_ROOT/src/item.txt"
+mv "$TEST_ROOT/src/item.txt" "$TEST_ROOT/dst/item.txt"
+```
+
+Il kernel produce `RAW_MOVED_FROM` sul vecchio path e `RAW_MOVED_TO` sul nuovo
+path, con lo stesso cookie. Per i file le mask restano `32` e `64`, senza il bit
+directory. Poiche' cambia il parent (`src` -> `dst`) ma il basename resta
+`item.txt`, il core deve produrre esattamente un `FILE_MOVED`. Il golden rifiuta
+`FILE_RENAMED` e `FILE_RELOCATED`, sia nei log compatibili sia in
+`output.jsonl`, per evitare che il contratto pubblico confonda move, rename e
+relocation.
+
 Lo scenario `test_dir_renamed_jsonl.sh` applica la stessa idea a una directory
 che resta nello stesso parent e cambia solo basename:
 
@@ -2489,6 +2515,11 @@ La copertura iniziale include:
   `output.jsonl` e controlla i record strutturati. La parte piu' importante e'
   il cookie: i due record raw devono avere lo stesso cookie non nullo, mentre il
   record semantico deve esporre `old_path` e `new_path`.
+- `tests/jsonl/test_file_moved_jsonl.sh`: avvia Alfred reale con
+  `output_enabled=true`, crea `src`, `dst` e `src/item.txt`, poi sposta il file
+  in `dst/item.txt`. Il test verifica raw move da file, cookie uguale,
+  `FILE_MOVED` esattamente una volta, e assenza di `FILE_RENAMED` o
+  `FILE_RELOCATED`.
 - `tests/jsonl/test_dir_renamed_jsonl.sh`: avvia Alfred reale con
   `output_enabled=true`, crea `old-dir` e poi lo rinomina in `new-dir` nello
   stesso parent. Il test verifica raw move da directory, cookie uguale,
