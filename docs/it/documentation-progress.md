@@ -796,9 +796,9 @@ l'installazione del watch ricorsivo e poi rimuove la directory. Il test verifica
 seconda cancellazione semantica, e il test rifiuta `FILE_DELETED`.
 
 Aggiornamento successivo: `test_attrib_raw_jsonl.sh` aggiunge il golden JSONL
-per `RAW_ATTRIB`. Lo scenario prepara `metadata.txt` prima dello startup e poi
-usa `chmod 600` per generare `IN_ATTRIB`. Il test verifica `RAW_ATTRIB` con mask
-`8` nei log compatibili e in `output.jsonl`, e controlla che `events.log` non
-cresca dopo il `chmod`. La documentazione chiarisce che il cambio attributi e'
-osservato come fatto raw/backend, ma non produce ancora una semantica core
-ufficiale.
+per `RAW_ATTRIB`. Lo scenario prepara `metadata.txt` prima dello startup, forza
+il modo iniziale `0644` e poi usa `chmod 600` dopo lo startup per generare
+`IN_ATTRIB`. Il test verifica `RAW_ATTRIB` con mask `8` nei log compatibili e in
+`output.jsonl`, e controlla che `events.log` non cresca dopo il `chmod 600`. La
+documentazione chiarisce che il cambio attributi e' osservato come fatto
+raw/backend, ma non produce ancora una semantica core ufficiale.
