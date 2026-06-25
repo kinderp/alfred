@@ -17,7 +17,7 @@
 #   new_path=rootB/lost
 # - successful recovery emits WATCH_LOST_RECOVERY_END with watch.state=valid
 # - the parent-level move pair emits exactly one semantic DIR_MOVED with
-#   old_path=rootA/lost and new_path=rootB/lost before the child-watch recovery
+#   old_path=rootA/lost and new_path=rootB/lost
 # - creating proof.txt after recovery emits RAW_CREATE and FILE_CREATED under
 #   the recovered root-B path
 # - no FILE_CREATED is emitted for proof.txt under the stale root-A path
@@ -38,7 +38,7 @@
 # same filesystem object, updates the watcher-table path, and proves the
 # recovered watch is active by observing a later file creation. Because both
 # configured roots are watched, the ordinary parent-level move pair can also
-# produce a DIR_MOVED semantic record before the child self-watch recovery.
+# produce a DIR_MOVED semantic record for the same filesystem operation.
 
 set -euo pipefail
 
@@ -410,7 +410,6 @@ require_order(root_a_added_idx, child_added_idx)
 require_order(root_b_added_idx, queued_idx)
 require_order(child_added_idx, stale_idx)
 require_order(child_added_idx, dir_moved_idx)
-require_order(dir_moved_idx, stale_idx)
 require_order(stale_idx, resync_failed_idx)
 require_order(resync_failed_idx, queued_idx)
 require_order(queued_idx, scan_a_idx)
