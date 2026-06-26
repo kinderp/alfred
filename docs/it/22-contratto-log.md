@@ -158,8 +158,8 @@ La tabella usa queste colonne:
 
 | Famiglia | Esempi | Log testuale oggi | Record model | Sink-capable | Runtime-routed | `output.jsonl` oggi | Da fare |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Fatti kernel/backend osservati | `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`, `IN_Q_OVERFLOW` | `raw.log` | parziale/futuro come `backend_observed` | no, manca ancora mapping/formatter pubblico | no | no | decidere se esporli come record `backend_observed` o mantenerli diagnostica raw backend |
-| Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | `raw.log` | previsto come `backend_observed + audit` | no, manca ancora tipo/formatter audit | no | no | aggiungere record audit solo se vogliamo output strutturato per audit read-only |
+| Fatti kernel/backend osservati | `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`, `IN_Q_OVERFLOW` | `raw.log` | parziale/futuro come `backend_observed` | no, manca ancora mapping/formatter pubblico | no | no | non-goal JSONL v0: restano diagnostica raw backend finche' `backend_observed` non avra' schema multi-backend |
+| Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | `raw.log` | previsto come `backend_observed + audit` | no, manca ancora tipo/formatter audit | no | no | non-goal JSONL v0: stream audit strutturato solo dopo modello read-only separato |
 | Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | `raw.log` | si', `alfred_record_from_raw()` | si', text e JSONL formatter li supportano | si', in `app.c` verso text sink e output pipeline | si', per i candidati | estendere a eventuali raw futuri e togliere ambiguita' con righe kernel |
 | Raw sintetici Alfred | `RAW_CREATE | ALFRED_RAW_ISDIR` generato dallo scan ricorsivo | `raw.log` + core | si', perche' e' un normale `alfred_raw_event_t` | si', come raw normalizzato | si', se passa dal callback applicativo | si', se passa dal callback applicativo | documentare ogni futuro sintetico come raw normalizzato o diagnostica, non via stringhe libere |
 | Semantica core | `FILE_CREATED`, `DIR_CREATED`, `FILE_READY`, `FILE_MODIFIED`, delete, rename, move, relocate, `OVERFLOW` | `events.log` | si', `alfred_record_from_event()` | si', text e JSONL formatter li supportano | si', in `core_logger.c` verso text sink/events.log e output pipeline JSONL | si', quando `output_enabled=true` | mantenere golden rappresentativi e decidere se introdurre un dispatcher applicativo comune |
@@ -199,6 +199,39 @@ Questa scelta evita di rendere `output.jsonl` troppo inotify-centrico prima di
 aver deciso come modellare `backend_observed` per fanotify, eBPF, Windows e
 macOS.
 
+Per JSONL v0 questa non e' solo una mancanza implementativa, ma una scelta di
+confine:
+
+```text
+backend_observed non e' output pubblico v0.
+```
+
+Il motivo e' che `IN_*` parla il linguaggio di Linux inotify. Campi come `wd`,
+`mask`, `cookie`, `name` e flag come `IN_ISDIR` sono preziosi per debug e test
+backend, ma non sono un vocabolario comune per fanotify, eBPF, Windows ETW o
+macOS Endpoint Security. Esporli subito in `output.jsonl` costringerebbe i
+consumer a dipendere dal primo backend implementato.
+
+La trasformazione corretta e' quindi:
+
+```text
+IN_CREATE nel raw.log
+-> ALFRED_RAW_CREATE
+-> record normalized_raw/filesystem/RAW_CREATE
+-> output.jsonl
+```
+
+e non:
+
+```text
+IN_CREATE
+-> record pubblico JSONL IN_CREATE
+```
+
+Quando in futuro introdurremo `backend_observed`, dovra' essere una categoria
+esplicita del modello eventi, con schema e golden dedicati. Fino ad allora il
+JSONL pubblico parte da `RAW_*`.
+
 ### Audit inotify opt-in
 
 `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` sono ancora solo raw log backend:
@@ -212,6 +245,13 @@ IN_CLOSE_NOWRITE wd=3 path=/tmp/root name=file.txt
 Non diventano `ALFRED_RAW_*`, non entrano nel core, non producono semantica e
 non vengono scritti in `output.jsonl`. Il motivo e' semantico: sono eventi
 osservativi rumorosi e non vogliamo confonderli con modifica o file-ready.
+
+Questi eventi sono particolarmente importanti per la futura direzione Agent
+Guard, perche' descrivono accessi read-only e aperture. Proprio per questo non
+vanno inseriti in fretta nel JSONL filesystem v0. Un audit serio dovra'
+probabilmente collegare open/access/close a processo, sessione agente, workspace
+e policy. Inotify da solo vede il fatto kernel, ma non identifica in modo
+sufficiente il soggetto che ha causato l'azione.
 
 Migrazione futura possibile:
 
