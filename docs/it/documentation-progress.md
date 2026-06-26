@@ -900,3 +900,11 @@ devono essere liste di path: devono essere link GitHub cliccabili, possibilmente
 con link ai paragrafi rilevanti e con una sintesi che permetta di capire il
 contesto della issue senza leggere subito tutta la documentazione. La issue
 resta il piano operativo; gli MD restano la fonte stabile del contratto.
+
+Aggiornamento successivo: sono state create le label GitHub iniziali per
+classificare roadmap, issue e PR. La tassonomia usa `area:*` per il modulo
+toccato, `kind:*` per il tipo di lavoro, `priority:*` per l'urgenza e
+`status:*` per lo stato operativo. `11-come-contribuire.md` spiega la tabella
+completa per studenti e contributori; `00-regole-operative.md` fissa la regola
+pratica: almeno una area e almeno un kind, con priority e status solo quando
+servono davvero.

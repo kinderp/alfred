@@ -76,6 +76,31 @@ Per `Writer Runtime v0` le prime Discussions di riferimento sono:
 - [`fail-closed, best-effort sinks and backpressure`](https://github.com/kinderp/alfred/discussions/34)
 - [`when to introduce a real worker thread`](https://github.com/kinderp/alfred/discussions/35)
 
+### Label GitHub
+
+Quando si crea o aggiorna una issue o una PR, applicare label utili alla
+ricerca e alla roadmap. Evitare troppe label decorative: devono dire area,
+tipo, priorita' o stato operativo.
+
+Famiglie correnti:
+
+- `area:*`: parte del progetto, per esempio `area:core`, `area:backend`,
+  `area:writer`, `area:docs`, `area:tests`, `area:security`,
+  `area:performance`, `area:ci`.
+- `kind:*`: tipo di lavoro, per esempio `kind:bug`, `kind:design`,
+  `kind:debt`, `kind:roadmap`, `kind:test`.
+- `priority:*`: urgenza, cioe' `priority:p0`, `priority:p1`, `priority:p2`.
+- `status:*`: stato operativo, per esempio `status:needs-discussion`,
+  `status:ready`, `status:blocked`, `status:needs-docs`.
+
+Regola pratica:
+
+```text
+almeno una area + almeno un kind
+priority solo se aiuta davvero a ordinare il lavoro
+status solo se segnala una condizione operativa reale
+```
+
 ### Issue madri e rimandi alla documentazione
 
 Quando si crea o aggiorna una issue madre, la sezione di contesto documentale

@@ -90,6 +90,30 @@ Issue madre: #32 Writer Runtime v0: implementation plan
 | Pull request | Modifica concreta da revieware e testare | una PR per ogni micro-step coerente |
 | Documentazione nel repository | Decisione consolidata, contratto stabile e spiegazione didattica | `docs/it/*.md` |
 
+## Label GitHub
+
+Le label servono a rendere issue e PR filtrabili. Una issue puo' avere piu'
+label: normalmente almeno una `area:*`, una `kind:*` e, se serve, una
+`priority:*` o `status:*`.
+
+| Famiglia | Quando usarla | Label iniziali |
+| --- | --- | --- |
+| `area:*` | Quale parte del progetto e' coinvolta | `area:core`, `area:backend`, `area:writer`, `area:docs`, `area:tests`, `area:security`, `area:performance`, `area:ci` |
+| `kind:*` | Che tipo di lavoro e' | `kind:bug`, `kind:design`, `kind:debt`, `kind:roadmap`, `kind:test` |
+| `priority:*` | Quanto e' urgente o bloccante | `priority:p0`, `priority:p1`, `priority:p2` |
+| `status:*` | Stato operativo extra | `status:needs-discussion`, `status:ready`, `status:blocked`, `status:needs-docs` |
+| default GitHub | Categorie generiche gia' presenti | `bug`, `documentation`, `enhancement`, `good first issue`, `help wanted`, `question` |
+
+Esempi:
+
+- una issue sul runtime JSONL puo' usare `area:writer`, `area:performance`,
+  `kind:design`, `priority:p1`;
+- un bug nei test golden puo' usare `area:tests`, `kind:bug`, `kind:test`;
+- una proposta ancora aperta puo' usare `kind:design` e
+  `status:needs-discussion`;
+- una issue adatta a nuovi contributori puo' usare `good first issue` solo se
+  il task e' piccolo, ben documentato e non richiede decisioni architetturali.
+
 La regola principale e':
 
 ```text
