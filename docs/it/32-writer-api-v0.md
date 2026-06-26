@@ -708,6 +708,29 @@ buco silenzioso nel file sarebbe peggiore di un arresto esplicito. Con
 `output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
 continuano a comportarsi come prima.
 
+La pipeline JSONL non deve cercare di descrivere ogni proprio fallimento dentro
+lo stesso `output.jsonl`. Se il writer non riesce a scrivere o a fare flush, il
+canale strutturato non e' piu' affidabile per registrare anche il record di
+errore. In v0 il comportamento corretto e' quindi:
+
+```text
+errore writer/output -> errors.log + exit status non-zero
+```
+
+e non:
+
+```text
+errore writer/output -> prova a scrivere un ultimo record JSONL di errore
+```
+
+Gli errori OS possono comunque essere presenti in JSONL quando appartengono a
+un record stabile, per esempio `WATCH_RESYNC_FAILED` con `os_error`. La
+differenza e' il punto di vista: in quel caso il record descrive un fatto
+diagnostico del backend/recovery; nel caso di writer failure il canale che
+dovrebbe scrivere il record e' proprio quello che ha fallito. La classificazione
+completa degli errori generici e' rimandata a un futuro modello
+`diagnostic/error` o `lifecycle/error`, documentato nel contratto log.
+
 Il minimo `8192` per `output_buffer_size` non e' arbitrario. Nel percorso JSONL
 runtime ci sono due buffer consecutivi:
 

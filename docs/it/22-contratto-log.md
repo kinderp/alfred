@@ -359,6 +359,90 @@ Non tutte le righe informative devono diventare subito eventi pubblici:
 Queste famiglie vanno progettate con calma. Metterle troppo presto in JSONL
 rischia di creare uno schema pubblico rumoroso e instabile.
 
+#### Errori strutturati e `output.jsonl`
+
+Nel codice corrente esistono gia' errori strutturati, ma solo dentro famiglie
+di record che hanno un significato operativo stabile. L'esempio principale e'
+la diagnostica watch/resync:
+
+```text
+WATCH_RESYNC_FAILED
+-> error=path-unreachable
+-> os_error.code=2
+-> os_error.name=ENOENT
+-> os_error.message=No such file or directory
+```
+
+Qui `error=path-unreachable` e' la classificazione Alfred: dice perche' il
+resync non puo' fidarsi del vecchio path. `os_error` e' invece evidenza
+proveniente dal sistema operativo: conserva il dettaglio Linux/Unix, per
+esempio `ENOENT`, senza costringere il consumer JSONL a parsare la stringa
+testuale `errno=2 (...)`.
+
+Questo caso e' gia' compatibile con JSONL perche' il record principale e'
+stabile:
+
+```text
+layer=diagnostic
+category=recovery
+type=WATCH_RESYNC_FAILED
+```
+
+Diverso e' il caso degli errori generici di applicazione:
+
+```text
+config invalida
+logger non inizializzato
+backend init fallito
+allocazione fallita
+writer JSONL fallito
+flush finale fallito
+```
+
+Oggi questi errori restano in `errors.log`. Non hanno ancora un record pubblico
+uniforme perche' mescolano fasi diverse del programma: configurazione,
+startup, runtime, shutdown, I/O e stato del writer. Serializzarli subito in
+`output.jsonl` creerebbe un contratto instabile e troppo vicino alle stringhe
+umane del logger.
+
+La regola v0 e':
+
+```text
+un errore entra in output.jsonl solo se appartiene a una famiglia di record
+gia' modellata e sink-capable.
+```
+
+Quindi:
+
+- `WATCH_RESYNC_FAILED` con `os_error` puo' entrare in JSONL, perche' e' un
+  record diagnostico recovery;
+- `WATCH_LOST_QUEUE_FAILED` puo' entrare in JSONL, perche' e' un record
+  diagnostico lost-scope;
+- `failed to emit output record` resta in `errors.log`, perche' descrive un
+  problema della stessa pipeline JSONL;
+- `failed to flush output pipeline` resta in `errors.log`, perche' se il
+  writer e' fallito non possiamo fidarci che riesca a scrivere anche il record
+  che racconta il proprio fallimento.
+
+Questa scelta e' deliberatamente conservativa. Quando `output_enabled=true`,
+Alfred usa una policy fail-closed: se il ledger strutturato non puo' essere
+aggiornato, il runtime segnala errore e si ferma invece di continuare con un
+`output.jsonl` incompleto. La prova del fallimento resta in `errors.log` e nel
+codice di uscita del processo, non necessariamente dentro lo stesso JSONL che
+ha appena fallito.
+
+Prima di aggiungere golden JSONL per errori applicativi generici dovremo
+decidere un modello esplicito, per esempio:
+
+```text
+layer=lifecycle category=application type=STARTUP_FAILED
+layer=diagnostic category=output type=OUTPUT_WRITE_FAILED
+layer=diagnostic category=config type=CONFIG_INVALID
+```
+
+Fino a quella decisione, i golden JSONL devono coprire solo errori strutturati
+gia' collegati a record stabili, non ogni riga presente in `errors.log`.
+
 ### Regola di interpretazione per `output.jsonl`
 
 Nello stato corrente:
@@ -540,7 +624,7 @@ La colonna `Decisione v0` ha questi significati:
 | Kernel/backend observed `IN_*` | no | test backend testuali/audit | non-goal v0 | progettare `backend_observed` prima di inserirli in JSONL |
 | Audit inotify opt-in | no | `tests/backend/test_audit_*` | non-goal v0 | entrare in JSONL solo se decidiamo un contratto audit strutturato read-only |
 | Lifecycle/app | no | nessuno JSONL | da progettare | decidere se startup, shutdown e config sono record pubblici o solo log umani |
-| Errori runtime generici | no | test backend su failure output/config | da progettare | definire schema `diagnostic/error` o `lifecycle/error` prima dei golden |
+| Errori runtime generici | no | test backend su failure output/config | da progettare | restano in `errors.log` e fail-closed; definire schema `diagnostic/error` o `lifecycle/error` prima dei golden |
 | Trace/performance | no | benchmark manuali | rimandato | definire layer trace/pipeline e policy di volume |
 | Security/policy/Agent Guard | no | nessuno runtime corrente | rimandato | richiede sessione agente, policy, decisioni e backend di enforcement |
 

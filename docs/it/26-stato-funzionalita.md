@@ -169,7 +169,7 @@ definitivamente una directory osservata rinominata o spostata.
 
 | Area | Stato | Motivo del rinvio |
 | --- | --- | --- |
-| JSONL runtime stabile | Parziale/rimandato | Formatter, sink, writer buffered, configurazione output e primo golden end-to-end esistono; mancano worker asincrono, backpressure e copertura golden ampia |
+| JSONL runtime stabile | Parziale/rimandato | Formatter, sink, writer buffered, configurazione output e golden rappresentativi esistono; i failure writer/output sono fail-closed e restano in `errors.log`/exit status, non in record JSONL generici; mancano worker asincrono, backpressure e modello pubblico per lifecycle/error |
 | Tracepoint logici | Rimandato | Servono per Lab e debug strutturato, ma vanno progettati dopo il modello eventi |
 | Backend API v0 | Documentata, primo tipo record, adapter raw, adapter semantico, builder diagnostico, formatter testuale, sink comune e text sink; core logger via record + sink; `WATCH_ADDED`/`WATCH_REMOVED`/`WATCH_STALE`/`WATCH_RESYNC_*`/`WATCH_LOST_*` backend via record + sink; `RAW_CREATE`/`RAW_DELETE`/`RAW_ATTRIB`/`RAW_MODIFY`/`RAW_CLOSE_WRITE` runtime via record + sink; policy OS error documentata; campi OS error presenti in `alfred_record_t`; runtime `WATCH_RESYNC_FAILED` con `errno=N (...)` via record disponibile | Specifica in `30-backend-api-v0.md`; manca refactor completo inotify a `emit(record)` e migrazione degli altri raw runtime |
 | Writer API v0 | Documentata e parzialmente implementata | Specifica in `32-writer-api-v0.md`; esistono sink, text sink, JSONL sink, JSONL buffered writer, counter sink, queue, dispatcher, output pipeline e configurazione output minima; manca il collegamento runtime asincrono |
