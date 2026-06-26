@@ -506,6 +506,56 @@ Gap noti da coprire in futuro:
 - lifecycle/app, trace/performance e security/policy quando diventeranno parte
   del contratto pubblico.
 
+### Matrice di chiusura JSONL golden
+
+Questa matrice non sostituisce la vista `Record model` / `Sink-capable` /
+`Runtime-routed`. Serve a rispondere a una domanda diversa:
+
+```text
+per questa famiglia esiste gia' un test JSONL stabile che blocca il contratto?
+```
+
+La colonna `Decisione v0` ha questi significati:
+
+| Valore | Significato |
+| --- | --- |
+| `coperto` | Esiste almeno un golden JSONL rappresentativo e stabile. |
+| `non-goal v0` | La famiglia resta volutamente fuori dal contratto JSONL pubblico corrente. |
+| `rimandato` | La famiglia e' prevista, ma dipende da un modello non ancora stabile. |
+| `da progettare` | Prima di scrivere golden serve decidere schema, layer, categoria o tipo record. |
+
+| Famiglia | JSONL golden oggi | Test principali | Decisione v0 | Cosa manca per chiuderla |
+| --- | --- | --- | --- | --- |
+| Raw Alfred create/delete/modify/close-write/attrib | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_file_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_modify_file_jsonl.sh`, `test_attrib_raw_jsonl.sh` | coperto | mantenere i test quando cambiano campi raw o `raw_mask` |
+| Raw Alfred move pair | si' | `test_rename_file_jsonl.sh`, `test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh`, `test_dir_renamed_jsonl.sh`, `test_dir_moved_jsonl.sh`, `test_dir_relocated_jsonl.sh` | coperto | mantenere controllo cookie e distinzione rename/move/relocate |
+| Raw Alfred overflow | si', sintetico | `test_overflow_raw_jsonl.sh` | coperto per raw | eventuale golden core `OVERFLOW` solo se avremo un helper stabile che attraversa anche il core |
+| Raw sintetici create directory | si', tramite scenari create/dir | `test_create_file_and_dir_jsonl.sh`, scenari directory move/delete | coperto | documentare eventuali nuovi sintetici come raw normalizzati o diagnostica |
+| Semantica create/delete/modify/ready | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_file_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_modify_file_jsonl.sh` | coperto | mantenere distinzione file/directory e modify/ready |
+| Semantica rename/move/relocate file | si' | `test_rename_file_jsonl.sh`, `test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh` | coperto | nessun golden aggiuntivo obbligatorio per v0 |
+| Semantica rename/move/relocate directory | si' | `test_dir_renamed_jsonl.sh`, `test_dir_moved_jsonl.sh`, `test_dir_relocated_jsonl.sh` | coperto | nessun golden aggiuntivo obbligatorio per v0 |
+| Semantica core `OVERFLOW` | no, solo raw sintetico | nessuno dedicato | rimandato | decidere se vale la pena simulare il passaggio core senza dipendere da overflow kernel reale |
+| Watch lifecycle base | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_self_move_recovery_jsonl.sh` | coperto | mantenere copertura `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` |
+| Resync locale base | si' | `test_self_move_recovery_jsonl.sh`, `test_lost_scope_runtime_recovery_jsonl.sh` | coperto per percorso reale base | eventuali golden mirati per reinstall/rollback solo se diventano contratto pubblico critico |
+| Lost-scope recovery completa | si' | `test_lost_scope_runtime_recovery_jsonl.sh` | coperto per percorso reale principale | golden aggiuntivi solo per retry/gave-up quando avremo scenari runtime deterministici |
+| Kernel/backend observed `IN_*` | no | test backend testuali/audit | non-goal v0 | progettare `backend_observed` prima di inserirli in JSONL |
+| Audit inotify opt-in | no | `tests/backend/test_audit_*` | non-goal v0 | entrare in JSONL solo se decidiamo un contratto audit strutturato read-only |
+| Lifecycle/app | no | nessuno JSONL | da progettare | decidere se startup, shutdown e config sono record pubblici o solo log umani |
+| Errori runtime generici | no | test backend su failure output/config | da progettare | definire schema `diagnostic/error` o `lifecycle/error` prima dei golden |
+| Trace/performance | no | benchmark manuali | rimandato | definire layer trace/pipeline e policy di volume |
+| Security/policy/Agent Guard | no | nessuno runtime corrente | rimandato | richiede sessione agente, policy, decisioni e backend di enforcement |
+
+Questa tabella stabilisce anche una regola pratica per i prossimi test:
+
+```text
+JSONL golden non duplica tutti i test testuali.
+JSONL golden copre le famiglie pubbliche del contratto strutturato.
+```
+
+I test testuali restano necessari per compatibilita' e debug umano. I golden
+JSONL servono invece a proteggere la forma pubblica strutturata: layer,
+category, type, path, old/new path, raw mask, cookie, payload watch/recovery e
+campi diagnostici rilevanti.
+
 ## Raw log audit inotify
 
 Quando `inotify_audit_events` e' configurato, Alfred puo' chiedere al kernel
