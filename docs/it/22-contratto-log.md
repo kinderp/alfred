@@ -359,6 +359,64 @@ Non tutte le righe informative devono diventare subito eventi pubblici:
 Queste famiglie vanno progettate con calma. Metterle troppo presto in JSONL
 rischia di creare uno schema pubblico rumoroso e instabile.
 
+#### Lifecycle applicativo e `output.jsonl`
+
+Il lifecycle applicativo descrive lo stato del processo Alfred, non un fatto
+osservato sul filesystem. Nel runtime corrente esempi di lifecycle sono:
+
+```text
+logger initialized
+alfred core initialized event_engine=core
+output pipeline initialized format=jsonl path=...
+signal handlers installed
+application startup complete
+event loop started
+event loop terminated
+shutdown started
+```
+
+Queste righe sono utili per operatori, studenti e debug, quindi restano nei log
+umani `events.log` o `errors.log`. Non entrano in `output.jsonl` v0.
+
+La scelta e' intenzionale. `output.jsonl` oggi vuole fissare il contratto
+strutturato dei fatti osservati e della diagnostica collegata al flusso eventi:
+raw Alfred normalizzati, eventi semantici core e diagnostica watch/resync /
+lost-scope. Se aggiungessimo subito startup, config e shutdown nello stesso
+stream, consumer e test dovrebbero distinguere troppi significati diversi:
+
+```text
+evento filesystem osservato
+diagnostica backend
+stato interno dell'applicazione
+stato del writer
+errore di configurazione
+shutdown ordinato
+```
+
+Per JSONL v0 quindi vale questa regola:
+
+```text
+lifecycle/app = log umano, non contratto JSONL pubblico
+```
+
+Questo non esclude un futuro modello lifecycle. Se avremo bisogno di replay,
+audit operativo o ledger completo della sessione Alfred, potremo introdurre
+record espliciti, per esempio:
+
+```text
+layer=lifecycle category=application type=STARTED
+layer=lifecycle category=config type=CONFIG_LOADED
+layer=lifecycle category=backend type=BACKEND_READY
+layer=lifecycle category=output type=OUTPUT_READY
+layer=lifecycle category=application type=SHUTDOWN_STARTED
+layer=lifecycle category=application type=SHUTDOWN_COMPLETED
+```
+
+Questi nomi sono esempi di roadmap, non contratto implementato. Prima di
+scrivere golden JSONL per lifecycle bisognera' decidere schema, campi minimi,
+ordine rispetto ai record osservativi e policy di errore quando il writer non
+e' ancora pronto o sta gia' fallendo.
+
 #### Errori strutturati e `output.jsonl`
 
 Nel codice corrente esistono gia' errori strutturati, ma solo dentro famiglie
@@ -623,7 +681,7 @@ La colonna `Decisione v0` ha questi significati:
 | Lost-scope recovery completa | si' | `test_lost_scope_runtime_recovery_jsonl.sh` | coperto per percorso reale principale | golden aggiuntivi solo per retry/gave-up quando avremo scenari runtime deterministici |
 | Kernel/backend observed `IN_*` | no | test backend testuali/audit | non-goal v0 | progettare `backend_observed` prima di inserirli in JSONL |
 | Audit inotify opt-in | no | `tests/backend/test_audit_*` | non-goal v0 | entrare in JSONL solo se decidiamo un contratto audit strutturato read-only |
-| Lifecycle/app | no | nessuno JSONL | da progettare | decidere se startup, shutdown e config sono record pubblici o solo log umani |
+| Lifecycle/app | no | nessuno JSONL | non-goal v0 | startup, shutdown, config e output-ready restano log umani; futuro layer lifecycle solo dopo schema dedicato |
 | Errori runtime generici | no | test backend su failure output/config | da progettare | restano in `errors.log` e fail-closed; definire schema `diagnostic/error` o `lifecycle/error` prima dei golden |
 | Trace/performance | no | benchmark manuali | rimandato | definire layer trace/pipeline e policy di volume |
 | Security/policy/Agent Guard | no | nessuno runtime corrente | rimandato | richiede sessione agente, policy, decisioni e backend di enforcement |
