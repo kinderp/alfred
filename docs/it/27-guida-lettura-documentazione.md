@@ -155,7 +155,10 @@ leggere anche:
 1. [Audit esplorativi notturni](audit/README.md)
    descrive issue madre, issue figlie, report, artifact e promozione degli
    scenari.
-2. [Scenari esplorativi nightly](../../tests/exploratory/nightly/README.md)
+2. [Matrice di maturita' da audit](audit/maturity-matrix.md)
+   spiega come stimare la maturita' osservata di una funzionalita' senza
+   confonderla con la sola copertura della suite ufficiale.
+3. [Scenari esplorativi nightly](../../tests/exploratory/nightly/README.md)
    mostra gli script rilanciabili e spiega quali log ispezionare.
 
 ## Percorso 7: resync, scanner e recovery
@@ -258,7 +261,7 @@ queste domande:
 | Argomento | Dove leggere |
 | --- | --- |
 | Architettura generale | [02](02-architettura-generale.md), [07](07-flusso-eventi.md), [16](16-mappa-codice-e-strutture.md) |
-| Audit esplorativi notturni | [audit/README.md](audit/README.md), [tests/exploratory/nightly](../../tests/exploratory/nightly/README.md) |
+| Audit esplorativi notturni | [audit/README.md](audit/README.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [tests/exploratory/nightly](../../tests/exploratory/nightly/README.md) |
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
 | Build e Makefile | [09](09-makefile-e-build-system.md) |

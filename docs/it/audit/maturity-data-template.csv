@@ -1,0 +1,6 @@
+audit_date,scenario,feature,kind,result,logs_checked,issue,artifact,notes
+2026-06-25,base-jsonl,file-lifecycle,user-scenario,PASS,"raw.log;events.log;output.jsonl",,drive-link,"Create modify attrib ready delete"
+2026-06-25,moves-jsonl,file-move,user-scenario,PASS,"events.log;output.jsonl",,drive-link,"Rename move relocate for files"
+2026-06-25,moves-jsonl,dir-move,user-scenario,PASS,"events.log;output.jsonl",,drive-link,"Rename move relocate for directories"
+2026-06-25,lost-scope-jsonl,lost-scope-recovery,edge-case,PASS,"events.log;output.jsonl",,drive-link,"Watch stale lost scan found recovery"
+2026-06-25,root-file-onlydir,root-validation,edge-case,FAIL,"events.log;errors.log;raw.log",#30,drive-link,"Regular-file root starts event loop"

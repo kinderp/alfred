@@ -76,6 +76,14 @@ La distinzione importante e':
 | `recursive-fast` | `mkdir -p one/two/three` produce create sintetiche e watch | PASS |
 | `root-file-onlydir` | Root file regolare deve fallire senza event loop | FAIL, issue `#30` |
 
+## Maturita' osservata
+
+La valutazione qualitativa delle funzionalita' toccate da questo audit e'
+riassunta in [maturity-matrix.md](maturity-matrix.md). Dopo un solo audit
+notturno nessuna funzionalita' viene considerata pienamente matura: anche gli
+scenari passati sono classificati al massimo come maturita' intermedia, perche'
+mancano ancora ripetizioni storiche, varianti piu' ampie e benchmark collegati.
+
 ## Bug confermato
 
 ### Root path file regolare

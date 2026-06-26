@@ -21,6 +21,27 @@ Se un audit trova un bug confermato, il bug deve diventare una issue separata
 su GitHub. Se lo scenario e' importante, deve poi essere trasformato in test
 ufficiale o golden test.
 
+## Differenza rispetto ai fuzzy test
+
+Gli audit notturni attuali non sono fuzzy test in senso stretto. Sono scenari
+esplorativi riproducibili: un umano sceglie operazioni realistiche, le codifica
+in script, raccoglie log e valuta se Alfred si comporta come documentato.
+
+Un fuzzy test vero genererebbe automaticamente molte sequenze casuali o
+semi-casuali e controllerebbe proprieta' generali come "non crashare",
+"produrre sempre JSONL valido" o "non generare record contraddittori".
+
+Questa distinzione e' importante:
+
+- gli audit esplorativi sono leggibili e spiegano bene il comportamento reale;
+- i fuzzy test sono piu' adatti a scoprire bug imprevisti su moltissime
+  combinazioni;
+- in futuro Alfred potra' avere entrambi, ma oggi gli script nightly sono
+  scenario-based tests.
+
+La maturita' osservata dagli audit e' documentata in
+[maturity-matrix.md](maturity-matrix.md).
+
 ## Struttura GitHub
 
 Ogni audit notturno usa una issue madre. La issue madre e' il diario pubblico
@@ -64,6 +85,8 @@ La struttura stabile e':
 docs/it/audit/
   README.md
   2026-06-25-audit-notturno.md
+  maturity-matrix.md
+  maturity-data-template.csv
 
 tests/exploratory/nightly/
   README.md

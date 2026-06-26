@@ -53,6 +53,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `34-report-benchmark-prestazioni.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
+| Parziale | `audit/maturity-matrix.md` |
+| Parziale | `audit/maturity-data-template.csv` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -86,6 +88,11 @@ e' `docs/it/audit/2026-06-25-audit-notturno.md`, collegato alle issue GitHub
 `tests/exploratory/nightly/` contiene scenari rilanciabili che non fanno ancora
 parte della suite ufficiale. Servono a ripetere audit precedenti e a decidere
 quali scenari promuovere a test contrattuali.
+
+`docs/it/audit/maturity-matrix.md` introduce una prima matrice qualitativa per
+stimare la maturita' osservata delle funzionalita' provate negli audit. Il
+documento chiarisce anche perche' gli audit attuali sono scenario-based tests e
+non fuzzy test in senso tecnico.
 
 ## Aggiornamento recente
 
