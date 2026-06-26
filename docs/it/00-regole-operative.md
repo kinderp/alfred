@@ -427,6 +427,8 @@ Regole operative:
 Percorsi stabili:
 
 - `docs/it/audit/`: metodo generale e report storici degli audit;
+- `docs/it/audit/nightly-playbook.md`: procedura compatta per avviare una
+  sessione notturna autonoma con un prompt breve;
 - `tests/exploratory/nightly/`: script rilanciabili per scenari esplorativi.
 
 Gli script in `tests/exploratory/nightly` sono intenzionalmente fuori dalle

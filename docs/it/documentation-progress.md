@@ -53,6 +53,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `34-report-benchmark-prestazioni.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
+| Parziale | `audit/nightly-playbook.md` |
 | Parziale | `audit/maturity-matrix.md` |
 | Parziale | `audit/maturity-data-template.csv` |
 | Parziale | `glossario.md` |
@@ -93,6 +94,11 @@ quali scenari promuovere a test contrattuali.
 stimare la maturita' osservata delle funzionalita' provate negli audit. Il
 documento chiarisce anche perche' gli audit attuali sono scenario-based tests e
 non fuzzy test in senso tecnico.
+
+`docs/it/audit/nightly-playbook.md` e' il playbook operativo per il prompt breve
+"inizia sessione test notturni seguendo regole operative". Definisce bootstrap,
+issue madre, scenari base, scenari extra, analisi log, issue figlie, sub-issue,
+upload artifact, aggiornamento maturita' e report finale.
 
 ## Aggiornamento recente
 

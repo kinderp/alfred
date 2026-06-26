@@ -42,6 +42,9 @@ Questa distinzione e' importante:
 La maturita' osservata dagli audit e' documentata in
 [maturity-matrix.md](maturity-matrix.md).
 
+Per eseguire una sessione completa partendo da un prompt breve, usare il
+[playbook operativo](nightly-playbook.md).
+
 ## Struttura GitHub
 
 Ogni audit notturno usa una issue madre. La issue madre e' il diario pubblico
@@ -85,6 +88,7 @@ La struttura stabile e':
 docs/it/audit/
   README.md
   2026-06-25-audit-notturno.md
+  nightly-playbook.md
   maturity-matrix.md
   maturity-data-template.csv
 
