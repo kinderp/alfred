@@ -665,6 +665,11 @@ Lo scenario sintetico gia' coperto e':
   `backend_build_overflow_raw()`, `alfred_record_from_raw()` e
   `alfred_record_format_jsonl()`, poi verifica `RAW_OVERFLOW` con
   `raw_mask=128` e `path=""`.
+- `tests/jsonl/test_overflow_core_jsonl.sh`: costruisce un
+  `alfred_raw_event_t` sintetico con `ALFRED_RAW_OVERFLOW`, lo passa a
+  `alfred_process()`, converte l'evento semantico `OVERFLOW` con
+  `alfred_record_from_event()` e verifica che il JSONL abbia
+  `layer=semantic`, `category=filesystem`, `type=OVERFLOW` senza path.
 
 La distinzione e' importante:
 
@@ -674,17 +679,15 @@ golden JSONL = esiste gia' un test stabile che blocca quel contratto
 ```
 
 Per esempio la semantica `OVERFLOW` e' sink-capable e runtime-routed se il core
-riceve un `RAW_OVERFLOW` durante l'esecuzione reale. Il golden attuale pero'
-copre in modo esplicito solo `RAW_OVERFLOW`, perche' generare un overflow reale
-della coda inotify in CI sarebbe fragile e dipenderebbe dalla pressione eventi,
-dalla configurazione del kernel e dal timing della macchina.
+riceve un `RAW_OVERFLOW` durante l'esecuzione reale. Il golden corrente copre
+questo contratto con un helper sintetico core-level, perche' generare un
+overflow reale della coda inotify in CI sarebbe fragile e dipenderebbe dalla
+pressione eventi, dalla configurazione del kernel e dal timing della macchina.
 
 Gap noti da coprire in futuro:
 
 - golden JSONL per record di errore strutturati quando avremo deciso lo schema
   pubblico degli errori;
-- eventuale golden per semantica `OVERFLOW`, se sceglieremo un helper stabile
-  che attraversi anche il core e non solo l'adapter raw;
 - lifecycle/app, trace/performance e security/policy quando diventeranno parte
   del contratto pubblico.
 
@@ -715,7 +718,7 @@ La colonna `Decisione v0` ha questi significati:
 | Semantica create/delete/modify/ready | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_file_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_modify_file_jsonl.sh` | coperto | mantenere distinzione file/directory e modify/ready |
 | Semantica rename/move/relocate file | si' | `test_rename_file_jsonl.sh`, `test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh` | coperto | nessun golden aggiuntivo obbligatorio per v0 |
 | Semantica rename/move/relocate directory | si' | `test_dir_renamed_jsonl.sh`, `test_dir_moved_jsonl.sh`, `test_dir_relocated_jsonl.sh` | coperto | nessun golden aggiuntivo obbligatorio per v0 |
-| Semantica core `OVERFLOW` | no, solo raw sintetico | nessuno dedicato | rimandato | decidere se vale la pena simulare il passaggio core senza dipendere da overflow kernel reale |
+| Semantica core `OVERFLOW` | si', sintetico | `test_overflow_core_jsonl.sh` | coperto | nessun overflow kernel reale in CI; il test alimenta direttamente il core con `ALFRED_RAW_OVERFLOW` |
 | Watch lifecycle base | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_self_move_recovery_jsonl.sh` | coperto | mantenere copertura `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` |
 | Resync locale base | si' | `test_self_move_recovery_jsonl.sh`, `test_lost_scope_runtime_recovery_jsonl.sh` | coperto per percorso reale base | eventuali golden mirati per reinstall/rollback solo se diventano contratto pubblico critico |
 | Lost-scope recovery completa | si' | `test_lost_scope_runtime_recovery_jsonl.sh` | coperto per percorso reale principale | golden aggiuntivi solo per retry/gave-up quando avremo scenari runtime deterministici |
