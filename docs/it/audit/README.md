@@ -41,6 +41,10 @@ Questa distinzione e' importante:
 
 La maturita' osservata dagli audit e' documentata in
 [maturity-matrix.md](maturity-matrix.md).
+La matrice include anche dimensioni che non sono ancora misurate in modo
+completo, come performance, sicurezza, coerenza e documentazione. Questo e'
+intenzionale: il modello deve indicare cosa raccogliere nei prossimi audit, non
+solo cio' che e' gia' misurabile dopo la prima notte.
 
 Per eseguire una sessione completa partendo da un prompt breve, usare il
 [playbook operativo](nightly-playbook.md).
