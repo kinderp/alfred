@@ -51,6 +51,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `32-writer-api-v0.md` |
 | Parziale | `33-writer-runtime-roadmap-v0.md` |
 | Parziale | `34-report-benchmark-prestazioni.md` |
+| Parziale | `35-qualita-prodotto-software.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/nightly-playbook.md` |
@@ -99,6 +100,11 @@ non fuzzy test in senso tecnico.
 "inizia sessione test notturni seguendo regole operative". Definisce bootstrap,
 issue madre, scenari base, scenari extra, analisi log, issue figlie, sub-issue,
 upload artifact, aggiornamento maturita' e report finale.
+
+`35-qualita-prodotto-software.md` spiega agli studenti il significato delle
+dimensioni usate nella matrice di maturita': correttezza funzionale,
+robustezza, affidabilita', stabilita', performance, leggerezza, sicurezza,
+coerenza, semplicita', manutenibilita', operabilita' e documentazione.
 
 ## Aggiornamento recente
 

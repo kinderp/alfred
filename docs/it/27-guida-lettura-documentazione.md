@@ -142,6 +142,9 @@ Questo percorso spiega come dimostrare che una modifica funziona.
    serve per interpretare le righe assertate dai test.
 4. [Stato funzionalita' supportate](26-stato-funzionalita.md)
    indica quali comportamenti sono gia' coperti e quali sono rimandati.
+5. [Qualita' del prodotto software](35-qualita-prodotto-software.md)
+   spiega robustezza, affidabilita', sicurezza, coerenza, performance,
+   operabilita' e documentazione come concetti di ingegneria del software.
 
 Per i test shell e' importante leggere anche la sezione sulle regex in
 [Debugging, test e strumenti](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell),
@@ -290,6 +293,7 @@ queste domande:
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [34](34-report-benchmark-prestazioni.md), [33](33-writer-runtime-roadmap-v0.md), [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
+| Qualita' prodotto | [35](35-qualita-prodotto-software.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [34](34-report-benchmark-prestazioni.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |

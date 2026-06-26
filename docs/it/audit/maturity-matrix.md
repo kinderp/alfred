@@ -71,6 +71,9 @@ Performance is separate from correctness.
 Architecture debt reduces long-term velocity.
 ```
 
+Per una spiegazione didattica di questi concetti, leggere anche
+[Qualita' del prodotto software](../35-qualita-prodotto-software.md).
+
 ## Come leggere le dimensioni
 
 ### Functional Maturity
