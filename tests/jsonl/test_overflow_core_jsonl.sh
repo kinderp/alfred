@@ -60,9 +60,11 @@ except json.JSONDecodeError as exc:
 
 expected = {
     "schema_version": 0,
+    "seq": 1,
     "layer": "semantic",
     "category": "filesystem",
     "type": "OVERFLOW",
+    "pid": 123,
 }
 
 failures = []
@@ -74,7 +76,7 @@ for forbidden in ("path", "old_path", "new_path", "raw_mask"):
     if forbidden in record:
         failures.append(f"unexpected {forbidden} field: {record[forbidden]!r}")
 
-unexpected_fields = sorted(set(record) - set(expected) - {"ts_ns", "pid", "seq"})
+unexpected_fields = sorted(set(record) - set(expected) - {"ts_ns"})
 if unexpected_fields:
     failures.append(f"unexpected fields: {','.join(unexpected_fields)}")
 
