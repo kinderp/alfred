@@ -27,6 +27,83 @@ altro momento, leggere questo file prima di continuare.
   diagramma, ADR o checklist di review. Se non aggiorna nulla, chiedersi se la
   modifica sta aggiungendo complessita' non tracciata.
 
+## Tracciamento GitHub di roadmap e decisioni
+
+Quando un lavoro supera il singolo micro-step, usare GitHub come struttura di
+coordinamento pubblica:
+
+```text
+Milestone
+    |
+    v
+Issue madre
+    |
+    +--> Project
+    +--> Discussions
+    +--> Issue figlie
+    +--> Pull request
+```
+
+- `Milestone`: macro-obiettivo misurabile, per esempio
+  [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1).
+- `Project`: vista operativa di issue, PR e roadmap, per esempio
+  [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1).
+- `Issue madre`: piano tecnico dettagliato della milestone, per esempio
+  [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32).
+- `Issue figlia`: micro-step, bug, test o task specifico collegato alla issue
+  madre.
+- `Discussion`: ragionamento progettuale aperto, con domande, alternative,
+  risposte e trade-off.
+- `Pull request`: modifica concreta e verificabile.
+- `docs/it`: decisione consolidata, contratto stabile e spiegazione didattica.
+
+Regola di separazione:
+
+```text
+GitHub Discussions conserva il processo di pensiero.
+La documentazione del repository conserva la decisione finale.
+```
+
+Quindi, quando in chat emerge una discussione architetturale importante, va
+riassunta o riportata in una GitHub Discussion se non e' ancora una decisione
+stabile. Quando invece scegliamo una strada, la scelta deve essere tradotta in
+documentazione stabile negli `.md` appropriati. Le Discussions non sostituiscono
+la documentazione: aiutano a capire perche' una decisione e' maturata.
+
+Per `Writer Runtime v0` le prime Discussions di riferimento sono:
+
+- [`common queue vs per-sink queues`](https://github.com/kinderp/alfred/discussions/33)
+- [`fail-closed, best-effort sinks and backpressure`](https://github.com/kinderp/alfred/discussions/34)
+- [`when to introduce a real worker thread`](https://github.com/kinderp/alfred/discussions/35)
+
+### Issue madri e rimandi alla documentazione
+
+Quando si crea o aggiorna una issue madre, la sezione di contesto documentale
+non deve essere una lista secca di path. Deve aiutare un lettore a capire la
+issue anche se non legge subito tutti gli MD.
+
+Regola:
+
+- usare link GitHub cliccabili ai documenti;
+- quando utile, linkare anche i paragrafi specifici;
+- aggiungere un riassunto breve di cosa dice ogni documento;
+- distinguere chiaramente fra issue come piano operativo e documentazione come
+  fonte stabile del contratto;
+- se una Discussion contiene il ragionamento, linkarla dalla issue madre e poi
+  trasferire la decisione finale negli MD.
+
+Esempio di forma corretta:
+
+```text
+[Writer API v0](https://github.com/kinderp/alfred/blob/main/docs/it/32-writer-api-v0.md)
+spiega perche' i writer devono restare fuori dal percorso caldo. Le sezioni
+piu' rilevanti sono Percorso caldo, Output pipeline sperimentale, Ownership e
+Record Queue v0.
+
+Sintesi: il backend produce record, il confine caldo termina alla coda bounded,
+i writer stanno a valle e non devono bloccare il collector.
+```
+
 ## Bootstrap di una nuova sessione agente
 
 Quando una nuova sessione viene aperta con Codex o con un altro agente AI, non

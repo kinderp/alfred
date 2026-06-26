@@ -47,6 +47,70 @@ Riferimenti ufficiali GitHub:
 - sincronizzazione di un fork:
   `https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork`
 
+## Struttura GitHub del progetto
+
+Alfred usa GitHub anche come spazio pubblico di pianificazione. Questo serve a
+rendere visibile non solo il codice finale, ma anche il processo che porta alle
+scelte tecniche. Per uno studente e' importante vedere come una decisione nasce
+da domande, alternative, trade-off, test e review; per un contributore e'
+importante sapere dove proporre una modifica e dove cercare il contesto.
+
+La struttura corrente e':
+
+```text
+Milestone: Writer Runtime v0
+    |
+    v
+Issue madre: #32 Writer Runtime v0: implementation plan
+    |
+    +--> Project: Alfred Roadmap
+    |       |
+    |       +--> vista operativa di issue e PR
+    |
+    +--> Discussions #33 #34 #35
+    |       |
+    |       +--> ragionamento, alternative e trade-off
+    |
+    +--> Issue figlie
+    |       |
+    |       +--> micro-step, bug, test, debiti tecnici
+    |
+    +--> Pull request
+            |
+            +--> modifiche verificabili, review e CI
+```
+
+| Strumento GitHub | Uso in Alfred | Esempio corrente |
+| --- | --- | --- |
+| Milestone | Macro-obiettivo con avanzamento misurabile | [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1) |
+| Project | Vista operativa di issue, PR e roadmap | [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) |
+| Issue madre | Piano tecnico dettagliato di una milestone | [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32) |
+| Issue figlia | Micro-step, bug o task specifico collegato a un piano | da creare quando il lavoro viene diviso |
+| Discussion | Discussione progettuale aperta, con domande e alternative | [`common queue vs per-sink queues`](https://github.com/kinderp/alfred/discussions/33) |
+| Pull request | Modifica concreta da revieware e testare | una PR per ogni micro-step coerente |
+| Documentazione nel repository | Decisione consolidata, contratto stabile e spiegazione didattica | `docs/it/*.md` |
+
+La regola principale e':
+
+```text
+Discussion = ragionamento vivo
+documentazione = decisione consolidata
+issue = lavoro da fare
+pull request = modifica verificabile
+```
+
+Una Discussion puo' contenere domande, dubbi, alternative e risposte emerse
+durante la progettazione. Non deve essere letta come contratto definitivo. Dopo
+che una scelta e' stata presa, la conclusione va riportata nella documentazione
+del repository, perche' gli MD sono la fonte stabile per utenti, studenti e
+contributori.
+
+Esempio: prima di decidere come implementare il runtime dei writer possiamo
+discutere in GitHub se usare una coda comune o una coda per sink. La Discussion
+conserva i pro e contro. Quando scegliamo la strada v0, la decisione entra in
+`32-writer-api-v0.md`, `33-writer-runtime-roadmap-v0.md` o nel documento piu'
+adatto.
+
 ## Creare il fork
 
 Dal browser:

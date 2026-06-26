@@ -883,3 +883,20 @@ recovery lost-scope completa e' coperta dallo scenario runtime root A -> root B.
 Gli elementi rimasti fuori (`backend_observed` `IN_*`, audit read-only,
 lifecycle/app, errori generici, trace/performance e security/policy) non sono
 buchi del JSONL golden v0: richiedono prima un modello pubblico separato.
+
+Aggiornamento successivo: la documentazione contributiva ora spiega anche la
+struttura GitHub usata per pianificare Alfred. Sono stati creati la milestone
+`Writer Runtime v0`, il Project `Alfred Roadmap`, la issue madre
+`Writer Runtime v0: implementation plan` e tre Discussions iniziali dedicate a
+code comuni vs code per sink, backpressure/failure policy e introduzione del
+worker thread. `11-come-contribuire.md`, `27-guida-lettura-documentazione.md` e
+`00-regole-operative.md` chiariscono la regola: GitHub Discussions conserva il
+processo di ragionamento e le alternative, mentre gli `.md` del repository
+conservano decisioni consolidate, contratti stabili e spiegazioni didattiche.
+
+Aggiornamento successivo: `00-regole-operative.md` ora specifica anche come
+scrivere le sezioni documentali nelle issue madri. I riferimenti agli MD non
+devono essere liste di path: devono essere link GitHub cliccabili, possibilmente
+con link ai paragrafi rilevanti e con una sintesi che permetta di capire il
+contesto della issue senza leggere subito tutta la documentazione. La issue
+resta il piano operativo; gli MD restano la fonte stabile del contratto.

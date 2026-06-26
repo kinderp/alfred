@@ -66,7 +66,8 @@ compromessi.
 Questo percorso serve a chi vuole aprire una pull request.
 
 1. [Come contribuire](11-come-contribuire.md)
-   spiega fork, branch, sincronizzazione con upstream, pull request, CI e review.
+   spiega fork, branch, sincronizzazione con upstream, struttura GitHub del
+   progetto, pull request, CI e review.
 2. [Regole operative](00-regole-operative.md)
    raccoglie il metodo di lavoro del progetto: micro-step, documentazione
    obbligatoria, commit message, test prima del commit, uso degli strumenti.
@@ -80,6 +81,22 @@ Questo percorso serve a chi vuole aprire una pull request.
 La regola pratica e': prima si capisce il contratto che si sta toccando, poi si
 modifica il codice, poi si aggiorna la documentazione e infine si eseguono i
 test collegati.
+
+Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
+
+1. la milestone corrente, per esempio
+   [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1);
+2. la issue madre della milestone, per esempio
+   [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32);
+3. il Project
+   [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1), che mostra
+   issue e PR in una vista operativa;
+4. le Discussions collegate, che conservano il ragionamento progettuale prima
+   che diventi documentazione stabile.
+
+Questa distinzione evita un errore comune: una Discussion puo' contenere idee
+ancora aperte, mentre gli `.md` nel repository devono descrivere la decisione
+consolidata.
 
 ## Percorso 4: capire il codice internamente
 
