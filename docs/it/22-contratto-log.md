@@ -684,12 +684,17 @@ questo contratto con un helper sintetico core-level, perche' generare un
 overflow reale della coda inotify in CI sarebbe fragile e dipenderebbe dalla
 pressione eventi, dalla configurazione del kernel e dal timing della macchina.
 
-Gap noti da coprire in futuro:
+Estensioni fuori dal perimetro JSONL golden v0:
 
 - golden JSONL per record di errore strutturati quando avremo deciso lo schema
   pubblico degli errori;
 - lifecycle/app, trace/performance e security/policy quando diventeranno parte
   del contratto pubblico.
+
+Questi punti non impediscono di considerare chiuso il JSONL golden v0 per il
+perimetro corrente del backend inotify di riferimento. Sono famiglie future o
+non-goal v0: prima di testarle in JSONL serve decidere un modello pubblico
+stabile, non solo aggiungere un nuovo assert.
 
 ### Matrice di chiusura JSONL golden
 
@@ -713,7 +718,7 @@ La colonna `Decisione v0` ha questi significati:
 | --- | --- | --- | --- | --- |
 | Raw Alfred create/delete/modify/close-write/attrib | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_file_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_modify_file_jsonl.sh`, `test_attrib_raw_jsonl.sh` | coperto | mantenere i test quando cambiano campi raw o `raw_mask` |
 | Raw Alfred move pair | si' | `test_rename_file_jsonl.sh`, `test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh`, `test_dir_renamed_jsonl.sh`, `test_dir_moved_jsonl.sh`, `test_dir_relocated_jsonl.sh` | coperto | mantenere controllo cookie e distinzione rename/move/relocate |
-| Raw Alfred overflow | si', sintetico | `test_overflow_raw_jsonl.sh` | coperto per raw | eventuale golden core `OVERFLOW` solo se avremo un helper stabile che attraversa anche il core |
+| Raw Alfred overflow | si', sintetico | `test_overflow_raw_jsonl.sh` | coperto | il golden raw verifica `RAW_OVERFLOW`; il golden core separato copre la trasformazione semantica `OVERFLOW` |
 | Raw sintetici create directory | si', tramite scenari create/dir | `test_create_file_and_dir_jsonl.sh`, scenari directory move/delete | coperto | documentare eventuali nuovi sintetici come raw normalizzati o diagnostica |
 | Semantica create/delete/modify/ready | si' | `test_create_file_and_dir_jsonl.sh`, `test_delete_file_jsonl.sh`, `test_delete_dir_jsonl.sh`, `test_modify_file_jsonl.sh` | coperto | mantenere distinzione file/directory e modify/ready |
 | Semantica rename/move/relocate file | si' | `test_rename_file_jsonl.sh`, `test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh` | coperto | nessun golden aggiuntivo obbligatorio per v0 |
@@ -728,6 +733,20 @@ La colonna `Decisione v0` ha questi significati:
 | Errori runtime generici | no | test backend su failure output/config | da progettare | restano in `errors.log` e fail-closed; definire schema `diagnostic/error` o `lifecycle/error` prima dei golden |
 | Trace/performance | no | benchmark manuali | rimandato | definire layer trace/pipeline e policy di volume |
 | Security/policy/Agent Guard | no | nessuno runtime corrente | rimandato | richiede sessione agente, policy, decisioni e backend di enforcement |
+
+Per il perimetro inotify reference corrente questa matrice chiude il JSONL
+golden v0. "Chiuso" qui non significa che ogni riga testuale storica abbia una
+copia JSONL. Significa che le famiglie pubbliche gia' scelte per il v0 hanno
+almeno un golden rappresentativo e stabile:
+
+- raw Alfred normalizzati, inclusi move pair e overflow;
+- eventi semantici core, incluso `OVERFLOW`;
+- diagnostica watch, resync e lost-scope gia' instradata nel runtime.
+
+Le famiglie segnate come `non-goal v0`, `rimandato` o `da progettare` restano
+fuori intenzionalmente. Aggiungerle senza schema dedicato renderebbe
+`output.jsonl` instabile e troppo vicino ai log umani o ai dettagli del backend
+inotify.
 
 Questa tabella stabilisce anche una regola pratica per i prossimi test:
 

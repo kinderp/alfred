@@ -853,9 +853,9 @@ move e relocated: questi record sono runtime-routed verso la pipeline JSONL
 quando `output_enabled=true`. Il documento distingue ora esplicitamente tra
 `runtime-routed`, cioe' un record che il codice puo' portare alla pipeline, e
 `golden JSONL`, cioe' uno scenario stabile che blocca quel contratto. La stessa
-sezione elenca gli scenari `tests/jsonl` coperti e i gap rimasti: recovery
-lost-scope completa, errori strutturati, eventuale semantic `OVERFLOW`,
-lifecycle/app, trace/performance e security/policy. Anche
+sezione elenca gli scenari `tests/jsonl` coperti e i gap allora rimasti:
+recovery lost-scope completa, errori strutturati, eventuale semantic
+`OVERFLOW`, lifecycle/app, trace/performance e security/policy. Anche
 `26-stato-funzionalita.md` e' stato aggiornato per chiarire che i raw principali
 passano dal record sink e che `RAW_OVERFLOW` e' coperto come golden sintetico.
 
@@ -873,3 +873,13 @@ stale. La documentazione chiarisce che, poiche' entrambe le root sono osservate,
 puo' esistere anche un `DIR_MOVED` semantico da parent-level move pair; questo
 non sostituisce la recovery del watch figlio, che resta necessaria per riparare
 la watcher table.
+
+Aggiornamento successivo: dopo il golden sintetico `test_overflow_core_jsonl.sh`
+la matrice JSONL golden v0 e' stata chiusa per il perimetro corrente del backend
+inotify di riferimento. `22-contratto-log.md` distingue ora tra famiglie
+coperte, famiglie volutamente non-goal v0 e famiglie future da progettare.
+`RAW_OVERFLOW` e `OVERFLOW` core sono entrambi coperti da test dedicati; la
+recovery lost-scope completa e' coperta dallo scenario runtime root A -> root B.
+Gli elementi rimasti fuori (`backend_observed` `IN_*`, audit read-only,
+lifecycle/app, errori generici, trace/performance e security/policy) non sono
+buchi del JSONL golden v0: richiedono prima un modello pubblico separato.
