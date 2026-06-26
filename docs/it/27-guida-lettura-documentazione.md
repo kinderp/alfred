@@ -147,6 +147,17 @@ Per i test shell e' importante leggere anche la sezione sulle regex in
 [Debugging, test e strumenti](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell),
 perche' molti assert confrontano pattern e non stringhe letterali.
 
+Gli audit esplorativi notturni sono un livello diverso dai test ufficiali:
+provano Alfred come farebbe un utente, lasciano una traccia su GitHub e
+raccolgono scenari che potranno diventare test stabili. Per questo percorso
+leggere anche:
+
+1. [Audit esplorativi notturni](audit/README.md)
+   descrive issue madre, issue figlie, report, artifact e promozione degli
+   scenari.
+2. [Scenari esplorativi nightly](../../tests/exploratory/nightly/README.md)
+   mostra gli script rilanciabili e spiega quali log ispezionare.
+
 ## Percorso 7: resync, scanner e recovery
 
 Questo percorso riguarda la parte piu' delicata: cosa succede quando un watch
@@ -247,6 +258,7 @@ queste domande:
 | Argomento | Dove leggere |
 | --- | --- |
 | Architettura generale | [02](02-architettura-generale.md), [07](07-flusso-eventi.md), [16](16-mappa-codice-e-strutture.md) |
+| Audit esplorativi notturni | [audit/README.md](audit/README.md), [tests/exploratory/nightly](../../tests/exploratory/nightly/README.md) |
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
 | Build e Makefile | [09](09-makefile-e-build-system.md) |

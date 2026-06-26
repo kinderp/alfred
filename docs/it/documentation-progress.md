@@ -50,6 +50,9 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `31-milestone-inotify-reference-backend.md` |
 | Parziale | `32-writer-api-v0.md` |
 | Parziale | `33-writer-runtime-roadmap-v0.md` |
+| Parziale | `34-report-benchmark-prestazioni.md` |
+| Parziale | `audit/README.md` |
+| Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `glossario.md` |
 
 ## Capitoli rimossi
@@ -70,6 +73,19 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |
 | Completo | `AGENTS.md` |
+| Parziale | `tests/exploratory/nightly/README.md` |
+
+## Aggiornamento audit esplorativi notturni
+
+`docs/it/audit/README.md` definisce il metodo per gli audit esplorativi
+notturni: issue madre, issue figlie, report nel repository, script
+riproducibili e regole per non committare log completi. Il primo report storico
+e' `docs/it/audit/2026-06-25-audit-notturno.md`, collegato alle issue GitHub
+`#29` e `#30`.
+
+`tests/exploratory/nightly/` contiene scenari rilanciabili che non fanno ancora
+parte della suite ufficiale. Servono a ripetere audit precedenti e a decidere
+quali scenari promuovere a test contrattuali.
 
 ## Aggiornamento recente
 

@@ -39,7 +39,8 @@ piu' dettaglio.
 30. [Writer API v0](32-writer-api-v0.md)
 31. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
 32. [Report benchmark prestazioni](34-report-benchmark-prestazioni.md)
-33. [Glossario](glossario.md)
+33. [Audit esplorativi notturni](audit/README.md)
+34. [Glossario](glossario.md)
 
 ## Come usare questi documenti
 
@@ -51,6 +52,10 @@ Per un percorso piu' guidato usa
 Quel documento divide la lettura per obiettivi: capire il progetto da zero,
 usare Alfred, contribuire al codice, studiare gli eventi, leggere i test,
 seguire scanner/resync e orientarsi nella roadmap futura.
+
+Per capire cosa e' stato provato durante gli audit esplorativi, leggere
+[audit/README.md](audit/README.md). I report storici degli audit notturni
+collegano scenari, comandi, artifact locali, issue GitHub e bug confermati.
 
 Per una nuova sessione con un agente AI o per riprendere il lavoro dopo una
 pausa lunga, partire da [AGENTS.md](../../AGENTS.md), dalle

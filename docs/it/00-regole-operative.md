@@ -388,6 +388,52 @@ Modified files:
   Mermaid resta la scelta semplice per gli `.md`; animazioni reali vanno
   progettate come passo successivo con strumenti dedicati.
 
+## Audit esplorativi notturni
+
+Gli audit esplorativi notturni servono a usare Alfred come un utente reale e a
+cercare divergenze dal contratto che non sono ancora coperte dalla suite
+ufficiale. Non sostituiscono `make test` e non devono trasformarsi in una massa
+di log committati nel repository.
+
+Regole operative:
+
+- quando il maintainer autorizza esplicitamente un audit autonomo, l'agente non
+  deve fermarsi a chiedere conferme operative: deve poter lanciare comandi,
+  raccogliere log, usare `gh`/GitHub API, creare issue, aggiornare issue e
+  collegare sub-issue senza attendere ulteriori `yes`;
+- questa autonomia vale per il perimetro dell'audit approvato. Non autorizza
+  modifiche arbitrarie al codice, refactor, fix o merge non richiesti;
+- creare una issue madre GitHub per ogni audit, con data, branch, commit,
+  ambiente, scenari provati, risultati, artifact e prossimi tentativi;
+- aprire una issue figlia separata per ogni bug confermato;
+- collegare sempre issue madre e issue figlia in entrambe le direzioni:
+  - se GitHub supporta le sub-issue, usare anche la relazione reale
+    `create sub issue -> add existing issue`, o la mutation/API equivalente
+    `addSubIssue`;
+  - se la relazione sub-issue non e' disponibile, mantenere almeno link
+    testuali espliciti nel body della issue madre e della issue figlia;
+- aggiornare la issue madre ogni volta che viene aperta una issue figlia,
+  indicando scenario, esito, link alla issue e stato della riproduzione;
+- mettere nel repository solo report, script riproducibili ed estratti
+  significativi, non log completi generati automaticamente;
+- conservare i log completi sotto `/tmp` durante l'audit o allegarli alla issue
+  solo quando sono davvero necessari;
+- a fine audit, comprimere gli artifact locali e caricarli su Google Drive con
+  `tests/exploratory/nightly/upload_audit_artifacts.sh`, poi linkare l'archivio
+  nella issue madre;
+- quando uno scenario esplorativo diventa stabile e importante, promuoverlo a
+  test ufficiale nella suite corretta.
+
+Percorsi stabili:
+
+- `docs/it/audit/`: metodo generale e report storici degli audit;
+- `tests/exploratory/nightly/`: script rilanciabili per scenari esplorativi.
+
+Gli script in `tests/exploratory/nightly` sono intenzionalmente fuori dalle
+suite ufficiali. Vanno usati per ripetere cio' che e' stato fatto in un audit,
+capire se un bug e' ancora presente e decidere cosa trasformare in test
+contrattuale.
+
 ## Verifiche
 
 Dopo aver discusso il passo e prima di modificare, consultare il codice come
