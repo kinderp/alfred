@@ -2508,6 +2508,25 @@ Interpretazione pratica:
 - `raw_lines`, `event_lines` e `jsonl_lines` non sono soglie di correttezza
   rigide. Servono per capire quanto output e' stato prodotto durante quel run.
 
+Lettura dei campi della coda con esempi:
+
+| Valori osservati | Interpretazione pratica |
+| --- | --- |
+| `enqueue_attempts=0` in `compat-only` | La pipeline strutturata e' spenta; Alfred sta usando solo i log compatibili. |
+| `enqueue_attempts=enqueue_success` e `enqueue_failures=0` | Tutti i record offerti alla pipeline sono entrati nella coda. |
+| `drained_records=enqueue_success` | Tutti i record accodati sono stati consegnati al dispatcher e ai sink prima dello shutdown. |
+| `pressure_drains=0` e `max_pending` basso | La coda non e' stata messa sotto pressione nel run osservato. |
+| `pressure_drains>0` e `max_pending=1024` | La coda bounded corrente e' arrivata alla capacita' massima; il runtime v0 ha drenato sotto pressione e poi ha ritentato l'enqueue. |
+| `enqueue_failures>0` | Il ledger strutturato non e' completo; con output JSONL abilitato Alfred deve fallire in modo fail-closed. |
+
+`max_pending=1024` non e' un obiettivo prestazionale. E' un indizio: significa
+che il workload ha prodotto una burst abbastanza grande da riempire la coda
+prima del drain normale del loop applicativo. Nella v0 questo puo' accadere
+perche' il runtime e' ancora single-threaded: il backend processa un batch di
+eventi, accoda record e solo dopo il poll `app_run()` chiama il drain ordinario.
+Il worker futuro dovrebbe rendere piu' raro questo caso, perche' consumer e
+producer potranno avanzare in modo indipendente.
+
 Esempi:
 
 ```bash

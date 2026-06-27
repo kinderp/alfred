@@ -1037,3 +1037,11 @@ una riga `output runtime stats ...` con enqueue tentati/riusciti/falliti,
 pressure drain, drain call, record drenati e massimo pending osservato. Il
 benchmark `make perf-runtime-output` include questi campi nel CSV per capire
 quando la coda bounded sta assorbendo una burst.
+
+Aggiornamento successivo: `tests/backend/test_output_queue_pressure.sh` verifica
+in modo mirato la valvola di pressione v0. Il test crea una burst abbastanza
+grande da riempire la coda bounded, poi controlla che `pressure_drains>0`,
+`max_pending` raggiunga la capacita' corrente, `enqueue_failures=0` e
+`drained_records=enqueue_success`. `10-debugging-test-e-strumenti.md` e
+`34-report-benchmark-prestazioni.md` spiegano i nuovi campi benchmark con
+esempi didattici.
