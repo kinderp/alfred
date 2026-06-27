@@ -728,15 +728,19 @@ bytes e li consegna solo al flush o quando deve liberare spazio.
 `config_t.output` introduce la configurazione minima, disabilitata di default:
 `output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536` e
 `output_log=output.jsonl`. `alfred_record_output_pipeline_t` collega queue,
-dispatcher, runtime drain e JSONL writer. `make perf-record-sinks` misura anche
+dispatcher, runtime drain e sink configurato. JSONL resta il writer reale v0;
+`counter` e' un formato benchmark/no-op che attraversa lo stesso confine senza
+serializzazione e senza I/O. `make perf-record-sinks` misura anche
 `output-pipeline-jsonl`, cioe' la pipeline composta con flush finale verso
 callback in memoria. Il runtime applicativo ora puo' inizializzare questa
 pipeline dietro `output_enabled=true` e scrivere JSONL aggiuntivo per i record
-raw normalizzati gia' migrati al record sink. `make perf-runtime-output`
-aggiunge il primo benchmark manuale del runtime reale: avvia Alfred, crea file
-reali sotto inotify e confronta `output_enabled=false` con
-`output_enabled=true`. Il prossimo passo resta usare queste misure per valutare
-il percorso end-to-end, non introdurre subito thread o backpressure reale.
+raw normalizzati gia' migrati al record sink, oppure usare
+`output_format=counter` per misurare solo queue, drain e dispatcher. `make
+perf-runtime-output` aggiunge il primo benchmark manuale del runtime reale:
+avvia Alfred, crea file reali sotto inotify e confronta `compat-only`,
+`counter-output` e `jsonl-output`. Il prossimo passo resta usare queste misure
+per valutare il percorso end-to-end, non introdurre subito thread o backpressure
+reale.
 
 ## Cose da non fare ora
 

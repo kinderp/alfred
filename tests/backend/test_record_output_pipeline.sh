@@ -4,6 +4,7 @@ set -euo pipefail
 
 cc -std=c99 -Wall -Wextra -Werror \
     -I../../core/include \
+    ../../core/src/alfred_record_counter_sink.c \
     ../../core/src/alfred_record_dispatcher.c \
     ../../core/src/alfred_record_jsonl.c \
     ../../core/src/alfred_record_jsonl_writer.c \

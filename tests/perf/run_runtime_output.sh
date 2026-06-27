@@ -6,6 +6,9 @@
 # directory, creates real files, and compares two runtime modes:
 #
 # - compat-only: output_enabled=false, so Alfred writes only raw/events/errors.
+# - counter-output: output_enabled=true with output_format=counter, so Alfred
+#   routes records through queue -> drain -> dispatcher -> no-op counter sink
+#   without JSONL formatting or output file I/O.
 # - jsonl-output: output_enabled=true, so Alfred also routes records through
 #   app_emit_output_record() -> app_enqueue_output_record(), followed by
 #   app_run() -> app_drain_output_pipeline() -> dispatcher -> JSONL writer ->
@@ -19,7 +22,8 @@
 # text logs, process startup/shutdown, file creation cost, JSONL writer cost and
 # real filesystem I/O. Use it to compare gross trends with synthetic rows such
 # as queue-dispatcher-jsonl and output-pipeline-jsonl, not to prove exact
-# throughput on every machine.
+# throughput on every machine. The counter-output row is the runtime baseline
+# for the structured queue/dispatcher path without writer serialization cost.
 #
 # LeakSanitizer is disabled for the measured Alfred process because this script
 # is a performance probe, not a leak test. In restricted or traced environments
@@ -136,6 +140,7 @@ run_one() {
     local mode="$1"
     local run="$2"
     local output_enabled="$3"
+    local output_format="$4"
     local run_dir="$BENCH_ROOT/$mode/run-$run"
     local watch_dir="$run_dir/watch"
     local config_file="$run_dir/alfred.conf"
@@ -172,7 +177,7 @@ raw_log=$raw_log
 event_log=$event_log
 error_log=$error_log
 output_enabled=$output_enabled
-output_format=jsonl
+output_format=$output_format
 output_buffer_size=65536
 output_log=$output_log
 EOF
@@ -299,6 +304,7 @@ mkdir -p "$BENCH_ROOT"
 printf "mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir\n"
 
 for run in $(seq 1 "$RUNS"); do
-    run_one "compat-only" "$run" "false"
-    run_one "jsonl-output" "$run" "true"
+    run_one "compat-only" "$run" "false" "jsonl"
+    run_one "counter-output" "$run" "true" "counter"
+    run_one "jsonl-output" "$run" "true" "jsonl"
 done

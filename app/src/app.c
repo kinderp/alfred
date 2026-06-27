@@ -293,14 +293,16 @@ static int log_raw_record(logger_t *logger, const alfred_record_t *record)
  * @app: application context with parsed configuration
  *
  * The pipeline is disabled by default. When enabled in this first runtime
- * wiring step, it is additive to raw.log/events.log/errors.log and supports
- * only JSONL because that is the only buffered writer with a v0 contract.
+ * wiring step, it is additive to raw.log/events.log/errors.log. JSONL is the
+ * user-facing writer; counter is a benchmark/no-op sink used to measure the
+ * same queue and dispatcher boundary without serialization or I/O.
  *
  * Return: ERR_OK on success, ERR_CONFIG/ERR_ALLOC/ERR_IO on failure.
  */
 static int app_init_output_pipeline(app_t *app)
 {
     alfred_record_output_pipeline_config_t pipeline_config;
+    alfred_record_output_pipeline_format_t pipeline_format;
 
     if (app == NULL) {
         return ERR_INVALID_ARG;
@@ -310,53 +312,62 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_OK;
     }
 
-    if (app->config.output.format != OUTPUT_FORMAT_JSONL) {
+    if (app->config.output.format != OUTPUT_FORMAT_JSONL &&
+        app->config.output.format != OUTPUT_FORMAT_COUNTER) {
         logger_error(&app->logger,
-                     "output_enabled requires output_format=jsonl");
+                     "output_enabled requires output_format=jsonl or counter");
         return ERR_CONFIG;
     }
 
-    if (app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
+    if (app->config.output.format == OUTPUT_FORMAT_JSONL &&
+        app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
         logger_error(&app->logger,
                      "output_buffer_size must be at least %u bytes",
                      APP_OUTPUT_FORMAT_BUFFER_SIZE);
         return ERR_CONFIG;
     }
 
-    app->output_stream = fopen(app->config.output_log, "a");
-    if (app->output_stream == NULL) {
-        logger_error(&app->logger,
-                     "failed to open output log %s",
-                     app->config.output_log);
-        return ERR_IO;
+    if (app->config.output.format == OUTPUT_FORMAT_JSONL) {
+        app->output_stream = fopen(app->config.output_log, "a");
+        if (app->output_stream == NULL) {
+            logger_error(&app->logger,
+                         "failed to open output log %s",
+                         app->config.output_log);
+            return ERR_IO;
+        }
+
+        /*
+         * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
+         * extra buffering so write_output_bytes() observes device errors at the
+         * writer flush boundary instead of deferring them until shutdown. This
+         * keeps output failure policy testable with devices such as /dev/full
+         * while still avoiding one write per event: JSONL writer flushes only
+         * when its own buffer is full or during shutdown.
+         */
+        if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
+            logger_error(&app->logger,
+                         "failed to configure output log buffering");
+            return ERR_IO;
+        }
+
+        app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
+        app->output_buffer = malloc(app->config.output.buffer_size);
+
+        if (app->output_format_buffer == NULL || app->output_buffer == NULL) {
+            logger_error(&app->logger,
+                         "failed to allocate output pipeline buffers");
+            return ERR_ALLOC;
+        }
     }
 
-    /*
-     * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
-     * extra buffering so write_output_bytes() observes device errors at the
-     * writer flush boundary instead of deferring them until shutdown. This keeps
-     * output failure policy testable with devices such as /dev/full while still
-     * avoiding one write per event: JSONL writer flushes only when its own buffer
-     * is full or during shutdown.
-     */
-    if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
-        logger_error(&app->logger,
-                     "failed to configure output log buffering");
-        return ERR_IO;
-    }
-
-    app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
-    app->output_buffer = malloc(app->config.output.buffer_size);
-
-    if (app->output_format_buffer == NULL || app->output_buffer == NULL) {
-        logger_error(&app->logger,
-                     "failed to allocate output pipeline buffers");
-        return ERR_ALLOC;
-    }
+    pipeline_format =
+        app->config.output.format == OUTPUT_FORMAT_COUNTER ?
+        ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER :
+        ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
 
     memset(&pipeline_config, 0, sizeof(pipeline_config));
     pipeline_config.enabled = 1;
-    pipeline_config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
+    pipeline_config.format = pipeline_format;
     pipeline_config.queue_capacity = APP_OUTPUT_QUEUE_CAPACITY;
     pipeline_config.drain_batch_size = APP_OUTPUT_QUEUE_CAPACITY;
     pipeline_config.write = write_output_bytes;
@@ -373,9 +384,15 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_ALLOC;
     }
 
-    logger_info(&app->logger,
-                "output pipeline initialized format=jsonl path=%s",
-                app->config.output_log);
+    if (app->config.output.format == OUTPUT_FORMAT_COUNTER) {
+        logger_info(&app->logger,
+                    "output pipeline initialized format=counter");
+    }
+    else {
+        logger_info(&app->logger,
+                    "output pipeline initialized format=jsonl path=%s",
+                    app->config.output_log);
+    }
 
     return ERR_OK;
 }

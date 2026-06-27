@@ -122,7 +122,8 @@ nel run corrente.
 | `queue-dispatcher-counter-text-jsonl` | `record -> queue -> dispatcher -> counter + text + JSONL` | Fan-out single-threaded dopo queue |
 | `output-pipeline-jsonl` | `record -> output pipeline enqueue -> runtime drain -> dispatcher -> JSONL buffered writer -> flush in memoria` | Prima misura dell'oggetto pipeline che potra' essere collegato ad `app_run()` |
 | `runtime-output compat-only` | `alfred reale -> inotify -> app callback -> log compatibili` | Baseline runtime reale senza pipeline JSONL |
-| `runtime-output jsonl-output` | `alfred reale -> inotify -> app callback -> output pipeline -> JSONL file` | Prima misura runtime reale con `output_enabled=true` |
+| `runtime-output counter-output` | `alfred reale -> inotify -> app callback -> output pipeline -> counter sink` | Baseline runtime reale della pipeline senza serializzazione e senza file JSONL |
+| `runtime-output jsonl-output` | `alfred reale -> inotify -> app callback -> output pipeline -> JSONL file` | Misura runtime reale con `output_enabled=true` e writer JSONL |
 
 ## Misura 1: run da 100000 record
 
@@ -263,15 +264,16 @@ make perf-runtime-output
 ```
 
 Questo run non usa record sintetici: avvia Alfred reale, crea file reali sotto
-una directory osservata da inotify e confronta runtime compatibile con runtime
-JSONL opt-in.
+una directory osservata da inotify e confronta runtime compatibile, runtime
+pipeline senza writer reale e runtime JSONL opt-in.
 
 Output osservato in questo run:
 
 ```text
 mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir
-compat-only,1,1000,0,1011723,110795,53995,1201347,9025.68,6006,3012,0,0,0,0,0,0,0,0,0,/tmp/alfred_perf_runtime_output/compat-only/run-1
-jsonl-output,1,1000,0,1014207,90384,163902,1309859,11063.91,6003,3014,6001,1503121,6001,6001,0,4,97,6001,1024,/tmp/alfred_perf_runtime_output/jsonl-output/run-1
+compat-only,1,1000,0,1056593,281258,78503,1476152,3555.45,6006,3012,0,0,0,0,0,0,0,0,0,/tmp/alfred_perf_runtime_output/compat-only/run-1
+counter-output,1,1000,0,1029213,213268,268141,1540276,4688.94,6003,3014,0,0,6001,6001,0,4,94,6001,1024,/tmp/alfred_perf_runtime_output/counter-output/run-1
+jsonl-output,1,1000,0,1114471,292240,406527,1838986,3421.85,6003,3014,6001,1503121,6001,6001,0,4,58,6001,1024,/tmp/alfred_perf_runtime_output/jsonl-output/run-1
 ```
 
 Lettura provvisoria:
@@ -279,11 +281,15 @@ Lettura provvisoria:
 - il run dimostra che il benchmark operativo funziona e produce artifact
   separati per confrontare `raw.log`, `events.log`, `errors.log` e
   `output.jsonl`;
+- `counter-output` attraversa `record -> queue -> drain -> dispatcher -> counter
+  sink` e chiude con `jsonl_lines=0` e `jsonl_bytes=0`. Questo e' il risultato
+  corretto: il formato counter misura la pipeline runtime senza serializzazione
+  JSONL e senza file output;
 - `jsonl-output` produce circa 6000 righe JSONL e circa 1.5 MB di output per
   1000 file creati;
-- `enqueue_attempts=enqueue_success=drained_records=6001` indica che tutti i
-  record offerti alla pipeline JSONL sono stati accodati e poi consegnati al
-  dispatcher;
+- in `counter-output` e `jsonl-output`, `enqueue_attempts=enqueue_success` e
+  `drained_records=6001` indicano che tutti i record offerti alla pipeline
+  strutturata sono stati accodati e poi consegnati al dispatcher;
 - `enqueue_failures=0` indica che la burst non ha prodotto un ledger incompleto;
 - `pressure_drains=4` indica che il producer ha trovato la coda piena quattro
   volte e ha usato la valvola di pressione v0 per drenare e ritentare;
@@ -309,7 +315,8 @@ sintetica con il runtime reale:
 ```text
 queue-dispatcher-jsonl    -> costo interno queue + dispatcher + JSONL
 output-pipeline-jsonl     -> costo della pipeline composta in memoria
-perf-runtime-output       -> costo osservato con Alfred reale, inotify e I/O
+runtime counter-output    -> costo osservato della pipeline senza writer reale
+runtime jsonl-output      -> costo osservato della pipeline con JSONL e I/O file
 ```
 
 ### Come leggere i nuovi campi runtime
@@ -333,8 +340,10 @@ La lettura consigliata e':
 
 Esempi di interpretazione:
 
-- `enqueue_attempts=0` in `compat-only`: corretto, perche' la pipeline JSONL e'
-  disabilitata.
+- `enqueue_attempts=0` in `compat-only`: corretto, perche' la pipeline
+  strutturata e' disabilitata.
+- `jsonl_lines=0` e `jsonl_bytes=0` in `counter-output`: corretto, perche' il
+  sink counter conta i record ma non produce un ledger JSONL.
 - `enqueue_attempts=enqueue_success=drained_records` e `enqueue_failures=0`:
   tutti i record accodati sono stati consegnati.
 - `pressure_drains=0` e `max_pending` basso: il workload non ha stressato la
@@ -365,6 +374,11 @@ Le conclusioni provvisorie sono:
    concentrata. La valvola di pressione v0 evita fallimenti falsi, ma il dato
    conferma che il worker asincrono e le future code per sink non sono dettagli
    estetici: serviranno per isolare meglio producer e consumer.
+7. La nuova riga `counter-output` permette finalmente di separare, anche nel
+   runtime reale, il costo del confine queue/dispatcher dal costo del writer
+   JSONL. Su questo run singolo `jsonl-output` e' piu' lento di
+   `counter-output`, ma il dato va ripetuto con piu' run prima di trarre
+   conclusioni quantitative.
 
 ## Cosa non possiamo concludere oggi
 
@@ -423,8 +437,10 @@ Le prossime misure utili sono:
 3. Confrontare flush finale, flush periodico e flush per record.
 4. Misurare buffer JSONL diversi: `4096`, `65536`, `262144`.
 5. Eseguire `make perf-runtime-output` con `--runs 5` e file count crescente per
-   confrontare runtime compatibile e runtime JSONL opt-in.
-6. Aggiungere un no-op pipeline sink per separare costo pipeline da costo JSONL.
+   confrontare runtime compatibile, runtime counter e runtime JSONL opt-in.
+6. Usare `counter-output` come baseline runtime senza writer reale e confrontarlo
+   con `jsonl-output` per isolare il costo di serializzazione, buffering e file
+   I/O.
 7. Misurare `pressure_drains`, `max_pending`, eventuali drop e latenza quando
    introdurremo backpressure reale, worker thread e code per sink.
 8. Misurare un futuro writer binario, per esempio MessagePack o protocollo

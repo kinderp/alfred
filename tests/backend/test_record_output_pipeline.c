@@ -24,7 +24,9 @@
  * output_enabled=true for additive JSONL output, while this unit test keeps the
  * helper isolated from runtime file ownership. Disabled mode is a no-op and
  * represents output_enabled=false: Alfred keeps the compatibility logs outside
- * this pipeline.
+ * this pipeline. Counter mode is a benchmark/no-op variant of the same
+ * queue/dispatcher path: it drains records into alfred_record_counter_sink_t
+ * without JSONL formatting, buffering, or output writes.
  */
 
 #include "alfred_record_output_pipeline.h"
@@ -94,6 +96,18 @@ static alfred_record_output_pipeline_config_t make_enabled_config(
     config.format_buffer_size = format_buffer_size;
     config.output_buffer = output_buffer;
     config.output_buffer_size = output_buffer_size;
+    return config;
+}
+
+static alfred_record_output_pipeline_config_t make_counter_config(void)
+{
+    alfred_record_output_pipeline_config_t config;
+
+    memset(&config, 0, sizeof(config));
+    config.enabled = 1;
+    config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER;
+    config.queue_capacity = 4u;
+    config.drain_batch_size = 8u;
     return config;
 }
 
@@ -173,6 +187,34 @@ static void test_enabled_jsonl_pipeline_enqueues_drains_and_flushes(void)
     assert(capture.sizes[0] == strlen(expected));
     assert(strcmp(capture.chunks[0], expected) == 0);
     assert(alfred_record_output_pipeline_buffered_bytes(&pipeline) == 0u);
+
+    alfred_record_output_pipeline_destroy(&pipeline);
+}
+
+static void test_enabled_counter_pipeline_drains_without_output(void)
+{
+    alfred_record_output_pipeline_t pipeline;
+    alfred_record_output_pipeline_config_t config;
+    alfred_record_runtime_drain_result_t result;
+    alfred_record_t record;
+
+    memset(&pipeline, 0, sizeof(pipeline));
+    config = make_counter_config();
+
+    assert(alfred_record_output_pipeline_init(&pipeline, &config) == 0);
+
+    record = make_file_created_record("/tmp/root/a.txt");
+    assert(alfred_record_output_pipeline_enqueue(&pipeline, &record) == 0);
+    assert(alfred_record_output_pipeline_pending(&pipeline) == 1u);
+
+    assert(alfred_record_output_pipeline_drain_once(&pipeline, &result) == 0);
+    assert(result.max_records == 8u);
+    assert(result.dispatched == 1u);
+    assert(result.remaining == 0u);
+    assert(result.status == 0);
+    assert(alfred_record_output_pipeline_pending(&pipeline) == 0u);
+    assert(alfred_record_output_pipeline_buffered_bytes(&pipeline) == 0u);
+    assert(alfred_record_output_pipeline_flush(&pipeline) == 0);
 
     alfred_record_output_pipeline_destroy(&pipeline);
 }
@@ -318,12 +360,18 @@ static void test_pipeline_rejects_invalid_enabled_config(void)
                                  sizeof(output_buffer));
     config.write = NULL;
     assert(alfred_record_output_pipeline_init(&pipeline, &config) == -1);
+
+    memset(&pipeline, 0, sizeof(pipeline));
+    config = make_counter_config();
+    config.queue_capacity = 0u;
+    assert(alfred_record_output_pipeline_init(&pipeline, &config) == -1);
 }
 
 int main(void)
 {
     test_disabled_pipeline_is_noop();
     test_enabled_jsonl_pipeline_enqueues_drains_and_flushes();
+    test_enabled_counter_pipeline_drains_without_output();
     test_pipeline_respects_drain_batch_size();
     test_pipeline_reports_queue_full();
     test_pipeline_propagates_flush_failure();

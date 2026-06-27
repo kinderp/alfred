@@ -56,17 +56,26 @@ When true with
 Alfred writes additive JSONL output through the
 .B record -> queue -> dispatcher -> writer
 path while preserving the compatibility logs.
+When true with
+.BR output_format=counter ,
+Alfred routes records through the same queue and dispatcher boundary and counts
+them without formatting JSONL or writing an output file. This is intended for
+benchmarks, not as a user-facing output format.
 .TP
 .B output_format
 Writer format for the output runtime. Supported configuration values are
 .B text
+.BR jsonl ,
 and
-.BR jsonl .
+.BR counter .
 The default is
 .BR jsonl .
 Unsupported values make configuration loading fail.
-The current runtime can enable only
-.BR jsonl ;
+The current runtime can enable
+.B jsonl
+as the user-facing writer and
+.B counter
+as a benchmark no-op writer.
 .B text
 is reserved for disabled or future configurations.
 .TP
@@ -83,6 +92,8 @@ Append-only JSONL output path used when
 .B output_enabled=true
 and
 .BR output_format=jsonl .
+It is not opened when
+.BR output_format=counter .
 The default is
 .BR output.jsonl .
 .TP
@@ -230,6 +241,12 @@ output_enabled=true
 output_format=jsonl
 output_buffer_size=65536
 output_log=/tmp/alfred.output.jsonl
+.EE
+.TP
+Enable the runtime counter benchmark path:
+.EX
+output_enabled=true
+output_format=counter
 .EE
 .SH NOTES
 This file format is intentionally simple and does not yet have include

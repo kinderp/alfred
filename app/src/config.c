@@ -178,9 +178,11 @@ static int parse_size_min(const char *value, size_t min_value, size_t *out)
  * @value: textual configuration value
  * @format: parsed output format on success
  *
- * Only formats with a documented v0 contract are accepted. This prevents
- * config files from advertising protobuf, MessagePack, sockets, or other future
- * outputs before the corresponding writer API and tests exist.
+ * Only formats with a documented v0 contract are accepted. JSONL is the public
+ * structured output format. Counter is a benchmark/no-op sink used to measure
+ * runtime queue/dispatcher overhead without JSONL serialization or file I/O.
+ * This prevents config files from advertising protobuf, MessagePack, sockets,
+ * or other future outputs before the corresponding writer API and tests exist.
  *
  * Return: 0 on success, -1 on unknown format.
  */
@@ -196,6 +198,11 @@ static int parse_output_format(const char *value, output_format_t *format)
 
     if (strcmp(value, "jsonl") == 0) {
         *format = OUTPUT_FORMAT_JSONL;
+        return 0;
+    }
+
+    if (strcmp(value, "counter") == 0) {
+        *format = OUTPUT_FORMAT_COUNTER;
         return 0;
     }
 

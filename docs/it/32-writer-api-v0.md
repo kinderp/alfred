@@ -14,8 +14,10 @@ Il documento definisce il contratto architetturale della Writer API. Il codice
 corrente ha gia' sink, text sink, JSONL sink, JSONL buffered writer, counter
 sink, queue e dispatcher. Ha anche un primo collegamento runtime opt-in:
 `app_run()` puo' scrivere JSONL su `output_log` quando `output_enabled=true` e
-`output_format=jsonl`. Non ha ancora, invece, un runtime writer asincrono
-completo con worker, backpressure, profili operativi e writer configurabili.
+`output_format=jsonl`, oppure attraversare la stessa pipeline con
+`output_format=counter` per benchmark senza formattazione e senza I/O. Non ha
+ancora, invece, un runtime writer asincrono completo con worker, backpressure,
+profili operativi e writer configurabili.
 
 Per l'ordine operativo dei prossimi micro-step leggere anche
 [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md). In particolare,
@@ -372,7 +374,7 @@ Writer API v0 deve permettere almeno questi writer:
 | --- | --- | --- |
 | `text` | compatibilita' log attuali e didattica | primo writer compatibile, leggibile dagli studenti |
 | `jsonl` | test golden, integrazioni semplici, debugging strutturato | primo formatter/sink v0 implementato e collegato al runtime opt-in tramite `output_enabled=true` |
-| `noop/counter` | benchmark e misure baseline | sink implementato per contare record senza serializzazione o I/O |
+| `counter` / `noop` | benchmark e misure baseline | sink implementato e collegato al runtime opt-in per contare record senza serializzazione o I/O |
 | `protobuf` | integrazioni con schema forte | utile quando il record model e' piu' stabile |
 | `messagepack` | binario compatto e flessibile | meno rigido di protobuf, utile per prototipi performanti |
 | `unix_socket` | integrazione locale con daemon, Lab o agent runtime | ideale per processi locali e controllo permessi Unix |
@@ -659,17 +661,20 @@ output_buffer_size=65536
 output_log=output.jsonl
 ```
 
-Questa configurazione collega il primo writer runtime solo quando
+Questa configurazione collega il primo writer runtime JSONL solo quando
 `output_enabled=true` e `output_format=jsonl`. Il default resta spento per non
 cambiare il comportamento storico. Quando e' acceso, il percorso JSONL e'
 aggiuntivo: `raw.log`, `events.log` ed `errors.log` continuano a essere prodotti.
+Per i benchmark runtime esiste anche `output_format=counter`: usa lo stesso
+confine `record -> queue -> dispatcher`, ma termina in un sink no-op che conta i
+record senza produrre `output_log`.
 
 Campi:
 
 | Chiave | Campo C | Default | Significato |
 | --- | --- | --- | --- |
 | `output_enabled` | `config.output.enabled` | `false` | abilita il percorso opt-in `record -> queue -> dispatcher -> writer` |
-| `output_format` | `config.output.format` | `jsonl` | formato richiesto; `jsonl` e' il solo formato runtime abilitabile in v0 |
+| `output_format` | `config.output.format` | `jsonl` | formato richiesto; `jsonl` e' il writer utente v0, `counter` e' il formato benchmark/no-op, `text` resta configurabile ma non attivabile |
 | `output_buffer_size` | `config.output.buffer_size` | `65536` | bytes del buffer per writer buffered, minimo `8192` |
 | `output_log` | `config.output_log` | `output.jsonl` | file append-only usato dal primo writer JSONL runtime |
 
@@ -681,7 +686,8 @@ backend/core
 -> raw.log / events.log / errors.log
 ```
 
-Quando `output_enabled=true`, la configurazione descrive il path target:
+Quando `output_enabled=true` e `output_format=jsonl`, la configurazione descrive
+il path target utente:
 
 ```text
 record
@@ -698,16 +704,28 @@ core e per tutta la diagnostica watch base: `WATCH_ADDED`, `WATCH_REMOVED`,
 `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`. Il collegamento e' volutamente
 sincrono: il callback applicativo, il core logger, il watch manager o il
 backend costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
-pipeline e' abilitata, accodano lo stesso record nella pipeline JSONL e drenano
-subito il batch disponibile.
+pipeline e' abilitata, accodano lo stesso record nella pipeline strutturata e
+drenano subito il batch disponibile. Con `output_format=counter`, il tratto
+iniziale e' identico:
+
+```text
+record
+-> queue
+-> runtime drain sincrono
+-> dispatcher
+-> counter sink
+```
+
+Il counter sink non formatta JSONL, non apre `output_log`, non scrive file e non
+fa flush. Serve a misurare il costo della pipeline runtime senza il writer reale.
 
 La policy di errore v0 e' conservativa. Quando `output_enabled=true`, Alfred
-tratta la pipeline JSONL come parte del contratto runtime scelto dall'utente: se
-enqueue, drain o writer falliscono, il runtime viene fermato invece di continuare
-a processare eventi producendo un `output.jsonl` incompleto. Questa scelta e'
-intenzionale perche' JSONL diventera' base per ledger, test golden e replay: un
-buco silenzioso nel file sarebbe peggiore di un arresto esplicito. Con
-`output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
+tratta la pipeline strutturata come parte del contratto runtime scelto
+dall'utente: se enqueue, drain o writer falliscono, il runtime viene fermato
+invece di continuare a processare eventi producendo un output incompleto. Questa
+scelta e' intenzionale perche' JSONL diventera' base per ledger, test golden e
+replay: un buco silenzioso nel file sarebbe peggiore di un arresto esplicito.
+Con `output_enabled=false`, invece, la pipeline e' un no-op e i log compatibili
 continuano a comportarsi come prima.
 
 La pipeline JSONL non deve cercare di descrivere ogni proprio fallimento dentro

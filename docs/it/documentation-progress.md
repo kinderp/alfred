@@ -1045,3 +1045,13 @@ grande da riempire la coda bounded, poi controlla che `pressure_drains>0`,
 `drained_records=enqueue_success`. `10-debugging-test-e-strumenti.md` e
 `34-report-benchmark-prestazioni.md` spiegano i nuovi campi benchmark con
 esempi didattici.
+
+Aggiornamento successivo: il runtime output supporta anche
+`output_format=counter` come formato benchmark/no-op. `counter` non e' un writer
+utente: attraversa `record -> queue -> drain -> dispatcher -> counter sink`
+senza formattazione JSONL, senza `output_log` e senza file I/O. `make
+perf-runtime-output` produce ora tre righe per run: `compat-only`,
+`counter-output` e `jsonl-output`. Il confronto `counter-output` vs
+`compat-only` misura il costo della pipeline strutturata senza writer reale; il
+confronto `jsonl-output` vs `counter-output` isola il costo aggiuntivo di JSONL,
+buffering e scrittura file.

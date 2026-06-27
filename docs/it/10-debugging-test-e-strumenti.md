@@ -2419,10 +2419,13 @@ avvia il binario `alfred`, configura log separati in una directory temporanea,
 osserva una directory reale con inotify e crea file reali dentro quella
 directory.
 
-Il benchmark esegue due modalita':
+Il benchmark esegue tre modalita':
 
 - `compat-only`: `output_enabled=false`, quindi Alfred scrive solo i log
   compatibili `raw.log`, `events.log` ed `errors.log`;
+- `counter-output`: `output_enabled=true` con `output_format=counter`, quindi
+  Alfred attraversa `record -> queue -> drain -> dispatcher -> counter sink`
+  senza formattare JSONL e senza scrivere `output_log`;
 - `jsonl-output`: `output_enabled=true`, quindi Alfred usa anche il percorso
   `app_emit_output_record() -> app_enqueue_output_record()`, seguito dal drain
   esplicito `app_run() -> app_drain_output_pipeline() -> dispatcher -> JSONL
@@ -2437,20 +2440,22 @@ passaggio asincrono.
 
 Questo benchmark serve a rispondere a una domanda diversa dai micro-benchmark:
 quanto costa il runtime reale quando entrano in gioco kernel, backend inotify,
-callback applicativi, log compatibili, file creati sul filesystem e output JSONL
-configurato?
+callback applicativi, log compatibili, file creati sul filesystem, costo della
+pipeline senza writer reale e output JSONL configurato?
 
 Output CSV:
 
 ```text
 mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir
 compat-only,1,1000,0,1001234,43000,12000,1080000,23255.81,1000,1000,0,0,0,0,0,0,0,0,0,/tmp/...
+counter-output,1,1000,0,1001300,45000,14000,1090000,22222.22,1000,1000,0,0,2000,2000,0,1,4,2000,1024,/tmp/...
 jsonl-output,1,1000,0,1001450,46000,15000,1095000,21739.13,1000,1000,2000,300000,2000,2000,0,1,4,2000,1024,/tmp/...
 ```
 
 Significato delle colonne:
 
-- `mode`: modalita' misurata, `compat-only` oppure `jsonl-output`;
+- `mode`: modalita' misurata, `compat-only`, `counter-output` oppure
+  `jsonl-output`;
 - `run`: numero del run ripetuto;
 - `files`: numero di file creati nella directory osservata;
 - `process_status`: exit status osservato del processo Alfred dopo lo shutdown
@@ -2496,6 +2501,12 @@ Interpretazione pratica:
 - se `compat-only` e `jsonl-output` sono vicini, l'output JSONL runtime non sta
   aggiungendo un overhead evidente rispetto al costo reale di backend, log
   compatibili e filesystem;
+- se `counter-output` cresce molto rispetto a `compat-only`, il costo e' gia'
+  nel confine `record -> queue -> drain -> dispatcher`, non nella
+  serializzazione JSONL;
+- se `jsonl-output` cresce molto rispetto a `counter-output`, il costo
+  aggiuntivo e' nel writer JSONL, nella serializzazione, nel buffering o nel
+  file I/O;
 - se `jsonl-output` cresce molto rispetto a `compat-only`, bisogna guardare al
   percorso `enqueue -> drain -> dispatcher -> JSONL writer -> output_log`;
 - se entrambi sono molto piu' lenti dei micro-benchmark, il costo non e' nella
@@ -2513,6 +2524,7 @@ Lettura dei campi della coda con esempi:
 | Valori osservati | Interpretazione pratica |
 | --- | --- |
 | `enqueue_attempts=0` in `compat-only` | La pipeline strutturata e' spenta; Alfred sta usando solo i log compatibili. |
+| `jsonl_lines=0` in `counter-output` | Corretto: il sink counter misura queue/dispatcher senza produrre JSONL. |
 | `enqueue_attempts=enqueue_success` e `enqueue_failures=0` | Tutti i record offerti alla pipeline sono entrati nella coda. |
 | `drained_records=enqueue_success` | Tutti i record accodati sono stati consegnati al dispatcher e ai sink prima dello shutdown. |
 | `pressure_drains=0` e `max_pending` basso | La coda non e' stata messa sotto pressione nel run osservato. |
@@ -3140,8 +3152,8 @@ Significato:
 
 | Chiave | Significato |
 | --- | --- |
-| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> JSONL writer` |
-| `output_format` | formato del writer; in v0 `jsonl` e' il solo formato attivabile nel runtime |
+| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> sink` |
+| `output_format` | formato del writer; `jsonl` e' il formato utente v0, `counter` e' un sink benchmark/no-op, `text` resta accettato solo come valore configurato ma non attivabile |
 | `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `8192` |
 | `output_log` | file JSONL append-only prodotto quando `output_enabled=true` |
 
