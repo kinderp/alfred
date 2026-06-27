@@ -162,6 +162,9 @@ Questo percorso spiega come dimostrare che una modifica funziona.
 5. [Qualita' del prodotto software](35-qualita-prodotto-software.md)
    spiega robustezza, affidabilita', sicurezza, coerenza, performance,
    operabilita' e documentazione come concetti di ingegneria del software.
+6. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+   chiarisce cosa Alfred e' oggi, cosa non deve promettere ancora, quali demo
+   usare e con quali strumenti integrarlo invece di sostituirli.
 
 Per i test shell e' importante leggere anche la sezione sulle regex in
 [Debugging, test e strumenti](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell),
@@ -231,6 +234,9 @@ Questo percorso serve per capire dove sta andando il progetto.
 8. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
+9. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+   separa posizionamento attuale, competitor, integrazioni consigliate e use
+   case futuri legati agli agenti AI.
 
 Questi documenti non sono tutti contratti gia' implementati: alcuni sono
 decisioni attuali, altri sono roadmap. Prima di implementare codice nuovo bisogna
@@ -310,6 +316,7 @@ queste domande:
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [34](34-report-benchmark-prestazioni.md), [33](33-writer-runtime-roadmap-v0.md), [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
+| Posizionamento, competitor e integrazioni | [36](36-use-cases-posizionamento-integrazioni.md), [24](24-roadmap-ai-agent-guardrail.md), [32](32-writer-api-v0.md), [25](25-roadmap-unificata-dossier.md) |
 | Qualita' prodotto | [35](35-qualita-prodotto-software.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [34](34-report-benchmark-prestazioni.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |

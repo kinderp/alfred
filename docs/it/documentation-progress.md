@@ -52,6 +52,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `33-writer-runtime-roadmap-v0.md` |
 | Parziale | `34-report-benchmark-prestazioni.md` |
 | Parziale | `35-qualita-prodotto-software.md` |
+| Parziale | `36-use-cases-posizionamento-integrazioni.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/nightly-playbook.md` |
@@ -917,3 +918,11 @@ sessione e rischio lo giustificano. La discussione progettuale e' stata salvata
 in GitHub Discussion `#37`, mentre la roadmap stabile ribadisce che prima
 servono Backend API v0 reale, capabilities runtime, subject/process context,
 primitive process/memory leggere, session engine e risk engine.
+
+Aggiornamento successivo: e' stato aggiunto
+`36-use-cases-posizionamento-integrazioni.md`. Il capitolo chiarisce il
+posizionamento corrente di Alfred come motore semantico filesystem Linux,
+separa use case supportati, parziali e futuri, confronta Alfred con Watchman,
+Fluent Bit, OpenTelemetry Collector, Wazuh, Falco, Tracee, Tetragon, Cilium e
+osquery, e stabilisce che la prima integrazione pratica da rendere semplice e'
+`Alfred JSONL -> Fluent Bit -> destinazioni esterne`.
