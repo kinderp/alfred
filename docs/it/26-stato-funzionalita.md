@@ -18,6 +18,13 @@ ragionamenti completi leggere:
 - [Scenari di test](14-scenari-test.md)
 - [Contratto dei log](22-contratto-log.md)
 - [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
+- [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+
+La differenza tra questo capitolo e il documento sui use case e' intenzionale:
+qui si parte dalla funzionalita' implementata o pianificata; nel documento sui
+use case si parte invece dal problema dell'utente. Quando una funzionalita'
+importante viene aggiunta, va controllato anche se genera un nuovo caso d'uso o
+rafforza un caso d'uso gia' documentato.
 
 ## Legenda
 
@@ -197,3 +204,13 @@ Il modello corrente parte da questa domanda:
 quale struttura dati comune rappresenta tutte le righe "Supportato" di questa
 matrice senza legarle per sempre a inotify?
 ```
+
+La seconda domanda da fare e':
+
+```text
+quale caso d'uso concreto diventa possibile o piu' credibile grazie a questa
+funzionalita'?
+```
+
+La risposta va mantenuta in
+[Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md).

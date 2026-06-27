@@ -196,6 +196,28 @@ Non serve aggiornare la matrice per ogni scenario banale. Aggiornarla quando:
 - uno scenario viene ripetuto in piu' notti;
 - viene aggiunta una nuova dimensione di valutazione.
 
+Quando l'audit avviene dopo modifiche importanti al codice, aggiornare anche la
+freschezza della validazione. La maturita' storica non va cancellata
+automaticamente, ma la confidence deve riflettere il rischio introdotto dalle
+modifiche recenti.
+
+Regola operativa:
+
+```text
+modifica bassa  -> maturita' invariata
+modifica media  -> freshness `stale`, pianificare audit mirato
+modifica alta   -> freshness `needs-revalidation`
+bug confermato  -> maturita' degradata + `needs-revalidation`
+audit superato  -> freshness torna `fresh` per lo scope verificato
+```
+
+Prima di aggiornare una funzionalita' come matura, controllare:
+
+1. ultimo commit validato;
+2. file o moduli toccati dagli ultimi cambi;
+3. se gli scenari eseguiti coprono davvero la funzionalita';
+4. se il controllo riguarda text log, JSONL, backend, core o performance.
+
 ## Report finale in chat
 
 Alla fine lasciare un report con:

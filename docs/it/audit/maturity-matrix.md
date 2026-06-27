@@ -46,6 +46,22 @@ La maturita' non coincide con "il test passa". Una funzionalita' puo' passare
 uno scenario singolo ed essere ancora fragile. Per questo usiamo piu'
 dimensioni.
 
+La maturita' va sempre letta rispetto al codice corrente. Un valore osservato
+su un vecchio commit non resta automaticamente valido se il codice collegato a
+quella funzionalita' cambia in modo importante. Per questo distinguiamo:
+
+```text
+maturita' osservata:
+cio' che gli audit hanno dimostrato storicamente
+
+confidence/freschezza:
+quanto quella maturita' e' ancora credibile sul commit corrente
+```
+
+Una funzionalita' puo' quindi avere maturita' storica alta ma confidence bassa,
+per esempio dopo un refactor del core o del backend che non e' stato ancora
+rivalidato dagli audit.
+
 | Area | Domanda | Scala iniziale |
 | --- | --- | --- |
 | Functional Maturity | La funzionalita' funziona in scenari reali? | iniziale/intermedia/alta |
@@ -55,6 +71,7 @@ dimensioni.
 | Security Posture | Non introduce rischi, bypass o leak di dati sensibili? | high-risk/medium/low-risk |
 | Behavioral Consistency | Si comporta in modo uniforme e spiegabile tra feature e livelli? | incoerente/parziale/coerente |
 | Documentation Fitness | Utenti, contributori e studenti possono capirla e verificarla? | mancante/parziale/usabile/buona |
+| Validation Freshness | La valutazione e' ancora valida rispetto al codice corrente? | fresh/stale/needs-revalidation |
 | Maturita' stimata | Sintesi qualitativa, non metrica assoluta. | iniziale/intermedia/alta |
 
 Queste aree non vanno fuse in una percentuale unica. Una funzionalita' puo'
@@ -69,6 +86,7 @@ Incoherence blocks clarity.
 Undocumented behavior is not mature.
 Performance is separate from correctness.
 Architecture debt reduces long-term velocity.
+Old evidence does not prove current maturity after major code changes.
 ```
 
 Per una spiegazione didattica di questi concetti, leggere anche
@@ -159,6 +177,100 @@ maturita' anche se altri scenari passano.
 
 Esempio: la validazione della root ha un audit dedicato, ma oggi resta poco
 matura perche' esiste la issue `#30`.
+
+### Validation Freshness
+
+Validation Freshness misura se la valutazione di maturita' e' ancora credibile
+rispetto al codice corrente.
+
+Gli audit salvano memoria storica: indicano che una funzionalita' ha funzionato
+in certi scenari, su un certo commit e in un certo ambiente. Ma se il codice che
+implementa quella funzionalita' cambia molto, gli audit vecchi non bastano piu'
+a sostenere la stessa fiducia.
+
+Campi da tracciare, almeno nei report e nelle future tabelle dati:
+
+| Campo | Significato |
+| --- | --- |
+| `last_validated_commit` | ultimo commit su cui lo scenario e' stato provato |
+| `affected_code_area` | moduli o file che influenzano la funzionalita' |
+| `validation_scope` | cosa e' stato davvero verificato: text log, JSONL, core, backend, performance |
+| `freshness_status` | `fresh`, `stale` o `needs-revalidation` |
+| `staleness_reason` | perche' la fiducia e' stata ridotta o invalidata |
+
+Stati consigliati:
+
+| Stato | Significato |
+| --- | --- |
+| `fresh` | la funzionalita' e' stata validata sul codice corrente o su codice non toccato da modifiche rilevanti |
+| `stale` | esiste evidenza storica utile, ma il codice collegato e' cambiato abbastanza da ridurre la fiducia |
+| `needs-revalidation` | una modifica importante o un bug confermato rende la valutazione precedente non affidabile |
+
+#### Regola di decadimento
+
+Non azzerare sempre la maturita' in modo automatico. Conservare la maturita'
+storica, ma abbassare o invalidare la confidence.
+
+| Tipo modifica | Esempi | Effetto sulla maturita' |
+| --- | --- | --- |
+| Bassa | documentazione, commenti, rename locale senza comportamento, refactor meccanico ben coperto | maturita' invariata; freshness resta `fresh` se gli scenari non sono toccati |
+| Media | helper condiviso, formatter, configurazione, campo JSONL, test o script collegati | freshness diventa `stale`; pianificare audit mirato |
+| Alta | core semantico, backend inotify, watcher table, scanner, recovery, queue/dispatcher, ownership record, writer runtime, hot path | freshness diventa `needs-revalidation` per le funzionalita' coinvolte |
+| Bug confermato | issue aperta su comportamento osservato | maturita' degradata e freshness `needs-revalidation` fino al fix e al nuovo audit |
+
+Esempi:
+
+```text
+FILE_READY
+invalidato o reso stale da modifiche a:
+- mapping `ALFRED_RAW_CLOSE_WRITE`
+- core semantico close-write
+- adapter `alfred_event_t -> alfred_record_t`
+- formatter JSONL, se la valutazione riguarda output strutturato
+```
+
+```text
+Lost-scope recovery
+invalidata o resa stale da modifiche a:
+- backend inotify
+- watcher table
+- scanner filesystem
+- identity tracking
+- lost-scope queue
+- reinstall missing watches
+```
+
+```text
+JSONL ledger
+invalidato o reso stale da modifiche a:
+- `alfred_record_t`
+- record ownership
+- record queue
+- dispatcher
+- JSONL writer
+- output pipeline
+```
+
+Nei grafici di maturita' conviene quindi mostrare due informazioni distinte:
+
+```text
+maturita' osservata
+freschezza/confidence della validazione
+```
+
+Una rappresentazione utile puo' essere:
+
+```text
+verde pieno    = alta maturita' + validazione recente
+verde pallido  = alta maturita' storica ma codice cambiato
+giallo         = maturita' media o validazione parziale
+rosso          = bug aperti o regressioni
+grigio         = da rivalidare
+```
+
+Questa distinzione evita due errori opposti: perdere memoria storica azzerando
+tutto a ogni refactor, oppure fidarsi troppo di audit vecchi dopo modifiche
+architetturali importanti.
 
 ### Performance Profile
 

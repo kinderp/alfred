@@ -46,6 +46,12 @@ completo, come performance, sicurezza, coerenza e documentazione. Questo e'
 intenzionale: il modello deve indicare cosa raccogliere nei prossimi audit, non
 solo cio' che e' gia' misurabile dopo la prima notte.
 
+La matrice distingue anche maturita' storica e freschezza della validazione.
+Se il codice collegato a una funzionalita' cambia in modo rilevante, la fiducia
+nei risultati precedenti puo' diventare `stale` o `needs-revalidation`. Questo
+non cancella la memoria storica degli audit, ma evita di trattare una vecchia
+validazione come prova valida sul codice corrente.
+
 Per eseguire una sessione completa partendo da un prompt breve, usare il
 [playbook operativo](nightly-playbook.md).
 

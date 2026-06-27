@@ -92,6 +92,12 @@ eBPF, procfs o meccanismi di sandboxing.
 
 ## Use case supportati oggi
 
+Questa sezione va letta insieme a
+[Stato funzionalita' supportate](26-stato-funzionalita.md). Il capitolo sulle
+funzionalita' risponde alla domanda tecnica "cosa fa Alfred oggi?". Questo
+capitolo risponde alla domanda prodotto "in quali situazioni quella
+funzionalita' aiuta qualcuno?".
+
 ### Motore semantico filesystem Linux
 
 Questo e' il primo use case reale.
@@ -278,6 +284,133 @@ molti FILE_MODIFIED
 ```
 
 Questa e' roadmap. Non va presentata come detection completa oggi.
+
+## Matrice funzionalita' -> use case
+
+Questa matrice collega le famiglie di funzionalita' correnti o pianificate ai
+casi d'uso. Serve a evitare due errori:
+
+- documentare funzionalita' senza spiegare a chi servono;
+- inventare use case senza collegarli a capacita' reali o pianificate.
+
+La colonna "Stato" indica se il use case e' gia' credibile oggi, se e'
+parziale o se richiede roadmap futura.
+
+| Famiglia funzionale | Esempi di funzionalita' Alfred | Use case collegati | Stato |
+| --- | --- | --- | --- |
+| Eventi semantici filesystem | `FILE_CREATED`, `FILE_DELETED`, `DIR_CREATED`, `DIR_DELETED` | Automazione locale, trigger per tool, didattica su inotify, audit filesystem semplice | Supportato |
+| Modifica e file ready | `FILE_MODIFIED`, `FILE_READY`, debounce modify, close-write | Backup incrementale, indicizzazione, ingestion documentale, scanner che devono aspettare file completi | Supportato |
+| Rename, move e relocate | `FILE_RENAMED`, `FILE_MOVED`, `FILE_RELOCATED`, equivalenti directory | Tool che non vogliono gestire cookie inotify, sincronizzatori, backup, tracking spostamenti in workspace | Supportato |
+| Watch ricorsivi | watch su directory figlie, `WATCH_ADDED`, `WATCH_REMOVED`, discovery directory | Monitoraggio di workspace dinamici, directory di build, upload folder, repository modificati da agenti | Supportato |
+| Creazione annidata veloce | scan mirato dopo create directory, raw sintetici per directory scoperte | Affidabilita' su `mkdir -p`, generatori di codice, estrazione archivi, tool che creano alberi velocemente | Supportato |
+| Diagnostica watch | `WATCH_STALE`, `WATCH_RESYNC_*`, `WATCH_LOST_*` | Debug affidabilita', observability backend, spiegazione di perdita scope, audit tecnico | Supportato/parziale |
+| Lost-scope recovery | identity tracking, recovery queue, fallback scan root, reinstall watch | Recupero di directory rinominate/spostate, resilienza su workspace vivi, riduzione perdita osservabilita' | Parziale |
+| Scanner filesystem | scanner/resync, snapshot, scan directory | Indicizzazione iniziale, snapshot prima del monitoraggio, verifica copertura watch, recovery dopo perdita stato | Parziale/futuro vicino |
+| Configurazione inotify | `inotify_watch_mask`, audit opt-in, `ALFRED_CONFIG` | Adattare rumore/costo agli scenari, debug backend, esperimenti controllati | Supportato |
+| Audit raw opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` nel raw log backend | Debug didattico inotify, studio del rumore eventi, prototipo per futuri file-read semantics | Opt-in diagnostico |
+| Attributi/metadati | `ALFRED_RAW_ATTRIB`, `IN_ATTRIB`, configurazione `-IN_ATTRIB` | Tamper detection su permessi/ownership, futuri eventi metadata changed | Raw supportato, semantica rimandata |
+| Overflow | `ALFRED_RAW_OVERFLOW`, `OVERFLOW` core | Capire quando il monitoraggio non e' piu' completo, attivare rescan o alert operativo | Supportato minimo |
+| JSONL ledger | `alfred_record_t`, writer JSONL, golden JSONL | Audit locale, test golden pubblici, integrazione Fluent Bit/OpenTelemetry/SIEM, replay futuro | Supportato/parziale |
+| Queue, dispatcher e sink | record queue, dispatcher, text sink, JSONL sink | Separare percorso caldo da writer lenti, plugin writer futuri, output multipli | Parziale |
+| Benchmark output | `make perf-record-sinks`, report benchmark | Misurare overhead, scegliere architettura con numeri, evitare ottimizzazioni a sensazione | Parziale |
+| Policy e workspace boundary | `decision`, `agent_session_id`, policy future | Agent Action Ledger, observe/would-block, sicurezza per agenti AI | Futuro |
+| Process/network context | `pid`, `ppid`, `uid`, `cmdline`, rete futura | Correlare chi ha causato un file event, session engine, security runtime | Futuro |
+| Deep Runtime Inspection | stack sample, register sample, `mprotect`, `mmap`, crash futuri | Investigazione mirata su processi sospetti, exploit timeline, runtime security avanzata | Futuro lungo |
+
+### Esempi di lettura della matrice
+
+Se un utente chiede "Alfred mi aiuta con un indicizzatore?", la risposta non
+parte dal nome tecnico `IN_CLOSE_WRITE`. Parte dal use case:
+
+```text
+Indicizzatore
+-> ha bisogno di sapere quando un file e' completo
+-> funzionalita' utile: FILE_READY
+-> stato: supportato
+```
+
+Se un utente chiede "Alfred mi aiuta a fare inventory iniziale di una
+directory?", la risposta e':
+
+```text
+Inventory/snapshot iniziale
+-> funzionalita' utile: scanner filesystem
+-> stato: parziale/futuro vicino
+-> oggi lo scanner esiste come base tecnica per resync, ma la CLI pubblica di
+   indicizzazione e' ancora roadmap
+```
+
+Se un utente chiede "Alfred blocca un agente AI che legge segreti?", la risposta
+deve essere onesta:
+
+```text
+Agent Guard / secret protection
+-> funzionalita' necessarie: file-read visibility, process context, policy,
+   enforcement
+-> stato: futuro
+-> con il solo inotify Alfred puo' osservare molte modifiche, ma non puo'
+   promettere blocco preventivo completo
+```
+
+## Brainstorming periodico sui use case
+
+I use case non devono essere scritti una volta sola e poi dimenticati. Ogni
+nuova famiglia di funzionalita' dovrebbe essere collegata almeno a un use case,
+oppure dichiarata come infrastruttura interna.
+
+Quando emerge una nuova idea, usare questa scheda:
+
+```text
+Nome use case:
+Utente/persona:
+Problema reale:
+Funzionalita' Alfred coinvolte:
+Stato: supportato / parziale / futuro
+Output utile: text log / JSONL / SIEM / Lab / report / policy
+Limiti attuali:
+Test o demo possibile:
+Documenti collegati:
+```
+
+Esempio:
+
+```text
+Nome use case:
+Indicizzazione iniziale di un albero filesystem
+
+Utente/persona:
+sviluppatore di tool, backup/indexer, studente
+
+Problema reale:
+prima di osservare eventi live, il tool deve sapere cosa esiste gia'
+
+Funzionalita' Alfred coinvolte:
+scanner filesystem, identity tracking, JSONL futuro, CLI futura --scan
+
+Stato:
+parziale/futuro vicino
+
+Output utile:
+JSONL o report testuale
+
+Limiti attuali:
+lo scanner e' usato come base tecnica per resync; la CLI pubblica di scan non e'
+ancora il prodotto principale
+
+Test o demo possibile:
+creare un albero con file e directory, lanciare scan, confrontare output atteso
+
+Documenti collegati:
+21-roadmap-scanner-resync.md, 26-stato-funzionalita.md, 36-use-cases-...
+```
+
+Regola pratica:
+
+```text
+Ogni volta che `26-stato-funzionalita.md` aggiunge una funzionalita' importante,
+controllare se `36-use-cases-posizionamento-integrazioni.md` deve aggiungere o
+aggiornare un use case collegato.
+```
 
 ## Use case da non promettere ora
 

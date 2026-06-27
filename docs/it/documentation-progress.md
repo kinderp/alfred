@@ -926,3 +926,18 @@ separa use case supportati, parziali e futuri, confronta Alfred con Watchman,
 Fluent Bit, OpenTelemetry Collector, Wazuh, Falco, Tracee, Tetragon, Cilium e
 osquery, e stabilisce che la prima integrazione pratica da rendere semplice e'
 `Alfred JSONL -> Fluent Bit -> destinazioni esterne`.
+
+Aggiornamento successivo: `36-use-cases-posizionamento-integrazioni.md` e
+`26-stato-funzionalita.md` sono stati collegati esplicitamente. Il documento sui
+use case contiene ora una matrice `famiglia funzionale -> use case`, esempi di
+lettura e una scheda di brainstorming periodico. La regola di manutenzione e':
+quando una nuova funzionalita' importante entra in `26-stato-funzionalita.md`,
+bisogna controllare se abilita, rafforza o modifica un use case in `36`.
+
+Aggiornamento successivo: la documentazione degli audit distingue ora maturita'
+storica e freschezza della validazione. `audit/maturity-matrix.md`,
+`audit/nightly-playbook.md` e `audit/README.md` spiegano che un refactor o una
+modifica importante del codice collegato puo' rendere una funzionalita'
+`stale` o `needs-revalidation` anche se gli audit precedenti erano positivi.
+La maturita' non viene sempre azzerata, ma la confidence deve riflettere il
+codice corrente.
