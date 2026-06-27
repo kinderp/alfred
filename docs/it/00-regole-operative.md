@@ -318,6 +318,21 @@ I commit devono seguire sempre queste regole:
 - non committare file locali non tracciati, log generati o esperimenti fuori
   task
 
+Quando un commit introduce o modifica un percorso di chiamata rilevante, il body
+deve includere anche una breve spiegazione in inglese delle funzioni e
+sottofunzioni principali coinvolte. La spiegazione deve chiarire:
+
+- quale funzione e' il punto di ingresso;
+- quali helper chiama;
+- quale responsabilita' ha ogni helper;
+- se cambia ownership, I/O, hot path, API o comportamento osservabile.
+
+Questa regola vale soprattutto per architettura, ownership, pipeline, API,
+callback, funzioni ponte, writer, sink, dispatcher, queue e percorso caldo. Non
+serve per modifiche banali, typo, link, rename piccoli o commit puramente
+editoriali. Se la spiegazione supera un riepilogo breve, documentarla negli MD e
+nel commit rimandare al documento aggiornato.
+
 ### Commit che risolvono finding di review
 
 Quando una PR riceve finding tecnici, il flusso obbligatorio e':

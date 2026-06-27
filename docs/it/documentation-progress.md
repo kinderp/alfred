@@ -982,3 +982,9 @@ Aggiornamento successivo: `00-regole-operative.md` e
 madre deve linkare vicino al goal la roadmap MD principale della milestone con
 un blocco `Primary roadmap`. La lista piu' ampia dei documenti da leggere resta
 utile, ma non sostituisce il link esplicito al documento operativo principale.
+
+Aggiornamento successivo: `00-regole-operative.md` aggiunge una regola per i
+commit che modificano call path rilevanti. Il body deve spiegare in inglese il
+punto di ingresso, gli helper principali, le responsabilita' delle sottofunzioni
+e gli eventuali effetti su ownership, I/O, hot path, API o comportamento
+osservabile. I commit banali restano esclusi per non appesantire la history.
