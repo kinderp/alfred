@@ -215,6 +215,114 @@ Alfred dovrebbe aiutare a riconoscere e fermare almeno questi rischi:
 Questa tabella non e' ancora una policy implementata. E' il primo threat model
 didattico per guidare backend, core, output e UI.
 
+## Deep Runtime Inspection
+
+Una direzione futura di Alfred e' osservare anche segnali di runtime piu'
+profondi: processi, syscall, rete, memoria, stack trace, registri e crash. Questa
+idea e' importante per trasformare Alfred da filesystem monitor avanzato a
+runtime security engine, ma non deve diventare subito un debugger permanente.
+
+La regola architetturale e':
+
+```text
+Alfred osserva segnali bassi quando servono,
+non legge continuamente registri, stack e heap di tutti i processi.
+```
+
+Il modello consigliato e' escalation-based:
+
+```text
+eventi leggeri filesystem/process/rete
+-> primitive Alfred
+-> sessione e rischio
+-> se il rischio sale
+-> deep inspection mirata su PID o sessione sospetta
+```
+
+Esempio:
+
+```text
+file creato in /tmp
+-> chmod +x
+-> execve
+-> connessione esterna
+-> rischio alto
+-> campionamento stack/registri solo per quel PID
+```
+
+Questo evita di pagare sempre il costo dei segnali piu' pesanti. Osservare
+registri CPU, stack utente, heap activity o Intel PT puo' essere molto costoso,
+rumoroso e dipendente da architettura, kernel, compilatore e runtime. Inoltre,
+senza session engine e risk engine, Alfred avrebbe molti dati bassi ma poco
+contesto per interpretarli.
+
+### Segnali futuri candidati
+
+I segnali leggeri da considerare prima sono:
+
+- `PROCESS_EXEC`
+- `PROCESS_FORK`
+- `PROCESS_EXIT`
+- `NET_CONNECT`
+- `MMAP`
+- `MPROTECT`
+- `BRK`
+- `MUNMAP`
+- `PTRACE`
+- `PROC_SIGNAL`
+- `PROC_CRASH`
+- `MEMORY_RWX`
+- `WX_TRANSITION`
+
+I segnali piu' profondi, da attivare solo su processi sospetti o in modalita'
+diagnostica, sono:
+
+- `STACK_SAMPLE`
+- `REG_SAMPLE`
+- campionamento branch/control-flow;
+- uprobes su funzioni userspace mirate;
+- Intel PT a finestra breve;
+- integrazioni future con ARM MTE, Intel CET o hardware breakpoint.
+
+### Tecnologie possibili
+
+| Tecnologia | Uso possibile | Nota |
+| --- | --- | --- |
+| eBPF/audit | `execve`, `openat`, `connect`, `mmap`, `mprotect`, `ptrace` | candidato principale per primitive process/memory/rete |
+| `/proc` | arricchire `pid`, `ppid`, `cmdline`, `cwd`, `exe` | utile per collegare eventi a process tree e sessione |
+| `perf_event_open` | stack/register sampling mirato | non sempre attivo; utile solo su PID sospetti |
+| uprobes | `malloc`, `free`, funzioni runtime specifiche | modalita' debug o target selezionati |
+| Intel PT / MTE / CET | evidenza avanzata di control-flow o memory safety | fase molto futura, non MVP |
+
+### Cosa non promettere
+
+Alfred non deve promettere nel breve periodo:
+
+- lettura continua dei registri di tutti i processi;
+- ricostruzione completa dell'heap;
+- detection generica e perfetta di ogni buffer overflow;
+- Intel PT sempre attivo;
+- tracing di ogni istruzione CPU;
+- blocco runtime basato su segnali che i backend attivi non possono osservare.
+
+Il valore prodotto non e' "leggere i registri". Il valore e' spiegare una
+catena di evidenze:
+
+```text
+input esterno
+-> memoria anonima resa eseguibile
+-> stack trace sospetto
+-> shell figlia
+-> connessione in uscita
+= possibile exploit runtime
+```
+
+Questa direzione e' stata salvata come discussione progettuale in
+[Deep Runtime Inspection: process, memory, stack and register signals](https://github.com/kinderp/alfred/discussions/37).
+Per ora resta roadmap: prima servono Backend API v0 reale, capabilities runtime,
+subject/process context, primitive process/memory leggere, session engine e risk
+engine.
+
 ## Componenti necessari
 
 ### Agent adapter

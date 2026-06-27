@@ -908,3 +908,12 @@ toccato, `kind:*` per il tipo di lavoro, `priority:*` per l'urgenza e
 completa per studenti e contributori; `00-regole-operative.md` fissa la regola
 pratica: almeno una area e almeno un kind, con priority e status solo quando
 servono davvero.
+
+Aggiornamento successivo: la visione futura di Alfred include ora una sezione
+su Deep Runtime Inspection in `24-roadmap-ai-agent-guardrail.md`. Il documento
+chiarisce che Alfred non deve leggere continuamente registri, stack e heap come
+un debugger permanente: i segnali profondi vanno attivati in modo mirato quando
+sessione e rischio lo giustificano. La discussione progettuale e' stata salvata
+in GitHub Discussion `#37`, mentre la roadmap stabile ribadisce che prima
+servono Backend API v0 reale, capabilities runtime, subject/process context,
+primitive process/memory leggere, session engine e risk engine.
