@@ -53,12 +53,18 @@ livello applicazione.
 
 ```c
 typedef struct app {
-    int running;
+    volatile sig_atomic_t running;
 
     config_t config;
     inotify_backend_t inotify;
     logger_t logger;
+    alfred_record_output_pipeline_t output_pipeline;
+    FILE *output_stream;
+    char *output_format_buffer;
+    char *output_buffer;
+    int output_failed;
     alfred_config_t core_config;
+    core_logger_context_t core_logger_context;
     alfred_engine_t *core;
 } app_t;
 ```
@@ -67,13 +73,32 @@ Questa struct e' il "contenitore" dello stato runtime.
 
 Campi importanti:
 
-- `running`: indica se il ciclo principale deve continuare
+- `running`: flag di shutdown cooperativo. Vale `1` mentre il ciclo principale
+  deve continuare e viene portata a `0` dal signal handler quando Alfred riceve
+  segnali come `SIGINT` o `SIGTERM`
 - `config`: configurazione runtime
 - `inotify`: stato del backend inotify, cioe' file descriptor e tabella watch
   descriptor -> path
 - `logger`: gestore dei file di log
+- `output_pipeline`: pipeline strutturata opzionale usata per `output.jsonl`
+  quando `output_enabled=true`
+- `output_stream`, `output_format_buffer`, `output_buffer`: risorse possedute
+  dall'applicazione e prestate alla pipeline/writer per evitare ownership
+  ambigua
+- `output_failed`: flag fail-closed dell'output strutturato. Se enqueue,
+  drain/write o flush finale falliscono, Alfred non continua come se il ledger
+  JSONL fosse completo
 - `core_config`: configurazione del core semantico
+- `core_logger_context`: contesto della callback che porta gli eventi semantici
+  dal core verso logger e output pipeline
 - `core`: istanza del motore semantico Alfred
+
+`running` usa `volatile sig_atomic_t` perche' viene scritto in un signal handler
+e letto dal codice normale. In C un signal handler puo' interrompere il programma
+in un punto qualunque: per questo deve fare pochissimo lavoro. Alfred non scrive
+log, non alloca memoria, non chiude file descriptor e non prende lock dentro il
+handler; si limita a cambiare una flag che il ciclo principale controlla in modo
+cooperativo.
 
 Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
 `app_t`; sono incapsulati in `inotify_backend_t`. Le funzioni del backend
@@ -143,6 +168,12 @@ flowchart TD
     B --> K[watch repair]
     K --> A
 ```
+
+Il ciclo reale e' controllato da `while (app->running)`. Quando l'utente preme
+`Ctrl-C` o il processo riceve `SIGTERM`, il signal handler imposta
+`app->running = 0`; il ciclo finisce alla prossima iterazione utile e Alfred
+arriva a `app_shutdown()`, dove puo' flushare i writer e rilasciare le risorse in
+un contesto normale e sicuro.
 
 Il file descriptor e' non bloccante, ma `app.c` non chiama piu' direttamente
 `read()`. La lettura e il parsing di `struct inotify_event` sono stati spostati
@@ -477,12 +508,17 @@ sola volta o ricevono un record borrowed dal backend/core, poi usano lo stesso
 `alfred_record_t` per il log compatibile e per la pipeline JSONL.
 
 Se la pipeline JSONL e' abilitata e l'emissione di un record fallisce,
-`app_emit_output_record()` marca `app.output_failed`. Da quel momento il callback
-applicativo restituisce un errore I/O e `app_run()` termina invece di continuare
-con un ledger JSONL parziale. Questa e' una scelta "fail closed": per debug
-sarebbe possibile immaginare un output best-effort, ma per un futuro log usato da
-test golden, audit e replay e' piu' sicuro fermarsi e rendere evidente il
-problema.
+`app_emit_output_record()` marca `app.output_failed`. Oggi questa funzione e'
+ancora un wrapper sincrono, ma il percorso e' gia' diviso in due fasi:
+`app_enqueue_output_record()` accoda il record owned nella coda bounded, mentre
+`app_drain_output_pipeline()` consuma la coda e chiama dispatcher e writer. Un
+errore puo' quindi emergere sia sul lato producer, per esempio se la coda rifiuta
+il record, sia sul lato consumer, per esempio se il writer JSONL fallisce in
+scrittura. In entrambi i casi il callback applicativo restituisce un errore I/O
+e `app_run()` termina invece di continuare con un ledger JSONL parziale. Questa
+e' una scelta "fail closed": per debug sarebbe possibile immaginare un output
+best-effort, ma per un futuro log usato da test golden, audit e replay e' piu'
+sicuro fermarsi e rendere evidente il problema.
 
 La stessa regola vale anche alla fine del processo. Il writer JSONL e'
 bufferizzato: un record puo' essere gia' stato accettato dalla pipeline ma non

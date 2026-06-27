@@ -988,3 +988,21 @@ commit che modificano call path rilevanti. Il body deve spiegare in inglese il
 punto di ingresso, gli helper principali, le responsabilita' delle sottofunzioni
 e gli eventuali effetti su ownership, I/O, hot path, API o comportamento
 osservabile. I commit banali restano esclusi per non appesantire la history.
+
+Aggiornamento successivo: `00-regole-operative.md` chiarisce che le issue madri
+devono mantenere una tabella `Implementation traceability`. Ogni elemento della
+checklist deve essere collegato a commit, PR o issue figlie rilevanti, cosi' si
+puo' capire quali modifiche implementano o preparano ciascun punto del piano.
+
+Aggiornamento successivo: la documentazione dei test runtime output chiarisce
+che `test_output_pipeline_runtime.sh` copre anche il nuovo wrapper sincrono
+`app_emit_output_record() -> app_enqueue_output_record() ->
+app_drain_output_pipeline()`. Il caso `/dev/full` resta il contratto principale
+per verificare che errori di enqueue, drain/write e flush finale non producano
+un ledger JSONL incompleto con exit status di successo.
+
+Aggiornamento successivo: `04-livello-applicazione.md` allinea la descrizione
+didattica di `app_t` al codice corrente. `running` e' ora spiegata come
+`volatile sig_atomic_t` usata per shutdown cooperativo da signal handler, mentre
+`output_failed` e le risorse della pipeline strutturata sono elencate fra i
+campi importanti del runtime applicativo.

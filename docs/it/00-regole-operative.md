@@ -124,6 +124,10 @@ Regola:
 - aggiungere un riassunto breve di cosa dice ogni documento;
 - distinguere chiaramente fra issue come piano operativo e documentazione come
   fonte stabile del contratto;
+- mantenere nella issue madre una tabella `Implementation traceability` che
+  colleghi ogni elemento della checklist a commit, PR o issue figlie rilevanti;
+- aggiornare quella tabella a ogni progress update significativo, indicando
+  cosa e' concluso, cosa e' in corso e quali commit sono solo preparatori;
 - se una Discussion contiene il ragionamento, linkarla dalla issue madre e poi
   trasferire la decisione finale negli MD.
 
@@ -142,6 +146,12 @@ Record Queue v0.
 
 Sintesi: il backend produce record, il confine caldo termina alla coda bounded,
 i writer stanno a valle e non devono bloccare il collector.
+
+Implementation traceability:
+| Checklist item | Status | Commits / PRs | Notes |
+| --- | --- | --- | --- |
+| Document current synchronous output pipeline | Done | commit link | Mappa pipeline corrente |
+| Define hot-path boundary | In progress | commit link, PR link | Codice parziale, worker ancora futuro |
 ```
 
 ## Bootstrap di una nuova sessione agente

@@ -28,6 +28,18 @@
 # alfred_record_t values into alfred_record_output_pipeline_t for JSONL output.
 # When JSONL output is explicitly enabled, writer failure is fatal: Alfred must
 # not keep processing events while producing an incomplete output.jsonl ledger.
+#
+# After the enqueue/drain split, this scenario also locks down the synchronous
+# wrapper that still exists in Writer Runtime v0:
+#
+#   app_emit_output_record()
+#   -> app_enqueue_output_record()
+#   -> app_drain_output_pipeline()
+#
+# A producer-side enqueue error, a consumer-side drain/write error, and a final
+# shutdown flush error must all preserve the same fail-closed output_failed
+# policy. This protects the future worker refactor from accidentally turning
+# JSONL writer failures into silent best-effort output.
 
 set -euo pipefail
 
