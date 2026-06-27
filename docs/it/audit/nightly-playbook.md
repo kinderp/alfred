@@ -68,6 +68,17 @@ La issue madre deve contenere:
 - bug confermati e issue figlie;
 - riepilogo finale.
 
+Label standard:
+
+```text
+area:tests
+kind:audit
+```
+
+Usare `status:ready` se l'audit e' una sessione operativa pianificata. Usare
+`status:needs-discussion` solo se la issue madre serve soprattutto a discutere
+scenari o interpretazioni prima di eseguire l'audit.
+
 Se una issue madre per quella data esiste gia', riusarla e aggiornarla. Se non
 esiste, crearla.
 
@@ -146,6 +157,25 @@ La issue figlia deve contenere:
 - estratti log;
 - motivo per cui e' bug o divergenza dal contratto;
 - link agli artifact completi, se disponibili.
+
+Label consigliate:
+
+```text
+bug confermato:
+area:tests
+kind:audit
+kind:bug
+
+scenario da promuovere a test:
+area:tests
+kind:audit
+kind:test
+
+debito emerso durante audit:
+area:tests
+kind:audit
+kind:debt
+```
 
 Subito dopo:
 

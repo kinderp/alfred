@@ -88,7 +88,7 @@ Famiglie correnti:
   `area:writer`, `area:docs`, `area:tests`, `area:security`,
   `area:performance`, `area:ci`.
 - `kind:*`: tipo di lavoro, per esempio `kind:bug`, `kind:design`,
-  `kind:debt`, `kind:roadmap`, `kind:test`.
+  `kind:debt`, `kind:roadmap`, `kind:test`, `kind:audit`.
 - `priority:*`: urgenza, cioe' `priority:p0`, `priority:p1`, `priority:p2`.
 - `status:*`: stato operativo, per esempio `status:needs-discussion`,
   `status:ready`, `status:blocked`, `status:needs-docs`.
@@ -100,6 +100,12 @@ almeno una area + almeno un kind
 priority solo se aiuta davvero a ordinare il lavoro
 status solo se segnala una condizione operativa reale
 ```
+
+Per gli audit esplorativi notturni usare sempre `area:tests` + `kind:audit`.
+Se l'audit apre una issue figlia per un bug confermato, aggiungere anche
+`kind:bug`. Se invece l'audit produce solo lavoro di copertura o promozione di
+uno scenario a test stabile, aggiungere `kind:test` o `kind:debt` secondo il
+caso.
 
 ### Issue madri e rimandi alla documentazione
 

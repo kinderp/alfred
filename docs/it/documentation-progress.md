@@ -947,3 +947,10 @@ numerata. L'indice breve e' stato trasformato in una tabella ragionata con una
 descrizione sintetica di ogni capitolo, chi dovrebbe leggerlo e quando. Gli
 audit esplorativi sono stati messi in una sezione separata per distinguere la
 documentazione stabile del progetto dal materiale operativo degli audit.
+
+Aggiornamento successivo: su GitHub e' stata aggiunta la label `kind:audit` per
+audit esplorativi, audit notturni e follow-up collegati. `00-regole-operative.md`,
+`11-come-contribuire.md`, `audit/README.md` e `audit/nightly-playbook.md`
+documentano ora che le issue madre degli audit usano `area:tests` +
+`kind:audit`, mentre le issue figlie mantengono `kind:audit` e aggiungono
+`kind:bug`, `kind:test` o `kind:debt` secondo il risultato.

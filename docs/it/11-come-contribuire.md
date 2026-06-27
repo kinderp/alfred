@@ -99,7 +99,7 @@ label: normalmente almeno una `area:*`, una `kind:*` e, se serve, una
 | Famiglia | Quando usarla | Label iniziali |
 | --- | --- | --- |
 | `area:*` | Quale parte del progetto e' coinvolta | `area:core`, `area:backend`, `area:writer`, `area:docs`, `area:tests`, `area:security`, `area:performance`, `area:ci` |
-| `kind:*` | Che tipo di lavoro e' | `kind:bug`, `kind:design`, `kind:debt`, `kind:roadmap`, `kind:test` |
+| `kind:*` | Che tipo di lavoro e' | `kind:bug`, `kind:design`, `kind:debt`, `kind:roadmap`, `kind:test`, `kind:audit` |
 | `priority:*` | Quanto e' urgente o bloccante | `priority:p0`, `priority:p1`, `priority:p2` |
 | `status:*` | Stato operativo extra | `status:needs-discussion`, `status:ready`, `status:blocked`, `status:needs-docs` |
 | default GitHub | Categorie generiche gia' presenti | `bug`, `documentation`, `enhancement`, `good first issue`, `help wanted`, `question` |
@@ -109,6 +109,9 @@ Esempi:
 - una issue sul runtime JSONL puo' usare `area:writer`, `area:performance`,
   `kind:design`, `priority:p1`;
 - un bug nei test golden puo' usare `area:tests`, `kind:bug`, `kind:test`;
+- una issue madre di audit notturno usa `area:tests`, `kind:audit`;
+- una issue figlia nata da audit usa `area:tests`, `kind:audit` e poi
+  `kind:bug`, `kind:test` o `kind:debt` in base al risultato;
 - una proposta ancora aperta puo' usare `kind:design` e
   `status:needs-discussion`;
 - una issue adatta a nuovi contributori puo' usare `good first issue` solo se

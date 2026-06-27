@@ -70,6 +70,18 @@ della sessione e deve contenere:
 | Bug confermati | Link alle issue figlie create per i problemi reali. |
 | Prossimi tentativi | Cosa provare nell'audit successivo. |
 
+La issue madre deve usare almeno queste label:
+
+```text
+area:tests
+kind:audit
+```
+
+Le issue figlie nate dall'audit devono mantenere `kind:audit` e aggiungere il
+tipo specifico del risultato: `kind:bug` per bug confermati, `kind:test` per
+scenari da promuovere a test ufficiale, `kind:debt` per debiti tecnici o
+documentali emersi durante l'audit.
+
 Ogni bug confermato usa una issue figlia dedicata. La issue figlia deve
 contenere:
 
