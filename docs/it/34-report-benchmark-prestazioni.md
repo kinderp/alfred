@@ -115,6 +115,8 @@ nel run corrente.
 | `queue-dispatcher-jsonl` | `record -> queue -> dispatcher -> JSONL` | Queue piu' dispatcher piu' JSONL |
 | `queue-dispatcher-counter-text-jsonl` | `record -> queue -> dispatcher -> counter + text + JSONL` | Fan-out single-threaded dopo queue |
 | `output-pipeline-jsonl` | `record -> output pipeline enqueue -> runtime drain -> dispatcher -> JSONL buffered writer -> flush in memoria` | Prima misura dell'oggetto pipeline che potra' essere collegato ad `app_run()` |
+| `runtime-output compat-only` | `alfred reale -> inotify -> app callback -> log compatibili` | Baseline runtime reale senza pipeline JSONL |
+| `runtime-output jsonl-output` | `alfred reale -> inotify -> app callback -> output pipeline -> JSONL file` | Prima misura runtime reale con `output_enabled=true` |
 
 ## Misura 1: run da 100000 record
 
@@ -246,6 +248,56 @@ Anche in quel caso la conclusione corretta non era che la pipeline fosse piu'
 veloce. La conclusione era: le due misure sono praticamente allineate e quindi
 non si vede overhead macroscopico del wrapper `alfred_record_output_pipeline_t`.
 
+## Misura 3: runtime reale con output opt-in
+
+Comando:
+
+```bash
+make perf-runtime-output
+```
+
+Questo run non usa record sintetici: avvia Alfred reale, crea file reali sotto
+una directory osservata da inotify e confronta runtime compatibile con runtime
+JSONL opt-in.
+
+Output osservato in questo run:
+
+```text
+mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,artifact_dir
+compat-only,1,1000,0,1009782,150102,23538,1210975,6662.14,6007,3012,0,0,/tmp/alfred_perf_runtime_output/compat-only/run-1
+jsonl-output,1,1000,0,1037903,69041,309130,1423210,14484.15,6003,3013,6001,1503121,/tmp/alfred_perf_runtime_output/jsonl-output/run-1
+```
+
+Lettura provvisoria:
+
+- il run dimostra che il benchmark operativo funziona e produce artifact
+  separati per confrontare `raw.log`, `events.log`, `errors.log` e
+  `output.jsonl`;
+- `jsonl-output` produce circa 6000 righe JSONL e circa 1.5 MB di output per
+  1000 file creati;
+- `emit_us` misura soprattutto il loop shell e il filesystem, non solo Alfred.
+  Per questo il valore puo' risultare piu' basso in una modalita' e piu' alto
+  nell'altra senza indicare automaticamente un miglioramento reale;
+- `settle_us` e `total_us` sono piu' utili per osservare quanto tempo serve al
+  processo completo per smaltire eventi, flushare e chiudere;
+- `process_status=0` conferma che lo script ha disabilitato LeakSanitizer nel
+  processo misurato e che lo shutdown cooperativo non viene sporcato da
+  diagnostica sanitizer. Un run precedente mostrava `process_status=1` con
+  `errors.log` vuoto proprio perche' LSAN falliva nell'ambiente di esecuzione;
+- lo script aspetta almeno `files * 3` righe in `events.log`, perche' una
+  creazione file semplice produce tipicamente `FILE_CREATED`, `FILE_MODIFIED` e
+  `FILE_READY`. Questo evita di fermare Alfred prima che il workload sia stato
+  smaltito.
+
+Questa misura non sostituisce i micro-benchmark. Serve a confrontare la pipeline
+sintetica con il runtime reale:
+
+```text
+queue-dispatcher-jsonl    -> costo interno queue + dispatcher + JSONL
+output-pipeline-jsonl     -> costo della pipeline composta in memoria
+perf-runtime-output       -> costo osservato con Alfred reale, inotify e I/O
+```
+
 ## Cosa possiamo concludere oggi
 
 Le conclusioni provvisorie sono:
@@ -319,7 +371,8 @@ Le prossime misure utili sono:
 2. Aggiungere un benchmark con writer JSONL che scrive su file temporaneo.
 3. Confrontare flush finale, flush periodico e flush per record.
 4. Misurare buffer JSONL diversi: `4096`, `65536`, `262144`.
-5. Misurare il percorso ora collegato ad `app_run()` con `output_enabled=true`.
+5. Eseguire `make perf-runtime-output` con `--runs 5` e file count crescente per
+   confrontare runtime compatibile e runtime JSONL opt-in.
 6. Aggiungere un no-op pipeline sink per separare costo pipeline da costo JSONL.
 7. Misurare queue depth e dropped records quando introdurremo backpressure reale.
 8. Misurare un futuro writer binario, per esempio MessagePack o protocollo

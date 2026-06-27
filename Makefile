@@ -256,6 +256,12 @@ perf:
 	@printf "  output pipeline. It isolates these costs from inotify,\n"
 	@printf "  filesystem I/O, sockets, threads, and real backpressure.\n"
 	@printf "\n"
+	@printf "make perf-runtime-output\n"
+	@printf "  Measures the real Alfred runtime with filesystem activity,\n"
+	@printf "  inotify, app callbacks, compatibility logs, and optional\n"
+	@printf "  JSONL output_enabled=true. It complements the synthetic\n"
+	@printf "  queue-dispatcher-jsonl and output-pipeline-jsonl rows.\n"
+	@printf "\n"
 	@printf "make perf-lost-scope\n"
 	@printf "  Measures synthetic lost-scope recovery over generated\n"
 	@printf "  directory trees with fake watch operations. It isolates\n"
@@ -267,6 +273,9 @@ perf-lost-scope:
 
 perf-record-sinks:
 	cd tests/perf && bash run_record_sinks.sh
+
+perf-runtime-output: all
+	cd tests/perf && bash run_runtime_output.sh
 
 # -----------------------------------------------------------------------------
 # VALGRIND

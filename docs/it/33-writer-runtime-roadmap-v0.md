@@ -699,9 +699,11 @@ dispatcher, runtime drain e JSONL writer. `make perf-record-sinks` misura anche
 `output-pipeline-jsonl`, cioe' la pipeline composta con flush finale verso
 callback in memoria. Il runtime applicativo ora puo' inizializzare questa
 pipeline dietro `output_enabled=true` e scrivere JSONL aggiuntivo per i record
-raw normalizzati gia' migrati al record sink. Il prossimo passo resta rendere il
-percorso piu' completo e misurarlo end-to-end, non introdurre subito thread o
-backpressure reale.
+raw normalizzati gia' migrati al record sink. `make perf-runtime-output`
+aggiunge il primo benchmark manuale del runtime reale: avvia Alfred, crea file
+reali sotto inotify e confronta `output_enabled=false` con
+`output_enabled=true`. Il prossimo passo resta usare queste misure per valutare
+il percorso end-to-end, non introdurre subito thread o backpressure reale.
 
 ## Cose da non fare ora
 

@@ -1006,3 +1006,17 @@ didattica di `app_t` al codice corrente. `running` e' ora spiegata come
 `volatile sig_atomic_t` usata per shutdown cooperativo da signal handler, mentre
 `output_failed` e le risorse della pipeline strutturata sono elencate fra i
 campi importanti del runtime applicativo.
+
+Aggiornamento successivo: `make perf-runtime-output` introduce il primo
+benchmark manuale del runtime output reale. A differenza di
+`perf-record-sinks`, avvia Alfred, crea file reali sotto inotify e confronta
+`output_enabled=false` con `output_enabled=true`, lasciando artifact separati
+per ogni run. `10-debugging-test-e-strumenti.md`, `26-stato-funzionalita.md` e
+`33-writer-runtime-roadmap-v0.md` spiegano scopo, CSV e limiti della misura.
+
+Aggiornamento successivo: il benchmark runtime output disabilita LeakSanitizer
+nel processo Alfred misurato, perche' LSAN puo' fallire in ambienti ristretti e
+sporcare `process_status` anche quando `errors.log` e lo shutdown sono puliti.
+Lo script aspetta inoltre almeno `files * 3` righe evento prima di fermare
+Alfred, cosi' il confronto non interrompe il workload prima dei record
+`FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY` attesi.

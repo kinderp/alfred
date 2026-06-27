@@ -2405,7 +2405,94 @@ Lettura pratica dei risultati:
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.
 
-### 10. Nessun `test-legacy-shadow`
+### 10. `make perf-runtime-output`
+
+Il comando:
+
+```bash
+make perf-runtime-output
+```
+
+esegue un benchmark manuale del runtime reale di Alfred. A differenza di
+`make perf-record-sinks`, non usa record sintetici costruiti in memoria:
+avvia il binario `alfred`, configura log separati in una directory temporanea,
+osserva una directory reale con inotify e crea file reali dentro quella
+directory.
+
+Il benchmark esegue due modalita':
+
+- `compat-only`: `output_enabled=false`, quindi Alfred scrive solo i log
+  compatibili `raw.log`, `events.log` ed `errors.log`;
+- `jsonl-output`: `output_enabled=true`, quindi Alfred usa anche il percorso
+  `app_emit_output_record() -> app_enqueue_output_record() ->
+  app_drain_output_pipeline() -> dispatcher -> JSONL writer -> output_log`.
+
+Questo benchmark serve a rispondere a una domanda diversa dai micro-benchmark:
+quanto costa il runtime reale quando entrano in gioco kernel, backend inotify,
+callback applicativi, log compatibili, file creati sul filesystem e output JSONL
+configurato?
+
+Output CSV:
+
+```text
+mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,artifact_dir
+compat-only,1,1000,0,1001234,43000,12000,1080000,23255.81,1000,1000,0,0,/tmp/...
+jsonl-output,1,1000,0,1001450,46000,15000,1095000,21739.13,1000,1000,2000,300000,/tmp/...
+```
+
+Significato delle colonne:
+
+- `mode`: modalita' misurata, `compat-only` oppure `jsonl-output`;
+- `run`: numero del run ripetuto;
+- `files`: numero di file creati nella directory osservata;
+- `process_status`: exit status osservato del processo Alfred dopo lo shutdown
+  richiesto dallo script. Nei run positivi deve essere `0`. Lo script disabilita
+  LeakSanitizer nel processo misurato per evitare che il sanitizer trasformi uno
+  shutdown pulito in `process_status=1` dentro ambienti ristretti o tracciati;
+- `startup_us`: tempo fra avvio del processo Alfred e inizio del workload. Al
+  momento include il secondo di attesa usato per lasciare installare il watch;
+- `emit_us`: tempo impiegato dallo script per creare i file. Questa misura
+  include il costo del filesystem e del loop shell, non solo Alfred;
+- `settle_us`: tempo di attesa dopo la creazione file per lasciare ad Alfred il
+  tempo di processare gli eventi visibili in `events.log`. Lo script aspetta
+  almeno `files * 3` righe evento, perche' una creazione file semplice produce
+  tipicamente `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`;
+- `total_us`: tempo totale dal lancio di Alfred allo shutdown completato;
+- `files_per_sec`: throughput della sola fase di creazione file, calcolato da
+  `files / emit_us`;
+- `raw_lines`: righe prodotte in `raw.log`;
+- `event_lines`: righe prodotte in `events.log`;
+- `jsonl_lines`: righe prodotte in `output.jsonl`;
+- `jsonl_bytes`: byte prodotti in `output.jsonl`;
+- `artifact_dir`: directory locale che contiene config, log e output del run.
+
+Interpretazione pratica:
+
+- se `compat-only` e `jsonl-output` sono vicini, l'output JSONL runtime non sta
+  aggiungendo un overhead evidente rispetto al costo reale di backend, log
+  compatibili e filesystem;
+- se `jsonl-output` cresce molto rispetto a `compat-only`, bisogna guardare al
+  percorso `enqueue -> drain -> dispatcher -> JSONL writer -> output_log`;
+- se entrambi sono molto piu' lenti dei micro-benchmark, il costo non e' nella
+  sola pipeline strutturata sintetica: potrebbe essere in inotify, logging
+  compatibile, creazione file, scheduler, disco o shutdown;
+- `raw_lines`, `event_lines` e `jsonl_lines` non sono soglie di correttezza
+  rigide. Servono per capire quanto output e' stato prodotto durante quel run.
+
+Esempi:
+
+```bash
+make perf-runtime-output
+cd tests/perf && bash run_runtime_output.sh --files 5000 --runs 3
+BENCH_ROOT=/tmp/alfred_runtime_a bash tests/perf/run_runtime_output.sh 2000
+```
+
+Come gli altri benchmark manuali, questo comando non e' una suite performance
+ufficiale. Non ha ancora warmup, percentili, isolamento CPU, profili runtime o
+baseline versionate. Serve per iniziare a confrontare il runtime reale con
+`queue-dispatcher-jsonl` e `output-pipeline-jsonl`.
+
+### 11. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
