@@ -18,7 +18,9 @@ sink, queue e dispatcher. Ha anche un primo collegamento runtime opt-in:
 completo con worker, backpressure, profili operativi e writer configurabili.
 
 Per l'ordine operativo dei prossimi micro-step leggere anche
-[Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md).
+[Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md). In particolare,
+la sezione "Mappa della pipeline corrente" distingue il percorso sincrono oggi
+implementato dal runtime asincrono che questa API prepara.
 
 ## Perche' serve
 

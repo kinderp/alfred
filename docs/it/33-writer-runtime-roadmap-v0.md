@@ -61,6 +61,140 @@ concreto e' il rapporto fra `events.log` e JSONL: il text writer compatibile puo
 fallire su una riga umana troppo lunga, ma il record strutturato deve comunque
 essere offerto alla pipeline JSONL.
 
+## Mappa della pipeline corrente
+
+La pipeline corrente e' volutamente transitoria: introduce gli oggetti del
+Writer Runtime v0, ma li usa ancora in modo sincrono. Questo significa che il
+record puo' attraversare coda, dispatcher e writer nella stessa catena di
+chiamate che ha ricevuto l'evento dal backend.
+
+Il percorso completo, quando `output_enabled=true`, e':
+
+```text
+evento raw, semantico o diagnostico
+-> alfred_record_t borrowed
+-> app_emit_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_drain_queue()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_writer_sink_emit()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> write_output_bytes()
+```
+
+Questa catena e' utile per validare contratto, ownership, formattazione JSONL e
+fail-closed della pipeline strutturata. Non e' ancora il percorso finale di
+produzione, perche' il backend puo' ancora arrivare fino al writer nello stesso
+turno di esecuzione.
+
+### Raw normalizzati
+
+I raw principali arrivano dal backend come `alfred_raw_event_t`.
+`handle_backend_event()` seleziona i raw gia' migrati al record sink con
+`is_raw_record_sink_candidate()`, poi usa:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> log_raw_record()
+-> alfred_record_text_sink_emit()
+-> raw.log compatibile
+```
+
+Se la pipeline JSONL e' abilitata, lo stesso record viene anche offerto a:
+
+```text
+app_emit_output_record()
+-> queue
+-> drain
+-> dispatcher
+-> JSONL writer
+```
+
+Dopo il ponte raw, `handle_backend_event()` passa comunque il raw originale a
+`alfred_process()`. Il core continua quindi a ricevere il fatto raw originale e
+a produrre la semantica filesystem.
+
+### Eventi semantici
+
+Il core emette `alfred_event_t` attraverso `core_logger_on_event()`. Il logger
+semantico converte l'evento una sola volta:
+
+```text
+alfred_event_t
+-> alfred_record_from_event()
+-> app_emit_output_record()
+-> queue / drain / dispatcher / JSONL writer
+-> alfred_record_text_sink_emit()
+-> events.log compatibile
+```
+
+L'ordine e' intenzionale: il record strutturato viene offerto alla pipeline
+JSONL prima del formatter testuale compatibile. In questo modo un limite del
+buffer testuale umano non decide se JSONL riceve un record semantico valido.
+
+### Diagnostica backend
+
+I record diagnostici `WATCH_*` vengono costruiti nel backend inotify o nel watch
+manager con builder dedicati, per esempio:
+
+```text
+alfred_record_build_watch_diagnostic()
+alfred_record_build_watch_diagnostic_with_os_error()
+```
+
+Il percorso compatibile e' ancora:
+
+```text
+WATCH_* record
+-> alfred_record_text_sink_emit()
+-> events.log o errors.log compatibile
+```
+
+Quando `emit_record` e' disponibile, lo stesso record diagnostico viene offerto
+anche alla pipeline strutturata:
+
+```text
+WATCH_* record
+-> app_emit_output_record()
+-> queue / drain / dispatcher / JSONL writer
+```
+
+Anche qui il record e' borrowed fino alla coda. La chiamata a
+`alfred_record_queue_push()` crea il clone owned, quindi il writer non dipende
+dal lifetime di path, reason o messaggi costruiti vicino al backend.
+
+### Cosa manca rispetto al runtime finale
+
+La pipeline attuale non ha ancora:
+
+- worker thread separato;
+- wakeup/event loop dedicato al writer;
+- code per sink;
+- backpressure reale;
+- retry, requeue o dead-letter policy;
+- isolamento fra sink critici, best-effort e debug;
+- garanzia che il backend termini sempre al solo enqueue.
+
+Il prossimo obiettivo della milestone e' quindi spostare progressivamente il
+punto di uscita del percorso caldo verso:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+```
+
+Tutto quello che avviene dopo il pop dalla coda deve diventare lavoro del lato
+runtime/writer, non del backend.
+
 ## Regola del percorso caldo
 
 Il percorso caldo target e':

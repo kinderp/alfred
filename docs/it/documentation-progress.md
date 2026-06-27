@@ -954,3 +954,11 @@ audit esplorativi, audit notturni e follow-up collegati. `00-regole-operative.md
 documentano ora che le issue madre degli audit usano `area:tests` +
 `kind:audit`, mentre le issue figlie mantengono `kind:audit` e aggiungono
 `kind:bug`, `kind:test` o `kind:debt` secondo il risultato.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` contiene ora la
+mappa della pipeline strutturata corrente. Il documento distingue il percorso
+sincrono oggi implementato (`record -> enqueue -> drain -> dispatcher ->
+JSONL writer`) dal target della milestone, in cui il percorso caldo deve
+terminare al solo enqueue bounded. `32-writer-api-v0.md` rimanda a questa mappa
+per evitare ambiguita' fra API gia' presenti, bridge runtime transitori e
+runtime writer asincrono futuro.
