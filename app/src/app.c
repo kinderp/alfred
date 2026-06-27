@@ -40,6 +40,9 @@ static void app_build_inotify_backend_context(
 static int log_raw_record(logger_t *logger, const alfred_record_t *record);
 static int app_init_output_pipeline(app_t *app);
 static int app_shutdown_output_pipeline(app_t *app);
+static int app_enqueue_output_record(app_t *app,
+                                     const alfred_record_t *record);
+static int app_drain_output_pipeline(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
 static int app_emit_output_record_callback(const alfred_record_t *record,
                                            void *userdata);
@@ -428,26 +431,26 @@ static int app_shutdown_output_pipeline(app_t *app)
 }
 
 /*
- * app_emit_output_record - enqueue and drain one optional runtime output record
+ * app_enqueue_output_record - enqueue one optional runtime output record
  * @app: application context
  * @record: borrowed Event Model v0 record
  *
- * This is deliberately synchronous for the first app_run() wiring step. It
- * proves the runtime path behind output_enabled=true without introducing worker
- * threads, wakeups, per-sink queues, or real backpressure yet.
+ * This helper names the producer side of the structured output path. It turns a
+ * borrowed runtime record into an owned queued record through
+ * alfred_record_output_pipeline_enqueue(), which delegates to the bounded queue
+ * and alfred_record_clone_owned().
  *
  * Failure policy:
  *   output_enabled=true makes the structured output path part of the runtime
- *   contract. If enqueue, drain, or writer delivery fails, the application marks
- *   output_failed so the event loop can stop instead of producing a silent
- *   partial JSONL ledger. Disabled output remains a successful no-op.
+ *   contract. If enqueue fails, the application marks output_failed so the
+ *   event loop can stop instead of producing a silent partial JSONL ledger.
+ *   Disabled output remains a successful no-op.
  *
- * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
+ * Return: 0 on success or when disabled, -1 on enqueue failure.
  */
-static int app_emit_output_record(app_t *app, const alfred_record_t *record)
+static int app_enqueue_output_record(app_t *app,
+                                     const alfred_record_t *record)
 {
-    alfred_record_runtime_drain_result_t drain_result;
-
     if (app == NULL || record == NULL) {
         return -1;
     }
@@ -466,6 +469,36 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
         return -1;
     }
 
+    return 0;
+}
+
+/*
+ * app_drain_output_pipeline - drain queued records through dispatcher/writer
+ * @app: application context
+ *
+ * This helper names the consumer side of the structured output path. In the v0
+ * wiring it is still called synchronously after enqueue, but the separation
+ * makes the future worker boundary explicit: drain consumes owned records from
+ * the queue, dispatches them to sinks, and lets writers perform formatting/I/O.
+ *
+ * Return: 0 on success or when disabled, -1 on drain/write failure.
+ */
+static int app_drain_output_pipeline(app_t *app)
+{
+    alfred_record_runtime_drain_result_t drain_result;
+
+    if (app == NULL) {
+        return -1;
+    }
+
+    if (!app->output_pipeline.enabled) {
+        return 0;
+    }
+
+    if (app->output_failed) {
+        return -1;
+    }
+
     if (alfred_record_output_pipeline_drain_once(&app->output_pipeline,
                                                  &drain_result) != 0) {
         app->output_failed = 1;
@@ -478,6 +511,31 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
     }
 
     return 0;
+}
+
+/*
+ * app_emit_output_record - enqueue and drain one optional runtime output record
+ * @app: application context
+ * @record: borrowed Event Model v0 record
+ *
+ * This wrapper preserves the current synchronous runtime behavior while making
+ * the two architectural phases visible in code:
+ *
+ *   app_enqueue_output_record()
+ *   app_drain_output_pipeline()
+ *
+ * A later worker step should keep producers on the enqueue side and move drain
+ * to a dedicated runtime loop.
+ *
+ * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
+ */
+static int app_emit_output_record(app_t *app, const alfred_record_t *record)
+{
+    if (app_enqueue_output_record(app, record) != 0) {
+        return -1;
+    }
+
+    return app_drain_output_pipeline(app);
 }
 
 /*
