@@ -7,8 +7,12 @@
 #
 # - compat-only: output_enabled=false, so Alfred writes only raw/events/errors.
 # - jsonl-output: output_enabled=true, so Alfred also routes records through
-#   app_emit_output_record() -> app_enqueue_output_record() ->
-#   app_drain_output_pipeline() -> dispatcher -> JSONL writer -> output_log.
+#   app_emit_output_record() -> app_enqueue_output_record(), followed by
+#   app_run() -> app_drain_output_pipeline() -> dispatcher -> JSONL writer ->
+#   output_log.
+#   If one backend poll fills the bounded queue, the v0 enqueue helper performs
+#   one pressure-relief drain and retries enqueue; future worker benchmarks
+#   should make that backpressure path asynchronous.
 #
 # This is intentionally a manual benchmark, not a correctness test and not a CI
 # threshold. It includes scheduler noise, kernel inotify delivery, compatibility

@@ -29,12 +29,19 @@
 # When JSONL output is explicitly enabled, writer failure is fatal: Alfred must
 # not keep processing events while producing an incomplete output.jsonl ledger.
 #
-# After the enqueue/drain split, this scenario also locks down the synchronous
-# wrapper that still exists in Writer Runtime v0:
+# After the enqueue/drain split, this scenario also locks down the current
+# single-threaded runtime boundary:
 #
 #   app_emit_output_record()
 #   -> app_enqueue_output_record()
+#
+#   app_run()
 #   -> app_drain_output_pipeline()
+#
+# If one backend poll delivers a burst larger than the bounded queue,
+# app_enqueue_output_record() may also perform one pressure-relief drain before
+# retrying enqueue. That keeps the v0 single-threaded runtime bounded without
+# treating a legitimate burst as an output failure.
 #
 # A producer-side enqueue error, a consumer-side drain/write error, and a final
 # shutdown flush error must all preserve the same fail-closed output_failed

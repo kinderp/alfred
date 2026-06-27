@@ -2424,8 +2424,16 @@ Il benchmark esegue due modalita':
 - `compat-only`: `output_enabled=false`, quindi Alfred scrive solo i log
   compatibili `raw.log`, `events.log` ed `errors.log`;
 - `jsonl-output`: `output_enabled=true`, quindi Alfred usa anche il percorso
-  `app_emit_output_record() -> app_enqueue_output_record() ->
-  app_drain_output_pipeline() -> dispatcher -> JSONL writer -> output_log`.
+  `app_emit_output_record() -> app_enqueue_output_record()`, seguito dal drain
+  esplicito `app_run() -> app_drain_output_pipeline() -> dispatcher -> JSONL
+  writer -> output_log`.
+
+Nella v0 il percorso resta single-threaded. Se un singolo poll backend produce
+una burst abbastanza grande da riempire la coda bounded prima che il loop possa
+fare drain, `app_enqueue_output_record()` usa una valvola di backpressure:
+drena la coda una volta e ritenta l'enqueue. Questo evita di misurare come
+fallimento una burst legittima; il worker runtime futuro dovra' rendere questo
+passaggio asincrono.
 
 Questo benchmark serve a rispondere a una domanda diversa dai micro-benchmark:
 quanto costa il runtime reale quando entrano in gioco kernel, backend inotify,

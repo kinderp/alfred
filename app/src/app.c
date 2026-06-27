@@ -435,10 +435,17 @@ static int app_shutdown_output_pipeline(app_t *app)
  * @app: application context
  * @record: borrowed Event Model v0 record
  *
- * This helper names the producer side of the structured output path. It turns a
- * borrowed runtime record into an owned queued record through
- * alfred_record_output_pipeline_enqueue(), which delegates to the bounded queue
- * and alfred_record_clone_owned().
+ * This helper names the producer side of the structured output path. In the
+ * common case it turns a borrowed runtime record into an owned queued record
+ * through alfred_record_output_pipeline_enqueue(), which delegates to the
+ * bounded queue and alfred_record_clone_owned().
+ *
+ * Writer Runtime v0 is still single-threaded: a backend poll can legally
+ * deliver a burst that is larger than the queue before control returns to
+ * app_run(). When the queue is already full, this helper performs one explicit
+ * pressure-relief drain and retries the enqueue once. That is the temporary v0
+ * backpressure boundary; the future worker runtime should replace this slow
+ * path with asynchronous draining.
  *
  * Failure policy:
  *   output_enabled=true makes the structured output path part of the runtime
@@ -463,6 +470,15 @@ static int app_enqueue_output_record(app_t *app,
         return -1;
     }
 
+    if (alfred_record_output_pipeline_pending(&app->output_pipeline) >=
+        APP_OUTPUT_QUEUE_CAPACITY) {
+
+        if (app_drain_output_pipeline(app) != 0) {
+            app->output_failed = 1;
+            return -1;
+        }
+    }
+
     if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
                                               record) != 0) {
         app->output_failed = 1;
@@ -476,10 +492,10 @@ static int app_enqueue_output_record(app_t *app,
  * app_drain_output_pipeline - drain queued records through dispatcher/writer
  * @app: application context
  *
- * This helper names the consumer side of the structured output path. In the v0
- * wiring it is still called synchronously after enqueue, but the separation
- * makes the future worker boundary explicit: drain consumes owned records from
- * the queue, dispatches them to sinks, and lets writers perform formatting/I/O.
+ * This helper names the consumer side of the structured output path. The event
+ * loop calls it after backend polling so producers only enqueue records, while
+ * the runtime drain step consumes owned records from the queue, dispatches them
+ * to sinks, and lets writers perform formatting/I/O.
  *
  * Return: 0 on success or when disabled, -1 on drain/write failure.
  */
@@ -514,28 +530,20 @@ static int app_drain_output_pipeline(app_t *app)
 }
 
 /*
- * app_emit_output_record - enqueue and drain one optional runtime output record
+ * app_emit_output_record - enqueue one optional runtime output record
  * @app: application context
  * @record: borrowed Event Model v0 record
  *
- * This wrapper preserves the current synchronous runtime behavior while making
- * the two architectural phases visible in code:
+ * This wrapper is the producer-side bridge used by backend/core callbacks. It
+ * deliberately does not drain the queue: app_run() owns the single-threaded
+ * runtime drain step after each backend poll. A later worker step can replace
+ * that drain site without changing producer callbacks again.
  *
- *   app_enqueue_output_record()
- *   app_drain_output_pipeline()
- *
- * A later worker step should keep producers on the enqueue side and move drain
- * to a dedicated runtime loop.
- *
- * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
+ * Return: 0 on success or when disabled, -1 on enqueue failure.
  */
 static int app_emit_output_record(app_t *app, const alfred_record_t *record)
 {
-    if (app_enqueue_output_record(app, record) != 0) {
-        return -1;
-    }
-
-    return app_drain_output_pipeline(app);
+    return app_enqueue_output_record(app, record);
 }
 
 /*
@@ -790,6 +798,13 @@ int app_run(app_t *app)
         error = inotify_backend_poll(&backend_ctx,
                                      handle_backend_event,
                                      app);
+        if (app_drain_output_pipeline(app) != 0) {
+            logger_error(&app->logger,
+                         "structured output failed; stopping event loop");
+            error = ERR_IO;
+            break;
+        }
+
         if (error != ERR_OK) {
             break;
         }

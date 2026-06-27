@@ -1020,3 +1020,12 @@ sporcare `process_status` anche quando `errors.log` e lo shutdown sono puliti.
 Lo script aspetta inoltre almeno `files * 3` righe evento prima di fermare
 Alfred, cosi' il confronto non interrompe il workload prima dei record
 `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY` attesi.
+
+Aggiornamento successivo: il runtime output separa meglio producer e consumer.
+`app_emit_output_record()` ora accoda soltanto tramite
+`app_enqueue_output_record()`, mentre `app_run()` chiama
+`app_drain_output_pipeline()` dopo ogni poll backend. Il runtime resta
+single-threaded: se una burst riempie la coda prima che il poll ritorni,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta l'enqueue
+una sola volta. Il punto che un futuro worker thread dovra' sostituire e' ora
+esplicito nel loop applicativo e nella valvola di backpressure v0.

@@ -292,14 +292,24 @@ app_enqueue_output_record()
 app_drain_output_pipeline()
 ```
 
-Questa separazione non deve cambiare subito il comportamento esterno. Nella
-prima fase `app_emit_output_record()` puo' restare un wrapper sincrono:
+La prima fase ha mantenuto il comportamento esterno e ha reso visibili le due
+funzioni. Il micro-step successivo sposta il drain fuori dal callback producer:
 
 ```text
 app_emit_output_record()
 -> app_enqueue_output_record()
+
+app_run()
+-> inotify_backend_poll()
 -> app_drain_output_pipeline()
 ```
+
+Esiste una sola eccezione intenzionale in questa v0: se una burst consegnata da
+`inotify_backend_poll()` riempie la coda prima che il loop possa drenarla,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta una sola
+volta l'enqueue. Questo non e' il modello finale: serve a mantenere bounded la
+memoria e a non fallire su burst legittime durante la fase single-threaded. Il
+worker runtime futuro dovra' assorbire questa responsabilita' fuori dal producer.
 
 Il valore della separazione e' architetturale: rende visibile dove Alfred prende
 ownership del record e dove invece inizia il lavoro lento di dispatcher e
@@ -325,6 +335,7 @@ Le sottofunzioni hanno questi ruoli:
 | Funzione | Ruolo |
 | --- | --- |
 | `alfred_record_output_pipeline_enqueue()` | controlla se la pipeline e' abilitata; se `output_enabled=false`, ritorna successo senza fare lavoro |
+| `app_drain_output_pipeline()` | viene chiamata da `app_enqueue_output_record()` solo quando la coda e' gia' piena, come valvola di backpressure v0 |
 | `alfred_record_queue_push()` | verifica che la coda sia valida e non piena, poi inserisce un record owned nel buffer circolare |
 | `alfred_record_clone_owned()` | copia il record e duplica le stringhe borrowed, cosi' la coda non dipende dal lifetime del producer |
 
@@ -379,10 +390,11 @@ Le sottofunzioni hanno questi ruoli:
 | `write_output_bytes()` | callback applicativa che scrive byte gia' formattati nel file `output_log` |
 | `alfred_record_destroy_owned()` | libera le stringhe owned del record estratto dalla coda dopo il dispatch |
 
-Nella v0 questo drain e' ancora sincrono: se viene chiamato subito dopo
-`enqueue`, il writer puo' ancora essere raggiunto nello stesso call stack che ha
-ricevuto l'evento. Il runtime finale dovra' spostare questa parte fuori dal
-percorso caldo, per esempio in un worker o in un loop dedicato.
+Nella v0 questo drain e' ancora sincrono: viene chiamato dal loop applicativo
+dopo ogni `inotify_backend_poll()`. Il producer non chiama piu' direttamente il
+writer, ma il drain resta nello stesso thread del runtime. Il runtime finale
+dovra' spostare questa parte fuori dal percorso caldo, per esempio in un worker
+o in un loop dedicato.
 
 ## Buffer circolare dei record
 

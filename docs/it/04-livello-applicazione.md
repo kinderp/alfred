@@ -507,18 +507,29 @@ sink o backpressure reale. I callback applicativi costruiscono il record una
 sola volta o ricevono un record borrowed dal backend/core, poi usano lo stesso
 `alfred_record_t` per il log compatibile e per la pipeline JSONL.
 
-Se la pipeline JSONL e' abilitata e l'emissione di un record fallisce,
-`app_emit_output_record()` marca `app.output_failed`. Oggi questa funzione e'
-ancora un wrapper sincrono, ma il percorso e' gia' diviso in due fasi:
-`app_enqueue_output_record()` accoda il record owned nella coda bounded, mentre
-`app_drain_output_pipeline()` consuma la coda e chiama dispatcher e writer. Un
-errore puo' quindi emergere sia sul lato producer, per esempio se la coda rifiuta
-il record, sia sul lato consumer, per esempio se il writer JSONL fallisce in
-scrittura. In entrambi i casi il callback applicativo restituisce un errore I/O
-e `app_run()` termina invece di continuare con un ledger JSONL parziale. Questa
-e' una scelta "fail closed": per debug sarebbe possibile immaginare un output
-best-effort, ma per un futuro log usato da test golden, audit e replay e' piu'
-sicuro fermarsi e rendere evidente il problema.
+Se la pipeline JSONL e' abilitata e l'emissione di un record fallisce, Alfred
+marca `app.output_failed`. Il percorso e' diviso in due fasi:
+`app_emit_output_record()` resta sul lato producer e chiama solo
+`app_enqueue_output_record()`, che accoda il record owned nella coda bounded. Il
+ciclo applicativo `app_run()` chiama poi `app_drain_output_pipeline()` dopo ogni
+`inotify_backend_poll()`: quella fase consuma la coda e chiama dispatcher e
+writer.
+
+La v0 e' ancora single-threaded. Un singolo `inotify_backend_poll()` puo'
+consegnare una burst di eventi piu' grande della coda prima che il controllo
+torni al ciclo applicativo. Per questo `app_enqueue_output_record()` contiene
+una valvola di backpressure temporanea: se la coda e' gia' piena, esegue un
+drain esplicito e ritenta una sola volta l'enqueue. Il percorso normale resta
+enqueue-only; il drain nel producer e' solo il caso di pressione della coda e
+dovra' essere sostituito dal worker runtime futuro.
+
+Un errore puo' quindi emergere sia sul lato producer, per esempio se la coda
+rifiuta il record anche dopo il drain di pressione, sia sul lato consumer, per
+esempio se il writer JSONL fallisce in scrittura. In entrambi i casi `app_run()`
+termina invece di continuare con un ledger JSONL parziale. Questa e' una scelta
+"fail closed": per debug sarebbe possibile immaginare un output best-effort, ma
+per un futuro log usato da test golden, audit e replay e' piu' sicuro fermarsi e
+rendere evidente il problema.
 
 La stessa regola vale anche alla fine del processo. Il writer JSONL e'
 bufferizzato: un record puo' essere gia' stato accettato dalla pipeline ma non
