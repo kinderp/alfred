@@ -43,6 +43,8 @@ static int app_shutdown_output_pipeline(app_t *app);
 static int app_enqueue_output_record(app_t *app,
                                      const alfred_record_t *record);
 static int app_drain_output_pipeline(app_t *app);
+static void app_observe_output_pending(app_t *app, size_t pending);
+static void app_log_output_runtime_stats(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
 static int app_emit_output_record_callback(const alfred_record_t *record,
                                            void *userdata);
@@ -398,6 +400,8 @@ static int app_shutdown_output_pipeline(app_t *app)
         return 0;
     }
 
+    app_log_output_runtime_stats(app);
+
     if (app->output_pipeline.enabled) {
         if (alfred_record_output_pipeline_flush(&app->output_pipeline) != 0) {
             logger_error(&app->logger,
@@ -431,6 +435,61 @@ static int app_shutdown_output_pipeline(app_t *app)
 }
 
 /*
+ * app_observe_output_pending - record the largest seen output queue depth
+ * @app: application context that owns local runtime counters
+ * @pending: current number of records in the bounded output queue
+ *
+ * The queue itself remains the source of truth. This helper only records a
+ * high-water mark for tests, benchmarks, and PR review notes.
+ */
+static void app_observe_output_pending(app_t *app, size_t pending)
+{
+    if (app == NULL) {
+        return;
+    }
+
+    if (pending > app->output_stats.max_pending) {
+        app->output_stats.max_pending = pending;
+    }
+}
+
+/*
+ * app_log_output_runtime_stats - log Writer Runtime v0 queue counters
+ * @app: application context that owns the output pipeline and logger
+ *
+ * The current counters are intentionally emitted as an INFO line in events.log,
+ * not as JSONL and not as a stable diagnostic record. They describe the local
+ * application runtime wiring: enqueue attempts, pressure-relief drains, drain
+ * calls, dispatched records, and queue high-water mark. A future metrics sink
+ * can promote them into a structured channel after the worker design settles.
+ */
+static void app_log_output_runtime_stats(app_t *app)
+{
+    const app_output_runtime_stats_t *stats;
+
+    if (app == NULL || !app->output_pipeline.enabled) {
+        return;
+    }
+
+    stats = &app->output_stats;
+    logger_info(&app->logger,
+                "output runtime stats enqueue_attempts=%zu "
+                "enqueue_success=%zu enqueue_failures=%zu "
+                "pressure_drains=%zu pressure_drain_failures=%zu "
+                "drain_calls=%zu drain_failures=%zu drained_records=%zu "
+                "max_pending=%zu",
+                stats->enqueue_attempts,
+                stats->enqueue_success,
+                stats->enqueue_failures,
+                stats->pressure_drains,
+                stats->pressure_drain_failures,
+                stats->drain_calls,
+                stats->drain_failures,
+                stats->drained_records,
+                stats->max_pending);
+}
+
+/*
  * app_enqueue_output_record - enqueue one optional runtime output record
  * @app: application context
  * @record: borrowed Event Model v0 record
@@ -458,6 +517,8 @@ static int app_shutdown_output_pipeline(app_t *app)
 static int app_enqueue_output_record(app_t *app,
                                      const alfred_record_t *record)
 {
+    size_t pending;
+
     if (app == NULL || record == NULL) {
         return -1;
     }
@@ -466,15 +527,23 @@ static int app_enqueue_output_record(app_t *app,
         return 0;
     }
 
+    app->output_stats.enqueue_attempts++;
+
     if (app->output_failed) {
+        app->output_stats.enqueue_failures++;
         return -1;
     }
 
-    if (alfred_record_output_pipeline_pending(&app->output_pipeline) >=
-        APP_OUTPUT_QUEUE_CAPACITY) {
+    pending = alfred_record_output_pipeline_pending(&app->output_pipeline);
+    app_observe_output_pending(app, pending);
+
+    if (pending >= APP_OUTPUT_QUEUE_CAPACITY) {
+        app->output_stats.pressure_drains++;
 
         if (app_drain_output_pipeline(app) != 0) {
             app->output_failed = 1;
+            app->output_stats.pressure_drain_failures++;
+            app->output_stats.enqueue_failures++;
             return -1;
         }
     }
@@ -482,8 +551,14 @@ static int app_enqueue_output_record(app_t *app,
     if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
                                               record) != 0) {
         app->output_failed = 1;
+        app->output_stats.enqueue_failures++;
         return -1;
     }
+
+    app->output_stats.enqueue_success++;
+    app_observe_output_pending(
+        app,
+        alfred_record_output_pipeline_pending(&app->output_pipeline));
 
     return 0;
 }
@@ -515,14 +590,21 @@ static int app_drain_output_pipeline(app_t *app)
         return -1;
     }
 
+    app->output_stats.drain_calls++;
+
     if (alfred_record_output_pipeline_drain_once(&app->output_pipeline,
                                                  &drain_result) != 0) {
         app->output_failed = 1;
+        app->output_stats.drain_failures++;
         return -1;
     }
 
+    app->output_stats.drained_records += drain_result.dispatched;
+    app_observe_output_pending(app, drain_result.remaining);
+
     if (drain_result.status != 0) {
         app->output_failed = 1;
+        app->output_stats.drain_failures++;
         return -1;
     }
 

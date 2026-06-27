@@ -523,6 +523,25 @@ drain esplicito e ritenta una sola volta l'enqueue. Il percorso normale resta
 enqueue-only; il drain nel producer e' solo il caso di pressione della coda e
 dovra' essere sostituito dal worker runtime futuro.
 
+Per rendere visibile questo comportamento, `app_t` mantiene anche contatori
+locali in `output_stats`. Questi contatori non sono record JSONL e non sono
+ancora una API pubblica: descrivono il wiring applicativo corrente. A shutdown,
+quando `output_enabled=true`, Alfred scrive in `events.log` una riga
+`output runtime stats ...` con:
+
+- tentativi di enqueue;
+- enqueue riusciti e falliti;
+- drain di pressione causati da coda piena;
+- drain falliti;
+- drain call totali;
+- record drenati;
+- massimo numero di record pending osservato nella coda.
+
+Questi valori servono per benchmark e review della milestone Writer Runtime v0:
+se `pressure_drains` cresce, significa che il producer ha incontrato una coda
+piena e ha dovuto aiutare il consumer. Il runtime finale con worker dovra'
+ridurre o eliminare questo caso dal percorso del producer.
+
 Un errore puo' quindi emergere sia sul lato producer, per esempio se la coda
 rifiuta il record anche dopo il drain di pressione, sia sul lato consumer, per
 esempio se il writer JSONL fallisce in scrittura. In entrambi i casi `app_run()`

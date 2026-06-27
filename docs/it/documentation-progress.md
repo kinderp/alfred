@@ -1029,3 +1029,11 @@ single-threaded: se una burst riempie la coda prima che il poll ritorni,
 `app_enqueue_output_record()` esegue un drain di pressione e ritenta l'enqueue
 una sola volta. Il punto che un futuro worker thread dovra' sostituire e' ora
 esplicito nel loop applicativo e nella valvola di backpressure v0.
+
+Aggiornamento successivo: `app_t` espone contatori locali
+`output_stats` per osservare Writer Runtime v0 senza promuovere ancora metriche
+pubbliche. A shutdown, con `output_enabled=true`, Alfred scrive in `events.log`
+una riga `output runtime stats ...` con enqueue tentati/riusciti/falliti,
+pressure drain, drain call, record drenati e massimo pending osservato. Il
+benchmark `make perf-runtime-output` include questi campi nel CSV per capire
+quando la coda bounded sta assorbendo una burst.

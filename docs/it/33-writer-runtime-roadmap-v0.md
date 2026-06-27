@@ -339,6 +339,27 @@ Le sottofunzioni hanno questi ruoli:
 | `alfred_record_queue_push()` | verifica che la coda sia valida e non piena, poi inserisce un record owned nel buffer circolare |
 | `alfred_record_clone_owned()` | copia il record e duplica le stringhe borrowed, cosi' la coda non dipende dal lifetime del producer |
 
+Per osservare questo confine senza introdurre ancora una API pubblica di metriche,
+`app_t` mantiene contatori locali in `output_stats` e li scrive a shutdown in
+`events.log` come riga `output runtime stats ...`. I campi principali sono:
+
+| Campo | Significato |
+| --- | --- |
+| `enqueue_attempts` | record offerti alla pipeline strutturata abilitata |
+| `enqueue_success` | record accettati nella coda bounded |
+| `enqueue_failures` | record non accettati dopo errore di enqueue o pressione |
+| `pressure_drains` | volte in cui la coda era piena e il producer ha drenato |
+| `pressure_drain_failures` | drain di pressione falliti |
+| `drain_calls` | chiamate totali al drain runtime |
+| `drain_failures` | drain falliti per dispatcher o writer |
+| `drained_records` | record consegnati con successo ai sink |
+| `max_pending` | massimo numero di record osservato nella coda |
+
+Questi contatori sono strumenti di orientamento per test, benchmark e review
+della milestone. Non vanno confusi con record diagnostici stabili: quando avremo
+un worker reale, code per sink o metriche pubbliche, potremo decidere quali campi
+promuovere in un canale strutturato.
+
 Questa funzione e' la candidata naturale per diventare il limite finale del
 percorso caldo:
 

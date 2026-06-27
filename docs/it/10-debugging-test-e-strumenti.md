@@ -2443,9 +2443,9 @@ configurato?
 Output CSV:
 
 ```text
-mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,artifact_dir
-compat-only,1,1000,0,1001234,43000,12000,1080000,23255.81,1000,1000,0,0,/tmp/...
-jsonl-output,1,1000,0,1001450,46000,15000,1095000,21739.13,1000,1000,2000,300000,/tmp/...
+mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir
+compat-only,1,1000,0,1001234,43000,12000,1080000,23255.81,1000,1000,0,0,0,0,0,0,0,0,0,/tmp/...
+jsonl-output,1,1000,0,1001450,46000,15000,1095000,21739.13,1000,1000,2000,300000,2000,2000,0,1,4,2000,1024,/tmp/...
 ```
 
 Significato delle colonne:
@@ -2472,6 +2472,23 @@ Significato delle colonne:
 - `event_lines`: righe prodotte in `events.log`;
 - `jsonl_lines`: righe prodotte in `output.jsonl`;
 - `jsonl_bytes`: byte prodotti in `output.jsonl`;
+- `enqueue_attempts`: record offerti alla pipeline strutturata quando
+  `output_enabled=true`. In `compat-only` vale `0` perche' la pipeline e'
+  disabilitata;
+- `enqueue_success`: record accettati nella coda bounded dopo eventuale drain di
+  pressione;
+- `enqueue_failures`: record non accettati per errore di enqueue o per errore
+  durante il drain di pressione. Nei run positivi deve restare `0`;
+- `pressure_drains`: quante volte il producer ha trovato la coda piena e ha
+  dovuto fare un drain prima di ritentare l'enqueue. Se cresce, il percorso
+  single-threaded sta mostrando pressione sulla coda;
+- `drain_calls`: chiamate totali a `app_drain_output_pipeline()`, sia dal loop
+  applicativo dopo `inotify_backend_poll()` sia dalla valvola di pressione;
+- `drained_records`: record consegnati con successo dal drain al dispatcher e
+  quindi ai sink registrati;
+- `max_pending`: massimo numero di record pending osservato nella coda. Se si
+  avvicina alla capacita' della coda, il workload sta stressando il confine
+  bounded;
 - `artifact_dir`: directory locale che contiene config, log e output del run.
 
 Interpretazione pratica:
@@ -2484,6 +2501,10 @@ Interpretazione pratica:
 - se entrambi sono molto piu' lenti dei micro-benchmark, il costo non e' nella
   sola pipeline strutturata sintetica: potrebbe essere in inotify, logging
   compatibile, creazione file, scheduler, disco o shutdown;
+- se `pressure_drains > 0` o `max_pending` e' alto, la coda bounded sta
+  assorbendo una burst e il runtime single-threaded sta usando la valvola di
+  backpressure v0. Non e' necessariamente un bug, ma e' un segnale da misurare
+  prima di introdurre worker o code per sink;
 - `raw_lines`, `event_lines` e `jsonl_lines` non sono soglie di correttezza
   rigide. Servono per capire quanto output e' stato prodotto durante quel run.
 

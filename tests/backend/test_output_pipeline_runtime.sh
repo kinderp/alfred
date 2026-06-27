@@ -21,6 +21,8 @@
 # - output_enabled=true stops Alfred on runtime JSONL writer failure
 # - output_enabled=true returns non-zero when buffered JSONL bytes fail only
 #   during final shutdown flush
+# - successful runtime output logs one "output runtime stats" INFO line with
+#   enqueue, drain and bounded-queue counters
 #
 # This test proves the first runtime wiring of the single-writer output
 # pipeline. output_enabled=true is additive: app.c still emits the compatibility
@@ -411,6 +413,13 @@ if ! grep -Eq '"category":"recovery".*"type":"WATCH_LOST_QUEUED".*"path":".*/res
     echo "FAIL: missing JSONL WATCH_LOST_QUEUED record for moved directory"
     echo "----- output.jsonl -----"
     cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq "output runtime stats enqueue_attempts=[0-9]+ .*drain_calls=[0-9]+ .*max_pending=[0-9]+" ./events.log; then
+    echo "FAIL: missing output runtime stats line"
+    echo "----- events.log -----"
+    cat ./events.log || true
     exit 1
 fi
 

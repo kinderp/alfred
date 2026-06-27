@@ -71,6 +71,32 @@ byte_count() {
     fi
 }
 
+runtime_stat() {
+    local event_log="$1"
+    local key="$2"
+    local line
+    local value
+
+    if [[ ! -f "$event_log" ]]; then
+        echo 0
+        return
+    fi
+
+    line="$(grep -E "output runtime stats " "$event_log" | tail -n 1 || true)"
+    if [[ -z "$line" ]]; then
+        echo 0
+        return
+    fi
+
+    value="$(printf "%s\n" "$line" |
+        sed -n "s/.*$key=\\([0-9][0-9]*\\).*/\\1/p")"
+    if [[ -z "$value" ]]; then
+        echo 0
+    else
+        echo "$value"
+    fi
+}
+
 emit_files() {
     local watch_dir="$1"
     local files="$2"
@@ -130,6 +156,13 @@ run_one() {
     local total_us
     local files_per_sec
     local expected_event_lines
+    local enqueue_attempts
+    local enqueue_success
+    local enqueue_failures
+    local pressure_drains
+    local drain_calls
+    local drained_records
+    local max_pending
 
     rm -rf "$run_dir"
     mkdir -p "$watch_dir"
@@ -180,7 +213,15 @@ EOF
         files_per_sec="0.00"
     fi
 
-    printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
+    enqueue_attempts="$(runtime_stat "$event_log" "enqueue_attempts")"
+    enqueue_success="$(runtime_stat "$event_log" "enqueue_success")"
+    enqueue_failures="$(runtime_stat "$event_log" "enqueue_failures")"
+    pressure_drains="$(runtime_stat "$event_log" "pressure_drains")"
+    drain_calls="$(runtime_stat "$event_log" "drain_calls")"
+    drained_records="$(runtime_stat "$event_log" "drained_records")"
+    max_pending="$(runtime_stat "$event_log" "max_pending")"
+
+    printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
         "$mode" \
         "$run" \
         "$FILES" \
@@ -194,6 +235,13 @@ EOF
         "$(line_count "$event_log")" \
         "$(line_count "$output_log")" \
         "$(byte_count "$output_log")" \
+        "$enqueue_attempts" \
+        "$enqueue_success" \
+        "$enqueue_failures" \
+        "$pressure_drains" \
+        "$drain_calls" \
+        "$drained_records" \
+        "$max_pending" \
         "$run_dir"
 }
 
@@ -248,7 +296,7 @@ fi
 rm -rf "$BENCH_ROOT"
 mkdir -p "$BENCH_ROOT"
 
-printf "mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,artifact_dir\n"
+printf "mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir\n"
 
 for run in $(seq 1 "$RUNS"); do
     run_one "compat-only" "$run" "false"
