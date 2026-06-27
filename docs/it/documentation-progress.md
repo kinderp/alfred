@@ -941,3 +941,9 @@ modifica importante del codice collegato puo' rendere una funzionalita'
 `stale` o `needs-revalidation` anche se gli audit precedenti erano positivi.
 La maturita' non viene sempre azzerata, ma la confidence deve riflettere il
 codice corrente.
+
+Aggiornamento successivo: `README.md` in `docs/it` non e' piu' solo una lista
+numerata. L'indice breve e' stato trasformato in una tabella ragionata con una
+descrizione sintetica di ogni capitolo, chi dovrebbe leggerlo e quando. Gli
+audit esplorativi sono stati messi in una sezione separata per distinguere la
+documentazione stabile del progetto dal materiale operativo degli audit.

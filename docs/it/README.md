@@ -5,46 +5,59 @@ contributori. I commenti nel codice restano in inglese e sono sintetici; questi
 documenti invece spiegano architettura, sintassi C, strumenti e ragionamenti con
 piu' dettaglio.
 
-## Percorso consigliato
+## Indice ragionato
 
-1. [Panoramica del progetto](01-panoramica-progetto.md)
-2. [Architettura generale](02-architettura-generale.md)
-3. [Struttura delle cartelle](03-struttura-cartelle.md)
-4. [Livello applicazione](04-livello-applicazione.md)
-5. [Modulo inotify](05-modulo-inotify.md)
-6. [Core engine](06-core-engine.md)
-7. [Flusso eventi](07-flusso-eventi.md)
-8. [C usato nel progetto](08-guida-c-usato-nel-progetto.md)
-9. [Makefile e build system](09-makefile-e-build-system.md)
-10. [Debugging, test e strumenti](10-debugging-test-e-strumenti.md)
-11. [Come contribuire](11-come-contribuire.md)
-12. [Semantica degli eventi](13-semantica-eventi.md)
-13. [Scenari di test](14-scenari-test.md)
-14. [Mappa del codice e strutture dati](16-mappa-codice-e-strutture.md)
-15. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
-16. [Modello licenze](18-modello-licenze.md)
-17. [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)
-18. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
-19. [Roadmap scanner e resync](21-roadmap-scanner-resync.md)
-20. [Contratto dei log](22-contratto-log.md)
-21. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
-22. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
-23. [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md)
-24. [Stato funzionalita' supportate](26-stato-funzionalita.md)
-25. [Guida alla lettura della documentazione](27-guida-lettura-documentazione.md)
-26. [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md)
-27. [Event Model v0](29-event-model-v0.md)
-28. [Backend API v0](30-backend-api-v0.md)
-29. [Milestone backend inotify di riferimento](31-milestone-inotify-reference-backend.md)
-30. [Writer API v0](32-writer-api-v0.md)
-31. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
-32. [Report benchmark prestazioni](34-report-benchmark-prestazioni.md)
-33. [Qualita' del prodotto software](35-qualita-prodotto-software.md)
-34. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
-35. [Audit esplorativi notturni](audit/README.md)
-36. [Playbook test notturni](audit/nightly-playbook.md)
-37. [Matrice maturita' audit](audit/maturity-matrix.md)
-38. [Glossario](glossario.md)
+La tabella non sostituisce la
+[Guida alla lettura della documentazione](27-guida-lettura-documentazione.md).
+Serve come indice rapido: per ogni capitolo indica cosa contiene, chi dovrebbe
+leggerlo e quando.
+
+| Capitolo | Cosa contiene | Chi dovrebbe leggerlo | Quando leggerlo |
+| --- | --- | --- | --- |
+| [00 - Regole operative](00-regole-operative.md) | Metodo di lavoro, micro-step, commit, review, GitHub, documentazione e regole per agenti AI. | Maintainer, contributori, agenti AI. | Prima di modificare codice o documentazione. |
+| [01 - Panoramica del progetto](01-panoramica-progetto.md) | Problema iniziale, differenza tra inotify raw ed eventi semantici, pipeline generale. | Tutti, soprattutto nuovi lettori. | Per capire perche' Alfred esiste. |
+| [02 - Architettura generale](02-architettura-generale.md) | Livelli principali: applicazione, backend, core, log e responsabilita'. | Studenti e contributori. | Prima di leggere codice o fare refactor. |
+| [03 - Struttura delle cartelle](03-struttura-cartelle.md) | Mappa delle directory e ruolo dei file principali. | Studenti e nuovi contributori. | Quando bisogna orientarsi nel repository. |
+| [04 - Livello applicazione](04-livello-applicazione.md) | `main`, `app_init`, `app_run`, configurazione, shutdown e responsabilita' di `app`. | Chi lavora su startup, config o ciclo runtime. | Prima di toccare `app/` o la CLI. |
+| [05 - Modulo inotify](05-modulo-inotify.md) | Backend Linux corrente, adapter, watch, maschere, eventi raw e discovery. | Chi lavora sul backend inotify. | Prima di modificare `modules/inotify/`. |
+| [06 - Core engine](06-core-engine.md) | Correlazione raw -> semantica, rename/move, debounce e responsabilita' del core. | Chi lavora su eventi semantici. | Prima di cambiare semantica o test core. |
+| [07 - Flusso eventi](07-flusso-eventi.md) | Percorso runtime dagli eventi kernel ai log e note storiche sullo shadow mode. | Studenti e contributori. | Quando bisogna capire cosa attraversa la pipeline. |
+| [08 - C usato nel progetto](08-guida-c-usato-nel-progetto.md) | Concetti C usati in Alfred: puntatori, callback, `void *`, lifetime, ownership e leak. | Studenti e nuovi contributori C. | Prima di leggere API con callback o ownership memoria. |
+| [09 - Makefile e build system](09-makefile-e-build-system.md) | Target `make`, variabili, `.PHONY`, build debug/release e quando aggiornare il Makefile. | Contributori. | Prima di cambiare build, test o file sorgenti compilati. |
+| [10 - Debugging, test e strumenti](10-debugging-test-e-strumenti.md) | Procedura prima del commit, test suite, regex shell, log, browser del codice e strumenti. | Contributori e studenti. | Quando si deve verificare o debuggare una modifica. |
+| [11 - Come contribuire](11-come-contribuire.md) | Fork, branch, PR, CI, review, aggiunta test e stile commenti. | Nuovi contributori. | Prima di aprire una PR. |
+| [13 - Semantica degli eventi](13-semantica-eventi.md) | Decisioni semantiche su create, delete, modify, file-ready, rename, move, relocate, dedup e overflow. | Chi tocca eventi o core. | Prima di cambiare significato di un evento. |
+| [14 - Scenari di test](14-scenari-test.md) | Scenari core, funzionali, backend, scanner, watcher e log attesi. | Chi aggiunge o interpreta test. | Quando un comportamento deve diventare verificabile. |
+| [16 - Mappa codice e strutture](16-mappa-codice-e-strutture.md) | Lettura guidata della codebase, funzioni, strutture dati, stati watch e diagrammi. | Studenti, contributori, agenti AI. | Quando serve capire chi chiama chi e cosa modifica cosa. |
+| [17 - Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md) | Idee su documentazione navigabile, grafi, animazioni, Doxygen, Graphviz e Kythe. | Maintainer e doc tooling. | Quando si progetta documentazione interattiva o grafica. |
+| [18 - Modello licenze](18-modello-licenze.md) | Ipotesi su core open source e moduli futuri piu' restrittivi o commerciali. | Maintainer. | Prima di decidere licenze o packaging commerciale. |
+| [19 - Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md) | Stato CLI, configurazione, pagine man e direzione futura dell'interfaccia utente. | Chi lavora su CLI o documentazione utente. | Prima di cambiare opzioni o comandi. |
+| [20 - Matrice eventi inotify](20-matrice-eventi-inotify.md) | Tutti gli eventi inotify, se Alfred li richiede, li osserva, li ignora o li rimanda. | Chi lavora sul backend o sulle maschere. | Prima di gestire un nuovo evento inotify. |
+| [21 - Roadmap scanner e resync](21-roadmap-scanner-resync.md) | Scanner filesystem, resync, recovery, watch stale, identity tracking, CSV e benchmark. | Chi lavora su recovery o scanner. | Prima di toccare watcher table, scanner o lost-scope. |
+| [22 - Contratto dei log](22-contratto-log.md) | Significato di `raw.log`, `events.log`, `output.jsonl` e record loggati. | Chi scrive test, audit o output. | Quando bisogna interpretare o cambiare log. |
+| [23 - Roadmap plugin backend](23-roadmap-plugin-backend.md) | API futura per backend inotify, fanotify, audit, eBPF, Windows e macOS. | Chi progetta backend futuri. | Prima di introdurre nuove sorgenti eventi. |
+| [24 - Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md) | Visione futura: Agent Action Ledger, workspace boundary, policy, deep runtime inspection. | Maintainer e architettura security. | Per orientare scelte future senza implementarle subito. |
+| [25 - Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md) | Roadmap complessiva: Event Model, Backend API, JSONL, Lab, performance e backend complessi. | Maintainer e contributori esperti. | Quando si decide la prossima milestone. |
+| [26 - Stato funzionalita'](26-stato-funzionalita.md) | Cosa Alfred supporta oggi, cosa e' diagnostico, cosa e' parziale e cosa e' rimandato. | Tutti. | Prima di progettare nuove feature o use case. |
+| [27 - Guida lettura documentazione](27-guida-lettura-documentazione.md) | Percorsi di lettura per utente, contributore, studente, eventi, test e roadmap. | Tutti. | Quando non sai quali documenti leggere. |
+| [28 - Audit documentazione e debiti](28-audit-documentazione-e-debiti.md) | Debiti documentali, diagrammi, link, decisioni rimandate e problemi noti della doc. | Maintainer. | Quando si ripulisce o riallinea la documentazione. |
+| [29 - Event Model v0](29-event-model-v0.md) | `alfred_record_t`, layer/category/type, ownership, record raw/semantic/diagnostic e JSONL. | Chi lavora su record, adapter, writer o golden test. | Prima di cambiare schema dati o output strutturato. |
+| [30 - Backend API v0](30-backend-api-v0.md) | Lifecycle backend, target, capabilities, errori e confine backend/core. | Chi lavora su backend API. | Prima del refactor backend-agnostic. |
+| [31 - Milestone inotify reference backend](31-milestone-inotify-reference-backend.md) | Perimetro corrente: chiudere inotify come backend di riferimento senza allargare troppo lo scope. | Maintainer, agenti AI, contributori. | A inizio sessione di lavoro architetturale. |
+| [32 - Writer API v0](32-writer-api-v0.md) | Sink, writer, queue, dispatcher, ownership, output strutturato e percorso caldo. | Chi lavora su output e performance. | Prima di toccare JSONL, text writer, socket o dispatcher. |
+| [33 - Writer Runtime v0](33-writer-runtime-roadmap-v0.md) | Roadmap per queue, dispatcher, worker, backpressure e collegamento runtime writer. | Chi lavora su runtime output. | Prima di implementare worker o code per sink. |
+| [34 - Report benchmark prestazioni](34-report-benchmark-prestazioni.md) | Misure eseguite, interpretazione, comandi benchmark e risultati osservati. | Chi valuta performance. | Dopo benchmark o prima di decisioni prestazionali. |
+| [35 - Qualita' prodotto software](35-qualita-prodotto-software.md) | Robustezza, affidabilita', sicurezza, coerenza, performance, operabilita' e documentazione. | Studenti e maintainer. | Per capire come valutiamo la maturita' di Alfred. |
+| [36 - Use case e integrazioni](36-use-cases-posizionamento-integrazioni.md) | Posizionamento, use case, competitor, integrazioni e matrice funzionalita' -> use case. | Maintainer, utenti, contributori. | Quando bisogna capire a cosa serve Alfred o comunicarlo. |
+| [Glossario](glossario.md) | Definizioni dei termini ricorrenti del progetto. | Tutti. | Quando un termine non e' chiaro. |
+
+## Audit esplorativi
+
+| Capitolo | Cosa contiene | Chi dovrebbe leggerlo | Quando leggerlo |
+| --- | --- | --- | --- |
+| [Audit esplorativi notturni](audit/README.md) | Metodo generale degli audit, issue madre/figlie, artifact e rapporto con test ufficiali. | Maintainer e chi esegue audit. | Prima di una sessione esplorativa. |
+| [Playbook test notturni](audit/nightly-playbook.md) | Procedura operativa autonoma: bootstrap, scenari, log, issue, upload artifact e report. | Agenti AI e maintainer. | Quando viene richiesto un audit notturno. |
+| [Matrice maturita' audit](audit/maturity-matrix.md) | Dimensioni di maturita', freshness, confidence e come leggere i risultati degli audit. | Maintainer, studenti, QA. | Dopo audit o quando si valuta una funzionalita'. |
 
 ## Come usare questi documenti
 
