@@ -282,6 +282,206 @@ Questa regola e' volutamente semplice. In futuro potremo valutare pool, arena,
 string table o storage inline per ridurre le allocazioni, ma v0 privilegia un
 contratto chiaro e testabile.
 
+## Funzioni del percorso enqueue e drain
+
+Il primo refactor di codice della milestone dovrebbe separare due responsabilita'
+che oggi vivono insieme in `app_emit_output_record()`:
+
+```text
+app_enqueue_output_record()
+app_drain_output_pipeline()
+```
+
+Questa separazione non deve cambiare subito il comportamento esterno. Nella
+prima fase `app_emit_output_record()` puo' restare un wrapper sincrono:
+
+```text
+app_emit_output_record()
+-> app_enqueue_output_record()
+-> app_drain_output_pipeline()
+```
+
+Il valore della separazione e' architetturale: rende visibile dove Alfred prende
+ownership del record e dove invece inizia il lavoro lento di dispatcher e
+writer.
+
+### `app_enqueue_output_record()`
+
+Questa funzione rappresenta il lato producer del percorso strutturato. Il suo
+compito e' prendere un `alfred_record_t` borrowed prodotto da backend, core o
+diagnostica e accodarlo in forma owned.
+
+Il percorso previsto e':
+
+```text
+app_enqueue_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+```
+
+Le sottofunzioni hanno questi ruoli:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_output_pipeline_enqueue()` | controlla se la pipeline e' abilitata; se `output_enabled=false`, ritorna successo senza fare lavoro |
+| `alfred_record_queue_push()` | verifica che la coda sia valida e non piena, poi inserisce un record owned nel buffer circolare |
+| `alfred_record_clone_owned()` | copia il record e duplica le stringhe borrowed, cosi' la coda non dipende dal lifetime del producer |
+
+Questa funzione e' la candidata naturale per diventare il limite finale del
+percorso caldo:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+```
+
+Quando il runtime diventera' asincrono, il backend o il core non dovranno
+aspettare JSONL, text writer, socket, flush o UI. Dovranno solo riuscire ad
+accodare il record secondo la policy di backpressure scelta.
+
+### `app_drain_output_pipeline()`
+
+Questa funzione rappresenta il lato consumer del percorso strutturato. Il suo
+compito e' consumare record gia' accodati e consegnarli ai sink registrati.
+
+Il percorso previsto e':
+
+```text
+app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_drain_queue()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_writer_sink_emit()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> write_output_bytes()
+-> alfred_record_destroy_owned()
+```
+
+Le sottofunzioni hanno questi ruoli:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_output_pipeline_drain_once()` | controlla se la pipeline e' abilitata e avvia un drain bounded con il batch size configurato |
+| `alfred_record_runtime_drain_once()` | helper single-threaded che chiama il dispatcher drain e produce un risultato con `max_records`, `dispatched`, `remaining` e `status` |
+| `alfred_record_dispatcher_drain_queue()` | ripete pop, dispatch e destroy fino a coda vuota, batch completo o primo errore |
+| `alfred_record_queue_pop()` | estrae il prossimo record owned dalla coda e trasferisce ownership al chiamante |
+| `alfred_record_dispatcher_dispatch_one()` | invia il record a tutti i sink registrati, in ordine, fermandosi al primo errore nella v0 |
+| `alfred_record_sink_emit()` | chiama la callback concreta del sink tramite l'interfaccia comune |
+| `alfred_record_jsonl_writer_sink_emit()` | adatta l'interfaccia sink generica al writer JSONL buffered |
+| `alfred_record_jsonl_writer_emit()` | formatta il record, aggiunge newline e lo accumula nel buffer del writer |
+| `alfred_record_format_jsonl()` | converte `alfred_record_t` in una riga JSON valida senza newline finale |
+| `write_output_bytes()` | callback applicativa che scrive byte gia' formattati nel file `output_log` |
+| `alfred_record_destroy_owned()` | libera le stringhe owned del record estratto dalla coda dopo il dispatch |
+
+Nella v0 questo drain e' ancora sincrono: se viene chiamato subito dopo
+`enqueue`, il writer puo' ancora essere raggiunto nello stesso call stack che ha
+ricevuto l'evento. Il runtime finale dovra' spostare questa parte fuori dal
+percorso caldo, per esempio in un worker o in un loop dedicato.
+
+## Buffer circolare dei record
+
+La coda corrente e' implementata dalla struttura `alfred_record_queue_t`,
+definita in `core/include/alfred_record_queue.h`.
+
+```c
+typedef struct {
+    alfred_record_t *items;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} alfred_record_queue_t;
+```
+
+Questa struttura e' un buffer circolare bounded di record owned.
+
+I campi hanno questo significato:
+
+- `items`: array allocato dinamicamente di `alfred_record_t`;
+- `capacity`: numero massimo di record che la coda puo' contenere;
+- `head`: indice del prossimo record che verra' estratto da `pop()`;
+- `tail`: indice dove verra' scritto il prossimo record inserito da `push()`;
+- `count`: numero di record attualmente presenti nella coda.
+
+Si chiama circolare perche' `head` e `tail` avanzano dentro l'array e, quando
+arrivano alla fine, tornano a zero usando il modulo:
+
+```c
+queue->tail = (queue->tail + 1u) % queue->capacity;
+queue->head = (queue->head + 1u) % queue->capacity;
+```
+
+Con `capacity = 4`, gli indici seguono quindi questa sequenza:
+
+```text
+0 -> 1 -> 2 -> 3 -> 0 -> 1 -> ...
+```
+
+Il campo `count` e' necessario per distinguere in modo semplice una coda vuota
+da una coda piena. In entrambe le situazioni puo' capitare che `head == tail`;
+senza `count` questa informazione sarebbe ambigua.
+
+Esempio con `capacity = 3`:
+
+```text
+inizio:
+items = [_, _, _]
+head = 0, tail = 0, count = 0
+
+push A:
+items = [A, _, _]
+head = 0, tail = 1, count = 1
+
+push B:
+items = [A, B, _]
+head = 0, tail = 2, count = 2
+
+pop -> A:
+items = [_, B, _]
+head = 1, tail = 2, count = 1
+
+push C:
+items = [_, B, C]
+head = 1, tail = 0, count = 2
+
+push D:
+items = [D, B, C]
+head = 1, tail = 1, count = 3
+```
+
+Nell'ultimo stato la coda e' piena anche se `head == tail`. Per questo
+`alfred_record_queue_is_full()` controlla `count == capacity`, mentre
+`alfred_record_queue_is_empty()` controlla `count == 0`.
+
+Le funzioni che gestiscono questa struttura sono:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_queue_init()` | alloca il buffer `items` con capacita' fissa |
+| `alfred_record_queue_push()` | clona un record borrowed in owned e lo inserisce in `items[tail]` |
+| `alfred_record_queue_pop()` | estrae `items[head]` e trasferisce ownership al chiamante |
+| `alfred_record_queue_clear()` | distrugge i record owned ancora accodati ma conserva il buffer |
+| `alfred_record_queue_destroy()` | distrugge i record accodati, libera `items` e azzera la struttura |
+| `alfred_record_queue_count()` | restituisce quanti record sono presenti |
+| `alfred_record_queue_capacity()` | restituisce la capacita' massima |
+| `alfred_record_queue_is_empty()` | verifica se `count == 0` |
+| `alfred_record_queue_is_full()` | verifica se `count == capacity` |
+
+La scelta di un buffer circolare bounded serve a rendere esplicito il limite di
+memoria. Se la coda e' piena, `push()` fallisce invece di crescere senza limite.
+Questa e' una proprieta' importante per Alfred: un writer lento non deve poter
+trasformare il processo in una crescita incontrollata di memoria.
+
+Nella v0 la coda e' ancora single-threaded. Non contiene mutex, condition
+variable o primitive atomiche. Prima di renderla usabile da un worker thread,
+dovremo decidere la policy di sincronizzazione, backpressure e shutdown.
+
 ## Fase 1: coda comune
 
 La prima forma runtime da implementare dovrebbe usare una sola coda comune.

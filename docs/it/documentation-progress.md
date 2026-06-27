@@ -962,3 +962,23 @@ JSONL writer`) dal target della milestone, in cui il percorso caldo deve
 terminare al solo enqueue bounded. `32-writer-api-v0.md` rimanda a questa mappa
 per evitare ambiguita' fra API gia' presenti, bridge runtime transitori e
 runtime writer asincrono futuro.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` spiega ora anche il
+buffer circolare `alfred_record_queue_t`: campi (`items`, `capacity`, `head`,
+`tail`, `count`), avanzamento con modulo, esempio con capacita' tre, funzioni
+di gestione e motivo architetturale della coda bounded. Questa spiegazione
+serve agli studenti e sara' riusata come nota architetturale nella PR della
+milestone Writer Runtime v0.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` documenta anche le
+funzioni candidate del prossimo micro-refactor:
+`app_enqueue_output_record()` e `app_drain_output_pipeline()`. Il capitolo
+spiega le sottofunzioni chiamate nei due percorsi, dalla clone owned al push in
+coda, e dal drain bounded fino a dispatcher, JSONL writer, callback byte e
+destroy del record owned.
+
+Aggiornamento successivo: `00-regole-operative.md` e
+`11-come-contribuire.md` chiariscono la regola per le issue madri: ogni issue
+madre deve linkare vicino al goal la roadmap MD principale della milestone con
+un blocco `Primary roadmap`. La lista piu' ampia dei documenti da leggere resta
+utile, ma non sostituisce il link esplicito al documento operativo principale.

@@ -115,6 +115,10 @@ issue anche se non legge subito tutti gli MD.
 
 Regola:
 
+- ogni issue madre deve avere subito dopo il goal un blocco `Primary roadmap`
+  con link GitHub cliccabile al documento roadmap MD corrispondente;
+- il blocco `Primary roadmap` deve spiegare in una frase perche' quel documento
+  e' il riferimento operativo principale della milestone;
 - usare link GitHub cliccabili ai documenti;
 - quando utile, linkare anche i paragrafi specifici;
 - aggiungere un riassunto breve di cosa dice ogni documento;
@@ -126,6 +130,11 @@ Regola:
 Esempio di forma corretta:
 
 ```text
+Primary roadmap:
+[Writer Runtime Roadmap v0](https://github.com/kinderp/alfred/blob/main/docs/it/33-writer-runtime-roadmap-v0.md)
+e' il riferimento operativo della milestone: descrive pipeline corrente,
+queue/drain boundary, coda bounded, micro-step e criteri di completamento.
+
 [Writer API v0](https://github.com/kinderp/alfred/blob/main/docs/it/32-writer-api-v0.md)
 spiega perche' i writer devono restare fuori dal percorso caldo. Le sezioni
 piu' rilevanti sono Percorso caldo, Output pipeline sperimentale, Ownership e
