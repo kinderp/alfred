@@ -126,19 +126,31 @@ La conseguenza pratica per il codice corrente e':
 ## Mappa della pipeline corrente
 
 La pipeline corrente e' volutamente transitoria: introduce gli oggetti del
-Writer Runtime v0, ma li usa ancora in modo sincrono. Questo significa che il
-record puo' attraversare coda, dispatcher e writer nella stessa catena di
-chiamate che ha ricevuto l'evento dal backend.
+Writer Runtime v0, ma li usa ancora in modo single-threaded. Questo significa
+che non esiste ancora un worker separato: il producer accoda il record, poi il
+loop applicativo drena la coda dopo il polling backend.
 
-Il percorso completo, quando `output_enabled=true`, e':
+Il percorso normale, quando `output_enabled=true`, e' diviso in due lati.
+
+Lato producer:
 
 ```text
 evento raw, semantico o diagnostico
 -> alfred_record_t borrowed
 -> app_emit_output_record()
+-> app_enqueue_output_record()
 -> alfred_record_output_pipeline_enqueue()
 -> alfred_record_queue_push()
 -> alfred_record_clone_owned()
+-> record owned nella queue bounded
+```
+
+Lato consumer/drain:
+
+```text
+app_run()
+-> inotify_backend_poll()
+-> app_drain_output_pipeline()
 -> alfred_record_output_pipeline_drain_once()
 -> alfred_record_runtime_drain_once()
 -> alfred_record_dispatcher_drain_queue()
@@ -151,10 +163,29 @@ evento raw, semantico o diagnostico
 -> write_output_bytes()
 ```
 
-Questa catena e' utile per validare contratto, ownership, formattazione JSONL e
-fail-closed della pipeline strutturata. Non e' ancora il percorso finale di
-produzione, perche' il backend puo' ancora arrivare fino al writer nello stesso
-turno di esecuzione.
+Con `output_format=counter`, il lato producer e il drain sono gli stessi, ma il
+dispatcher chiama il counter sink invece del JSONL writer:
+
+```text
+alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+```
+
+Esiste una sola eccezione intenzionale: se una burst ricevuta da
+`inotify_backend_poll()` riempie la queue prima che `app_run()` possa drenarla,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta una sola
+volta l'enqueue.
+
+```text
+app_enqueue_output_record()
+-> queue piena
+-> app_drain_output_pipeline()
+-> retry alfred_record_output_pipeline_enqueue()
+```
+
+Questa eccezione e' la valvola di pressione v0. Mantiene bounded la memoria
+senza introdurre thread reali, ma non e' il modello finale di produzione. Il
+worker runtime futuro dovra' spostare anche questo caso fuori dal producer.
 
 ### Raw normalizzati
 
@@ -174,11 +205,12 @@ Se la pipeline JSONL e' abilitata, lo stesso record viene anche offerto a:
 
 ```text
 app_emit_output_record()
+-> app_enqueue_output_record()
 -> queue
--> drain
--> dispatcher
--> JSONL writer
 ```
+
+Il drain comune avverra' poi da `app_run()` dopo il poll backend, verso JSONL o
+counter secondo `output_format`.
 
 Dopo il ponte raw, `handle_backend_event()` passa comunque il raw originale a
 `alfred_process()`. Il core continua quindi a ricevere il fatto raw originale e
@@ -193,7 +225,8 @@ semantico converte l'evento una sola volta:
 alfred_event_t
 -> alfred_record_from_event()
 -> app_emit_output_record()
--> queue / drain / dispatcher / JSONL writer
+-> app_enqueue_output_record()
+-> queue
 -> alfred_record_text_sink_emit()
 -> events.log compatibile
 ```
@@ -226,7 +259,8 @@ anche alla pipeline strutturata:
 ```text
 WATCH_* record
 -> app_emit_output_record()
--> queue / drain / dispatcher / JSONL writer
+-> app_enqueue_output_record()
+-> queue
 ```
 
 Anche qui il record e' borrowed fino alla coda. La chiamata a
