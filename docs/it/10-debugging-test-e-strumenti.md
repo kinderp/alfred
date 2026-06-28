@@ -3197,7 +3197,10 @@ output_buffer_size=8192kb
 `protobuf` e i buffer invalidi falliscono durante il parsing della
 configurazione. `output_enabled=true` con `output_format=text` fallisce invece
 allo startup runtime: il parser conosce `text` come valore futuro, ma `app.c`
-abilita per ora solo JSONL.
+abilita oggi solo `jsonl` e `counter` come formati runtime. `jsonl` produce il
+ledger strutturato utente; `counter` attraversa lo stesso confine
+`record -> queue -> dispatcher -> sink`, ma conta i record senza formattazione
+e senza I/O su `output_log`.
 
 ### Provare gli eventi audit inotify
 
