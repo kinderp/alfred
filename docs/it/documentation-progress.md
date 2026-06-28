@@ -1073,3 +1073,12 @@ controlla che i log compatibili restino presenti, verifica la riga
 `output runtime stats` e conferma che il file `output_log` non venga creato.
 In questo modo il benchmark manuale misura le prestazioni, mentre il test
 backend verifica la correttezza del percorso counter.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` registra un debito
+di test non bloccante su `test_output_pipeline_runtime.sh`. Il test usa ancora
+alcuni `sleep` fissi, ma non presenta la stessa race del conteggio generico di
+righe corretta in `test_output_queue_pressure.sh`: le asserzioni finali cercano
+record concreti. Il TODO documenta il cleanup futuro: sostituire gli sleep con
+attese esplicite sui record `FILE_CREATED`, `DIR_CREATED`, `WATCH_STALE`,
+`WATCH_RESYNC_*`, `WATCH_LOST_QUEUED` e JSONL equivalenti se il test diventa
+flaky.

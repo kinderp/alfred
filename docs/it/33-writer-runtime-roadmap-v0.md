@@ -291,6 +291,42 @@ record borrowed
 Tutto quello che avviene dopo il pop dalla coda deve diventare lavoro del lato
 runtime/writer, non del backend.
 
+### Debito di test non bloccante
+
+`tests/backend/test_output_pipeline_runtime.sh` usa ancora alcuni `sleep` fissi
+per lasciare tempo ad Alfred di inizializzare il backend, osservare le azioni di
+test e drenare la pipeline strutturata prima delle asserzioni finali.
+
+Questo non e' lo stesso problema corretto in
+`tests/backend/test_output_queue_pressure.sh`: il test pipeline runtime non usa
+un conteggio generico di righe come prova che il workload sia completo. Le
+asserzioni finali controllano record concreti in `raw.log`, `events.log` e
+`output.jsonl`, per esempio `FILE_CREATED`, `DIR_CREATED`, `WATCH_STALE`,
+`WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e `WATCH_LOST_QUEUED`.
+
+Il rischio residuo e' piu' debole:
+
+```text
+sleep fisso troppo corto su una CI lenta
+-> Alfred non ha ancora processato tutti i record attesi
+-> il test fallisce anche se il comportamento runtime e' corretto
+```
+
+TODO(test): se `test_output_pipeline_runtime.sh` diventa flaky, sostituire gli
+`sleep` ampi con attese esplicite sui record concreti che chiudono ogni
+scenario:
+
+- `FILE_CREATED` per il file breve;
+- `FILE_CREATED` per il file con path lungo;
+- `DIR_CREATED` per la directory creata;
+- `WATCH_STALE` / `WATCH_REMOVED` per la directory rimossa;
+- `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED` e `WATCH_LOST_QUEUED` per il caso
+  `IN_MOVE_SELF`;
+- record JSONL equivalenti quando `output_enabled=true`.
+
+Questo cleanup rendera' il test piu' deterministico, ma non e' bloccante per la
+chiusura della PR che corregge la race del conteggio generico di righe.
+
 ## Regola del percorso caldo
 
 Il percorso caldo target e':
