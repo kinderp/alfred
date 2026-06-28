@@ -61,6 +61,68 @@ concreto e' il rapporto fra `events.log` e JSONL: il text writer compatibile puo
 fallire su una riga umana troppo lunga, ma il record strutturato deve comunque
 essere offerto alla pipeline JSONL.
 
+## Decisione di chiusura v0
+
+Writer Runtime v0 viene chiuso come runtime single-threaded documentato.
+Questa non e' la forma finale di Alfred, ma e' il confine corretto per questa
+milestone: stabilizza record, ownership, coda bounded, drain, dispatcher, sink,
+JSONL writer e counter sink senza introdurre ancora concorrenza reale.
+
+Dentro questa v0 sono quindi inclusi:
+
+- record strutturati `alfred_record_t`;
+- adapter raw, semantici e diagnostici verso record;
+- copia owned dei record al confine della coda;
+- `alfred_record_queue_t` bounded e single-threaded;
+- drain runtime esplicito dopo il polling backend;
+- valvola di pressione v0 quando la coda si riempie durante una burst;
+- dispatcher bounded verso sink registrati;
+- sink JSONL buffered collegato al runtime opt-in;
+- sink counter/no-op collegato al runtime opt-in per benchmark;
+- contatori runtime per capire enqueue, drain, pressione e record consegnati;
+- test backend, golden JSONL e benchmark di orientamento.
+
+Restano fuori da Writer Runtime v0:
+
+- worker thread dedicato;
+- condition variable, mutex o primitive atomiche nella queue;
+- code separate per sink;
+- policy per sink `critical`, `best_effort` e `debug`;
+- retry, requeue, drop controllato o dead-letter queue;
+- socket writer, protobuf, MessagePack e writer binari;
+- plugin writer dinamici;
+- garanzie di latenza p95/p99 su workload reali;
+- separazione completa fra loop backend e loop writer.
+
+La scelta e' intenzionale. Inserire ora un worker thread renderebbe la PR piu'
+grande e cambierebbe contemporaneamente troppi contratti: lifetime dei record,
+shutdown, error propagation, backpressure, sincronizzazione, ordine dei record,
+test e benchmark. La v0 deve invece dimostrare prima il confine:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+-> drain esplicito
+-> dispatcher
+-> sink
+```
+
+Quando questo confine e' stabile, il lavoro successivo puo' sostituire il drain
+sincrono con un worker senza cambiare il contratto pubblico dei record o la
+responsabilita' dei writer.
+
+La conseguenza pratica per il codice corrente e':
+
+- `app_enqueue_output_record()` rappresenta il lato producer e il futuro fine
+  del percorso caldo;
+- `app_drain_output_pipeline()` rappresenta il lato consumer, oggi ancora nello
+  stesso thread;
+- la valvola di pressione resta una soluzione v0 per non fallire su burst
+  legittime prima che esista un worker;
+- i benchmark counter/jsonl servono a misurare il costo della pipeline senza
+  confondere subito i risultati con scheduling e lock.
+
 ## Mappa della pipeline corrente
 
 La pipeline corrente e' volutamente transitoria: introduce gli oggetti del

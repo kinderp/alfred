@@ -726,6 +726,16 @@ sink. `README.md`, `27-guida-lettura-documentazione.md`,
 `31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
 stati aggiornati per rimandare al nuovo capitolo.
 
+Aggiornamento successivo: la roadmap Writer Runtime v0 dichiara esplicitamente
+la decisione di chiusura della v0 come runtime single-threaded documentato. Il
+confine corrente comprende record owned al limite della coda, coda bounded,
+drain esplicito, dispatcher, sink JSONL, counter sink, contatori runtime, test
+backend, golden JSONL e benchmark di orientamento. Restano fuori dalla v0 worker
+thread, code per sink, policy `critical`/`best_effort`/`debug`, retry/drop
+avanzati, writer socket/binari e garanzie di latenza su workload reali. Questa
+scelta evita di introdurre concorrenza reale prima di stabilizzare ownership,
+backpressure minima e contratto JSONL.
+
 Aggiornamento successivo: `00-regole-operative.md` e
 `10-debugging-test-e-strumenti.md` chiariscono la regola di scelta dei test.
 I contratti interni fra moduli, ownership, queue, dispatcher, sink e writer
