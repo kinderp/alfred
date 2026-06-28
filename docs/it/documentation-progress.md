@@ -1055,3 +1055,11 @@ perf-runtime-output` produce ora tre righe per run: `compat-only`,
 `compat-only` misura il costo della pipeline strutturata senza writer reale; il
 confronto `jsonl-output` vs `counter-output` isola il costo aggiuntivo di JSONL,
 buffering e scrittura file.
+
+Aggiornamento successivo: `tests/backend/test_output_counter_runtime.sh`
+promuove `output_format=counter` da sola baseline benchmark a contratto runtime
+testato end-to-end. Il test avvia Alfred reale, genera eventi filesystem,
+controlla che i log compatibili restino presenti, verifica la riga
+`output runtime stats` e conferma che il file `output_log` non venga creato.
+In questo modo il benchmark manuale misura le prestazioni, mentre il test
+backend verifica la correttezza del percorso counter.

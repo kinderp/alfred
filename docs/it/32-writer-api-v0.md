@@ -667,7 +667,9 @@ cambiare il comportamento storico. Quando e' acceso, il percorso JSONL e'
 aggiuntivo: `raw.log`, `events.log` ed `errors.log` continuano a essere prodotti.
 Per i benchmark runtime esiste anche `output_format=counter`: usa lo stesso
 confine `record -> queue -> dispatcher`, ma termina in un sink no-op che conta i
-record senza produrre `output_log`.
+record senza produrre `output_log`. La chiave `output_buffer_size` resta
+validata dal parser come chiave globale della configurazione output; in counter
+mode pero' `app.c` non alloca e non usa i buffer JSONL.
 
 Campi:
 
