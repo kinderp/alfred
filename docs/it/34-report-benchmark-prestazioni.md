@@ -435,7 +435,7 @@ Le prossime misure utili sono:
 1. Ripetere `make perf-record-sinks` con `--runs 5` o piu' per ridurre il rumore.
 2. Aggiungere un benchmark con writer JSONL che scrive su file temporaneo.
 3. Confrontare flush finale, flush periodico e flush per record.
-4. Misurare buffer JSONL diversi: `4096`, `65536`, `262144`.
+4. Misurare buffer JSONL diversi: `8192`, `65536`, `262144`.
 5. Eseguire `make perf-runtime-output` con `--runs 5` e file count crescente per
    confrontare runtime compatibile, runtime counter e runtime JSONL opt-in.
 6. Usare `counter-output` come baseline runtime senza writer reale e confrontarlo
