@@ -726,6 +726,16 @@ sink. `README.md`, `27-guida-lettura-documentazione.md`,
 `31-milestone-inotify-reference-backend.md` e `26-stato-funzionalita.md` sono
 stati aggiornati per rimandare al nuovo capitolo.
 
+Aggiornamento successivo: la roadmap Writer Runtime v0 dichiara esplicitamente
+la decisione di chiusura della v0 come runtime single-threaded documentato. Il
+confine corrente comprende record owned al limite della coda, coda bounded,
+drain esplicito, dispatcher, sink JSONL, counter sink, contatori runtime, test
+backend, golden JSONL e benchmark di orientamento. Restano fuori dalla v0 worker
+thread, code per sink, policy `critical`/`best_effort`/`debug`, retry/drop
+avanzati, writer socket/binari e garanzie di latenza su workload reali. Questa
+scelta evita di introdurre concorrenza reale prima di stabilizzare ownership,
+backpressure minima e contratto JSONL.
+
 Aggiornamento successivo: `00-regole-operative.md` e
 `10-debugging-test-e-strumenti.md` chiariscono la regola di scelta dei test.
 I contratti interni fra moduli, ownership, queue, dispatcher, sink e writer
@@ -954,3 +964,112 @@ audit esplorativi, audit notturni e follow-up collegati. `00-regole-operative.md
 documentano ora che le issue madre degli audit usano `area:tests` +
 `kind:audit`, mentre le issue figlie mantengono `kind:audit` e aggiungono
 `kind:bug`, `kind:test` o `kind:debt` secondo il risultato.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` contiene ora la
+mappa della pipeline strutturata corrente. Il documento distingue il percorso
+sincrono oggi implementato (`record -> enqueue -> drain -> dispatcher ->
+JSONL writer`) dal target della milestone, in cui il percorso caldo deve
+terminare al solo enqueue bounded. `32-writer-api-v0.md` rimanda a questa mappa
+per evitare ambiguita' fra API gia' presenti, bridge runtime transitori e
+runtime writer asincrono futuro.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` spiega ora anche il
+buffer circolare `alfred_record_queue_t`: campi (`items`, `capacity`, `head`,
+`tail`, `count`), avanzamento con modulo, esempio con capacita' tre, funzioni
+di gestione e motivo architetturale della coda bounded. Questa spiegazione
+serve agli studenti e sara' riusata come nota architetturale nella PR della
+milestone Writer Runtime v0.
+
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` documenta anche le
+funzioni candidate del prossimo micro-refactor:
+`app_enqueue_output_record()` e `app_drain_output_pipeline()`. Il capitolo
+spiega le sottofunzioni chiamate nei due percorsi, dalla clone owned al push in
+coda, e dal drain bounded fino a dispatcher, JSONL writer, callback byte e
+destroy del record owned.
+
+Aggiornamento successivo: `00-regole-operative.md` e
+`11-come-contribuire.md` chiariscono la regola per le issue madri: ogni issue
+madre deve linkare vicino al goal la roadmap MD principale della milestone con
+un blocco `Primary roadmap`. La lista piu' ampia dei documenti da leggere resta
+utile, ma non sostituisce il link esplicito al documento operativo principale.
+
+Aggiornamento successivo: `00-regole-operative.md` aggiunge una regola per i
+commit che modificano call path rilevanti. Il body deve spiegare in inglese il
+punto di ingresso, gli helper principali, le responsabilita' delle sottofunzioni
+e gli eventuali effetti su ownership, I/O, hot path, API o comportamento
+osservabile. I commit banali restano esclusi per non appesantire la history.
+
+Aggiornamento successivo: `00-regole-operative.md` chiarisce che le issue madri
+devono mantenere una tabella `Implementation traceability`. Ogni elemento della
+checklist deve essere collegato a commit, PR o issue figlie rilevanti, cosi' si
+puo' capire quali modifiche implementano o preparano ciascun punto del piano.
+
+Aggiornamento successivo: la documentazione dei test runtime output chiarisce
+che `test_output_pipeline_runtime.sh` copre anche il nuovo wrapper sincrono
+`app_emit_output_record() -> app_enqueue_output_record() ->
+app_drain_output_pipeline()`. Il caso `/dev/full` resta il contratto principale
+per verificare che errori di enqueue, drain/write e flush finale non producano
+un ledger JSONL incompleto con exit status di successo.
+
+Aggiornamento successivo: `04-livello-applicazione.md` allinea la descrizione
+didattica di `app_t` al codice corrente. `running` e' ora spiegata come
+`volatile sig_atomic_t` usata per shutdown cooperativo da signal handler, mentre
+`output_failed` e le risorse della pipeline strutturata sono elencate fra i
+campi importanti del runtime applicativo.
+
+Aggiornamento successivo: `make perf-runtime-output` introduce il primo
+benchmark manuale del runtime output reale. A differenza di
+`perf-record-sinks`, avvia Alfred, crea file reali sotto inotify e confronta
+`output_enabled=false` con `output_enabled=true`, lasciando artifact separati
+per ogni run. `10-debugging-test-e-strumenti.md`, `26-stato-funzionalita.md` e
+`33-writer-runtime-roadmap-v0.md` spiegano scopo, CSV e limiti della misura.
+
+Aggiornamento successivo: il benchmark runtime output disabilita LeakSanitizer
+nel processo Alfred misurato, perche' LSAN puo' fallire in ambienti ristretti e
+sporcare `process_status` anche quando `errors.log` e lo shutdown sono puliti.
+Lo script aspetta inoltre almeno `files * 3` righe evento prima di fermare
+Alfred, cosi' il confronto non interrompe il workload prima dei record
+`FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY` attesi.
+
+Aggiornamento successivo: il runtime output separa meglio producer e consumer.
+`app_emit_output_record()` ora accoda soltanto tramite
+`app_enqueue_output_record()`, mentre `app_run()` chiama
+`app_drain_output_pipeline()` dopo ogni poll backend. Il runtime resta
+single-threaded: se una burst riempie la coda prima che il poll ritorni,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta l'enqueue
+una sola volta. Il punto che un futuro worker thread dovra' sostituire e' ora
+esplicito nel loop applicativo e nella valvola di backpressure v0.
+
+Aggiornamento successivo: `app_t` espone contatori locali
+`output_stats` per osservare Writer Runtime v0 senza promuovere ancora metriche
+pubbliche. A shutdown, con `output_enabled=true`, Alfred scrive in `events.log`
+una riga `output runtime stats ...` con enqueue tentati/riusciti/falliti,
+pressure drain, drain call, record drenati e massimo pending osservato. Il
+benchmark `make perf-runtime-output` include questi campi nel CSV per capire
+quando la coda bounded sta assorbendo una burst.
+
+Aggiornamento successivo: `tests/backend/test_output_queue_pressure.sh` verifica
+in modo mirato la valvola di pressione v0. Il test crea una burst abbastanza
+grande da riempire la coda bounded, poi controlla che `pressure_drains>0`,
+`max_pending` raggiunga la capacita' corrente, `enqueue_failures=0` e
+`drained_records=enqueue_success`. `10-debugging-test-e-strumenti.md` e
+`34-report-benchmark-prestazioni.md` spiegano i nuovi campi benchmark con
+esempi didattici.
+
+Aggiornamento successivo: il runtime output supporta anche
+`output_format=counter` come formato benchmark/no-op. `counter` non e' un writer
+utente: attraversa `record -> queue -> drain -> dispatcher -> counter sink`
+senza formattazione JSONL, senza `output_log` e senza file I/O. `make
+perf-runtime-output` produce ora tre righe per run: `compat-only`,
+`counter-output` e `jsonl-output`. Il confronto `counter-output` vs
+`compat-only` misura il costo della pipeline strutturata senza writer reale; il
+confronto `jsonl-output` vs `counter-output` isola il costo aggiuntivo di JSONL,
+buffering e scrittura file.
+
+Aggiornamento successivo: `tests/backend/test_output_counter_runtime.sh`
+promuove `output_format=counter` da sola baseline benchmark a contratto runtime
+testato end-to-end. Il test avvia Alfred reale, genera eventi filesystem,
+controlla che i log compatibili restino presenti, verifica la riga
+`output runtime stats` e conferma che il file `output_log` non venga creato.
+In questo modo il benchmark manuale misura le prestazioni, mentre il test
+backend verifica la correttezza del percorso counter.

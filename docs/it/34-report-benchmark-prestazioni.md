@@ -13,9 +13,12 @@ Questo report invece registra le misure effettivamente raccolte e le
 interpretazioni che ne derivano.
 
 La regola piu' importante e' non leggere questi numeri come una promessa di
-prestazioni di Alfred in produzione. Le misure correnti usano record sintetici,
-girano in memoria e non attraversano ancora `app_run()`, inotify reale, file I/O,
-socket, thread, lock, wakeup o backpressure reale.
+prestazioni di Alfred in produzione. Le misure storiche iniziali usavano record
+sintetici e giravano in memoria. Il benchmark `make perf-runtime-output`
+attraversa invece `app_run()`, inotify reale, file creati sul filesystem e
+output JSONL su file temporaneo. Restano fuori dal report attuale socket,
+thread, lock espliciti, code per sink, percentili e backpressure asincrona
+reale.
 
 ## Obiettivo del processo
 
@@ -51,6 +54,8 @@ I benchmark attuali servono a rispondere a domande molto concrete:
 5. Quanto costa comporre queue, runtime drain, dispatcher e writer buffered?
 6. La nuova astrazione `alfred_record_output_pipeline_t` aggiunge overhead
    evidente rispetto ai pezzi misurati separatamente?
+7. Quando il runtime reale produce una burst, la coda bounded resta osservabile
+   tramite contatori locali?
 
 ## Comandi usati
 
@@ -88,8 +93,9 @@ Per ora le misure hanno questi limiti:
 - non fissiamo affinity CPU;
 - non disabilitiamo governor dinamici della CPU;
 - non misuriamo p95/p99 latency;
-- non misuriamo queue depth nel tempo;
-- non misuriamo drop o backpressure reale;
+- non misuriamo queue depth continua nel tempo;
+- misuriamo solo la valvola di pressione single-threaded v0, non backpressure
+  asincrona reale;
 - non misuriamo disco, socket o thread;
 - non misuriamo eventi kernel reali.
 
@@ -115,6 +121,9 @@ nel run corrente.
 | `queue-dispatcher-jsonl` | `record -> queue -> dispatcher -> JSONL` | Queue piu' dispatcher piu' JSONL |
 | `queue-dispatcher-counter-text-jsonl` | `record -> queue -> dispatcher -> counter + text + JSONL` | Fan-out single-threaded dopo queue |
 | `output-pipeline-jsonl` | `record -> output pipeline enqueue -> runtime drain -> dispatcher -> JSONL buffered writer -> flush in memoria` | Prima misura dell'oggetto pipeline che potra' essere collegato ad `app_run()` |
+| `runtime-output compat-only` | `alfred reale -> inotify -> app callback -> log compatibili` | Baseline runtime reale senza pipeline JSONL |
+| `runtime-output counter-output` | `alfred reale -> inotify -> app callback -> output pipeline -> counter sink` | Baseline runtime reale della pipeline senza serializzazione e senza file JSONL |
+| `runtime-output jsonl-output` | `alfred reale -> inotify -> app callback -> output pipeline -> JSONL file` | Misura runtime reale con `output_enabled=true` e writer JSONL |
 
 ## Misura 1: run da 100000 record
 
@@ -246,6 +255,105 @@ Anche in quel caso la conclusione corretta non era che la pipeline fosse piu'
 veloce. La conclusione era: le due misure sono praticamente allineate e quindi
 non si vede overhead macroscopico del wrapper `alfred_record_output_pipeline_t`.
 
+## Misura 3: runtime reale con output opt-in
+
+Comando:
+
+```bash
+make perf-runtime-output
+```
+
+Questo run non usa record sintetici: avvia Alfred reale, crea file reali sotto
+una directory osservata da inotify e confronta runtime compatibile, runtime
+pipeline senza writer reale e runtime JSONL opt-in.
+
+Output osservato in questo run:
+
+```text
+mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir
+compat-only,1,1000,0,1056593,281258,78503,1476152,3555.45,6006,3012,0,0,0,0,0,0,0,0,0,/tmp/alfred_perf_runtime_output/compat-only/run-1
+counter-output,1,1000,0,1029213,213268,268141,1540276,4688.94,6003,3014,0,0,6001,6001,0,4,94,6001,1024,/tmp/alfred_perf_runtime_output/counter-output/run-1
+jsonl-output,1,1000,0,1114471,292240,406527,1838986,3421.85,6003,3014,6001,1503121,6001,6001,0,4,58,6001,1024,/tmp/alfred_perf_runtime_output/jsonl-output/run-1
+```
+
+Lettura provvisoria:
+
+- il run dimostra che il benchmark operativo funziona e produce artifact
+  separati per confrontare `raw.log`, `events.log`, `errors.log` e
+  `output.jsonl`;
+- `counter-output` attraversa `record -> queue -> drain -> dispatcher -> counter
+  sink` e chiude con `jsonl_lines=0` e `jsonl_bytes=0`. Questo e' il risultato
+  corretto: il formato counter misura la pipeline runtime senza serializzazione
+  JSONL e senza file output;
+- `jsonl-output` produce circa 6000 righe JSONL e circa 1.5 MB di output per
+  1000 file creati;
+- in `counter-output` e `jsonl-output`, `enqueue_attempts=enqueue_success` e
+  `drained_records=6001` indicano che tutti i record offerti alla pipeline
+  strutturata sono stati accodati e poi consegnati al dispatcher;
+- `enqueue_failures=0` indica che la burst non ha prodotto un ledger incompleto;
+- `pressure_drains=4` indica che il producer ha trovato la coda piena quattro
+  volte e ha usato la valvola di pressione v0 per drenare e ritentare;
+- `max_pending=1024` indica che la coda bounded ha raggiunto la capacita'
+  corrente durante il workload;
+- `emit_us` misura soprattutto il loop shell e il filesystem, non solo Alfred.
+  Per questo il valore puo' risultare piu' basso in una modalita' e piu' alto
+  nell'altra senza indicare automaticamente un miglioramento reale;
+- `settle_us` e `total_us` sono piu' utili per osservare quanto tempo serve al
+  processo completo per smaltire eventi, flushare e chiudere;
+- `process_status=0` conferma che lo script ha disabilitato LeakSanitizer nel
+  processo misurato e che lo shutdown cooperativo non viene sporcato da
+  diagnostica sanitizer. Un run precedente mostrava `process_status=1` con
+  `errors.log` vuoto proprio perche' LSAN falliva nell'ambiente di esecuzione;
+- lo script aspetta almeno `files * 3` righe in `events.log`, perche' una
+  creazione file semplice produce tipicamente `FILE_CREATED`, `FILE_MODIFIED` e
+  `FILE_READY`. Questo evita di fermare Alfred prima che il workload sia stato
+  smaltito.
+
+Questa misura non sostituisce i micro-benchmark. Serve a confrontare la pipeline
+sintetica con il runtime reale:
+
+```text
+queue-dispatcher-jsonl    -> costo interno queue + dispatcher + JSONL
+output-pipeline-jsonl     -> costo della pipeline composta in memoria
+runtime counter-output    -> costo osservato della pipeline senza writer reale
+runtime jsonl-output      -> costo osservato della pipeline con JSONL e I/O file
+```
+
+### Come leggere i nuovi campi runtime
+
+I campi `enqueue_*`, `pressure_drains`, `drain_calls`, `drained_records` e
+`max_pending` sono contatori locali del Writer Runtime v0. Non sono ancora una
+API pubblica di metriche: servono a noi per capire come si comporta il confine
+`record -> queue -> dispatcher -> writer` durante i benchmark.
+
+La lettura consigliata e':
+
+| Campo | Domanda a cui risponde |
+| --- | --- |
+| `enqueue_attempts` | Quanti record sono stati offerti alla pipeline strutturata? |
+| `enqueue_success` | Quanti record sono entrati davvero nella coda bounded? |
+| `enqueue_failures` | Ci sono stati record persi o rifiutati dal percorso strutturato? |
+| `pressure_drains` | Quante volte il producer ha trovato la coda piena e ha drenato sotto pressione? |
+| `drain_calls` | Quante volte il runtime ha provato a svuotare la coda? |
+| `drained_records` | Quanti record sono arrivati al dispatcher e ai sink? |
+| `max_pending` | Quanto si e' riempita al massimo la coda durante il run? |
+
+Esempi di interpretazione:
+
+- `enqueue_attempts=0` in `compat-only`: corretto, perche' la pipeline
+  strutturata e' disabilitata.
+- `jsonl_lines=0` e `jsonl_bytes=0` in `counter-output`: corretto, perche' il
+  sink counter conta i record ma non produce un ledger JSONL.
+- `enqueue_attempts=enqueue_success=drained_records` e `enqueue_failures=0`:
+  tutti i record accodati sono stati consegnati.
+- `pressure_drains=0` e `max_pending` basso: il workload non ha stressato la
+  coda.
+- `pressure_drains>0` e `max_pending=1024`: la coda bounded e' arrivata piena.
+  Nella v0 single-threaded il producer drena una volta e ritenta l'enqueue.
+- `enqueue_failures>0`: il percorso output non e' affidabile per quel run; con
+  `output_enabled=true` Alfred deve uscire con errore invece di fingere che il
+  ledger JSONL sia completo.
+
 ## Cosa possiamo concludere oggi
 
 Le conclusioni provvisorie sono:
@@ -262,6 +370,15 @@ Le conclusioni provvisorie sono:
 5. La scelta architetturale `record -> queue -> dispatcher -> writer` resta
    sensata: separa responsabilita', prepara writer diversi e non mostra ancora
    un costo strutturale preoccupante.
+6. Nel runtime reale la coda bounded puo' riempirsi durante una burst
+   concentrata. La valvola di pressione v0 evita fallimenti falsi, ma il dato
+   conferma che il worker asincrono e le future code per sink non sono dettagli
+   estetici: serviranno per isolare meglio producer e consumer.
+7. La nuova riga `counter-output` permette finalmente di separare, anche nel
+   runtime reale, il costo del confine queue/dispatcher dal costo del writer
+   JSONL. Su questo run singolo `jsonl-output` e' piu' lento di
+   `counter-output`, ma il dato va ripetuto con piu' run prima di trarre
+   conclusioni quantitative.
 
 ## Cosa non possiamo concludere oggi
 
@@ -274,7 +391,7 @@ Non possiamo ancora dire:
 - quanto incide `fflush()`;
 - quanto incide un socket;
 - quanto incide un thread dispatcher;
-- come si comporta la backpressure;
+- come si comporteranno backpressure asincrona, worker thread e code per sink;
 - cosa succede se un sink e' lento;
 - quale buffer size e' ottimale;
 - quale sara' il comportamento p95/p99.
@@ -318,10 +435,14 @@ Le prossime misure utili sono:
 1. Ripetere `make perf-record-sinks` con `--runs 5` o piu' per ridurre il rumore.
 2. Aggiungere un benchmark con writer JSONL che scrive su file temporaneo.
 3. Confrontare flush finale, flush periodico e flush per record.
-4. Misurare buffer JSONL diversi: `4096`, `65536`, `262144`.
-5. Misurare il percorso ora collegato ad `app_run()` con `output_enabled=true`.
-6. Aggiungere un no-op pipeline sink per separare costo pipeline da costo JSONL.
-7. Misurare queue depth e dropped records quando introdurremo backpressure reale.
+4. Misurare buffer JSONL diversi: `8192`, `65536`, `262144`.
+5. Eseguire `make perf-runtime-output` con `--runs 5` e file count crescente per
+   confrontare runtime compatibile, runtime counter e runtime JSONL opt-in.
+6. Usare `counter-output` come baseline runtime senza writer reale e confrontarlo
+   con `jsonl-output` per isolare il costo di serializzazione, buffering e file
+   I/O.
+7. Misurare `pressure_drains`, `max_pending`, eventuali drop e latenza quando
+   introdurremo backpressure reale, worker thread e code per sink.
 8. Misurare un futuro writer binario, per esempio MessagePack o protocollo
    binario interno.
 

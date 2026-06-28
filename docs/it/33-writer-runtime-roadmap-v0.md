@@ -61,6 +61,236 @@ concreto e' il rapporto fra `events.log` e JSONL: il text writer compatibile puo
 fallire su una riga umana troppo lunga, ma il record strutturato deve comunque
 essere offerto alla pipeline JSONL.
 
+## Decisione di chiusura v0
+
+Writer Runtime v0 viene chiuso come runtime single-threaded documentato.
+Questa non e' la forma finale di Alfred, ma e' il confine corretto per questa
+milestone: stabilizza record, ownership, coda bounded, drain, dispatcher, sink,
+JSONL writer e counter sink senza introdurre ancora concorrenza reale.
+
+Dentro questa v0 sono quindi inclusi:
+
+- record strutturati `alfred_record_t`;
+- adapter raw, semantici e diagnostici verso record;
+- copia owned dei record al confine della coda;
+- `alfred_record_queue_t` bounded e single-threaded;
+- drain runtime esplicito dopo il polling backend;
+- valvola di pressione v0 quando la coda si riempie durante una burst;
+- dispatcher bounded verso sink registrati;
+- sink JSONL buffered collegato al runtime opt-in;
+- sink counter/no-op collegato al runtime opt-in per benchmark;
+- contatori runtime per capire enqueue, drain, pressione e record consegnati;
+- test backend, golden JSONL e benchmark di orientamento.
+
+Restano fuori da Writer Runtime v0:
+
+- worker thread dedicato;
+- condition variable, mutex o primitive atomiche nella queue;
+- code separate per sink;
+- policy per sink `critical`, `best_effort` e `debug`;
+- retry, requeue, drop controllato o dead-letter queue;
+- socket writer, protobuf, MessagePack e writer binari;
+- plugin writer dinamici;
+- garanzie di latenza p95/p99 su workload reali;
+- separazione completa fra loop backend e loop writer.
+
+La scelta e' intenzionale. Inserire ora un worker thread renderebbe la PR piu'
+grande e cambierebbe contemporaneamente troppi contratti: lifetime dei record,
+shutdown, error propagation, backpressure, sincronizzazione, ordine dei record,
+test e benchmark. La v0 deve invece dimostrare prima il confine:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+-> drain esplicito
+-> dispatcher
+-> sink
+```
+
+Quando questo confine e' stabile, il lavoro successivo puo' sostituire il drain
+sincrono con un worker senza cambiare il contratto pubblico dei record o la
+responsabilita' dei writer.
+
+La conseguenza pratica per il codice corrente e':
+
+- `app_enqueue_output_record()` rappresenta il lato producer e il futuro fine
+  del percorso caldo;
+- `app_drain_output_pipeline()` rappresenta il lato consumer, oggi ancora nello
+  stesso thread;
+- la valvola di pressione resta una soluzione v0 per non fallire su burst
+  legittime prima che esista un worker;
+- i benchmark counter/jsonl servono a misurare il costo della pipeline senza
+  confondere subito i risultati con scheduling e lock.
+
+## Mappa della pipeline corrente
+
+La pipeline corrente e' volutamente transitoria: introduce gli oggetti del
+Writer Runtime v0, ma li usa ancora in modo single-threaded. Questo significa
+che non esiste ancora un worker separato: il producer accoda il record, poi il
+loop applicativo drena la coda dopo il polling backend.
+
+Il percorso normale, quando `output_enabled=true`, e' diviso in due lati.
+
+Lato producer:
+
+```text
+evento raw, semantico o diagnostico
+-> alfred_record_t borrowed
+-> app_emit_output_record()
+-> app_enqueue_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+-> record owned nella queue bounded
+```
+
+Lato consumer/drain:
+
+```text
+app_run()
+-> inotify_backend_poll()
+-> app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_drain_queue()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_writer_sink_emit()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> write_output_bytes()
+```
+
+Con `output_format=counter`, il lato producer e il drain sono gli stessi, ma il
+dispatcher chiama il counter sink invece del JSONL writer:
+
+```text
+alfred_record_sink_emit()
+-> alfred_record_counter_sink_emit()
+```
+
+Esiste una sola eccezione intenzionale: se una burst ricevuta da
+`inotify_backend_poll()` riempie la queue prima che `app_run()` possa drenarla,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta una sola
+volta l'enqueue.
+
+```text
+app_enqueue_output_record()
+-> queue piena
+-> app_drain_output_pipeline()
+-> retry alfred_record_output_pipeline_enqueue()
+```
+
+Questa eccezione e' la valvola di pressione v0. Mantiene bounded la memoria
+senza introdurre thread reali, ma non e' il modello finale di produzione. Il
+worker runtime futuro dovra' spostare anche questo caso fuori dal producer.
+
+### Raw normalizzati
+
+I raw principali arrivano dal backend come `alfred_raw_event_t`.
+`handle_backend_event()` seleziona i raw gia' migrati al record sink con
+`is_raw_record_sink_candidate()`, poi usa:
+
+```text
+alfred_raw_event_t
+-> alfred_record_from_raw()
+-> log_raw_record()
+-> alfred_record_text_sink_emit()
+-> raw.log compatibile
+```
+
+Se la pipeline JSONL e' abilitata, lo stesso record viene anche offerto a:
+
+```text
+app_emit_output_record()
+-> app_enqueue_output_record()
+-> queue
+```
+
+Il drain comune avverra' poi da `app_run()` dopo il poll backend, verso JSONL o
+counter secondo `output_format`.
+
+Dopo il ponte raw, `handle_backend_event()` passa comunque il raw originale a
+`alfred_process()`. Il core continua quindi a ricevere il fatto raw originale e
+a produrre la semantica filesystem.
+
+### Eventi semantici
+
+Il core emette `alfred_event_t` attraverso `core_logger_on_event()`. Il logger
+semantico converte l'evento una sola volta:
+
+```text
+alfred_event_t
+-> alfred_record_from_event()
+-> app_emit_output_record()
+-> app_enqueue_output_record()
+-> queue
+-> alfred_record_text_sink_emit()
+-> events.log compatibile
+```
+
+L'ordine e' intenzionale: il record strutturato viene offerto alla pipeline
+JSONL prima del formatter testuale compatibile. In questo modo un limite del
+buffer testuale umano non decide se JSONL riceve un record semantico valido.
+
+### Diagnostica backend
+
+I record diagnostici `WATCH_*` vengono costruiti nel backend inotify o nel watch
+manager con builder dedicati, per esempio:
+
+```text
+alfred_record_build_watch_diagnostic()
+alfred_record_build_watch_diagnostic_with_os_error()
+```
+
+Il percorso compatibile e' ancora:
+
+```text
+WATCH_* record
+-> alfred_record_text_sink_emit()
+-> events.log o errors.log compatibile
+```
+
+Quando `emit_record` e' disponibile, lo stesso record diagnostico viene offerto
+anche alla pipeline strutturata:
+
+```text
+WATCH_* record
+-> app_emit_output_record()
+-> app_enqueue_output_record()
+-> queue
+```
+
+Anche qui il record e' borrowed fino alla coda. La chiamata a
+`alfred_record_queue_push()` crea il clone owned, quindi il writer non dipende
+dal lifetime di path, reason o messaggi costruiti vicino al backend.
+
+### Cosa manca rispetto al runtime finale
+
+La pipeline attuale non ha ancora:
+
+- worker thread separato;
+- wakeup/event loop dedicato al writer;
+- code per sink;
+- backpressure reale;
+- retry, requeue o dead-letter policy;
+- isolamento fra sink critici, best-effort e debug;
+- garanzia che il backend termini sempre al solo enqueue.
+
+Il prossimo obiettivo della milestone e' quindi spostare progressivamente il
+punto di uscita del percorso caldo verso:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+```
+
+Tutto quello che avviene dopo il pop dalla coda deve diventare lavoro del lato
+runtime/writer, non del backend.
+
 ## Regola del percorso caldo
 
 Il percorso caldo target e':
@@ -147,6 +377,239 @@ alfred_record_queue_pop()
 Questa regola e' volutamente semplice. In futuro potremo valutare pool, arena,
 string table o storage inline per ridurre le allocazioni, ma v0 privilegia un
 contratto chiaro e testabile.
+
+## Funzioni del percorso enqueue e drain
+
+Il primo refactor di codice della milestone dovrebbe separare due responsabilita'
+che oggi vivono insieme in `app_emit_output_record()`:
+
+```text
+app_enqueue_output_record()
+app_drain_output_pipeline()
+```
+
+La prima fase ha mantenuto il comportamento esterno e ha reso visibili le due
+funzioni. Il micro-step successivo sposta il drain fuori dal callback producer:
+
+```text
+app_emit_output_record()
+-> app_enqueue_output_record()
+
+app_run()
+-> inotify_backend_poll()
+-> app_drain_output_pipeline()
+```
+
+Esiste una sola eccezione intenzionale in questa v0: se una burst consegnata da
+`inotify_backend_poll()` riempie la coda prima che il loop possa drenarla,
+`app_enqueue_output_record()` esegue un drain di pressione e ritenta una sola
+volta l'enqueue. Questo non e' il modello finale: serve a mantenere bounded la
+memoria e a non fallire su burst legittime durante la fase single-threaded. Il
+worker runtime futuro dovra' assorbire questa responsabilita' fuori dal producer.
+
+Il valore della separazione e' architetturale: rende visibile dove Alfred prende
+ownership del record e dove invece inizia il lavoro lento di dispatcher e
+writer.
+
+### `app_enqueue_output_record()`
+
+Questa funzione rappresenta il lato producer del percorso strutturato. Il suo
+compito e' prendere un `alfred_record_t` borrowed prodotto da backend, core o
+diagnostica e accodarlo in forma owned.
+
+Il percorso previsto e':
+
+```text
+app_enqueue_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+```
+
+Le sottofunzioni hanno questi ruoli:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_output_pipeline_enqueue()` | controlla se la pipeline e' abilitata; se `output_enabled=false`, ritorna successo senza fare lavoro |
+| `app_drain_output_pipeline()` | viene chiamata da `app_enqueue_output_record()` solo quando la coda e' gia' piena, come valvola di backpressure v0 |
+| `alfred_record_queue_push()` | verifica che la coda sia valida e non piena, poi inserisce un record owned nel buffer circolare |
+| `alfred_record_clone_owned()` | copia il record e duplica le stringhe borrowed, cosi' la coda non dipende dal lifetime del producer |
+
+Per osservare questo confine senza introdurre ancora una API pubblica di metriche,
+`app_t` mantiene contatori locali in `output_stats` e li scrive a shutdown in
+`events.log` come riga `output runtime stats ...`. I campi principali sono:
+
+| Campo | Significato |
+| --- | --- |
+| `enqueue_attempts` | record offerti alla pipeline strutturata abilitata |
+| `enqueue_success` | record accettati nella coda bounded |
+| `enqueue_failures` | record non accettati dopo errore di enqueue o pressione |
+| `pressure_drains` | volte in cui la coda era piena e il producer ha drenato |
+| `pressure_drain_failures` | drain di pressione falliti |
+| `drain_calls` | chiamate totali al drain runtime |
+| `drain_failures` | drain falliti per dispatcher o writer |
+| `drained_records` | record consegnati con successo ai sink |
+| `max_pending` | massimo numero di record osservato nella coda |
+
+Questi contatori sono strumenti di orientamento per test, benchmark e review
+della milestone. Non vanno confusi con record diagnostici stabili: quando avremo
+un worker reale, code per sink o metriche pubbliche, potremo decidere quali campi
+promuovere in un canale strutturato.
+
+Questa funzione e' la candidata naturale per diventare il limite finale del
+percorso caldo:
+
+```text
+record borrowed
+-> clone owned
+-> enqueue bounded
+```
+
+Quando il runtime diventera' asincrono, il backend o il core non dovranno
+aspettare JSONL, text writer, socket, flush o UI. Dovranno solo riuscire ad
+accodare il record secondo la policy di backpressure scelta.
+
+### `app_drain_output_pipeline()`
+
+Questa funzione rappresenta il lato consumer del percorso strutturato. Il suo
+compito e' consumare record gia' accodati e consegnarli ai sink registrati.
+
+Il percorso previsto e':
+
+```text
+app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_dispatcher_drain_queue()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> alfred_record_sink_emit()
+-> alfred_record_jsonl_writer_sink_emit()
+-> alfred_record_jsonl_writer_emit()
+-> alfred_record_format_jsonl()
+-> write_output_bytes()
+-> alfred_record_destroy_owned()
+```
+
+Le sottofunzioni hanno questi ruoli:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_output_pipeline_drain_once()` | controlla se la pipeline e' abilitata e avvia un drain bounded con il batch size configurato |
+| `alfred_record_runtime_drain_once()` | helper single-threaded che chiama il dispatcher drain e produce un risultato con `max_records`, `dispatched`, `remaining` e `status` |
+| `alfred_record_dispatcher_drain_queue()` | ripete pop, dispatch e destroy fino a coda vuota, batch completo o primo errore |
+| `alfred_record_queue_pop()` | estrae il prossimo record owned dalla coda e trasferisce ownership al chiamante |
+| `alfred_record_dispatcher_dispatch_one()` | invia il record a tutti i sink registrati, in ordine, fermandosi al primo errore nella v0 |
+| `alfred_record_sink_emit()` | chiama la callback concreta del sink tramite l'interfaccia comune |
+| `alfred_record_jsonl_writer_sink_emit()` | adatta l'interfaccia sink generica al writer JSONL buffered |
+| `alfred_record_jsonl_writer_emit()` | formatta il record, aggiunge newline e lo accumula nel buffer del writer |
+| `alfred_record_format_jsonl()` | converte `alfred_record_t` in una riga JSON valida senza newline finale |
+| `write_output_bytes()` | callback applicativa che scrive byte gia' formattati nel file `output_log` |
+| `alfred_record_destroy_owned()` | libera le stringhe owned del record estratto dalla coda dopo il dispatch |
+
+Nella v0 questo drain e' ancora sincrono: viene chiamato dal loop applicativo
+dopo ogni `inotify_backend_poll()`. Il producer non chiama piu' direttamente il
+writer, ma il drain resta nello stesso thread del runtime. Il runtime finale
+dovra' spostare questa parte fuori dal percorso caldo, per esempio in un worker
+o in un loop dedicato.
+
+## Buffer circolare dei record
+
+La coda corrente e' implementata dalla struttura `alfred_record_queue_t`,
+definita in `core/include/alfred_record_queue.h`.
+
+```c
+typedef struct {
+    alfred_record_t *items;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} alfred_record_queue_t;
+```
+
+Questa struttura e' un buffer circolare bounded di record owned.
+
+I campi hanno questo significato:
+
+- `items`: array allocato dinamicamente di `alfred_record_t`;
+- `capacity`: numero massimo di record che la coda puo' contenere;
+- `head`: indice del prossimo record che verra' estratto da `pop()`;
+- `tail`: indice dove verra' scritto il prossimo record inserito da `push()`;
+- `count`: numero di record attualmente presenti nella coda.
+
+Si chiama circolare perche' `head` e `tail` avanzano dentro l'array e, quando
+arrivano alla fine, tornano a zero usando il modulo:
+
+```c
+queue->tail = (queue->tail + 1u) % queue->capacity;
+queue->head = (queue->head + 1u) % queue->capacity;
+```
+
+Con `capacity = 4`, gli indici seguono quindi questa sequenza:
+
+```text
+0 -> 1 -> 2 -> 3 -> 0 -> 1 -> ...
+```
+
+Il campo `count` e' necessario per distinguere in modo semplice una coda vuota
+da una coda piena. In entrambe le situazioni puo' capitare che `head == tail`;
+senza `count` questa informazione sarebbe ambigua.
+
+Esempio con `capacity = 3`:
+
+```text
+inizio:
+items = [_, _, _]
+head = 0, tail = 0, count = 0
+
+push A:
+items = [A, _, _]
+head = 0, tail = 1, count = 1
+
+push B:
+items = [A, B, _]
+head = 0, tail = 2, count = 2
+
+pop -> A:
+items = [_, B, _]
+head = 1, tail = 2, count = 1
+
+push C:
+items = [_, B, C]
+head = 1, tail = 0, count = 2
+
+push D:
+items = [D, B, C]
+head = 1, tail = 1, count = 3
+```
+
+Nell'ultimo stato la coda e' piena anche se `head == tail`. Per questo
+`alfred_record_queue_is_full()` controlla `count == capacity`, mentre
+`alfred_record_queue_is_empty()` controlla `count == 0`.
+
+Le funzioni che gestiscono questa struttura sono:
+
+| Funzione | Ruolo |
+| --- | --- |
+| `alfred_record_queue_init()` | alloca il buffer `items` con capacita' fissa |
+| `alfred_record_queue_push()` | clona un record borrowed in owned e lo inserisce in `items[tail]` |
+| `alfred_record_queue_pop()` | estrae `items[head]` e trasferisce ownership al chiamante |
+| `alfred_record_queue_clear()` | distrugge i record owned ancora accodati ma conserva il buffer |
+| `alfred_record_queue_destroy()` | distrugge i record accodati, libera `items` e azzera la struttura |
+| `alfred_record_queue_count()` | restituisce quanti record sono presenti |
+| `alfred_record_queue_capacity()` | restituisce la capacita' massima |
+| `alfred_record_queue_is_empty()` | verifica se `count == 0` |
+| `alfred_record_queue_is_full()` | verifica se `count == capacity` |
+
+La scelta di un buffer circolare bounded serve a rendere esplicito il limite di
+memoria. Se la coda e' piena, `push()` fallisce invece di crescere senza limite.
+Questa e' una proprieta' importante per Alfred: un writer lento non deve poter
+trasformare il processo in una crescita incontrollata di memoria.
+
+Nella v0 la coda e' ancora single-threaded. Non contiene mutex, condition
+variable o primitive atomiche. Prima di renderla usabile da un worker thread,
+dovremo decidere la policy di sincronizzazione, backpressure e shutdown.
 
 ## Fase 1: coda comune
 
@@ -361,13 +824,19 @@ bytes e li consegna solo al flush o quando deve liberare spazio.
 `config_t.output` introduce la configurazione minima, disabilitata di default:
 `output_enabled=false`, `output_format=jsonl`, `output_buffer_size=65536` e
 `output_log=output.jsonl`. `alfred_record_output_pipeline_t` collega queue,
-dispatcher, runtime drain e JSONL writer. `make perf-record-sinks` misura anche
+dispatcher, runtime drain e sink configurato. JSONL resta il writer reale v0;
+`counter` e' un formato benchmark/no-op che attraversa lo stesso confine senza
+serializzazione e senza I/O. `make perf-record-sinks` misura anche
 `output-pipeline-jsonl`, cioe' la pipeline composta con flush finale verso
 callback in memoria. Il runtime applicativo ora puo' inizializzare questa
 pipeline dietro `output_enabled=true` e scrivere JSONL aggiuntivo per i record
-raw normalizzati gia' migrati al record sink. Il prossimo passo resta rendere il
-percorso piu' completo e misurarlo end-to-end, non introdurre subito thread o
-backpressure reale.
+raw normalizzati gia' migrati al record sink, oppure usare
+`output_format=counter` per misurare solo queue, drain e dispatcher. `make
+perf-runtime-output` aggiunge il primo benchmark manuale del runtime reale:
+avvia Alfred, crea file reali sotto inotify e confronta `compat-only`,
+`counter-output` e `jsonl-output`. Il prossimo passo resta usare queste misure
+per valutare il percorso end-to-end, non introdurre subito thread o backpressure
+reale.
 
 ## Cose da non fare ora
 

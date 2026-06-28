@@ -34,12 +34,15 @@
  * output_format_t - configured format for the runtime writer path
  *
  * The enum describes the writer format requested by configuration. It does not
- * mean every format is wired into app_run(): output.enabled controls whether
- * the runtime writer path should be active, and app.c currently accepts JSONL.
+ * mean every format is a public output format: output.enabled controls whether
+ * the runtime writer path should be active. JSONL is the user-facing v0 writer;
+ * counter is a benchmark/no-op sink used to measure queue and dispatcher cost
+ * without serialization or I/O.
  */
 typedef enum {
     OUTPUT_FORMAT_TEXT = 0,
-    OUTPUT_FORMAT_JSONL = 1
+    OUTPUT_FORMAT_JSONL = 1,
+    OUTPUT_FORMAT_COUNTER = 2
 } output_format_t;
 
 /*

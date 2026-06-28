@@ -90,9 +90,9 @@ static int log_record_event(core_logger_context_t *context,
      * truncation for very long paths. JSONL must not silently lose a valid record
      * because the legacy human-readable formatter could not fit its line.
      *
-     * If output fails, app_emit_output_record() marks the app output path failed;
-     * handle_backend_event() observes that after alfred_process() returns and
-     * stops the event loop. We still continue here so events.log can preserve the
+     * If enqueue fails, app_emit_output_record() marks the app output path
+     * failed; if the downstream writer fails, app_run() observes that during its
+     * explicit drain step. We still continue here so events.log can preserve the
      * semantic event when possible.
      */
     if (context->emit_record != NULL &&

@@ -40,6 +40,11 @@ static void app_build_inotify_backend_context(
 static int log_raw_record(logger_t *logger, const alfred_record_t *record);
 static int app_init_output_pipeline(app_t *app);
 static int app_shutdown_output_pipeline(app_t *app);
+static int app_enqueue_output_record(app_t *app,
+                                     const alfred_record_t *record);
+static int app_drain_output_pipeline(app_t *app);
+static void app_observe_output_pending(app_t *app, size_t pending);
+static void app_log_output_runtime_stats(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
 static int app_emit_output_record_callback(const alfred_record_t *record,
                                            void *userdata);
@@ -288,14 +293,16 @@ static int log_raw_record(logger_t *logger, const alfred_record_t *record)
  * @app: application context with parsed configuration
  *
  * The pipeline is disabled by default. When enabled in this first runtime
- * wiring step, it is additive to raw.log/events.log/errors.log and supports
- * only JSONL because that is the only buffered writer with a v0 contract.
+ * wiring step, it is additive to raw.log/events.log/errors.log. JSONL is the
+ * user-facing writer; counter is a benchmark/no-op sink used to measure the
+ * same queue and dispatcher boundary without serialization or I/O.
  *
  * Return: ERR_OK on success, ERR_CONFIG/ERR_ALLOC/ERR_IO on failure.
  */
 static int app_init_output_pipeline(app_t *app)
 {
     alfred_record_output_pipeline_config_t pipeline_config;
+    alfred_record_output_pipeline_format_t pipeline_format;
 
     if (app == NULL) {
         return ERR_INVALID_ARG;
@@ -305,53 +312,62 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_OK;
     }
 
-    if (app->config.output.format != OUTPUT_FORMAT_JSONL) {
+    if (app->config.output.format != OUTPUT_FORMAT_JSONL &&
+        app->config.output.format != OUTPUT_FORMAT_COUNTER) {
         logger_error(&app->logger,
-                     "output_enabled requires output_format=jsonl");
+                     "output_enabled requires output_format=jsonl or counter");
         return ERR_CONFIG;
     }
 
-    if (app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
+    if (app->config.output.format == OUTPUT_FORMAT_JSONL &&
+        app->config.output.buffer_size < APP_OUTPUT_FORMAT_BUFFER_SIZE) {
         logger_error(&app->logger,
                      "output_buffer_size must be at least %u bytes",
                      APP_OUTPUT_FORMAT_BUFFER_SIZE);
         return ERR_CONFIG;
     }
 
-    app->output_stream = fopen(app->config.output_log, "a");
-    if (app->output_stream == NULL) {
-        logger_error(&app->logger,
-                     "failed to open output log %s",
-                     app->config.output_log);
-        return ERR_IO;
+    if (app->config.output.format == OUTPUT_FORMAT_JSONL) {
+        app->output_stream = fopen(app->config.output_log, "a");
+        if (app->output_stream == NULL) {
+            logger_error(&app->logger,
+                         "failed to open output log %s",
+                         app->config.output_log);
+            return ERR_IO;
+        }
+
+        /*
+         * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
+         * extra buffering so write_output_bytes() observes device errors at the
+         * writer flush boundary instead of deferring them until shutdown. This
+         * keeps output failure policy testable with devices such as /dev/full
+         * while still avoiding one write per event: JSONL writer flushes only
+         * when its own buffer is full or during shutdown.
+         */
+        if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
+            logger_error(&app->logger,
+                         "failed to configure output log buffering");
+            return ERR_IO;
+        }
+
+        app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
+        app->output_buffer = malloc(app->config.output.buffer_size);
+
+        if (app->output_format_buffer == NULL || app->output_buffer == NULL) {
+            logger_error(&app->logger,
+                         "failed to allocate output pipeline buffers");
+            return ERR_ALLOC;
+        }
     }
 
-    /*
-     * Alfred owns batching in alfred_record_jsonl_writer_t. Disable stdio's
-     * extra buffering so write_output_bytes() observes device errors at the
-     * writer flush boundary instead of deferring them until shutdown. This keeps
-     * output failure policy testable with devices such as /dev/full while still
-     * avoiding one write per event: JSONL writer flushes only when its own buffer
-     * is full or during shutdown.
-     */
-    if (setvbuf(app->output_stream, NULL, _IONBF, 0) != 0) {
-        logger_error(&app->logger,
-                     "failed to configure output log buffering");
-        return ERR_IO;
-    }
-
-    app->output_format_buffer = malloc(APP_OUTPUT_FORMAT_BUFFER_SIZE);
-    app->output_buffer = malloc(app->config.output.buffer_size);
-
-    if (app->output_format_buffer == NULL || app->output_buffer == NULL) {
-        logger_error(&app->logger,
-                     "failed to allocate output pipeline buffers");
-        return ERR_ALLOC;
-    }
+    pipeline_format =
+        app->config.output.format == OUTPUT_FORMAT_COUNTER ?
+        ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER :
+        ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
 
     memset(&pipeline_config, 0, sizeof(pipeline_config));
     pipeline_config.enabled = 1;
-    pipeline_config.format = ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL;
+    pipeline_config.format = pipeline_format;
     pipeline_config.queue_capacity = APP_OUTPUT_QUEUE_CAPACITY;
     pipeline_config.drain_batch_size = APP_OUTPUT_QUEUE_CAPACITY;
     pipeline_config.write = write_output_bytes;
@@ -368,9 +384,15 @@ static int app_init_output_pipeline(app_t *app)
         return ERR_ALLOC;
     }
 
-    logger_info(&app->logger,
-                "output pipeline initialized format=jsonl path=%s",
-                app->config.output_log);
+    if (app->config.output.format == OUTPUT_FORMAT_COUNTER) {
+        logger_info(&app->logger,
+                    "output pipeline initialized format=counter");
+    }
+    else {
+        logger_info(&app->logger,
+                    "output pipeline initialized format=jsonl path=%s",
+                    app->config.output_log);
+    }
 
     return ERR_OK;
 }
@@ -394,6 +416,8 @@ static int app_shutdown_output_pipeline(app_t *app)
     if (app == NULL) {
         return 0;
     }
+
+    app_log_output_runtime_stats(app);
 
     if (app->output_pipeline.enabled) {
         if (alfred_record_output_pipeline_flush(&app->output_pipeline) != 0) {
@@ -428,27 +452,150 @@ static int app_shutdown_output_pipeline(app_t *app)
 }
 
 /*
- * app_emit_output_record - enqueue and drain one optional runtime output record
+ * app_observe_output_pending - record the largest seen output queue depth
+ * @app: application context that owns local runtime counters
+ * @pending: current number of records in the bounded output queue
+ *
+ * The queue itself remains the source of truth. This helper only records a
+ * high-water mark for tests, benchmarks, and PR review notes.
+ */
+static void app_observe_output_pending(app_t *app, size_t pending)
+{
+    if (app == NULL) {
+        return;
+    }
+
+    if (pending > app->output_stats.max_pending) {
+        app->output_stats.max_pending = pending;
+    }
+}
+
+/*
+ * app_log_output_runtime_stats - log Writer Runtime v0 queue counters
+ * @app: application context that owns the output pipeline and logger
+ *
+ * The current counters are intentionally emitted as an INFO line in events.log,
+ * not as JSONL and not as a stable diagnostic record. They describe the local
+ * application runtime wiring: enqueue attempts, pressure-relief drains, drain
+ * calls, dispatched records, and queue high-water mark. A future metrics sink
+ * can promote them into a structured channel after the worker design settles.
+ */
+static void app_log_output_runtime_stats(app_t *app)
+{
+    const app_output_runtime_stats_t *stats;
+
+    if (app == NULL || !app->output_pipeline.enabled) {
+        return;
+    }
+
+    stats = &app->output_stats;
+    logger_info(&app->logger,
+                "output runtime stats enqueue_attempts=%zu "
+                "enqueue_success=%zu enqueue_failures=%zu "
+                "pressure_drains=%zu pressure_drain_failures=%zu "
+                "drain_calls=%zu drain_failures=%zu drained_records=%zu "
+                "max_pending=%zu",
+                stats->enqueue_attempts,
+                stats->enqueue_success,
+                stats->enqueue_failures,
+                stats->pressure_drains,
+                stats->pressure_drain_failures,
+                stats->drain_calls,
+                stats->drain_failures,
+                stats->drained_records,
+                stats->max_pending);
+}
+
+/*
+ * app_enqueue_output_record - enqueue one optional runtime output record
  * @app: application context
  * @record: borrowed Event Model v0 record
  *
- * This is deliberately synchronous for the first app_run() wiring step. It
- * proves the runtime path behind output_enabled=true without introducing worker
- * threads, wakeups, per-sink queues, or real backpressure yet.
+ * This helper names the producer side of the structured output path. In the
+ * common case it turns a borrowed runtime record into an owned queued record
+ * through alfred_record_output_pipeline_enqueue(), which delegates to the
+ * bounded queue and alfred_record_clone_owned().
+ *
+ * Writer Runtime v0 is still single-threaded: a backend poll can legally
+ * deliver a burst that is larger than the queue before control returns to
+ * app_run(). When the queue is already full, this helper performs one explicit
+ * pressure-relief drain and retries the enqueue once. That is the temporary v0
+ * backpressure boundary; the future worker runtime should replace this slow
+ * path with asynchronous draining.
  *
  * Failure policy:
  *   output_enabled=true makes the structured output path part of the runtime
- *   contract. If enqueue, drain, or writer delivery fails, the application marks
- *   output_failed so the event loop can stop instead of producing a silent
- *   partial JSONL ledger. Disabled output remains a successful no-op.
+ *   contract. If enqueue fails, the application marks output_failed so the
+ *   event loop can stop instead of producing a silent partial JSONL ledger.
+ *   Disabled output remains a successful no-op.
  *
- * Return: 0 on success or when disabled, -1 on enqueue/drain/write failure.
+ * Return: 0 on success or when disabled, -1 on enqueue failure.
  */
-static int app_emit_output_record(app_t *app, const alfred_record_t *record)
+static int app_enqueue_output_record(app_t *app,
+                                     const alfred_record_t *record)
+{
+    size_t pending;
+
+    if (app == NULL || record == NULL) {
+        return -1;
+    }
+
+    if (!app->output_pipeline.enabled) {
+        return 0;
+    }
+
+    app->output_stats.enqueue_attempts++;
+
+    if (app->output_failed) {
+        app->output_stats.enqueue_failures++;
+        return -1;
+    }
+
+    pending = alfred_record_output_pipeline_pending(&app->output_pipeline);
+    app_observe_output_pending(app, pending);
+
+    if (pending >= APP_OUTPUT_QUEUE_CAPACITY) {
+        app->output_stats.pressure_drains++;
+
+        if (app_drain_output_pipeline(app) != 0) {
+            app->output_failed = 1;
+            app->output_stats.pressure_drain_failures++;
+            app->output_stats.enqueue_failures++;
+            return -1;
+        }
+    }
+
+    if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
+                                              record) != 0) {
+        app->output_failed = 1;
+        app->output_stats.enqueue_failures++;
+        return -1;
+    }
+
+    app->output_stats.enqueue_success++;
+    app_observe_output_pending(
+        app,
+        alfred_record_output_pipeline_pending(&app->output_pipeline));
+
+    return 0;
+}
+
+/*
+ * app_drain_output_pipeline - drain queued records through dispatcher/writer
+ * @app: application context
+ *
+ * This helper names the consumer side of the structured output path. The event
+ * loop calls it after backend polling so producers only enqueue records, while
+ * the runtime drain step consumes owned records from the queue, dispatches them
+ * to sinks, and lets writers perform formatting/I/O.
+ *
+ * Return: 0 on success or when disabled, -1 on drain/write failure.
+ */
+static int app_drain_output_pipeline(app_t *app)
 {
     alfred_record_runtime_drain_result_t drain_result;
 
-    if (app == NULL || record == NULL) {
+    if (app == NULL) {
         return -1;
     }
 
@@ -460,24 +607,42 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
         return -1;
     }
 
-    if (alfred_record_output_pipeline_enqueue(&app->output_pipeline,
-                                              record) != 0) {
-        app->output_failed = 1;
-        return -1;
-    }
+    app->output_stats.drain_calls++;
 
     if (alfred_record_output_pipeline_drain_once(&app->output_pipeline,
                                                  &drain_result) != 0) {
         app->output_failed = 1;
+        app->output_stats.drain_failures++;
         return -1;
     }
 
+    app->output_stats.drained_records += drain_result.dispatched;
+    app_observe_output_pending(app, drain_result.remaining);
+
     if (drain_result.status != 0) {
         app->output_failed = 1;
+        app->output_stats.drain_failures++;
         return -1;
     }
 
     return 0;
+}
+
+/*
+ * app_emit_output_record - enqueue one optional runtime output record
+ * @app: application context
+ * @record: borrowed Event Model v0 record
+ *
+ * This wrapper is the producer-side bridge used by backend/core callbacks. It
+ * deliberately does not drain the queue: app_run() owns the single-threaded
+ * runtime drain step after each backend poll. A later worker step can replace
+ * that drain site without changing producer callbacks again.
+ *
+ * Return: 0 on success or when disabled, -1 on enqueue failure.
+ */
+static int app_emit_output_record(app_t *app, const alfred_record_t *record)
+{
+    return app_enqueue_output_record(app, record);
 }
 
 /*
@@ -732,6 +897,13 @@ int app_run(app_t *app)
         error = inotify_backend_poll(&backend_ctx,
                                      handle_backend_event,
                                      app);
+        if (app_drain_output_pipeline(app) != 0) {
+            logger_error(&app->logger,
+                         "structured output failed; stopping event loop");
+            error = ERR_IO;
+            break;
+        }
+
         if (error != ERR_OK) {
             break;
         }

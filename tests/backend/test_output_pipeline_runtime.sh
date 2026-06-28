@@ -21,6 +21,8 @@
 # - output_enabled=true stops Alfred on runtime JSONL writer failure
 # - output_enabled=true returns non-zero when buffered JSONL bytes fail only
 #   during final shutdown flush
+# - successful runtime output logs one "output runtime stats" INFO line with
+#   enqueue, drain and bounded-queue counters
 #
 # This test proves the first runtime wiring of the single-writer output
 # pipeline. output_enabled=true is additive: app.c still emits the compatibility
@@ -28,6 +30,25 @@
 # alfred_record_t values into alfred_record_output_pipeline_t for JSONL output.
 # When JSONL output is explicitly enabled, writer failure is fatal: Alfred must
 # not keep processing events while producing an incomplete output.jsonl ledger.
+#
+# After the enqueue/drain split, this scenario also locks down the current
+# single-threaded runtime boundary:
+#
+#   app_emit_output_record()
+#   -> app_enqueue_output_record()
+#
+#   app_run()
+#   -> app_drain_output_pipeline()
+#
+# If one backend poll delivers a burst larger than the bounded queue,
+# app_enqueue_output_record() may also perform one pressure-relief drain before
+# retrying enqueue. That keeps the v0 single-threaded runtime bounded without
+# treating a legitimate burst as an output failure.
+#
+# A producer-side enqueue error, a consumer-side drain/write error, and a final
+# shutdown flush error must all preserve the same fail-closed output_failed
+# policy. This protects the future worker refactor from accidentally turning
+# JSONL writer failures into silent best-effort output.
 
 set -euo pipefail
 
@@ -392,6 +413,13 @@ if ! grep -Eq '"category":"recovery".*"type":"WATCH_LOST_QUEUED".*"path":".*/res
     echo "FAIL: missing JSONL WATCH_LOST_QUEUED record for moved directory"
     echo "----- output.jsonl -----"
     cat "$OUTPUT_LOG" || true
+    exit 1
+fi
+
+if ! grep -Eq "output runtime stats enqueue_attempts=[0-9]+ .*drain_calls=[0-9]+ .*max_pending=[0-9]+" ./events.log; then
+    echo "FAIL: missing output runtime stats line"
+    echo "----- events.log -----"
+    cat ./events.log || true
     exit 1
 fi
 

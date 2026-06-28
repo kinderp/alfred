@@ -24,7 +24,45 @@
 #include "logger.h"
 
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
+
+/*
+ * app_output_runtime_stats_t - local Writer Runtime v0 counters
+ *
+ * These counters describe the current application-level output wiring. They
+ * are deliberately not an Event Model v0 record and not a stable public API:
+ * they help tests, benchmarks, and PR reviews understand the bounded queue
+ * behavior before Alfred introduces worker threads or per-sink queues.
+ */
+typedef struct {
+    /* Records offered to the enabled structured output path. */
+    size_t enqueue_attempts;
+
+    /* Records accepted into the bounded queue after any pressure-relief drain. */
+    size_t enqueue_success;
+
+    /* Records not accepted because enqueue or pressure drain failed. */
+    size_t enqueue_failures;
+
+    /* Times enqueue found the bounded queue full before pushing a record. */
+    size_t pressure_drains;
+
+    /* Pressure drains that failed and therefore made output fail closed. */
+    size_t pressure_drain_failures;
+
+    /* Explicit drain calls performed by app_run() or pressure relief. */
+    size_t drain_calls;
+
+    /* Drain calls that failed because dispatcher or writer failed. */
+    size_t drain_failures;
+
+    /* Records successfully dispatched by all drain calls. */
+    size_t drained_records;
+
+    /* Largest queue occupancy observed by the application runtime. */
+    size_t max_pending;
+} app_output_runtime_stats_t;
 
 /*
  * app_t - process-wide runtime context
@@ -76,6 +114,13 @@ typedef struct app {
      * ledger while the event loop keeps processing filesystem activity.
      */
     int output_failed;
+
+    /*
+     * Application-local observability for Writer Runtime v0. The counters are
+     * logged at shutdown when structured output is enabled so benchmarks can
+     * see queue pressure without parsing internal state.
+     */
+    app_output_runtime_stats_t output_stats;
 
     /*
      * Core correlator configuration, callback context, and engine.

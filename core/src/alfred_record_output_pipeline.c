@@ -32,6 +32,15 @@ static int config_is_valid_for_jsonl(
            config->output_buffer_size > 0u;
 }
 
+static int config_is_valid_for_counter(
+    const alfred_record_output_pipeline_config_t *config)
+{
+    return config != NULL &&
+           config->format == ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER &&
+           config->queue_capacity > 0u &&
+           config->drain_batch_size > 0u;
+}
+
 int alfred_record_output_pipeline_init(
     alfred_record_output_pipeline_t *pipeline,
     const alfred_record_output_pipeline_config_t *config)
@@ -54,7 +63,8 @@ int alfred_record_output_pipeline_init(
         return 0;
     }
 
-    if (!config_is_valid_for_jsonl(config)) {
+    if (!config_is_valid_for_jsonl(config) &&
+        !config_is_valid_for_counter(config)) {
         memset(pipeline, 0, sizeof(*pipeline));
         return -1;
     }
@@ -72,6 +82,24 @@ int alfred_record_output_pipeline_init(
                                       1u) != 0) {
         alfred_record_output_pipeline_destroy(pipeline);
         return -1;
+    }
+
+    if (config->format == ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER) {
+        if (alfred_record_counter_sink_init(&pipeline->counter, &sink) != 0) {
+            alfred_record_output_pipeline_destroy(pipeline);
+            return -1;
+        }
+
+        if (alfred_record_dispatcher_add_sink(
+                &pipeline->dispatcher,
+                "counter",
+                ALFRED_RECORD_DISPATCHER_SINK_DEBUG,
+                &sink) != 0) {
+            alfred_record_output_pipeline_destroy(pipeline);
+            return -1;
+        }
+
+        return 0;
     }
 
     pipeline->writer.write = config->write;
@@ -165,6 +193,10 @@ int alfred_record_output_pipeline_flush(
         return 0;
     }
 
+    if (pipeline->format == ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER) {
+        return 0;
+    }
+
     return alfred_record_jsonl_writer_flush(&pipeline->writer);
 }
 
@@ -182,6 +214,10 @@ size_t alfred_record_output_pipeline_buffered_bytes(
     const alfred_record_output_pipeline_t *pipeline)
 {
     if (pipeline == NULL || !pipeline->enabled) {
+        return 0u;
+    }
+
+    if (pipeline->format == ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER) {
         return 0u;
     }
 

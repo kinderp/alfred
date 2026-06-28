@@ -90,6 +90,30 @@ Issue madre: #32 Writer Runtime v0: implementation plan
 | Pull request | Modifica concreta da revieware e testare | una PR per ogni micro-step coerente |
 | Documentazione nel repository | Decisione consolidata, contratto stabile e spiegazione didattica | `docs/it/*.md` |
 
+Quando si crea una issue madre, il body deve indicare subito la roadmap MD
+principale della milestone. Questa roadmap non va nascosta in una lista lunga di
+documenti: deve apparire vicino al goal come `Primary roadmap`, con link GitHub
+cliccabile e una breve spiegazione del perche' e' il riferimento operativo
+principale.
+
+Esempio:
+
+```text
+Primary roadmap:
+Writer Runtime Roadmap v0
+https://github.com/kinderp/alfred/blob/main/docs/it/33-writer-runtime-roadmap-v0.md
+
+This document is the main operational reference for the milestone.
+```
+
+Le issue madri possono poi avere una sezione piu' ampia, come
+`Repository documentation to read first`, con link a contratti, guide e
+paragrafi specifici. La differenza e':
+
+- `Primary roadmap`: il documento che guida la milestone corrente;
+- `Repository documentation to read first`: altri documenti utili per capire
+  contratti, contesto, test e limiti.
+
 ## Label GitHub
 
 Le label servono a rendere issue e PR filtrabili. Una issue puo' avere piu'

@@ -115,17 +115,30 @@ issue anche se non legge subito tutti gli MD.
 
 Regola:
 
+- ogni issue madre deve avere subito dopo il goal un blocco `Primary roadmap`
+  con link GitHub cliccabile al documento roadmap MD corrispondente;
+- il blocco `Primary roadmap` deve spiegare in una frase perche' quel documento
+  e' il riferimento operativo principale della milestone;
 - usare link GitHub cliccabili ai documenti;
 - quando utile, linkare anche i paragrafi specifici;
 - aggiungere un riassunto breve di cosa dice ogni documento;
 - distinguere chiaramente fra issue come piano operativo e documentazione come
   fonte stabile del contratto;
+- mantenere nella issue madre una tabella `Implementation traceability` che
+  colleghi ogni elemento della checklist a commit, PR o issue figlie rilevanti;
+- aggiornare quella tabella a ogni progress update significativo, indicando
+  cosa e' concluso, cosa e' in corso e quali commit sono solo preparatori;
 - se una Discussion contiene il ragionamento, linkarla dalla issue madre e poi
   trasferire la decisione finale negli MD.
 
 Esempio di forma corretta:
 
 ```text
+Primary roadmap:
+[Writer Runtime Roadmap v0](https://github.com/kinderp/alfred/blob/main/docs/it/33-writer-runtime-roadmap-v0.md)
+e' il riferimento operativo della milestone: descrive pipeline corrente,
+queue/drain boundary, coda bounded, micro-step e criteri di completamento.
+
 [Writer API v0](https://github.com/kinderp/alfred/blob/main/docs/it/32-writer-api-v0.md)
 spiega perche' i writer devono restare fuori dal percorso caldo. Le sezioni
 piu' rilevanti sono Percorso caldo, Output pipeline sperimentale, Ownership e
@@ -133,6 +146,12 @@ Record Queue v0.
 
 Sintesi: il backend produce record, il confine caldo termina alla coda bounded,
 i writer stanno a valle e non devono bloccare il collector.
+
+Implementation traceability:
+| Checklist item | Status | Commits / PRs | Notes |
+| --- | --- | --- | --- |
+| Document current synchronous output pipeline | Done | commit link | Mappa pipeline corrente |
+| Define hot-path boundary | In progress | commit link, PR link | Codice parziale, worker ancora futuro |
 ```
 
 ## Bootstrap di una nuova sessione agente
@@ -308,6 +327,21 @@ I commit devono seguire sempre queste regole:
 - includere solo i file del passo corrente
 - non committare file locali non tracciati, log generati o esperimenti fuori
   task
+
+Quando un commit introduce o modifica un percorso di chiamata rilevante, il body
+deve includere anche una breve spiegazione in inglese delle funzioni e
+sottofunzioni principali coinvolte. La spiegazione deve chiarire:
+
+- quale funzione e' il punto di ingresso;
+- quali helper chiama;
+- quale responsabilita' ha ogni helper;
+- se cambia ownership, I/O, hot path, API o comportamento osservabile.
+
+Questa regola vale soprattutto per architettura, ownership, pipeline, API,
+callback, funzioni ponte, writer, sink, dispatcher, queue e percorso caldo. Non
+serve per modifiche banali, typo, link, rename piccoli o commit puramente
+editoriali. Se la spiegazione supera un riepilogo breve, documentarla negli MD e
+nel commit rimandare al documento aggiornato.
 
 ### Commit che risolvono finding di review
 

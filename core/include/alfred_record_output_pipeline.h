@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 #include "alfred_record.h"
+#include "alfred_record_counter_sink.h"
 #include "alfred_record_dispatcher.h"
 #include "alfred_record_jsonl_writer.h"
 #include "alfred_record_queue.h"
@@ -26,13 +27,14 @@ extern "C" {
 /*
  * alfred_record_output_pipeline_format_t - writer format supported by pipeline
  *
- * The first pipeline implementation supports only JSONL because the buffered
- * JSONL writer already has a documented and tested contract. Text remains a
- * valid top-level configuration value only for disabled/future configurations;
- * app.c currently accepts JSONL when output_enabled=true.
+ * JSONL is the first real output writer. COUNTER is a benchmark/no-op format:
+ * it routes records through the same queue and dispatcher boundary, then counts
+ * them without formatting, buffering, or I/O. Text remains a valid top-level
+ * configuration value only for disabled/future configurations.
  */
 typedef enum {
-    ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL = 1
+    ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_JSONL = 1,
+    ALFRED_RECORD_OUTPUT_PIPELINE_FORMAT_COUNTER = 2
 } alfred_record_output_pipeline_format_t;
 
 /*
@@ -73,6 +75,7 @@ typedef struct {
  * @dispatcher: bounded dispatcher with one sink in v0
  * @sink_storage: embedded storage for the single registered sink
  * @writer: JSONL buffered writer used when @format is JSONL
+ * @counter: no-op counter sink state used when @format is COUNTER
  *
  * The pipeline owns the queue allocation. It does not own writer buffers,
  * output callbacks, files, sockets, or threads.
@@ -85,6 +88,7 @@ typedef struct {
     alfred_record_dispatcher_t dispatcher;
     alfred_record_dispatcher_sink_t sink_storage[1];
     alfred_record_jsonl_writer_t writer;
+    alfred_record_counter_sink_t counter;
 } alfred_record_output_pipeline_t;
 
 /*

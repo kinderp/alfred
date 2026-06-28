@@ -2405,7 +2405,154 @@ Lettura pratica dei risultati:
 - se `min_us` e `max_us` sono molto distanti, conviene aumentare `runs` o
   ripetere il test su una macchina meno carica.
 
-### 10. Nessun `test-legacy-shadow`
+### 10. `make perf-runtime-output`
+
+Il comando:
+
+```bash
+make perf-runtime-output
+```
+
+esegue un benchmark manuale del runtime reale di Alfred. A differenza di
+`make perf-record-sinks`, non usa record sintetici costruiti in memoria:
+avvia il binario `alfred`, configura log separati in una directory temporanea,
+osserva una directory reale con inotify e crea file reali dentro quella
+directory.
+
+Il benchmark esegue tre modalita':
+
+- `compat-only`: `output_enabled=false`, quindi Alfred scrive solo i log
+  compatibili `raw.log`, `events.log` ed `errors.log`;
+- `counter-output`: `output_enabled=true` con `output_format=counter`, quindi
+  Alfred attraversa `record -> queue -> drain -> dispatcher -> counter sink`
+  senza formattare JSONL e senza scrivere `output_log`;
+- `jsonl-output`: `output_enabled=true`, quindi Alfred usa anche il percorso
+  `app_emit_output_record() -> app_enqueue_output_record()`, seguito dal drain
+  esplicito `app_run() -> app_drain_output_pipeline() -> dispatcher -> JSONL
+  writer -> output_log`.
+
+Nella v0 il percorso resta single-threaded. Se un singolo poll backend produce
+una burst abbastanza grande da riempire la coda bounded prima che il loop possa
+fare drain, `app_enqueue_output_record()` usa una valvola di backpressure:
+drena la coda una volta e ritenta l'enqueue. Questo evita di misurare come
+fallimento una burst legittima; il worker runtime futuro dovra' rendere questo
+passaggio asincrono.
+
+Questo benchmark serve a rispondere a una domanda diversa dai micro-benchmark:
+quanto costa il runtime reale quando entrano in gioco kernel, backend inotify,
+callback applicativi, log compatibili, file creati sul filesystem, costo della
+pipeline senza writer reale e output JSONL configurato?
+
+Output CSV:
+
+```text
+mode,run,files,process_status,startup_us,emit_us,settle_us,total_us,files_per_sec,raw_lines,event_lines,jsonl_lines,jsonl_bytes,enqueue_attempts,enqueue_success,enqueue_failures,pressure_drains,drain_calls,drained_records,max_pending,artifact_dir
+compat-only,1,1000,0,1001234,43000,12000,1080000,23255.81,1000,1000,0,0,0,0,0,0,0,0,0,/tmp/...
+counter-output,1,1000,0,1001300,45000,14000,1090000,22222.22,1000,1000,0,0,2000,2000,0,1,4,2000,1024,/tmp/...
+jsonl-output,1,1000,0,1001450,46000,15000,1095000,21739.13,1000,1000,2000,300000,2000,2000,0,1,4,2000,1024,/tmp/...
+```
+
+Significato delle colonne:
+
+- `mode`: modalita' misurata, `compat-only`, `counter-output` oppure
+  `jsonl-output`;
+- `run`: numero del run ripetuto;
+- `files`: numero di file creati nella directory osservata;
+- `process_status`: exit status osservato del processo Alfred dopo lo shutdown
+  richiesto dallo script. Nei run positivi deve essere `0`. Lo script disabilita
+  LeakSanitizer nel processo misurato per evitare che il sanitizer trasformi uno
+  shutdown pulito in `process_status=1` dentro ambienti ristretti o tracciati;
+- `startup_us`: tempo fra avvio del processo Alfred e inizio del workload. Al
+  momento include il secondo di attesa usato per lasciare installare il watch;
+- `emit_us`: tempo impiegato dallo script per creare i file. Questa misura
+  include il costo del filesystem e del loop shell, non solo Alfred;
+- `settle_us`: tempo di attesa dopo la creazione file per lasciare ad Alfred il
+  tempo di processare gli eventi visibili in `events.log`. Lo script aspetta
+  almeno `files * 3` righe evento, perche' una creazione file semplice produce
+  tipicamente `FILE_CREATED`, `FILE_MODIFIED` e `FILE_READY`;
+- `total_us`: tempo totale dal lancio di Alfred allo shutdown completato;
+- `files_per_sec`: throughput della sola fase di creazione file, calcolato da
+  `files / emit_us`;
+- `raw_lines`: righe prodotte in `raw.log`;
+- `event_lines`: righe prodotte in `events.log`;
+- `jsonl_lines`: righe prodotte in `output.jsonl`;
+- `jsonl_bytes`: byte prodotti in `output.jsonl`;
+- `enqueue_attempts`: record offerti alla pipeline strutturata quando
+  `output_enabled=true`. In `compat-only` vale `0` perche' la pipeline e'
+  disabilitata;
+- `enqueue_success`: record accettati nella coda bounded dopo eventuale drain di
+  pressione;
+- `enqueue_failures`: record non accettati per errore di enqueue o per errore
+  durante il drain di pressione. Nei run positivi deve restare `0`;
+- `pressure_drains`: quante volte il producer ha trovato la coda piena e ha
+  dovuto fare un drain prima di ritentare l'enqueue. Se cresce, il percorso
+  single-threaded sta mostrando pressione sulla coda;
+- `drain_calls`: chiamate totali a `app_drain_output_pipeline()`, sia dal loop
+  applicativo dopo `inotify_backend_poll()` sia dalla valvola di pressione;
+- `drained_records`: record consegnati con successo dal drain al dispatcher e
+  quindi ai sink registrati;
+- `max_pending`: massimo numero di record pending osservato nella coda. Se si
+  avvicina alla capacita' della coda, il workload sta stressando il confine
+  bounded;
+- `artifact_dir`: directory locale che contiene config, log e output del run.
+
+Interpretazione pratica:
+
+- se `compat-only` e `jsonl-output` sono vicini, l'output JSONL runtime non sta
+  aggiungendo un overhead evidente rispetto al costo reale di backend, log
+  compatibili e filesystem;
+- se `counter-output` cresce molto rispetto a `compat-only`, il costo e' gia'
+  nel confine `record -> queue -> drain -> dispatcher`, non nella
+  serializzazione JSONL;
+- se `jsonl-output` cresce molto rispetto a `counter-output`, il costo
+  aggiuntivo e' nel writer JSONL, nella serializzazione, nel buffering o nel
+  file I/O;
+- se `jsonl-output` cresce molto rispetto a `compat-only`, bisogna guardare al
+  percorso `enqueue -> drain -> dispatcher -> JSONL writer -> output_log`;
+- se entrambi sono molto piu' lenti dei micro-benchmark, il costo non e' nella
+  sola pipeline strutturata sintetica: potrebbe essere in inotify, logging
+  compatibile, creazione file, scheduler, disco o shutdown;
+- se `pressure_drains > 0` o `max_pending` e' alto, la coda bounded sta
+  assorbendo una burst e il runtime single-threaded sta usando la valvola di
+  backpressure v0. Non e' necessariamente un bug, ma e' un segnale da misurare
+  prima di introdurre worker o code per sink;
+- `raw_lines`, `event_lines` e `jsonl_lines` non sono soglie di correttezza
+  rigide. Servono per capire quanto output e' stato prodotto durante quel run.
+
+Lettura dei campi della coda con esempi:
+
+| Valori osservati | Interpretazione pratica |
+| --- | --- |
+| `enqueue_attempts=0` in `compat-only` | La pipeline strutturata e' spenta; Alfred sta usando solo i log compatibili. |
+| `jsonl_lines=0` in `counter-output` | Corretto: il sink counter misura queue/dispatcher senza produrre JSONL. |
+| `enqueue_attempts=enqueue_success` e `enqueue_failures=0` | Tutti i record offerti alla pipeline sono entrati nella coda. |
+| `drained_records=enqueue_success` | Tutti i record accodati sono stati consegnati al dispatcher e ai sink prima dello shutdown. |
+| `pressure_drains=0` e `max_pending` basso | La coda non e' stata messa sotto pressione nel run osservato. |
+| `pressure_drains>0` e `max_pending=1024` | La coda bounded corrente e' arrivata alla capacita' massima; il runtime v0 ha drenato sotto pressione e poi ha ritentato l'enqueue. |
+| `enqueue_failures>0` | Il ledger strutturato non e' completo; con output JSONL abilitato Alfred deve fallire in modo fail-closed. |
+
+`max_pending=1024` non e' un obiettivo prestazionale. E' un indizio: significa
+che il workload ha prodotto una burst abbastanza grande da riempire la coda
+prima del drain normale del loop applicativo. Nella v0 questo puo' accadere
+perche' il runtime e' ancora single-threaded: il backend processa un batch di
+eventi, accoda record e solo dopo il poll `app_run()` chiama il drain ordinario.
+Il worker futuro dovrebbe rendere piu' raro questo caso, perche' consumer e
+producer potranno avanzare in modo indipendente.
+
+Esempi:
+
+```bash
+make perf-runtime-output
+cd tests/perf && bash run_runtime_output.sh --files 5000 --runs 3
+BENCH_ROOT=/tmp/alfred_runtime_a bash tests/perf/run_runtime_output.sh 2000
+```
+
+Come gli altri benchmark manuali, questo comando non e' una suite performance
+ufficiale. Non ha ancora warmup, percentili, isolamento CPU, profili runtime o
+baseline versionate. Serve per iniziare a confrontare il runtime reale con
+`queue-dispatcher-jsonl` e `output-pipeline-jsonl`.
+
+### 11. Nessun `test-legacy-shadow`
 
 Il target `make test-legacy-shadow` e la variante
 `ENABLE_LEGACY_SHADOW=1` sono stati rimossi dal Makefile. I test funzionali
@@ -3005,8 +3152,8 @@ Significato:
 
 | Chiave | Significato |
 | --- | --- |
-| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> JSONL writer` |
-| `output_format` | formato del writer; in v0 `jsonl` e' il solo formato attivabile nel runtime |
+| `output_enabled` | se `false`, Alfred continua solo con `raw.log`, `events.log` ed `errors.log`; se `true`, abilita il percorso opt-in `record -> queue -> dispatcher -> sink` |
+| `output_format` | formato del writer; `jsonl` e' il formato utente v0, `counter` e' un sink benchmark/no-op, `text` resta accettato solo come valore configurato ma non attivabile |
 | `output_buffer_size` | bytes del buffer per writer buffered; minimo accettato `8192` |
 | `output_log` | file JSONL append-only prodotto quando `output_enabled=true` |
 
@@ -3050,7 +3197,10 @@ output_buffer_size=8192kb
 `protobuf` e i buffer invalidi falliscono durante il parsing della
 configurazione. `output_enabled=true` con `output_format=text` fallisce invece
 allo startup runtime: il parser conosce `text` come valore futuro, ma `app.c`
-abilita per ora solo JSONL.
+abilita oggi solo `jsonl` e `counter` come formati runtime. `jsonl` produce il
+ledger strutturato utente; `counter` attraversa lo stesso confine
+`record -> queue -> dispatcher -> sink`, ma conta i record senza formattazione
+e senza I/O su `output_log`.
 
 ### Provare gli eventi audit inotify
 

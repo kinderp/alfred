@@ -13,7 +13,7 @@
  *
  * accepted config:
  * - output_enabled=true
- * - output_format=text or output_format=jsonl
+ * - output_format=text, output_format=jsonl, or output_format=counter
  * - output_buffer_size >= OUTPUT_BUFFER_SIZE_MIN (8192 in v0)
  * - output_log=custom-output.jsonl
  *
@@ -27,8 +27,9 @@
  * output.enabled=true describes the future record -> queue -> dispatcher ->
  * writer path. With output.enabled=false, Alfred keeps only the compatibility
  * path through the existing raw.log/events.log/errors.log loggers. With
- * output.enabled=true, app.c currently accepts JSONL and writes additive
- * structured output to output_log while preserving the legacy logs.
+ * output.enabled=true, app.c currently accepts JSONL as the user-facing writer
+ * and counter as a benchmark/no-op writer. Counter routes records through queue
+ * and dispatcher without formatting JSONL or writing output_log.
  */
 
 #include "config.h"
@@ -122,6 +123,24 @@ static void test_output_config_accepts_text(void)
     remove(path);
 }
 
+static void test_output_config_accepts_counter(void)
+{
+    config_t cfg;
+    const char *path = "/tmp/alfred_output_config_counter.conf";
+
+    write_config_file(path,
+                      "output_enabled=true\n"
+                      "output_format=counter\n"
+                      "output_buffer_size=8192\n");
+
+    config_defaults(&cfg);
+    assert(config_load(&cfg, path) == ERR_OK);
+    assert(cfg.output.enabled == 1);
+    assert(cfg.output.format == OUTPUT_FORMAT_COUNTER);
+    assert(cfg.output.buffer_size == OUTPUT_BUFFER_SIZE_MIN);
+    remove(path);
+}
+
 static void test_output_config_rejects_invalid_format(void)
 {
     config_t cfg;
@@ -158,6 +177,7 @@ int main(void)
     test_output_defaults_are_disabled();
     test_output_config_accepts_jsonl();
     test_output_config_accepts_text();
+    test_output_config_accepts_counter();
     test_output_config_rejects_invalid_format();
     test_output_config_rejects_invalid_buffer_size();
 
