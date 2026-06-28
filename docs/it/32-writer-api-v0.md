@@ -613,8 +613,9 @@ produzione:
   log;
 - il formatter non aggiunge newline; il writer buffered invece aggiunge newline
   e accumula righe gia' formattate prima del flush;
-- il percorso runtime v0 e' ancora sincrono: enqueue, drain e writer avvengono
-  nel callback applicativo invece che in un worker thread;
+- il percorso runtime v0 e' ancora sincrono: il producer accoda il record, ma
+  il drain e il writer vengono eseguiti nello stesso thread da `app_run()` dopo
+  il polling backend, non da un worker thread;
 - non implementa backpressure avanzata, code per sink, retry o profili
   critical/best-effort/debug;
 - non assegna sequenze o timestamp da solo;
@@ -638,7 +639,7 @@ diventare una scelta implicita dimenticata nel codice.
 | Campi zero/`NULL` omessi | Il formatter non emette campi opzionali quando valgono `0` o `NULL` | Riduce il rumore del primo mapping e mantiene JSONL v0 compatto | Prima di dichiarare stabile lo schema JSONL o usarlo come contratto golden esterno |
 | Assenza di `null` espliciti | I campi non disponibili non compaiono invece di comparire come `null` | Evita di decidere troppo presto quali campi sono strutturalmente presenti ma sconosciuti | Quando definiremo schema, compatibilita' fra versioni e consumer esterni |
 | Path Linux non UTF-8 non lossless | Le stringhe sono trattate come testo valido, non come sequenze byte-safe | Basta per i test attuali e per il primo writer didattico | Prima di uso forense, produzione ostile, replay affidabile o auditing security-grade |
-| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta durante il drain chiamato dal callback applicativo | Rende verificabile il percorso runtime opt-in senza introdurre ancora worker thread | Prima di rendere il path caldo realmente asincrono |
+| Sink JSONL sincrono | `alfred_record_jsonl_sink_emit()` formatta durante il drain single-threaded chiamato da `app_run()` dopo il polling backend | Rende verificabile il percorso runtime opt-in senza introdurre ancora worker thread | Prima di rendere il path caldo realmente asincrono |
 | Writer JSONL buffered minimale | `alfred_record_jsonl_writer_emit()` accumula righe in buffer caller-owned e `flush()` chiama una callback bytes | Fissa il contratto di batching; `app.c` fornisce oggi la callback che scrive su `output_log` | Prima di output runtime con target multipli e profili operativi |
 | Backpressure solo fail-closed | Sink e writer non gestiscono code per sink, drop, retry o classi critical/best-effort/debug; se la pipeline runtime fallisce, Alfred si ferma | Evita un ledger JSONL parziale e silenzioso nella fase v0 | Prima di socket, Lab, ledger JSONL continuativo o writer thread |
 | File/socket gestiti fuori dal writer | Il writer buffered consegna bytes a una callback; oggi `app.c` apre `output_log`, ma il writer non conosce path, file descriptor o rotazione | Mantiene separati formato, framing, buffering e I/O reale | Quando introdurremo target multipli, rotazione o plugin writer |
@@ -703,12 +704,40 @@ record
 Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
 normalizzati gia' migrati al record sink, per gli eventi semantici emessi dal
 core e per tutta la diagnostica watch base: `WATCH_ADDED`, `WATCH_REMOVED`,
-`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`. Il collegamento e' volutamente
-sincrono: il callback applicativo, il core logger, il watch manager o il
+`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`.
+
+Il collegamento e' volutamente sincrono, ma non e' piu' un drain normale dentro
+il producer. Il callback applicativo, il core logger, il watch manager o il
 backend costruiscono un `alfred_record_t`, scrivono il log compatibile e, se la
-pipeline e' abilitata, accodano lo stesso record nella pipeline strutturata e
-drenano subito il batch disponibile. Con `output_format=counter`, il tratto
-iniziale e' identico:
+pipeline e' abilitata, offrono lo stesso record al lato producer:
+
+```text
+app_emit_output_record()
+-> app_enqueue_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+```
+
+Il drain normale avviene dopo il poll backend, nel ciclo applicativo:
+
+```text
+app_run()
+-> inotify_backend_poll()
+-> app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
+-> dispatcher
+-> JSONL buffered writer
+-> output_log
+```
+
+L'unica eccezione e' la valvola di pressione v0: se una burst consegnata da un
+singolo `inotify_backend_poll()` riempie la coda bounded prima che `app_run()`
+possa drenarla, `app_enqueue_output_record()` esegue un drain esplicito e ritenta
+l'enqueue una sola volta. Questa eccezione mantiene bounded la memoria nella v0
+single-threaded, ma non e' il modello finale del percorso caldo.
+
+Con `output_format=counter`, il tratto producer e il drain sono gli stessi, ma il
+sink finale cambia:
 
 ```text
 record
@@ -943,12 +972,13 @@ Significato:
 | Campo | Ruolo |
 | --- | --- |
 | `enabled` | se falso, la pipeline e' un no-op |
-| `format` | formato writer attivo; v0 supporta solo JSONL |
+| `format` | formato writer attivo; v0 supporta JSONL e counter |
 | `drain_batch_size` | massimo numero di record consumati da un drain |
 | `queue` | coda bounded di record owned |
 | `dispatcher` | fan-out bounded; v0 registra un solo sink |
-| `sink_storage[1]` | storage embedded per il sink JSONL |
-| `writer` | JSONL buffered writer |
+| `sink_storage[1]` | storage embedded per il sink registrato, JSONL o counter |
+| `writer` | JSONL buffered writer usato solo quando `format=jsonl` |
+| `counter` | sink no-op/counter usato solo quando `format=counter` |
 
 Quando la pipeline e' disabilitata, `enqueue`, `drain_once` e `flush` tornano
 successo senza produrre output. Questo rappresenta il comportamento di
@@ -956,9 +986,12 @@ successo senza produrre output. Questo rappresenta il comportamento di
 la nuova pipeline non partecipa.
 
 Quando la pipeline e' abilitata, il record viene clonato nella queue come owned,
-poi il drain consegna un batch al dispatcher. Il dispatcher chiama il sink JSONL
-e il sink scrive nel buffer del writer. La callback di output non viene chiamata
-dal drain: viene chiamata solo da `alfred_record_output_pipeline_flush()`.
+poi il drain consegna un batch al dispatcher. Con `format=jsonl`, il dispatcher
+chiama il sink JSONL e il sink scrive nel buffer del writer. La callback di
+output non viene chiamata direttamente dal drain: viene chiamata dal writer
+quando deve liberare spazio o da `alfred_record_output_pipeline_flush()`. Con
+`format=counter`, invece, il dispatcher chiama il counter sink, che conta i
+record senza formattare JSONL, senza aprire `output_log` e senza flush.
 
 Questa scelta e' intenzionale:
 
