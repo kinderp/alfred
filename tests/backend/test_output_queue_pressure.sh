@@ -7,6 +7,9 @@
 # - pressure_drains is greater than 0
 # - drained_records equals enqueue_success
 # - max_pending reaches the current bounded queue capacity during the burst
+# - the test waits for the concrete FILE_READY event of the last generated file
+#   before sending SIGINT, so startup/watch lines cannot satisfy the workload
+#   completion condition early
 #
 # This scenario intentionally creates more events than the current runtime
 # output queue can hold during one backend poll. inotify_backend_poll() drains a
@@ -69,14 +72,14 @@ line_count() {
     wc -l < "$file"
 }
 
-wait_for_event_lines() {
+wait_for_log_pattern() {
     local file="$1"
-    local expected="$2"
+    local pattern="$2"
     local timeout_ms="$3"
     local elapsed_ms=0
 
     while (( elapsed_ms < timeout_ms )); do
-        if (( $(line_count "$file") >= expected )); then
+        if [[ -f "$file" ]] && grep -Eq "$pattern" "$file"; then
             return 0
         fi
 
@@ -158,8 +161,13 @@ for i in $(seq 1 "$FILES"); do
     printf "queue pressure %s\n" "$i" > "$TEST_ROOT/file-$i.txt"
 done
 
-if ! wait_for_event_lines ./events.log "$((FILES * 3))" 15000; then
-    fail_with_all_logs "timed out waiting for file lifecycle events"
+# Wait for the final generated file to reach the compatibility semantic log
+# before stopping Alfred. A generic events.log line-count threshold can be
+# satisfied by startup/watch diagnostics before the burst has fully reached the
+# core and output runtime, which is the same timing class fixed in the counter
+# runtime test.
+if ! wait_for_log_pattern ./events.log "FILE_READY path=.*/file-${FILES}\\.txt" 15000; then
+    fail_with_all_logs "timed out waiting for final FILE_READY lifecycle event"
 fi
 
 kill -INT "$ALFRED_PID" 2>/dev/null || true
