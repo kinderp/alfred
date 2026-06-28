@@ -60,25 +60,14 @@ fail_with_all_logs() {
     exit 1
 }
 
-line_count() {
+wait_for_log_pattern() {
     local file="$1"
-
-    if [[ ! -f "$file" ]]; then
-        echo 0
-        return
-    fi
-
-    wc -l < "$file"
-}
-
-wait_for_event_lines() {
-    local file="$1"
-    local expected="$2"
+    local pattern="$2"
     local timeout_ms="$3"
     local elapsed_ms=0
 
     while (( elapsed_ms < timeout_ms )); do
-        if (( $(line_count "$file") >= expected )); then
+        if [[ -f "$file" ]] && grep -Eq "$pattern" "$file"; then
             return 0
         fi
 
@@ -157,8 +146,12 @@ sleep 1
 printf "counter runtime\n" > "$TEST_ROOT/counter-file.txt"
 mkdir "$TEST_ROOT/counter-dir"
 
-if ! wait_for_event_lines ./events.log 4 10000; then
-    fail_with_all_logs "timed out waiting for compatibility events"
+if ! wait_for_log_pattern ./events.log "FILE_CREATED path=.*/counter-file.txt" 10000; then
+    fail_with_all_logs "timed out waiting for compatibility FILE_CREATED event"
+fi
+
+if ! wait_for_log_pattern ./events.log "DIR_CREATED path=.*/counter-dir" 10000; then
+    fail_with_all_logs "timed out waiting for compatibility DIR_CREATED event"
 fi
 
 kill -INT "$ALFRED_PID" 2>/dev/null || true
