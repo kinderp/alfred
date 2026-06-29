@@ -67,10 +67,11 @@ milestone GitHub, issue madre e documenti collegati. Alla chiusura bisogna
 aggiornare durata reale, sintesi dell'esito e lavoro rimandato.
 
 Nel registro cronologico la colonna `Milestone` deve contenere il link
-cliccabile alla GitHub Milestone quando questa esiste. La colonna `GitHub`
-rimane per issue madre, PR, discussion e altri link di tracciabilita'. Se la
-milestone GitHub non e' ancora stata creata, il nome resta testo semplice e la
-colonna `GitHub` deve indicare chiaramente `Da creare`.
+cliccabile al documento MD locale della milestone o della roadmap primaria,
+quando esiste. La colonna `GitHub` resta il punto per GitHub Milestone, issue
+madre, PR, discussion e altri link di tracciabilita'. Se una milestone non ha
+ancora un documento dedicato o una GitHub Milestone, indicarlo chiaramente nelle
+colonne corrispondenti.
 
 Le milestone nuove devono partire con una data di fine orientativa esplicita.
 La data va inserita nella GitHub Milestone; se per un limite operativo non e'
