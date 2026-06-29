@@ -83,7 +83,7 @@ Issue madre: #32 Writer Runtime v0: implementation plan
 | Strumento GitHub | Uso in Alfred | Esempio corrente |
 | --- | --- | --- |
 | Milestone | Macro-obiettivo con avanzamento misurabile | [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1) |
-| Project | Vista operativa di issue, PR e roadmap | [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) |
+| Project | Vista operativa di issue, PR e roadmap | [`Repository Projects`](https://github.com/kinderp/alfred/projects), con [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) collegato al repository |
 | Issue madre | Piano tecnico dettagliato di una milestone | [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32) |
 | Issue figlia | Micro-step, bug o task specifico collegato a un piano | da creare quando il lavoro viene diviso |
 | Discussion | Discussione progettuale aperta, con domande e alternative | [`common queue vs per-sink queues`](https://github.com/kinderp/alfred/discussions/33) |

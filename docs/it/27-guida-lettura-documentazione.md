@@ -88,9 +88,10 @@ Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
    [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1);
 2. la issue madre della milestone, per esempio
    [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32);
-3. il Project
-   [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1), che mostra
-   issue e PR in una vista operativa;
+3. il Project nella pagina
+   [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
+   [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
+   e PR in una vista operativa;
 4. le Discussions collegate, che conservano il ragionamento progettuale prima
    che diventi documentazione stabile.
 

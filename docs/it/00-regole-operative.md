@@ -47,7 +47,9 @@ Issue madre
 - `Milestone`: macro-obiettivo misurabile, per esempio
   [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1).
 - `Project`: vista operativa di issue, PR e roadmap, per esempio
-  [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1).
+  [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove il
+  Project v2 [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) e'
+  collegato al repository.
 - `Issue madre`: piano tecnico dettagliato della milestone, per esempio
   [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32).
 - `Issue figlia`: micro-step, bug, test o task specifico collegato alla issue
