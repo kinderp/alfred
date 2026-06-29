@@ -56,6 +56,23 @@ Issue madre
   risposte e trade-off.
 - `Pull request`: modifica concreta e verificabile.
 - `docs/it`: decisione consolidata, contratto stabile e spiegazione didattica.
+- `Registro milestone`: vista cronologica versionata delle milestone, con
+  durata stimata/reale, dipendenze, priorita' e collegamenti a GitHub.
+
+Ogni milestone non banale deve essere registrata anche nel
+[Registro milestone del progetto](37-roadmap-milestone-progetto.md). La riga
+deve indicare almeno stato, finestra prevista, data di fine orientativa, durata
+stimata, dipendenze, motivazione della priorita', cosa sblocca e link a
+milestone GitHub, issue madre e documenti collegati. Alla chiusura bisogna
+aggiornare durata reale, sintesi dell'esito e lavoro rimandato.
+
+Le milestone nuove devono partire con una data di fine orientativa esplicita.
+La data va inserita nella GitHub Milestone; se per un limite operativo non e'
+possibile farlo subito, deve comparire almeno nella issue madre e nel registro.
+Non e' una promessa rigida: serve per stimare la velocita' del progetto e
+capire quando una milestone sta crescendo troppo. Se lo scope cambia o una
+review scopre problemi importanti, aggiornare la data e scrivere il motivo
+nella issue madre o nel registro.
 
 Regola di separazione:
 

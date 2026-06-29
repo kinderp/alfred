@@ -237,6 +237,9 @@ Questo percorso serve per capire dove sta andando il progetto.
 9. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
+10. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+   collega milestone GitHub, issue madre, durata orientativa, durata reale,
+   dipendenze e documenti stabili in una vista cronologica.
 
 Questi documenti non sono tutti contratti gia' implementati: alcuni sono
 decisioni attuali, altri sono roadmap. Prima di implementare codice nuovo bisogna
@@ -312,6 +315,7 @@ queste domande:
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Memoria C, lifetime, ownership e leak | [08](08-guida-c-usato-nel-progetto.md#lifetime-della-memoria), [29](29-event-model-v0.md#ownership-dei-campi), [32](32-writer-api-v0.md#ownership-e-record-accodati) |
+| Milestone, dipendenze e durata prevista | [37](37-roadmap-milestone-progetto.md), [31](31-milestone-inotify-reference-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
@@ -364,6 +368,9 @@ riferimento veloce:
   per orientarsi nel codice.
 - [Roadmap unificata dopo i dossier](25-roadmap-unificata-dossier.md):
   per capire la direzione futura.
+- [Registro milestone del progetto](37-roadmap-milestone-progetto.md):
+  per capire ordine cronologico, durata, dipendenze e priorita' delle
+  milestone.
 - [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md):
   per distinguere problemi reali, scelte rimandate e punti da discutere.
 - [documentation-progress.md](documentation-progress.md):

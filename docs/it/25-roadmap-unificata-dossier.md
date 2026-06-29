@@ -50,6 +50,12 @@ Questo ordine e' volutamente conservativo. Se partissimo subito dalle
 prestazioni o da eBPF, rischieremmo di ottimizzare o estendere un contratto non
 ancora stabile.
 
+Il registro cronologico delle milestone operative vive in
+[Registro milestone del progetto](37-roadmap-milestone-progetto.md). Questa
+roadmap spiega l'ordine concettuale; il registro milestone collega quell'ordine
+a GitHub Milestone, issue madre, durata prevista, durata reale, dipendenze e
+tracciabilita' storica.
+
 ## Fase 1 - Event Model v0
 
 Obiettivo: definire il modello dati comune di Alfred.

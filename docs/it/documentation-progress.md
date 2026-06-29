@@ -53,6 +53,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `34-report-benchmark-prestazioni.md` |
 | Parziale | `35-qualita-prodotto-software.md` |
 | Parziale | `36-use-cases-posizionamento-integrazioni.md` |
+| Parziale | `37-roadmap-milestone-progetto.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/nightly-playbook.md` |
@@ -106,6 +107,15 @@ upload artifact, aggiornamento maturita' e report finale.
 dimensioni usate nella matrice di maturita': correttezza funzionale,
 robustezza, affidabilita', stabilita', performance, leggerezza, sicurezza,
 coerenza, semplicita', manutenibilita', operabilita' e documentazione.
+
+## Aggiornamento registro milestone
+
+`37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
+milestone di Alfred. Il documento separa GitHub Milestone/Project come tracking
+operativo dalla documentazione versionata come memoria storica. Per ogni
+milestone prevede data di fine orientativa, durata stimata, durata reale,
+dipendenze, motivazione della priorita', cosa viene sbloccato e link a issue,
+PR e documenti stabili.
 
 ## Aggiornamento recente
 

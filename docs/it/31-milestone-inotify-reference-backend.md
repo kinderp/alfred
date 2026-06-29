@@ -152,6 +152,7 @@ Per lavorare su questa milestone leggere almeno:
 9. [Matrice eventi inotify](20-matrice-eventi-inotify.md)
 10. [Contratto dei log](22-contratto-log.md)
 11. [Stato funzionalita' supportate](26-stato-funzionalita.md)
+12. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
 
 La [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md) va letta per
 capire la direzione, ma non autorizza da sola a implementare policy, blocco o

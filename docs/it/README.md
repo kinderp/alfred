@@ -49,6 +49,7 @@ leggerlo e quando.
 | [34 - Report benchmark prestazioni](34-report-benchmark-prestazioni.md) | Misure eseguite, interpretazione, comandi benchmark e risultati osservati. | Chi valuta performance. | Dopo benchmark o prima di decisioni prestazionali. |
 | [35 - Qualita' prodotto software](35-qualita-prodotto-software.md) | Robustezza, affidabilita', sicurezza, coerenza, performance, operabilita' e documentazione. | Studenti e maintainer. | Per capire come valutiamo la maturita' di Alfred. |
 | [36 - Use case e integrazioni](36-use-cases-posizionamento-integrazioni.md) | Posizionamento, use case, competitor, integrazioni e matrice funzionalita' -> use case. | Maintainer, utenti, contributori. | Quando bisogna capire a cosa serve Alfred o comunicarlo. |
+| [37 - Registro milestone del progetto](37-roadmap-milestone-progetto.md) | Milestone in ordine cronologico, durata prevista/reale, dipendenze, priorita', GitHub tracking e documenti collegati. | Maintainer, contributori, agenti AI. | Quando si decide o si ricostruisce l'evoluzione del progetto. |
 | [Glossario](glossario.md) | Definizioni dei termini ricorrenti del progetto. | Tutti. | Quando un termine non e' chiaro. |
 
 ## Audit esplorativi
