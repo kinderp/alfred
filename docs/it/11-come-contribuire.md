@@ -885,6 +885,42 @@ Non usare `git push --force` a meno che un maintainer lo chieda esplicitamente.
 Per un contributore nuovo, commit aggiuntivi chiari sono piu' semplici da
 rivedere e meno rischiosi.
 
+### Validatori e contratti pubblici interni
+
+Quando una modifica introduce o aggiorna un validatore di contratto, i casi
+rifiutati dal validatore devono essere documentati esplicitamente. Un test che
+fallisce non basta: un contributore deve poter leggere il contratto prima di
+toccare il codice.
+
+Regola pratica:
+
+```text
+se il validatore rifiuta un caso,
+quel caso deve comparire in header/docstring, MD di contratto, guida didattica
+o contributori, test e pagine man quando il contratto e' visibile fuori dal
+codice.
+```
+
+Per esempio, `alfred_backend_ops_is_minimally_valid()` rifiuta:
+
+- descriptor `ops` nullo;
+- nome backend nullo o vuoto;
+- versione API diversa da Backend API v0;
+- descriptor capabilities nullo;
+- nome capabilities nullo o vuoto;
+- nome ops e nome capabilities incoerenti;
+- versione ops e versione capabilities incoerenti;
+- capability flags vuote;
+- callback lifecycle mancanti.
+
+Se in futuro questo elenco cambia, la PR deve aggiornare insieme:
+
+- header o docstring della funzione;
+- documento di contratto, per esempio `30-backend-api-v0.md`;
+- guida didattica, se il concetto e' utile agli studenti;
+- test mirati;
+- man page collegata, se il contratto e' esposto come riferimento operativo.
+
 ## Stile dei commenti nel codice
 
 I commenti nel codice devono seguire:

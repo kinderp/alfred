@@ -112,46 +112,18 @@ strutturati, come descritto in [Backend API v0](30-backend-api-v0.md) e
 
 ## API C proposta
 
-La forma aggiornata della API e' descritta in
-[Backend API v0](30-backend-api-v0.md). La bozza storica era:
+La roadmap non deve duplicare la definizione C di `alfred_backend_ops_t`.
+La fonte autorevole e' ora:
 
-```c
-typedef struct alfred_backend alfred_backend_t;
+- [Backend API v0](30-backend-api-v0.md), per il contratto spiegato;
+- `core/include/alfred_backend_ops.h`, per la forma C compilata;
+- `tests/backend/test_backend_ops.c`, per i casi validi e rifiutati.
 
-typedef int (*alfred_backend_raw_emit_fn)(
-    const alfred_raw_event_t *raw,
-    void *userdata
-);
-
-typedef int (*alfred_backend_diag_emit_fn)(
-    const alfred_log_record_t *diag,
-    void *userdata
-);
-
-typedef struct {
-    alfred_backend_raw_emit_fn emit_raw;
-    alfred_backend_diag_emit_fn emit_diag;
-    void *userdata;
-} alfred_backend_emit_t;
-
-typedef struct {
-    const char *name;
-    uint32_t api_version;
-
-    int (*init)(alfred_backend_t *backend,
-                const alfred_backend_config_t *config,
-                const alfred_backend_emit_t *emit);
-
-    int (*start)(alfred_backend_t *backend);
-    int (*poll)(alfred_backend_t *backend, int timeout_ms);
-    int (*stop)(alfred_backend_t *backend);
-    void (*destroy)(alfred_backend_t *backend);
-} alfred_backend_ops_t;
-```
-
-Questa non e' una API implementata. La specifica aggiornata usa un emit sink
-basato su `alfred_record_t` e separa lifecycle, target management, capabilities,
-ownership ed error model. Prima di scrivere codice restano da decidere:
+Questa separazione evita che una bozza di roadmap resti indietro rispetto al
+contratto reale. La specifica aggiornata usa un emit boundary basato su
+`alfred_record_t` e separa lifecycle, target management, capabilities,
+ownership ed error model. Prima di completare il refactor runtime restano da
+decidere:
 
 - dove vive `alfred_backend_t`
 - quali campi contiene `alfred_backend_config_t`
