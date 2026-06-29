@@ -135,6 +135,22 @@ static void test_ops_rejects_missing_capabilities(void)
     assert(alfred_backend_ops_is_minimally_valid(&ops) == 0);
 }
 
+static void test_ops_rejects_missing_or_empty_capability_name(void)
+{
+    alfred_backend_capabilities_t capabilities = TEST_CAPABILITIES;
+    alfred_backend_ops_t ops = valid_ops();
+
+    capabilities.backend_name = NULL;
+    ops.capabilities = &capabilities;
+    assert(alfred_backend_ops_is_minimally_valid(&ops) == 0);
+
+    capabilities = TEST_CAPABILITIES;
+    ops = valid_ops();
+    capabilities.backend_name = "";
+    ops.capabilities = &capabilities;
+    assert(alfred_backend_ops_is_minimally_valid(&ops) == 0);
+}
+
 static void test_ops_rejects_capability_name_mismatch(void)
 {
     alfred_backend_capabilities_t capabilities = TEST_CAPABILITIES;
@@ -263,6 +279,7 @@ int main(void)
     test_ops_rejects_missing_or_empty_name();
     test_ops_rejects_invalid_version();
     test_ops_rejects_missing_capabilities();
+    test_ops_rejects_missing_or_empty_capability_name();
     test_ops_rejects_capability_name_mismatch();
     test_ops_rejects_capability_version_mismatch();
     test_ops_rejects_zero_capabilities();
