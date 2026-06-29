@@ -254,6 +254,10 @@ solo la forma minima del contratto. La docstring di `alfred_backend_emit_t` e
 la Backend API v0 chiariscono anche la ownership dell'emit boundary: il backend
 puo' copiare function pointer e `userdata`, ma non deve conservare il puntatore
 alla busta `alfred_backend_emit_t` ricevuta da `init()`.
+I casi rifiutati da `alfred_backend_ops_is_minimally_valid()` sono ora
+documentati esplicitamente nel contratto Backend API v0, nella guida C per
+studenti, nella guida contributori e nella man page `alfred-events(7)`, oltre
+che nei test.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,

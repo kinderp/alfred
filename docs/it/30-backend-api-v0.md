@@ -564,16 +564,39 @@ int alfred_backend_ops_is_minimally_valid(
 
 valida solo metadata statici e callback richieste. Non avvia backend, non
 registra target e non viene chiamato nel percorso caldo degli eventi. Serve per
-test, wiring futuro e registry statico. In particolare controlla che:
+test, wiring futuro e registry statico.
+
+Il contratto positivo e':
 
 - `ops` non sia `NULL`;
 - `name` sia presente e non vuoto;
 - `api_version` sia `ALFRED_BACKEND_API_VERSION_V0`;
 - `capabilities` sia presente;
+- `capabilities->backend_name` sia presente e non vuoto;
 - `ops->name` e `capabilities->backend_name` coincidano;
 - `ops->api_version` e `capabilities->api_version` coincidano;
 - le capability non siano vuote;
 - tutte le callback lifecycle siano valorizzate.
+
+Di conseguenza il validatore deve rifiutare esplicitamente questi casi:
+
+| Caso rifiutato | Perche' non e' valido |
+| --- | --- |
+| `ops == NULL` | non esiste nessun descriptor da registrare |
+| `ops->name == NULL` | il backend non ha identita' stabile |
+| `ops->name` vuoto | il backend ha un'identita' non usabile |
+| `ops->api_version != ALFRED_BACKEND_API_VERSION_V0` | il chiamante non puo' assumere il contratto v0 |
+| `ops->capabilities == NULL` | mancano le capability del backend |
+| `ops->capabilities->backend_name == NULL` | il descriptor capabilities non identifica il backend |
+| `ops->capabilities->backend_name` vuoto | il descriptor capabilities ha un'identita' non usabile |
+| `ops->capabilities->backend_name != ops->name` | ops table e capabilities descrivono backend diversi o incoerenti |
+| `ops->capabilities->api_version != ops->api_version` | metadata e ops table non parlano la stessa versione API |
+| `ops->capabilities->flags == 0` | il backend non dichiara nessuna capability osservabile o controllabile |
+| una callback lifecycle e' `NULL` | il runtime non puo' chiamare il lifecycle in modo prevedibile |
+
+Questa tabella non e' solo una nota di test: e' parte del contratto Backend API
+v0. Se un caso viene rifiutato dal validatore, deve essere documentato qui, nei
+test e, quando rilevante per utenti o tooling, nelle pagine man.
 
 Per v0 tutte le callback sono obbligatorie anche se alcune implementazioni,
 come `start` e `stop` per inotify, potranno essere no-op. Questo rende il
@@ -1250,11 +1273,12 @@ tests/backend/test_backend_ops.c
 tests/backend/test_backend_ops.sh
 ```
 
-Il test verifica descriptor validi e casi invalidi: nome mancante, versione API
-sbagliata, capabilities mancanti o incoerenti, capability vuote e callback
-lifecycle non valorizzate. Non esercita il runtime inotify e non misura
-performance: blocca solo la forma minima della tabella operations prima del
-refactor successivo.
+Il test verifica descriptor validi e casi invalidi: `ops == NULL`, nome ops
+mancante o vuoto, versione API sbagliata, capabilities mancanti, nome
+capabilities mancante o vuoto, nome capabilities diverso dal nome ops, versione
+capabilities incoerente, capability vuote e callback lifecycle non valorizzate.
+Non esercita il runtime inotify e non misura performance: blocca solo la forma
+minima della tabella operations prima del refactor successivo.
 
 ## Decisioni rimandate
 

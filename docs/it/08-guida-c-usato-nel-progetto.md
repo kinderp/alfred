@@ -480,6 +480,7 @@ sapere che deve passare lo stesso `userdata` ricevuto dal suo chiamante.
 | `inotify_backend_event_fn` | `modules/inotify/include/inotify_backend.h` | backend inotify | consegnare un `alfred_raw_event_t` all'app/core boundary |
 | `fs_scan_fn` | `app/include/fs_scanner.h` | scanner filesystem | notificare ogni entry trovata durante una scansione |
 | `watcher_iter_fn` | `modules/inotify/include/watcher.h` | watcher table | visitare watch in uno stato specifico |
+| `alfred_backend_emit_fn` | `core/include/alfred_backend_ops.h` | backend futuri conformi a Backend API v0 | consegnare un `alfred_record_t` borrowed al runtime |
 | `alfred_record_sink_emit_fn` | `core/include/alfred_record_sink.h` | dispatcher o bridge record | consegnare un `alfred_record_t` a un sink generico |
 | `alfred_record_text_sink_write_fn` | `core/include/alfred_record_text_sink.h` | text sink | consegnare un payload testuale gia' formattato |
 
@@ -528,6 +529,72 @@ handle_backend_event(raw, userdata)
 
 Il backend non sa che `userdata` contiene `app_t *`. Questa e' la separazione
 voluta: il backend produce raw event, ma non conosce l'applicazione completa.
+
+### Esempio: emit boundary della Backend API v0
+
+Backend API v0 prepara un confine piu' generale per i backend futuri:
+
+```c
+typedef int (*alfred_backend_emit_fn)(
+    const alfred_record_t *record,
+    void *userdata
+);
+
+typedef struct alfred_backend_emit {
+    alfred_backend_emit_fn emit;
+    void *userdata;
+} alfred_backend_emit_t;
+```
+
+Questa struttura e' una piccola busta caller-owned. Contiene la funzione da
+richiamare e il contesto da ripassare alla funzione. Il backend la riceve in
+`init()`, ma `poll()` non la riceve di nuovo. Quindi il backend deve copiare i
+valori dentro il proprio runtime:
+
+```c
+backend->emit_fn = emit->emit;
+backend->emit_userdata = emit->userdata;
+```
+
+Non deve salvare il puntatore alla busta:
+
+```c
+backend->emit = emit; /* sbagliato */
+```
+
+Il motivo e' il lifetime: `emit` potrebbe essere una variabile locale del
+chiamante. Dopo il ritorno della funzione che l'ha creata, il suo indirizzo puo'
+non essere piu' valido. Copiare la function pointer e il valore `userdata`
+evita questo dangling pointer. `userdata` resta comunque borrowed: il backend lo
+usa, ma non lo possiede e non lo libera.
+
+La tabella ops del backend ha un validatore:
+
+```c
+int alfred_backend_ops_is_minimally_valid(
+    const alfred_backend_ops_t *ops
+);
+```
+
+Questo validatore rifiuta esplicitamente i casi che renderebbero ambiguo il
+contratto:
+
+| Caso rifiutato | Cosa significa per uno studente |
+| --- | --- |
+| `ops == NULL` | non c'e' nessuna struct da leggere |
+| `ops->name == NULL` o vuoto | il backend non ha un nome stabile |
+| versione API diversa da v0 | il codice non puo' assumere la stessa forma della struct |
+| `ops->capabilities == NULL` | mancano le informazioni su cosa sa fare il backend |
+| `capabilities->backend_name == NULL` o vuoto | le capability non dicono a quale backend appartengono |
+| nome ops e nome capabilities diversi | due pezzi del descriptor si contraddicono |
+| versione ops e versione capabilities diverse | metadata e funzioni non usano lo stesso contratto |
+| capability flags uguali a zero | il backend non dichiara nessuna capacita' |
+| callback lifecycle `NULL` | il runtime non sa quale funzione chiamare in una fase del ciclo di vita |
+
+Quando aggiungiamo un validatore di contratto, i casi rifiutati devono comparire
+in tre posti: docstring dell'header, documentazione didattica e test. Se il
+contratto diventa visibile anche a utenti o tooling, va aggiunto anche nelle
+pagine man.
 
 ### Esempio: callback del core
 

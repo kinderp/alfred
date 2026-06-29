@@ -198,6 +198,41 @@ flags
 .EE
 JSONL, MessagePack, Protobuf, socket output, Alfred Lab and plugin backends
 should be built on that structured model, not on ad hoc log strings.
+.SH BACKEND API V0 CONTRACT DRAFT
+Backend API v0 is an internal contract draft for future backend wiring. It is
+not a stable external plugin ABI yet, but its minimal operations descriptor is
+already compile-tested in the source tree.
+.PP
+The minimal backend operations validator rejects descriptors that cannot be
+registered predictably. In v0, an operations descriptor is invalid when:
+.IP \(bu 2
+the operations descriptor is NULL;
+.IP \(bu
+the backend name is NULL or empty;
+.IP \(bu
+the API version is not Backend API v0;
+.IP \(bu
+the capabilities descriptor is NULL;
+.IP \(bu
+the capabilities backend name is NULL or empty;
+.IP \(bu
+the operations backend name and capabilities backend name differ;
+.IP \(bu
+the operations API version and capabilities API version differ;
+.IP \(bu
+the capabilities flags field is zero;
+.IP \(bu
+any lifecycle callback is NULL.
+.PP
+These rejected cases are part of the contract, not only test details. They are
+documented so future backend adapters fail early instead of registering an
+ambiguous backend.
+.PP
+The backend emit envelope is caller-owned. A backend may copy the emit function
+pointer and userdata value into its runtime, but must not store the address of
+the emit envelope itself. The backend does not own userdata and must not free
+it. Records emitted through that callback are borrowed for the duration of the
+callback unless the receiver explicitly clones them.
 .SH SEE ALSO
 .BR alfred (1),
 .BR alfred.conf (5),

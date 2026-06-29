@@ -93,6 +93,18 @@ typedef struct alfred_backend_ops {
  * - at least one capability flag;
  * - all lifecycle callbacks populated.
  *
+ * Therefore this helper rejects these contract violations explicitly:
+ *
+ * - @ops is NULL;
+ * - @ops->name is NULL or empty;
+ * - @ops->api_version is not ALFRED_BACKEND_API_VERSION_V0;
+ * - @ops->capabilities is NULL;
+ * - @ops->capabilities->backend_name is NULL or empty;
+ * - @ops->capabilities->backend_name differs from @ops->name;
+ * - @ops->capabilities->api_version differs from @ops->api_version;
+ * - @ops->capabilities->flags is zero;
+ * - any lifecycle callback is NULL.
+ *
  * Return: 1 when @ops is valid enough to register, 0 otherwise.
  */
 int alfred_backend_ops_is_minimally_valid(
