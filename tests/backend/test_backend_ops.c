@@ -11,6 +11,11 @@
 
 #include <assert.h>
 
+typedef struct fake_backend_runtime {
+    alfred_backend_emit_fn emit_fn;
+    void *emit_userdata;
+} fake_backend_runtime_t;
+
 static const alfred_backend_capabilities_t TEST_CAPABILITIES = {
     .backend_name = "test",
     .api_version = ALFRED_BACKEND_API_VERSION_V0,
@@ -195,6 +200,63 @@ static void test_ops_rejects_missing_callbacks(void)
     assert(alfred_backend_ops_is_minimally_valid(&ops) == 0);
 }
 
+static int fake_backend_init_copies_emit_values(
+    fake_backend_runtime_t *runtime,
+    const alfred_backend_emit_t *emit
+)
+{
+    if (runtime == NULL || emit == NULL || emit->emit == NULL) {
+        return -1;
+    }
+
+    runtime->emit_fn = emit->emit;
+    runtime->emit_userdata = emit->userdata;
+
+    return 0;
+}
+
+static int capture_emit_userdata(
+    const alfred_record_t *record,
+    void *userdata
+)
+{
+    int *seen = userdata;
+
+    (void)record;
+
+    if (seen == NULL) {
+        return -1;
+    }
+
+    *seen += 1;
+    return 0;
+}
+
+static void test_backend_emit_contract_copies_values_not_envelope_pointer(void)
+{
+    fake_backend_runtime_t runtime = {0};
+    int seen = 0;
+    alfred_backend_emit_t emit = {
+        .emit = capture_emit_userdata,
+        .userdata = &seen
+    };
+    alfred_record_t record = {0};
+
+    assert(fake_backend_init_copies_emit_values(&runtime, &emit) == 0);
+
+    /*
+     * Mutating the original envelope after init simulates a caller-owned
+     * stack/local envelope going out of scope. The fake backend must keep using
+     * the copied function pointer and userdata value, not the envelope address.
+     */
+    emit.emit = NULL;
+    emit.userdata = NULL;
+
+    assert(runtime.emit_fn != NULL);
+    assert(runtime.emit_fn(&record, runtime.emit_userdata) == 0);
+    assert(seen == 1);
+}
+
 int main(void)
 {
     test_ops_accepts_complete_v0_descriptor();
@@ -205,6 +267,7 @@ int main(void)
     test_ops_rejects_capability_version_mismatch();
     test_ops_rejects_zero_capabilities();
     test_ops_rejects_missing_callbacks();
+    test_backend_emit_contract_copies_values_not_envelope_pointer();
 
     return 0;
 }

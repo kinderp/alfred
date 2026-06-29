@@ -23,6 +23,24 @@ typedef int (*alfred_backend_emit_fn)(
     void *userdata
 );
 
+/*
+ * alfred_backend_emit_t - caller-owned backend emit envelope
+ * @emit: callback used by a backend to emit one borrowed record
+ * @userdata: opaque caller-owned context passed back to @emit
+ *
+ * The caller owns this envelope and the object referenced by @userdata. A
+ * backend may copy @emit and @userdata into its own runtime during init, but it
+ * must not store the alfred_backend_emit_t pointer itself. This prevents a
+ * backend from keeping a pointer to a stack-local envelope created by the
+ * caller.
+ *
+ * The backend does not own @userdata and must not free it. The caller must keep
+ * @userdata valid while the backend can still emit records, normally until the
+ * backend has been stopped and destroyed.
+ *
+ * Records passed to @emit are borrowed and valid only for the duration of the
+ * callback unless the receiver explicitly clones them.
+ */
 typedef struct alfred_backend_emit {
     alfred_backend_emit_fn emit;
     void *userdata;

@@ -215,10 +215,49 @@ Regole:
 
 - il backend chiama `emit()` per ogni record prodotto;
 - il record e' valido solo durante la chiamata, salvo diversa documentazione;
-- il backend non conserva `userdata`;
+- il backend non conserva il puntatore `alfred_backend_emit_t *`;
+- il backend puo' copiare nel proprio runtime i valori `emit->emit` e
+  `emit->userdata`;
+- il backend non possiede e non libera `userdata`;
+- il chiamante deve mantenere `userdata` valido finche' il backend puo'
+  emettere record, normalmente fino a `stop()`/`destroy()`;
 - il backend non decide quale writer ricevera' il record;
 - l'app dispatcher decide se inviare il record al core, al log testuale, a JSONL
   o ad altri consumer.
+
+Questa distinzione e' fondamentale per evitare dangling pointer.
+`init()` riceve un puntatore a una piccola "busta" caller-owned:
+
+```c
+alfred_backend_emit_t emit = {
+    .emit = app_emit_record,
+    .userdata = &app
+};
+
+backend->ops->init(backend, config, &emit);
+```
+
+Il backend non deve salvare l'indirizzo della busta:
+
+```c
+backend->emit = emit; /* sbagliato: conserva un puntatore esterno */
+```
+
+Se `emit` era una variabile locale del chiamante, dopo il ritorno della funzione
+quell'indirizzo puo' non essere piu' valido. Una futura chiamata a `poll()`
+potrebbe quindi dereferenziare memoria scaduta.
+
+Il backend deve invece copiare i valori contenuti nella busta:
+
+```c
+backend->emit_fn = emit->emit;
+backend->emit_userdata = emit->userdata;
+```
+
+In questo modo il backend conserva la function pointer e il valore opaque
+`userdata`, ma non dipende dalla durata della variabile locale
+`alfred_backend_emit_t`. `userdata` resta comunque caller-owned: il backend lo
+passa alla callback, ma non lo libera e non ne decide la durata.
 
 ## Percorso caldo e I/O
 

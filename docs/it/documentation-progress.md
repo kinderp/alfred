@@ -250,7 +250,10 @@ backend/config/target, emit boundary basato su `alfred_record_t`, puntatore al
 descriptor `alfred_backend_capabilities_t`, callback lifecycle e helper
 `alfred_backend_ops_is_minimally_valid()`. Il runtime inotify non e' ancora
 migrato a questa tabella: il test `tests/backend/test_backend_ops.c` blocca
-solo la forma minima del contratto.
+solo la forma minima del contratto. La docstring di `alfred_backend_emit_t` e
+la Backend API v0 chiariscono anche la ownership dell'emit boundary: il backend
+puo' copiare function pointer e `userdata`, ma non deve conservare il puntatore
+alla busta `alfred_backend_emit_t` ricevuta da `init()`.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
