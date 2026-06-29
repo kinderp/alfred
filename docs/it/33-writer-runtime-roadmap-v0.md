@@ -897,18 +897,26 @@ Questi temi sono importanti, ma vanno affrontati quando il percorso
 
 ## Criterio di completamento
 
-Il Writer Runtime v0 potra' dirsi pronto quando:
+Il Writer Runtime v0 e' considerato pronto nel perimetro single-threaded della
+milestone quando:
 
-- il backend produce record senza chiamare writer lenti;
+- il percorso strutturato opt-in produce record senza chiamare direttamente i
+  writer lenti dal backend;
 - il record diventa owned prima di attraversare la coda;
 - una coda bounded protegge il confine caldo/freddo;
 - un dispatcher consegna record a sink registrati;
-- almeno un writer testuale compatibile e un writer JSONL funzionano fuori dal
-  percorso caldo;
+- il text sink compatibile, il JSONL writer buffered e il counter sink hanno
+  confini espliciti e testati;
 - i benchmark distinguono costo queue, dispatcher, text e JSONL;
 - la documentazione spiega chiaramente cosa e' runtime corrente e cosa e'
   roadmap futura;
 - non esistono drop silenziosi non documentati.
+
+Questo criterio non significa che il percorso caldo finale sia gia'
+asincrono. Nella v0 il drain resta chiamato dal loop applicativo, con una
+valvola di pressione sincrona quando una burst riempie la coda bounded. La fase
+successiva potra' sostituire quel drain con un worker senza cambiare il
+contratto pubblico dei record o il significato dei test JSONL/counter.
 
 La frase guida e':
 

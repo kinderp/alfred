@@ -1090,3 +1090,11 @@ bidirezionali. Quando disponibile, la issue figlia va aggiunta anche come
 sub-issue nativa GitHub; se gli strumenti automatici non lo permettono, il
 collegamento deve essere registrato almeno nella issue madre e nella issue
 figlia.
+
+Aggiornamento successivo: audit finale di coerenza Writer Runtime v0. L'indice,
+lo stato funzionale e la roadmap Writer Runtime distinguono ora in modo piu'
+netto lo stato implementato v0 dal lavoro futuro: il runtime output e'
+collegato come percorso opt-in single-threaded con queue bounded, drain
+esplicito, dispatcher, JSONL/counter, statistiche runtime e valvola di
+pressione; worker thread, code per sink, socket/binary writer e backpressure
+pubblica restano fasi successive.
