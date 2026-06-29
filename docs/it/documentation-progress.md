@@ -258,6 +258,10 @@ I casi rifiutati da `alfred_backend_ops_is_minimally_valid()` sono ora
 documentati esplicitamente nel contratto Backend API v0, nella guida C per
 studenti, nella guida contributori e nella man page `alfred-events(7)`, oltre
 che nei test.
+La roadmap plugin backend non duplica piu' la vecchia bozza di
+`alfred_backend_ops_t`: rimanda al contratto Backend API v0, all'header
+compilato e ai test, cosi' il prossimo adapter refactor ha una sola fonte di
+verita'.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
