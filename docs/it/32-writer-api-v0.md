@@ -701,10 +701,19 @@ record
 -> output_log
 ```
 
-Nel codice corrente questo path e' collegato ad `app_run()` per i record raw
-normalizzati gia' migrati al record sink, per gli eventi semantici emessi dal
-core e per tutta la diagnostica watch base: `WATCH_ADDED`, `WATCH_REMOVED`,
-`WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`.
+Nel codice corrente questo path e' collegato ad `app_run()` per:
+
+- i record raw normalizzati gia' migrati al record sink;
+- gli eventi semantici emessi dal core;
+- la diagnostica watch lifecycle, come `WATCH_ADDED`, `WATCH_REMOVED`,
+  `WATCH_STALE` e `WATCH_STALE_EVENT_DROPPED`;
+- la diagnostica resync e lost-scope gia' migrata al confine strutturato, come
+  `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_FAILED`, `WATCH_LOST_QUEUED`,
+  `WATCH_LOST_FOUND` e `WATCH_LOST_RECOVERY_END`.
+
+Lifecycle applicativo, errori runtime generici, trace/performance e futuri
+record security/policy restano fuori dal contratto runtime JSONL v0 finche' non
+avranno uno schema pubblico dedicato.
 
 Il collegamento e' volutamente sincrono, ma non e' piu' un drain normale dentro
 il producer. Il callback applicativo, il core logger, il watch manager o il

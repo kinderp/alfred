@@ -1090,3 +1090,28 @@ bidirezionali. Quando disponibile, la issue figlia va aggiunta anche come
 sub-issue nativa GitHub; se gli strumenti automatici non lo permettono, il
 collegamento deve essere registrato almeno nella issue madre e nella issue
 figlia.
+
+Aggiornamento successivo: audit finale di coerenza Writer Runtime v0. L'indice,
+lo stato funzionale e la roadmap Writer Runtime distinguono ora in modo piu'
+netto lo stato implementato v0 dal lavoro futuro: il runtime output e'
+collegato come percorso opt-in single-threaded con queue bounded, drain
+esplicito, dispatcher, JSONL/counter, statistiche runtime e valvola di
+pressione; worker thread, code per sink, socket/binary writer e backpressure
+pubblica restano fasi successive.
+
+Aggiornamento successivo: la review della PR Writer Runtime v0 final audit ha
+evidenziato una contraddizione residua in `22-contratto-log.md` e
+`32-writer-api-v0.md`: alcune sezioni introduttive descrivevano ancora la
+diagnostica JSONL collegata come sola diagnostica watch base, mentre la matrice
+di chiusura indicava gia' resync e lost-scope come runtime-routed. Le sezioni
+sono state riallineate: nel perimetro JSONL v0 rientrano raw normalizzati,
+semantica core e diagnostica watch/resync/lost-scope; lifecycle, errori
+runtime generici, trace/performance e security/policy restano futuri o non-goal
+v0.
+
+Aggiornamento successivo: la seconda review della stessa PR ha corretto il
+diagramma del percorso diagnostico in `22-contratto-log.md`. Il blocco ora usa
+solo funzioni reali (`alfred_record_build_watch_diagnostic()`,
+`alfred_record_build_watch_diagnostic_with_os_error()` e
+`alfred_record_build_stale_event_dropped()`) e spiega in prosa che il builder
+diagnostico watch copre anche molti record `WATCH_RESYNC_*` e `WATCH_LOST_*`.
