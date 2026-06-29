@@ -591,8 +591,8 @@ lost-scope recovery:
 ```text
 watch manager / resync / lost-scope recovery
 -> alfred_record_build_watch_diagnostic()
+   oppure alfred_record_build_watch_diagnostic_with_os_error()
    oppure alfred_record_build_stale_event_dropped()
-   oppure builder diagnostico dedicato al record `WATCH_*`
 -> alfred_record_sink_emit()
 -> alfred_record_text_sink_emit()
 -> events.log
@@ -604,6 +604,15 @@ watch manager / resync / lost-scope recovery
 -> JSONL writer
 -> output_log
 ```
+
+`alfred_record_build_watch_diagnostic()` non e' limitata ai soli
+`WATCH_ADDED`/`WATCH_REMOVED`: viene usata anche per molti record diagnostici
+`WATCH_RESYNC_*` e `WATCH_LOST_*`. Quando il record deve conservare anche un
+errore OS, il percorso usa la variante
+`alfred_record_build_watch_diagnostic_with_os_error()`. Il builder
+`alfred_record_build_stale_event_dropped()` resta il caso specifico in cui
+Alfred vede un evento kernel su un watch stale e decide di non trasformarlo in
+raw/core event.
 
 Questo percorso oggi copre famiglie diagnostiche diverse:
 

@@ -1108,3 +1108,10 @@ sono state riallineate: nel perimetro JSONL v0 rientrano raw normalizzati,
 semantica core e diagnostica watch/resync/lost-scope; lifecycle, errori
 runtime generici, trace/performance e security/policy restano futuri o non-goal
 v0.
+
+Aggiornamento successivo: la seconda review della stessa PR ha corretto il
+diagramma del percorso diagnostico in `22-contratto-log.md`. Il blocco ora usa
+solo funzioni reali (`alfred_record_build_watch_diagnostic()`,
+`alfred_record_build_watch_diagnostic_with_os_error()` e
+`alfred_record_build_stale_event_dropped()`) e spiega in prosa che il builder
+diagnostico watch copre anche molti record `WATCH_RESYNC_*` e `WATCH_LOST_*`.
