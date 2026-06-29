@@ -159,8 +159,18 @@ stringa: nasce come `alfred_record_t` e, per
 
 ## Tipi concettuali
 
-Questi tipi descrivono la direzione della API. Non sono ancora header C
-implementati.
+Questi tipi descrivono la direzione della API. La prima forma C dello
+scheletro operations esiste ora in:
+
+```text
+core/include/alfred_backend_ops.h
+core/src/alfred_backend_ops.c
+```
+
+Questo non significa che il runtime inotify sia gia' migrato alla nuova API.
+Significa che il contratto minimo e' compilabile e testabile: nome backend,
+versione API, capabilities, emit boundary e callback lifecycle possono essere
+validati prima di collegare `app.c` a un backend generico.
 
 ```c
 typedef struct alfred_backend alfred_backend_t;
@@ -475,7 +485,7 @@ I writer serializzano.
 typedef struct {
     const char *name;
     uint32_t api_version;
-    uint64_t capabilities;
+    const alfred_backend_capabilities_t *capabilities;
 
     int (*init)(alfred_backend_t *backend,
                 const alfred_backend_config_t *config,
@@ -497,6 +507,39 @@ typedef struct {
     void (*destroy)(alfred_backend_t *backend);
 } alfred_backend_ops_t;
 ```
+
+Nel codice corrente lo scheletro vive in
+`core/include/alfred_backend_ops.h`. Il campo `capabilities` non e' piu' una
+semplice bitmask locale: punta a `alfred_backend_capabilities_t`, cioe' allo
+stesso descriptor statico introdotto per dichiarare cosa un backend sa
+osservare o controllare. Questa scelta evita due sorgenti di verita' diverse:
+il nome, la versione API e le capability del backend devono restare coerenti.
+
+Il helper:
+
+```c
+int alfred_backend_ops_is_minimally_valid(
+    const alfred_backend_ops_t *ops
+);
+```
+
+valida solo metadata statici e callback richieste. Non avvia backend, non
+registra target e non viene chiamato nel percorso caldo degli eventi. Serve per
+test, wiring futuro e registry statico. In particolare controlla che:
+
+- `ops` non sia `NULL`;
+- `name` sia presente e non vuoto;
+- `api_version` sia `ALFRED_BACKEND_API_VERSION_V0`;
+- `capabilities` sia presente;
+- `ops->name` e `capabilities->backend_name` coincidano;
+- `ops->api_version` e `capabilities->api_version` coincidano;
+- le capability non siano vuote;
+- tutte le callback lifecycle siano valorizzate.
+
+Per v0 tutte le callback sono obbligatorie anche se alcune implementazioni,
+come `start` e `stop` per inotify, potranno essere no-op. Questo rende il
+contratto piu' esplicito: un backend non lascia buchi nella tabella ops, ma
+dichiara deliberatamente che una fase non richiede lavoro.
 
 ### `name`
 
@@ -521,9 +564,10 @@ separatamente.
 
 ### `capabilities`
 
-Bitmask di funzionalita' dichiarate dal backend. Le capabilities non dicono che
-una feature e' attiva nella configurazione corrente: dicono che il backend e'
-capace di offrirla.
+Descriptor statico di funzionalita' dichiarate dal backend. Le capabilities
+non dicono che una feature e' attiva nella configurazione corrente: dicono che
+il backend e' capace di offrirla. Il puntatore e' borrowed: punta a metadata
+statico del backend e non deve essere liberato dal chiamante.
 
 ### `init`
 
@@ -681,10 +725,15 @@ Questa tabella e' ora bloccata anche da
   il confine API/record e non dichiara capability che non possiede, come audit
   API-level, processo, rete, permission events o block.
 
-Questo e' un primo passo deliberatamente piccolo. Non introduce ancora
-`alfred_backend_ops_t` completo, non cambia `inotify_backend_poll()` e non
-aggiunge fanotify/eBPF. Serve a rendere verificabile una domanda fondamentale:
-"cosa puo' davvero fare questo backend?".
+Questo e' un primo passo deliberatamente piccolo. Non cambia
+`inotify_backend_poll()` e non aggiunge fanotify/eBPF. Serve a rendere
+verificabile una domanda fondamentale: "cosa puo' davvero fare questo
+backend?".
+
+Il passo successivo nello stesso filone introduce
+`alfred_backend_ops_t` come scheletro C compilabile. Anche questo resta un
+contratto, non un cambio runtime: nessun evento passa ancora attraverso
+`alfred_backend_ops_t`.
 
 Nota su `audit_events`: il backend inotify ha gia' una configurazione
 `inotify_audit_events` per osservare `IN_OPEN`, `IN_ACCESS` e
@@ -793,6 +842,19 @@ gia' migrati
 -> backend_emit_diagnostic_record(WATCH_*) domani
 -> text writer produce la stessa riga leggibile
 ```
+
+Lo scheletro `alfred_backend_ops_t` permette di preparare questa migrazione
+senza cambiare ancora il comportamento esterno. Il futuro adapter inotify verso
+Backend API v0 dovra' riempire la tabella ops con:
+
+- `name = "inotify"`;
+- `api_version = ALFRED_BACKEND_API_VERSION_V0`;
+- `capabilities = inotify_backend_capabilities()`;
+- callback verso le funzioni inotify correnti o wrapper sottili;
+- no-op espliciti per lifecycle non ancora necessari.
+
+Fino a quel momento `app.c` continua a chiamare direttamente il backend inotify
+corrente.
 
 ## Relazione con Event Model v0
 
@@ -1141,6 +1203,19 @@ Quando la API verra' implementata, servira' coprire:
 - text sink che chiama un writer callback senza cambiare payload;
 - nessun cambiamento nella semantica core;
 - nessuna emissione diretta di eventi `FILE_*` / `DIR_*` dal backend.
+
+Il contratto ops minimo e' gia' coperto da:
+
+```text
+tests/backend/test_backend_ops.c
+tests/backend/test_backend_ops.sh
+```
+
+Il test verifica descriptor validi e casi invalidi: nome mancante, versione API
+sbagliata, capabilities mancanti o incoerenti, capability vuote e callback
+lifecycle non valorizzate. Non esercita il runtime inotify e non misura
+performance: blocca solo la forma minima della tabella operations prima del
+refactor successivo.
 
 ## Decisioni rimandate
 

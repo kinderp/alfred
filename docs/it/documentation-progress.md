@@ -227,7 +227,6 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
-
 Il primo frammento C della Backend API v0 lato input e' ora il modello di
 capabilities:
 
@@ -243,6 +242,15 @@ permission events, process context, network context o blocking. L'opt-in audit
 inotify corrente resta raw-log-only finche' non produce record audit
 strutturati. Il contratto e' coperto da
 `tests/backend/test_backend_capabilities.c`.
+
+Il contratto Backend API v0 ora ha anche il primo scheletro C compilabile per
+`alfred_backend_ops_t` in `core/include/alfred_backend_ops.h` e
+`core/src/alfred_backend_ops.c`. Lo scheletro definisce tipi opachi per
+backend/config/target, emit boundary basato su `alfred_record_t`, puntatore al
+descriptor `alfred_backend_capabilities_t`, callback lifecycle e helper
+`alfred_backend_ops_is_minimally_valid()`. Il runtime inotify non e' ancora
+migrato a questa tabella: il test `tests/backend/test_backend_ops.c` blocca
+solo la forma minima del contratto.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,

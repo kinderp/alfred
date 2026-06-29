@@ -99,6 +99,7 @@ APP_SRCS := \
 
 CORE_SRCS := \
 	$(CORE_DIR)/src/alfred_backend_capabilities.c \
+	$(CORE_DIR)/src/alfred_backend_ops.c \
 	$(CORE_DIR)/src/alfred_correlator.c \
 	$(CORE_DIR)/src/alfred_record_adapter.c \
 	$(CORE_DIR)/src/alfred_record_counter_sink.c \
