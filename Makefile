@@ -98,6 +98,7 @@ APP_SRCS := \
 	$(APP_DIR)/src/utils.c
 
 CORE_SRCS := \
+	$(CORE_DIR)/src/alfred_backend_capabilities.c \
 	$(CORE_DIR)/src/alfred_correlator.c \
 	$(CORE_DIR)/src/alfred_record_adapter.c \
 	$(CORE_DIR)/src/alfred_record_counter_sink.c \
@@ -124,6 +125,7 @@ DEFINES += -DALFRED_ENABLE_INOTIFY
 MODULE_SRCS += \
 	$(MODULE_DIR)/inotify/src/inotify_adapter.c \
 	$(MODULE_DIR)/inotify/src/inotify_backend.c \
+	$(MODULE_DIR)/inotify/src/inotify_backend_capabilities.c \
 	$(MODULE_DIR)/inotify/src/inotify_config.c \
 	$(MODULE_DIR)/inotify/src/watch_manager.c \
 	$(MODULE_DIR)/inotify/src/watcher.c

@@ -196,9 +196,9 @@ Resta parziale perche' `alfred_record_t` esiste come contratto dati in
 `core/src/alfred_record_adapter.c`. Lo stesso file contiene anche l'adapter
 semantico `alfred_event_t -> alfred_record_t`, usato da `core_logger_on_event()`
 prima del formatter testuale. Esiste anche il builder diagnostico `WATCH_*` in
-`core/src/alfred_record_diagnostic.c` e il formatter testuale in
-`core/src/alfred_record_text.c`, ma mancano ancora writer JSONL e uso runtime
-nel backend inotify.
+`core/src/alfred_record_diagnostic.c`, il formatter testuale in
+`core/src/alfred_record_text.c`, il writer JSONL buffered e i sink/runtime
+output introdotti dal Writer Runtime v0.
 
 ## Aggiornamento Backend API v0
 
@@ -227,6 +227,23 @@ questi campi tramite `alfred_record_build_watch_diagnostic_with_os_error()`.
 Il formatter testuale puo' gia' renderli nella forma compatibile
 `errno=N (...)`. Il runtime inotify usa gia' questo percorso per
 `WATCH_RESYNC_FAILED` con `errno`, conservando codice OS e messaggio nel record.
+
+Il primo frammento C della Backend API v0 lato input e' ora il modello di
+capabilities:
+
+- `core/include/alfred_backend_capabilities.h`
+- `core/src/alfred_backend_capabilities.c`
+- `modules/inotify/src/inotify_backend_capabilities.c`
+
+Il descriptor `alfred_backend_capabilities_t` dichiara nome backend, versione
+API e bitmask delle capability. Il backend inotify dichiara capability
+osservazionali filesystem, recursive watch, metadata raw, self events,
+overflow, identity tracking e lost-scope recovery. Non dichiara audit events,
+permission events, process context, network context o blocking. L'opt-in audit
+inotify corrente resta raw-log-only finche' non produce record audit
+strutturati. Il contratto e' coperto da
+`tests/backend/test_backend_capabilities.c`.
+
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
 `RAW_MOVED_FROM`, `RAW_MOVED_TO` e `RAW_OVERFLOW`. `app.c` converte
