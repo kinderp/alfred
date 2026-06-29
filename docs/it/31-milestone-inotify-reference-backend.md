@@ -153,7 +153,14 @@ Per lavorare su questa milestone leggere almeno:
 10. [Contratto dei log](22-contratto-log.md)
 11. [Stato funzionalita' supportate](26-stato-funzionalita.md)
 12. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+13. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
 
 La [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md) va letta per
 capire la direzione, ma non autorizza da sola a implementare policy, blocco o
 backend futuri durante questa milestone.
+
+La [Visione Observation Runtime](38-visione-observation-runtime.md) e i
+[Principi architetturali futuri](39-principi-architetturali-futuri.md) valgono
+allo stesso modo: orientano nomi, confini e responsabilita', ma non trasformano
+la milestone corrente in un progetto di knowledge graph, world model o AI
+generale.

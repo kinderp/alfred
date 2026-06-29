@@ -54,6 +54,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `35-qualita-prodotto-software.md` |
 | Parziale | `36-use-cases-posizionamento-integrazioni.md` |
 | Parziale | `37-roadmap-milestone-progetto.md` |
+| Parziale | `38-visione-observation-runtime.md` |
+| Parziale | `39-principi-architetturali-futuri.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/nightly-playbook.md` |
@@ -116,6 +118,19 @@ operativo dalla documentazione versionata come memoria storica. Per ogni
 milestone prevede data di fine orientativa, durata stimata, durata reale,
 dipendenze, motivazione della priorita', cosa viene sbloccato e link a issue,
 PR e documenti stabili.
+
+## Aggiornamento visione Observation Runtime
+
+`38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
+runtime di osservazioni: eventi, misure, percezioni, inferenze, previsioni,
+azioni, outcome e feedback. Il documento chiarisce che questa e' una bussola
+architetturale, non scope corrente.
+
+`39-principi-architetturali-futuri.md` traduce la visione in principi pratici:
+provenance obbligatoria, separazione tra osservazione/inferenza/decisione,
+backend come sensori con capabilities, stato derivato dal log, percorso caldo
+corto, versioning separato dei contratti e LLM come adapter/interfaccia, non
+come fonte di verita'.
 
 ## Aggiornamento recente
 

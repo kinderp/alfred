@@ -50,6 +50,8 @@ leggerlo e quando.
 | [35 - Qualita' prodotto software](35-qualita-prodotto-software.md) | Robustezza, affidabilita', sicurezza, coerenza, performance, operabilita' e documentazione. | Studenti e maintainer. | Per capire come valutiamo la maturita' di Alfred. |
 | [36 - Use case e integrazioni](36-use-cases-posizionamento-integrazioni.md) | Posizionamento, use case, competitor, integrazioni e matrice funzionalita' -> use case. | Maintainer, utenti, contributori. | Quando bisogna capire a cosa serve Alfred o comunicarlo. |
 | [37 - Registro milestone del progetto](37-roadmap-milestone-progetto.md) | Milestone in ordine cronologico, durata prevista/reale, dipendenze, priorita', GitHub tracking e documenti collegati. | Maintainer, contributori, agenti AI. | Quando si decide o si ricostruisce l'evoluzione del progetto. |
+| [38 - Visione Observation Runtime](38-visione-observation-runtime.md) | Visione lunga: Alfred come runtime di osservazioni, memoria, provenance, replay, feedback e sistemi intelligenti. | Maintainer e architettura. | Per orientare scelte future senza allargare lo scope corrente. |
+| [39 - Principi architetturali futuri](39-principi-architetturali-futuri.md) | Principi pratici: provenance, osservazioni/inferenze separate, backend come sensori, log append-only e percorso caldo corto. | Maintainer, contributori esperti, agenti AI. | Prima di introdurre concetti comuni o nuove API architetturali. |
 | [Glossario](glossario.md) | Definizioni dei termini ricorrenti del progetto. | Tutti. | Quando un termine non e' chiaro. |
 
 ## Audit esplorativi

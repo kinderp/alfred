@@ -143,6 +143,52 @@ evento OS
 Tutto il resto, come JSONL, text writer, socket, dashboard o report, deve stare
 fuori dal percorso caldo quando Alfred dovra' puntare a prestazioni alte.
 
+### Le astrazioni devono pagare il proprio costo
+
+Una astrazione architetturale puo' essere utile, ma non e' gratuita. Porte,
+adapter, dispatcher, code, callback, plugin-like API, projection o writer
+aggiungono concetti da capire e, a volte, costo runtime.
+
+Per Alfred la domanda non e':
+
+```text
+questa architettura e' elegante?
+```
+
+La domanda e':
+
+```text
+questa architettura rende Alfred piu' piccolo, chiaro, testabile,
+robusto, sicuro o estendibile senza danneggiare prestazioni e semplicita'?
+```
+
+Se una astrazione tocca il percorso caldo, deve essere misurata. Il confronto
+minimo dovrebbe indicare:
+
+- baseline prima della modifica;
+- nuova versione;
+- scenario no-op o counter quando possibile;
+- scenario JSONL o text quando rilevante;
+- `records/sec` o `ns/record`;
+- eventuali allocazioni, copie, lock o I/O aggiunti;
+- interpretazione del risultato.
+
+Se il costo e' piccolo rispetto al beneficio, va scritto. Se il costo e'
+incerto, la modifica resta sperimentale o va rimandata.
+
+Regola sintetica:
+
+```text
+Architecture must pay rent.
+```
+
+Una astrazione che non compra chiarezza, testabilita', sicurezza,
+affidabilita', estensibilita' necessaria o performance misurabile e' debito,
+non qualita'.
+
+La discussione architetturale collegata e':
+[Architecture direction: lightweight ports-and-adapters for Alfred](https://github.com/kinderp/alfred/discussions/44).
+
 ## Sicurezza
 
 La sicurezza e' centrale per Alfred. Se Alfred deve proteggere sistemi da agenti

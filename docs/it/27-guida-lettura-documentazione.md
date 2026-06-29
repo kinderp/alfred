@@ -240,6 +240,12 @@ Questo percorso serve per capire dove sta andando il progetto.
 10. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
+11. [Visione Observation Runtime](38-visione-observation-runtime.md)
+   descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
+   come motore di eventi filesystem.
+12. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+   traduce quella visione in regole pratiche: provenance, log append-only,
+   backend come sensori e percorso caldo corto.
 
 Questi documenti non sono tutti contratti gia' implementati: alcuni sono
 decisioni attuali, altri sono roadmap. Prima di implementare codice nuovo bisogna
@@ -277,6 +283,9 @@ minimo e poi scegliere i documenti pertinenti al task.
 10. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    e' visione futura: va usata per orientare le scelte, non come autorizzazione
    automatica a implementare Agent Guard completo.
+11. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+   va letto quando si introduce un campo comune, una nuova API o una astrazione
+   che potrebbe vincolare il futuro modello di osservazioni.
 
 Prima di modificare codice, una sessione agente dovrebbe rispondere almeno a
 queste domande:
@@ -321,6 +330,7 @@ queste domande:
 | Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
 | Performance | [34](34-report-benchmark-prestazioni.md), [33](33-writer-runtime-roadmap-v0.md), [32](32-writer-api-v0.md#percorso-caldo), [21](21-roadmap-scanner-resync.md), [25](25-roadmap-unificata-dossier.md) |
 | Posizionamento, competitor e integrazioni | [36](36-use-cases-posizionamento-integrazioni.md), [24](24-roadmap-ai-agent-guardrail.md), [32](32-writer-api-v0.md), [25](25-roadmap-unificata-dossier.md) |
+| Observation Runtime e visione cognitiva | [38](38-visione-observation-runtime.md), [39](39-principi-architetturali-futuri.md), [24](24-roadmap-ai-agent-guardrail.md) |
 | Qualita' prodotto | [35](35-qualita-prodotto-software.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [34](34-report-benchmark-prestazioni.md) |
 | Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
@@ -371,6 +381,9 @@ riferimento veloce:
 - [Registro milestone del progetto](37-roadmap-milestone-progetto.md):
   per capire ordine cronologico, durata, dipendenze e priorita' delle
   milestone.
+- [Principi architetturali futuri](39-principi-architetturali-futuri.md):
+  per controllare che una nuova astrazione non leghi Alfred al solo filesystem
+  o a un singolo backend.
 - [Audit documentazione e debiti dichiarati](28-audit-documentazione-e-debiti.md):
   per distinguere problemi reali, scelte rimandate e punti da discutere.
 - [documentation-progress.md](documentation-progress.md):

@@ -104,6 +104,7 @@ Quando la milestone viene chiusa:
 | 4 | Tracepoint and Lab MVP | planned | Da definire | Da stimare | Non ancora nota | Alfred deve diventare spiegabile: test, studenti e demo hanno bisogno di tracepoint stabili e scenari leggibili. | Event Model v0, Writer Runtime v0, JSONL stabile, Backend API v0 almeno avviata. | Alfred Lab, demo pubbliche, documentazione animabile, debugging piu' chiaro. | Da creare. | [25](25-roadmap-unificata-dossier.md), [17](17-roadmap-documentazione-avanzata.md), [16](16-mappa-codice-e-strutture.md) |
 | 5 | Performance suite v0 | planned | Da definire | Da stimare | Non ancora nota | Le scelte di queue, writer, JSONL e futuri backend devono essere guidate da numeri, non da sensazioni. | Writer Runtime v0, benchmark iniziali, output counter/JSONL. | Decisioni su worker, per-sink queues, buffering, binary writer e hot path. | Da creare. | [34](34-report-benchmark-prestazioni.md), [33](33-writer-runtime-roadmap-v0.md), [35](35-qualita-prodotto-software.md) |
 | 6 | Agent workspace observe ledger | planned | Da definire | Da stimare | Non ancora nota | E' il primo ponte credibile verso Agent Guard: osservare effetti reali di una sessione agente senza promettere ancora enforcement completo. | Event Model v0, JSONL, process/session fields futuri, workspace boundary design. | Would-block mode, policy iniziali, Agent Action Ledger, integrazioni con agenti AI. | Da creare. | [24](24-roadmap-ai-agent-guardrail.md), [36](36-use-cases-posizionamento-integrazioni.md), [29](29-event-model-v0.md) |
+| 7 | Universal Observation Runtime research | future | Non pianificata | Non stimata | Non ancora nota | Serve evitare che il modello comune venga chiuso dentro filesystem/inotify se Alfred dovra' rappresentare osservazioni, inferenze, azioni e feedback. | Backend API v0 reale, almeno piu' domini/sensori, replay, projection layer minimo. | Possibile modello Observation, knowledge graph, world model digitale, agenti e LLM come adapter/interfaccia. | Da creare solo quando diventa lavoro operativo. | [38](38-visione-observation-runtime.md), [39](39-principi-architetturali-futuri.md), [24](24-roadmap-ai-agent-guardrail.md) |
 
 ## Come leggere la durata
 
@@ -149,6 +150,8 @@ specifici:
 - [Backend API v0](30-backend-api-v0.md)
 - [Roadmap plugin backend](23-roadmap-plugin-backend.md)
 - [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+- [Visione Observation Runtime](38-visione-observation-runtime.md)
+- [Principi architetturali futuri](39-principi-architetturali-futuri.md)
 
 Quando una roadmap tecnica cambia l'ordine delle milestone, aggiornare anche
 questo registro.

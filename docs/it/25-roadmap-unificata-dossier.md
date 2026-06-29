@@ -56,6 +56,13 @@ roadmap spiega l'ordine concettuale; il registro milestone collega quell'ordine
 a GitHub Milestone, issue madre, durata prevista, durata reale, dipendenze e
 tracciabilita' storica.
 
+La visione lunga oltre questa roadmap e' documentata in
+[Visione Observation Runtime](38-visione-observation-runtime.md) e
+[Principi architetturali futuri](39-principi-architetturali-futuri.md). Quei
+documenti non cambiano l'ordine operativo corrente: servono a evitare scelte
+troppo filesystem-specific quando si toccano modello dati, backend API,
+provenance, replay, capabilities o futuri livelli di policy.
+
 ## Fase 1 - Event Model v0
 
 Obiettivo: definire il modello dati comune di Alfred.

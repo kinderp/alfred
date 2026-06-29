@@ -215,6 +215,15 @@ visione, ma non autorizza a implementare Agent Guard completo, fanotify, eBPF,
 Windows, macOS, dashboard o policy engine durante la milestone inotify, salvo
 richiesta esplicita.
 
+`38-visione-observation-runtime.md` e
+`39-principi-architetturali-futuri.md` descrivono una visione ancora piu'
+generale: Alfred come runtime di osservazioni, provenance, memoria, replay e
+feedback per sistemi intelligenti. Vanno letti quando si introduce un campo
+comune, una nuova API o una astrazione che potrebbe vincolare il futuro modello
+di record. Non autorizzano a implementare knowledge graph, world model, LLM
+integration, sensori video/GPS/browser o AI generale durante la milestone
+corrente.
+
 ## Principi di ragionamento dell'agente
 
 Queste regole valgono quando un agente AI aiuta a modificare o documentare il
@@ -284,6 +293,53 @@ Il backend non aspetta il writer.
 Quando una modifica introduce o tocca output, writer, sink, logger, JSONL,
 socket o formati binari, leggere anche `32-writer-api-v0.md` e verificare che
 la serializzazione resti fuori dal percorso caldo target.
+
+## Regola del costo architetturale
+
+Ogni astrazione architetturale nuova deve giustificare il proprio costo.
+L'obiettivo di Alfred resta:
+
+```text
+piccolo, veloce, performante, affidabile, robusto,
+semplice, manutenibile, ben documentato e chiaro.
+```
+
+Quindi porte, adapter, dispatcher, code, plugin-like API, callback, copie owned,
+projection, writer o nuovi livelli intermedi non devono essere introdotti solo
+per eleganza architetturale. Devono comprare almeno uno tra:
+
+- chiarezza reale;
+- testabilita';
+- separazione delle responsabilita';
+- estensibilita' necessaria;
+- sicurezza;
+- affidabilita';
+- operabilita';
+- prestazioni misurate o migliorabili.
+
+Se una astrazione tocca il percorso caldo, aggiunge copie, allocazioni, lock,
+I/O, dispatch indiretto o buffering, bisogna misurarne il costo con benchmark
+mirati o spiegare perche' il costo e' fuori dal path caldo. La PR o il commit
+devono indicare almeno:
+
+- costo atteso;
+- beneficio atteso;
+- benchmark eseguito o benchmark da aggiungere;
+- scenario baseline usato per il confronto;
+- motivo per cui il costo e' accettabile.
+
+Regola guida:
+
+```text
+Architecture must pay rent.
+```
+
+Una architettura piu' astratta e' accettabile solo se rende Alfred piu' chiaro,
+piu' verificabile, piu' sicuro o piu' estendibile senza violare il budget di
+performance.
+
+La discussione progettuale di riferimento e':
+[Architecture direction: lightweight ports-and-adapters for Alfred](https://github.com/kinderp/alfred/discussions/44).
 
 ## Uso di indici semantici e grafi del codice
 
