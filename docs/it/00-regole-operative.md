@@ -128,6 +128,16 @@ Regola:
   colleghi ogni elemento della checklist a commit, PR o issue figlie rilevanti;
 - aggiornare quella tabella a ogni progress update significativo, indicando
   cosa e' concluso, cosa e' in corso e quali commit sono solo preparatori;
+- per ogni micro-step non banale di una issue madre, creare una issue figlia
+  dedicata e una PR dedicata. La issue figlia deve linkare la issue madre e la
+  PR; la PR deve linkare la issue figlia con `Closes #...` quando il merge deve
+  chiuderla; la issue madre deve linkare la issue figlia e la PR nella
+  tracciabilita' o in un commento di update;
+- quando GitHub espone la funzione nativa `Create sub-issue -> add existing
+  issue`, aggiungere anche la issue figlia come sub-issue nativa della issue
+  madre. Se l'automazione disponibile non espone questa funzione, lasciare
+  almeno un link bidirezionale esplicito e annotare che il collegamento nativo
+  andra' completato dalla UI;
 - se una Discussion contiene il ragionamento, linkarla dalla issue madre e poi
   trasferire la decisione finale negli MD.
 

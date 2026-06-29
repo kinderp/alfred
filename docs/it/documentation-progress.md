@@ -1082,3 +1082,11 @@ record concreti come `FILE_CREATED`, `DIR_CREATED`, `WATCH_ADDED`,
 `WATCH_REMOVED`, `WATCH_RESYNC_*` e `WATCH_LOST_QUEUED`. I record JSONL restano
 verificati dopo lo shutdown perche' il writer e' buffered e il flush finale fa
 parte del contratto testato.
+
+Aggiornamento successivo: `00-regole-operative.md` rende esplicita la regola di
+tracciabilita' GitHub per milestone strutturate. Ogni micro-step non banale di
+una issue madre deve avere una issue figlia e una PR dedicata, con link
+bidirezionali. Quando disponibile, la issue figlia va aggiunta anche come
+sub-issue nativa GitHub; se gli strumenti automatici non lo permettono, il
+collegamento deve essere registrato almeno nella issue madre e nella issue
+figlia.
