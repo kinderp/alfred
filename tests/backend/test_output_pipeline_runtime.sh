@@ -69,6 +69,53 @@ cleanup_output_runtime() {
     fi
 }
 
+fail_with_all_logs() {
+    local message="$1"
+
+    echo "FAIL: $message"
+    echo "----- events.log -----"
+    cat ./events.log || true
+    echo "----- raw.log -----"
+    cat ./raw.log || true
+    echo "----- errors.log -----"
+    cat ./errors.log || true
+    echo "----- output.jsonl -----"
+    cat "$OUTPUT_LOG" || true
+    exit 1
+}
+
+wait_for_log_pattern() {
+    local file="$1"
+    local pattern="$2"
+    local timeout_ms="$3"
+    local elapsed_ms=0
+
+    while (( elapsed_ms < timeout_ms )); do
+        if [[ -f "$file" ]] && grep -Eq "$pattern" "$file"; then
+            return 0
+        fi
+
+        sleep 0.1
+        elapsed_ms=$((elapsed_ms + 100))
+    done
+
+    return 1
+}
+
+wait_for_event_pattern() {
+    local pattern="$1"
+    local message="$2"
+
+    if ! wait_for_log_pattern ./events.log "$pattern" 10000; then
+        fail_with_all_logs "$message"
+    fi
+}
+
+wait_for_startup() {
+    wait_for_event_pattern "application startup complete" \
+        "timed out waiting for Alfred startup"
+}
+
 trap cleanup_output_runtime EXIT
 
 reset_env
@@ -117,7 +164,7 @@ ALFRED_EVENT_ENGINE=core \
     "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
 ALFRED_PID=$!
 
-sleep 1
+wait_for_startup
 
 LONG_NAME="$(printf 'x%.0s' $(seq 1 180))"
 for i in $(seq 1 600); do
@@ -175,13 +222,14 @@ ALFRED_EVENT_ENGINE=core \
     "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
 ALFRED_PID=$!
 
-sleep 1
+wait_for_startup
 
 # This creates only a small amount of JSONL data, so the writer keeps the record
 # buffered during app_run(). The output failure should surface at shutdown flush,
 # and main() must convert that final flush failure into a non-zero process exit.
 printf "shutdown flush only\n" > "$TEST_ROOT/shutdown-flush-only.txt"
-sleep 1
+wait_for_event_pattern "FILE_CREATED path=.*/shutdown-flush-only.txt" \
+    "timed out waiting for shutdown-flush-only FILE_CREATED"
 
 kill -TERM "$ALFRED_PID" 2>/dev/null || true
 
@@ -233,17 +281,38 @@ ALFRED_EVENT_ENGINE=core \
     "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
 ALFRED_PID=$!
 
-sleep 1
+wait_for_startup
 
 printf "hello\n" > "$TEST_ROOT/created-file.txt"
 printf "hello long path\n" > "$LONG_SEMANTIC_FILE"
 mkdir "$TEST_ROOT/created-dir"
 mkdir "$TEST_ROOT/removed-dir"
 mkdir "$TEST_ROOT/resync-dir"
-sleep 1
+
+# These waits replace broad sleeps with the concrete records that prove the
+# runtime has processed the setup operations needed by the next phase. In
+# particular, removed-dir and resync-dir must have watches before the test
+# removes or moves them, otherwise the self-event diagnostics would be a timing
+# artifact rather than the intended contract.
+wait_for_event_pattern "FILE_CREATED path=.*/created-file.txt" \
+    "timed out waiting for created-file FILE_CREATED"
+wait_for_event_pattern "FILE_CREATED path=.*/created-long-file.txt" \
+    "timed out waiting for long-path FILE_CREATED"
+wait_for_event_pattern "DIR_CREATED path=.*/created-dir" \
+    "timed out waiting for created-dir DIR_CREATED"
+wait_for_event_pattern "WATCH_ADDED wd=[0-9]+ path=.*/removed-dir" \
+    "timed out waiting for removed-dir WATCH_ADDED"
+wait_for_event_pattern "WATCH_ADDED wd=[0-9]+ path=.*/resync-dir" \
+    "timed out waiting for resync-dir WATCH_ADDED"
+
 rmdir "$TEST_ROOT/removed-dir"
 mv "$TEST_ROOT/resync-dir" "$TEST_ROOT/resync-dir-moved"
-sleep 1
+
+wait_for_event_pattern "WATCH_REMOVED wd=[0-9]+ path=.*/removed-dir" \
+    "timed out waiting for removed-dir WATCH_REMOVED"
+wait_for_event_pattern \
+    "WATCH_LOST_QUEUED wd=[0-9]+ path=.*/resync-dir reason=IN_MOVE_SELF error=path-unreachable pending=1" \
+    "timed out waiting for resync-dir WATCH_LOST_QUEUED"
 
 stop_alfred
 ALFRED_PID=""
