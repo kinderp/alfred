@@ -104,7 +104,6 @@ Inotify dichiara capability osservazionali filesystem:
 
 - `filesystem_events`;
 - `recursive_watch`;
-- `audit_events`, solo come opt-in raw log;
 - `metadata_events`, per esempio `IN_ATTRIB` raw-only;
 - `self_events`, come diagnostica `WATCH_STALE` e rimozione watch;
 - `overflow_events`;
@@ -113,10 +112,19 @@ Inotify dichiara capability osservazionali filesystem:
 
 Inotify non dichiara:
 
+- `audit_events`;
 - `permission_events`;
 - `process_context`;
 - `network_context`;
 - `can_block`.
+
+La differenza su `audit_events` e' intenzionale. La configurazione
+`inotify_audit_events` oggi rende visibili `IN_OPEN`, `IN_ACCESS` e
+`IN_CLOSE_NOWRITE` solo nel raw log inotify. Non produce ancora
+`ALFRED_RAW_OPEN`, `ALFRED_RAW_ACCESS`, `ALFRED_RAW_CLOSE_NOWRITE`, record
+strutturati o eventi core. Per questo non deve essere dichiarata come capability
+Backend API v0: una capability deve indicare che il fatto e' disponibile al
+confine API/record, non solo in un log diagnostico del backend.
 
 Questo e' importante per la roadmap Agent Guard: se una futura policy chiede
 "blocca una lettura di segreti" ma il backend attivo e' solo inotify, Alfred

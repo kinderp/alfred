@@ -164,8 +164,9 @@ typedef int (*inotify_backend_event_fn)(
  * The descriptor is backend metadata, not runtime configuration and not an
  * event-path operation. It says that the inotify backend can observe filesystem
  * mutation, recursive watches, metadata/self/overflow diagnostics, identity
- * tracking and lost-scope recovery. It deliberately does not claim process
- * context, network context, permission events or blocking/enforcement.
+ * tracking and lost-scope recovery. It deliberately does not claim API-level
+ * audit events, process context, network context, permission events or
+ * blocking/enforcement. The current inotify audit opt-in is raw-log-only.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */

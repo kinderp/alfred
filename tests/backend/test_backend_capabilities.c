@@ -48,9 +48,6 @@ static void test_inotify_declares_observational_filesystem_capabilities(void)
                ALFRED_BACKEND_CAP_RECURSIVE_WATCH) == 1);
     assert(alfred_backend_capabilities_has(
                capabilities,
-               ALFRED_BACKEND_CAP_AUDIT_EVENTS) == 1);
-    assert(alfred_backend_capabilities_has(
-               capabilities,
                ALFRED_BACKEND_CAP_METADATA_EVENTS) == 1);
     assert(alfred_backend_capabilities_has(
                capabilities,
@@ -74,6 +71,9 @@ static void test_inotify_does_not_claim_enforcement_or_context(void)
     assert(alfred_backend_capabilities_has(
                capabilities,
                ALFRED_BACKEND_CAP_PERMISSION_EVENTS) == 0);
+    assert(alfred_backend_capabilities_has(
+               capabilities,
+               ALFRED_BACKEND_CAP_AUDIT_EVENTS) == 0);
     assert(alfred_backend_capabilities_has(
                capabilities,
                ALFRED_BACKEND_CAP_PROCESS_CONTEXT) == 0);

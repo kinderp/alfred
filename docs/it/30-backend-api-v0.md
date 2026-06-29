@@ -661,7 +661,7 @@ Capabilities del backend inotify corrente:
 | --- | --- |
 | `filesystem_events` | si |
 | `recursive_watch` | si |
-| `audit_events` | opt-in raw log |
+| `audit_events` | no: l'opt-in corrente e' raw-log-only |
 | `metadata_events` | raw-only tramite `IN_ATTRIB` |
 | `self_events` | diagnostica backend |
 | `overflow_events` | minimo: raw/core `OVERFLOW` |
@@ -677,13 +677,22 @@ Questa tabella e' ora bloccata anche da
 
 - il helper comune rifiuta input ambigui come `NULL`, `0` o maschere con piu'
   bit;
-- inotify dichiara solo capability osservazionali filesystem e non dichiara
-  capability che non possiede, come processo, rete, permission events o block.
+- inotify dichiara solo capability osservazionali filesystem che attraversano
+  il confine API/record e non dichiara capability che non possiede, come audit
+  API-level, processo, rete, permission events o block.
 
 Questo e' un primo passo deliberatamente piccolo. Non introduce ancora
 `alfred_backend_ops_t` completo, non cambia `inotify_backend_poll()` e non
 aggiunge fanotify/eBPF. Serve a rendere verificabile una domanda fondamentale:
 "cosa puo' davvero fare questo backend?".
+
+Nota su `audit_events`: il backend inotify ha gia' una configurazione
+`inotify_audit_events` per osservare `IN_OPEN`, `IN_ACCESS` e
+`IN_CLOSE_NOWRITE` nel raw log inotify. Questa visibilita' e' utile per misurare
+rumore e comportamento del kernel, ma non e' ancora una capability Backend API
+v0 perche' non produce record audit strutturati. Quando questi fatti
+attraverseranno il confine `alfred_record_t`, il backend potra' dichiarare
+`audit_events`.
 
 ## Error model
 

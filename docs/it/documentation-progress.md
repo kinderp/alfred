@@ -237,10 +237,12 @@ capabilities:
 
 Il descriptor `alfred_backend_capabilities_t` dichiara nome backend, versione
 API e bitmask delle capability. Il backend inotify dichiara capability
-osservazionali filesystem, recursive watch, audit raw, metadata raw, self
-events, overflow, identity tracking e lost-scope recovery. Non dichiara
-permission events, process context, network context o blocking. Il contratto e'
-coperto da `tests/backend/test_backend_capabilities.c`.
+osservazionali filesystem, recursive watch, metadata raw, self events,
+overflow, identity tracking e lost-scope recovery. Non dichiara audit events,
+permission events, process context, network context o blocking. L'opt-in audit
+inotify corrente resta raw-log-only finche' non produce record audit
+strutturati. Il contratto e' coperto da
+`tests/backend/test_backend_capabilities.c`.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
