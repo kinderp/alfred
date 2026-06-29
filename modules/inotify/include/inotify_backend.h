@@ -12,6 +12,7 @@
 #ifndef INOTIFY_BACKEND_H
 #define INOTIFY_BACKEND_H
 
+#include "alfred_backend_capabilities.h"
 #include "alfred_correlator.h"
 #include "alfred_record.h"
 #include "inotify_config.h"
@@ -156,6 +157,19 @@ typedef int (*inotify_backend_event_fn)(
     const alfred_raw_event_t *raw,
     void *userdata
 );
+
+/*
+ * inotify_backend_capabilities - return static Backend API v0 capabilities
+ *
+ * The descriptor is backend metadata, not runtime configuration and not an
+ * event-path operation. It says that the inotify backend can observe filesystem
+ * mutation, recursive watches, metadata/self/overflow diagnostics, identity
+ * tracking and lost-scope recovery. It deliberately does not claim process
+ * context, network context, permission events or blocking/enforcement.
+ *
+ * Return: borrowed pointer to static process-lifetime metadata.
+ */
+const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
 
 /*
  * inotify_backend_init - initialize descriptor and watcher table

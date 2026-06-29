@@ -386,6 +386,38 @@ syscall.
 Per questo ogni backend deve dichiarare capabilities invece di lasciare che il
 core deduca il comportamento dal nome del backend.
 
+Nel codice C questo primo pezzo del contratto esiste come metadata statico:
+
+```text
+core/include/alfred_backend_capabilities.h
+core/src/alfred_backend_capabilities.c
+modules/inotify/src/inotify_backend_capabilities.c
+```
+
+`alfred_backend_capabilities_t` contiene:
+
+| Campo | Significato |
+| --- | --- |
+| `backend_name` | nome stabile del backend, per esempio `inotify` |
+| `api_version` | versione della Backend API supportata; per v0 vale `0` |
+| `flags` | bitmask delle capability dichiarate dal backend |
+
+La funzione `alfred_backend_capabilities_has()` verifica una sola capability
+alla volta. Se riceve `NULL`, `0` o piu' bit insieme ritorna `0`. Questa scelta
+rende esplicita la domanda del chiamante: "questo backend ha proprio questa
+capability?", non "ha almeno una capability fra queste?".
+
+Il backend inotify espone:
+
+```c
+const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
+```
+
+Il puntatore restituito e' borrowed e punta a metadata statico con durata pari
+al processo. Non va liberato. Questa funzione non appartiene al percorso caldo
+degli eventi: descrive il backend durante wiring, test, diagnostica o futura
+selezione backend. Non aggiunge allocazioni, I/O, lock o dispatch per evento.
+
 ### 6. Contesto futuro agente/processo/policy
 
 Backend API v0 resta system-event-first, ma non deve impedire Agent Guard. Il
@@ -639,6 +671,19 @@ Capabilities del backend inotify corrente:
 | `process_context` | no affidabile con inotify |
 | `network_context` | no |
 | `can_block` | no |
+
+Questa tabella e' ora bloccata anche da
+`tests/backend/test_backend_capabilities.c`. Il test verifica due cose:
+
+- il helper comune rifiuta input ambigui come `NULL`, `0` o maschere con piu'
+  bit;
+- inotify dichiara solo capability osservazionali filesystem e non dichiara
+  capability che non possiede, come processo, rete, permission events o block.
+
+Questo e' un primo passo deliberatamente piccolo. Non introduce ancora
+`alfred_backend_ops_t` completo, non cambia `inotify_backend_poll()` e non
+aggiunge fanotify/eBPF. Serve a rendere verificabile una domanda fondamentale:
+"cosa puo' davvero fare questo backend?".
 
 ## Error model
 

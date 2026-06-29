@@ -87,6 +87,44 @@ Questa struttura e' contenuta in `app_t` come campo `inotify`. Il backend usa
 ancora `app_t` per accedere a configurazione e logger, ma `fd` e tabella dei
 watch non sono piu' campi diretti dell'applicazione.
 
+## Capabilities Backend API v0
+
+Il backend inotify ora espone anche metadata statico sulle proprie
+capabilities:
+
+```c
+const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
+```
+
+Questa funzione non legge eventi e non cambia il runtime. Restituisce un
+puntatore borrowed a una struct statica che descrive cosa il backend inotify sa
+fare come implementazione.
+
+Inotify dichiara capability osservazionali filesystem:
+
+- `filesystem_events`;
+- `recursive_watch`;
+- `audit_events`, solo come opt-in raw log;
+- `metadata_events`, per esempio `IN_ATTRIB` raw-only;
+- `self_events`, come diagnostica `WATCH_STALE` e rimozione watch;
+- `overflow_events`;
+- `identity_tracking`, con `st_dev` e `st_ino`;
+- `lost_scope_recovery`.
+
+Inotify non dichiara:
+
+- `permission_events`;
+- `process_context`;
+- `network_context`;
+- `can_block`.
+
+Questo e' importante per la roadmap Agent Guard: se una futura policy chiede
+"blocca una lettura di segreti" ma il backend attivo e' solo inotify, Alfred
+deve sapere che puo' osservare alcuni effetti filesystem, ma non puo' bloccare
+prima dell'accesso e non puo' attribuire in modo affidabile l'azione a un
+processo o a una sessione agente. Le capabilities impediscono di dedurre
+comportamenti dal nome del backend e rendono espliciti i suoi limiti.
+
 ## Maschera di watch attuale
 
 Il backend non riceve automaticamente tutti gli eventi che inotify potrebbe
