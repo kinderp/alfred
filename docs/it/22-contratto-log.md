@@ -584,13 +584,15 @@ alfred_event_t
 -> output_log
 ```
 
-Il terzo percorso collegato e' la diagnostica watch base:
+Il terzo percorso collegato e' la diagnostica backend gia' migrata al modello
+strutturato. Nel perimetro v0 include watch lifecycle, resync locale e
+lost-scope recovery:
 
 ```text
-watch_manager_add() / watch_manager_remove()
-oppure evento kernel su watch stale
+watch manager / resync / lost-scope recovery
 -> alfred_record_build_watch_diagnostic()
    oppure alfred_record_build_stale_event_dropped()
+   oppure builder diagnostico dedicato al record `WATCH_*`
 -> alfred_record_sink_emit()
 -> alfred_record_text_sink_emit()
 -> events.log
@@ -603,13 +605,22 @@ oppure evento kernel su watch stale
 -> output_log
 ```
 
-Questo percorso oggi copre `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE` e
-`WATCH_STALE_EVENT_DROPPED`. Sono record diagnostici, non eventi semantici
-filesystem: dicono che Alfred ha iniziato a osservare un path, ha smesso di
-osservarlo, non si fida piu' del mapping `wd -> path`, oppure ha visto un evento
-kernel su un watch stale e ha scelto di non inoltrarlo al core. Non significano
-direttamente che l'utente abbia creato, cancellato, spostato o rinominato una
-directory.
+Questo percorso oggi copre famiglie diagnostiche diverse:
+
+- watch lifecycle base: `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`,
+  `WATCH_STALE_EVENT_DROPPED`;
+- resync locale: `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_*`,
+  `WATCH_RESYNC_REINSTALLED`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`;
+- lost-scope recovery: `WATCH_LOST_QUEUED`, `WATCH_LOST_SCAN_BEGIN`,
+  `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`,
+  `WATCH_LOST_RECOVERY_FAILED`, `WATCH_LOST_RECOVERY_END` e gli altri
+  `WATCH_LOST_*` documentati nella sezione dedicata.
+
+Sono record diagnostici, non eventi semantici filesystem: dicono che Alfred ha
+iniziato o smesso di osservare un path, non si fida piu' del mapping
+`wd -> path`, sta provando a riparare un watch stale, oppure sta cercando una
+subtree persa tramite identita' filesystem. Non significano direttamente che
+l'utente abbia creato, cancellato, spostato o rinominato una directory.
 
 `WATCH_STALE_EVENT_DROPPED` conserva due campi specifici nel payload `watch`:
 
@@ -621,9 +632,10 @@ directory.
 Questi campi spiegano cosa Alfred ha visto e perche' non lo ha trasformato in
 raw/core event.
 
-Il contratto completo arrivera' quando anche il resto della diagnostica,
-lifecycle e futuri record security avranno un routing esplicito verso lo stesso
-modello di writer.
+Il contratto completo arrivera' quando anche lifecycle applicativo, errori
+runtime generici, trace/performance e futuri record security/policy avranno uno
+schema pubblico dedicato e un routing esplicito verso lo stesso modello di
+writer.
 
 ### Copertura golden JSONL corrente
 

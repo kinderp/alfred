@@ -1098,3 +1098,13 @@ collegato come percorso opt-in single-threaded con queue bounded, drain
 esplicito, dispatcher, JSONL/counter, statistiche runtime e valvola di
 pressione; worker thread, code per sink, socket/binary writer e backpressure
 pubblica restano fasi successive.
+
+Aggiornamento successivo: la review della PR Writer Runtime v0 final audit ha
+evidenziato una contraddizione residua in `22-contratto-log.md` e
+`32-writer-api-v0.md`: alcune sezioni introduttive descrivevano ancora la
+diagnostica JSONL collegata come sola diagnostica watch base, mentre la matrice
+di chiusura indicava gia' resync e lost-scope come runtime-routed. Le sezioni
+sono state riallineate: nel perimetro JSONL v0 rientrano raw normalizzati,
+semantica core e diagnostica watch/resync/lost-scope; lifecycle, errori
+runtime generici, trace/performance e security/policy restano futuri o non-goal
+v0.
