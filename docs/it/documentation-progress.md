@@ -1074,11 +1074,19 @@ controlla che i log compatibili restino presenti, verifica la riga
 In questo modo il benchmark manuale misura le prestazioni, mentre il test
 backend verifica la correttezza del percorso counter.
 
-Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` registra un debito
-di test non bloccante su `test_output_pipeline_runtime.sh`. Il test usa ancora
-alcuni `sleep` fissi, ma non presenta la stessa race del conteggio generico di
-righe corretta in `test_output_queue_pressure.sh`: le asserzioni finali cercano
-record concreti. Il TODO documenta il cleanup futuro: sostituire gli sleep con
-attese esplicite sui record `FILE_CREATED`, `DIR_CREATED`, `WATCH_STALE`,
-`WATCH_RESYNC_*`, `WATCH_LOST_QUEUED` e JSONL equivalenti se il test diventa
-flaky.
+Aggiornamento successivo: `33-writer-runtime-roadmap-v0.md` registra prima e
+poi chiude il debito di test non bloccante su
+`test_output_pipeline_runtime.sh`. Il test non usa piu' `sleep` ampi per
+sincronizzare le fasi principali: aspetta `application startup complete` e
+record concreti come `FILE_CREATED`, `DIR_CREATED`, `WATCH_ADDED`,
+`WATCH_REMOVED`, `WATCH_RESYNC_*` e `WATCH_LOST_QUEUED`. I record JSONL restano
+verificati dopo lo shutdown perche' il writer e' buffered e il flush finale fa
+parte del contratto testato.
+
+Aggiornamento successivo: `00-regole-operative.md` rende esplicita la regola di
+tracciabilita' GitHub per milestone strutturate. Ogni micro-step non banale di
+una issue madre deve avere una issue figlia e una PR dedicata, con link
+bidirezionali. Quando disponibile, la issue figlia va aggiunta anche come
+sub-issue nativa GitHub; se gli strumenti automatici non lo permettono, il
+collegamento deve essere registrato almeno nella issue madre e nella issue
+figlia.
