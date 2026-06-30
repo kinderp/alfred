@@ -59,6 +59,9 @@ static int inotify_backend_ops_add_target(
 
     if (runtime == NULL ||
         !runtime->initialized ||
+        runtime->context.runtime == NULL ||
+        runtime->context.config == NULL ||
+        runtime->context.logger == NULL ||
         target == NULL ||
         target->target_type != ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH ||
         target->path == NULL ||
