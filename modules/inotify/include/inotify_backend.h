@@ -209,10 +209,10 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  *
  * This descriptor connects the inotify backend identity and capabilities to the
  * common Backend API v0 shape. app.c still calls the existing inotify-specific
- * functions directly, so the normal runtime behavior is unchanged. The first
- * lifecycle adapter step wires init/destroy through the common ops table for
- * focused tests; target management, polling, start and stop remain staged
- * placeholders until their own migration steps.
+ * functions directly, so the normal runtime behavior is unchanged. The staged
+ * adapter path wires init/destroy/add_target through the common ops table for
+ * focused tests; remove_target, polling, start and stop remain placeholders
+ * until their own migration steps.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */

@@ -175,7 +175,6 @@ validati prima di collegare `app.c` a un backend generico.
 ```c
 typedef struct alfred_backend alfred_backend_t;
 typedef struct alfred_backend_config alfred_backend_config_t;
-typedef struct alfred_backend_target alfred_backend_target_t;
 typedef struct alfred_record alfred_record_t;
 ```
 
@@ -187,9 +186,11 @@ recovery.
 necessaria al backend. I campi specifici del backend devono stare in una sezione
 backend-specifica, non nel core.
 
-`alfred_backend_target_t` rappresenta cosa osservare. Nel caso filesystem
-contiene almeno un path e opzioni come ricorsivita' o audit opt-in. In futuro
-potra' rappresentare anche target non filesystem.
+`alfred_backend_target_t` rappresenta cosa osservare. Nel codice v0 esiste gia'
+come struct concreta minimale per target filesystem-path: contiene un path
+borrowed, un tipo target, flags e un puntatore a opzioni backend-specifiche
+ancora non supportate. In futuro potra' rappresentare anche target non
+filesystem.
 
 `alfred_record_t` e' il record comune definito da Event Model v0. Il backend
 puo' emettere record `backend_observed`, `normalized_raw` e `diagnostic`.
@@ -721,7 +722,10 @@ Backend API v0 deve distinguere il target osservato dal backend runtime.
 Concetto minimo:
 
 ```c
-typedef struct {
+#define ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH 1u
+#define ALFRED_BACKEND_TARGET_FLAG_NONE 0u
+
+typedef struct alfred_backend_target {
     const char *path;
     uint32_t target_type;
     uint32_t flags;
@@ -734,13 +738,18 @@ Per il filesystem v0:
 | Campo | Uso |
 | --- | --- |
 | `path` | root o path da osservare |
-| `target_type` | per ora `filesystem_path` |
-| `flags` | ricorsivo, audit opt-in, read-only policy futura |
-| `backend_options` | opzioni specifiche, per esempio maschere inotify |
+| `target_type` | per ora `ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH` |
+| `flags` | per ora solo `ALFRED_BACKEND_TARGET_FLAG_NONE` |
+| `backend_options` | opzioni specifiche future, per ora rifiutate se non `NULL` |
 
 Decisione v0: non rendere subito generico tutto il mondo. Il target iniziale
 puo' essere filesystem-oriented, ma deve lasciare spazio a target futuri non
 filesystem.
+
+Il path e' borrowed: il chiamante deve tenerlo valido solo durante
+`add_target()`. Se il backend deve conservarlo, deve copiarlo nel proprio stato
+interno. Il backend inotify lo fa gia' nel watch manager, che copia i path nella
+tabella dei watch.
 
 ## Capabilities
 
@@ -935,8 +944,9 @@ ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
 non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
 per leggere le capabilities inotify ed evita di creare una API C implicita.
 
-`init` e `destroy` sono il primo pezzo reale della tabella ops inotify. Per non
-trasformare subito `app.c`, il modulo espone due tipi concreti:
+`init`, `destroy` e `add_target` sono il primo pezzo reale della tabella ops
+inotify. Per non trasformare subito `app.c`, il modulo espone due tipi
+concreti:
 
 ```c
 inotify_backend_ops_runtime_t
@@ -951,16 +961,20 @@ interno, copia function pointer e `userdata` dell'emit boundary, poi chiama il
 percorso esistente `inotify_backend_init()`. `destroy` chiama
 `inotify_backend_shutdown()` solo se `init` e' riuscito, azzera i puntatori
 borrowed del contesto e torna a uno stato distrutto riutilizzabile.
+`add_target` accetta solo target `ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH`
+con path non vuoto, flags pari a `ALFRED_BACKEND_TARGET_FLAG_NONE` e
+`backend_options == NULL`; poi delega al percorso esistente
+`inotify_backend_add_startup_watch()`.
 
 Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
 chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.
 La tabella ops serve per provare il confine statico in modo incrementale.
 
-Le callback `start`, `add_target`, `remove_target`, `poll` e `stop` non sono
-ancora il runtime reale. Se chiamate, falliscono con `ERR_INVALID_ARG` invece di
-fare finta di avviare, osservare target o leggere eventi. La migrazione di
-target management, polling e `app.c` resta un passo successivo e dovra' avere
-test propri.
+Le callback `start`, `remove_target`, `poll` e `stop` non sono ancora il
+runtime reale. Se chiamate, falliscono con `ERR_INVALID_ARG` invece di fare
+finta di avviare, rimuovere target o leggere eventi. La migrazione di
+`remove_target`, polling e `app.c` resta un passo successivo e dovra' avere test
+propri.
 
 ## Relazione con Event Model v0
 

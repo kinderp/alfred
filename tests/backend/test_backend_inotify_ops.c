@@ -12,6 +12,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -57,6 +58,52 @@ static void assert_runtime_destroyed(const inotify_backend_ops_runtime_t *runtim
     assert(runtime->context.logger == NULL);
     assert(runtime->context.emit_record == NULL);
     assert(runtime->context.emit_record_userdata == NULL);
+}
+
+static void test_inotify_ops_rejects_invalid_add_target_arguments(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    alfred_backend_target_t target;
+    int backend_option = 1;
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&target, 0, sizeof(target));
+
+    target.path = "/tmp";
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+
+    assert(ops->add_target(NULL, NULL) == ERR_INVALID_ARG);
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+
+    runtime.initialized = 1;
+
+    assert(ops->add_target((alfred_backend_t *)&runtime, NULL) ==
+           ERR_INVALID_ARG);
+
+    target.target_type = 999u;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+    target.path = NULL;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+
+    target.path = "";
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+
+    target.path = "/tmp";
+    target.flags = 1u;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+
+    target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+    target.backend_options = &backend_option;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
 }
 
 static void test_inotify_ops_descriptor_is_valid(void)
@@ -124,9 +171,11 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     logger_t logger;
     emit_capture_t capture;
     alfred_backend_emit_t emit;
+    alfred_backend_target_t target;
     const char *raw_log = "/tmp/alfred_test_backend_inotify_ops.raw.log";
     const char *event_log = "/tmp/alfred_test_backend_inotify_ops.events.log";
     const char *error_log = "/tmp/alfred_test_backend_inotify_ops.errors.log";
+    char watch_root[] = "/tmp/alfred_test_backend_inotify_ops_watch.XXXXXX";
 
     unlink(raw_log);
     unlink(event_log);
@@ -137,6 +186,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     memset(&logger, 0, sizeof(logger));
     memset(&capture, 0, sizeof(capture));
     memset(&emit, 0, sizeof(emit));
+    memset(&target, 0, sizeof(target));
 
     inotify_config_defaults(&inotify_config);
     inotify_config.watcher_capacity = 8;
@@ -147,6 +197,11 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     config.logger = &logger;
     emit.emit = capture_emit;
     emit.userdata = &capture;
+    target.path = watch_root;
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+    target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+
+    assert(mkdtemp(watch_root) != NULL);
 
     assert(ops->init((alfred_backend_t *)&runtime,
                      (const alfred_backend_config_t *)&config,
@@ -154,12 +209,14 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
 
     /*
-     * Only init/destroy are real in this micro-step. The rest of the lifecycle
-     * still rejects accidental runtime use until each step is migrated.
+     * init/destroy/add_target are real in this micro-step sequence. The rest of
+     * the lifecycle still rejects accidental use until each step is migrated.
      */
     assert(ops->start(NULL) == ERR_INVALID_ARG);
-    assert(ops->add_target((alfred_backend_t *)&runtime, NULL) ==
-           ERR_INVALID_ARG);
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 1);
+    assert(capture.calls == 1);
     assert(ops->remove_target((alfred_backend_t *)&runtime, NULL) ==
            ERR_INVALID_ARG);
     assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
@@ -176,6 +233,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
                      (const alfred_backend_config_t *)&config,
                      &emit) == ERR_OK);
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
+    assert(watcher_count(&runtime.runtime.watchers) == 0);
 
     ops->destroy((alfred_backend_t *)&runtime);
     assert_runtime_destroyed(&runtime);
@@ -188,6 +246,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     unlink(raw_log);
     unlink(event_log);
     unlink(error_log);
+    rmdir(watch_root);
 }
 
 int main(void)
@@ -195,6 +254,7 @@ int main(void)
     test_inotify_ops_descriptor_is_valid();
     test_inotify_ops_uses_inotify_capabilities();
     test_inotify_ops_rejects_invalid_init_arguments();
+    test_inotify_ops_rejects_invalid_add_target_arguments();
     test_inotify_ops_init_destroy_lifecycle();
 
     return 0;

@@ -1,9 +1,9 @@
 /* ============================================================================
  * alfred_backend_ops.h - Backend API v0 operations contract
  *
- * This header defines the first compile-tested shape of Backend API v0. It is
- * a contract skeleton only: current runtime wiring still uses the inotify
- * backend directly, and future commits will adapt that backend to this shape.
+ * This header defines the first compile-tested shape of Backend API v0. Current
+ * runtime wiring still uses the inotify backend directly, while focused staged
+ * commits adapt selected inotify callbacks to this common shape.
  * ========================================================================== */
 
 #ifndef ALFRED_BACKEND_OPS_H
@@ -16,7 +16,29 @@
 
 typedef struct alfred_backend alfred_backend_t;
 typedef struct alfred_backend_config alfred_backend_config_t;
-typedef struct alfred_backend_target alfred_backend_target_t;
+
+#define ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH 1u
+#define ALFRED_BACKEND_TARGET_FLAG_NONE 0u
+
+/*
+ * alfred_backend_target_t - one Backend API v0 observation target
+ * @path: borrowed filesystem path for filesystem-path targets
+ * @target_type: target kind, currently ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH
+ * @flags: target flags, currently ALFRED_BACKEND_TARGET_FLAG_NONE only
+ * @backend_options: backend-specific options, currently unsupported in v0
+ *
+ * This first concrete target model is intentionally small. It gives the
+ * Backend API a compile-tested target boundary without pretending that all
+ * future domains are filesystem-shaped. For v0, callers pass a borrowed path
+ * that must remain valid for the duration of add_target(); the backend must
+ * copy anything it needs after the call returns.
+ */
+typedef struct alfred_backend_target {
+    const char *path;
+    uint32_t target_type;
+    uint32_t flags;
+    const void *backend_options;
+} alfred_backend_target_t;
 
 typedef int (*alfred_backend_emit_fn)(
     const alfred_record_t *record,

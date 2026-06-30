@@ -272,10 +272,18 @@ reso reali `init` e `destroy` nella tabella ops usando
 concreti passati attraverso l'API opaca. `init` costruisce il contesto inotify
 esistente, copia function pointer e `userdata` dell'emit boundary e chiama
 `inotify_backend_init()`. `destroy` chiama `inotify_backend_shutdown()` solo per
-runtime inizializzati e poi azzera i puntatori borrowed del contesto. `start`,
-`add_target`, `remove_target`, `poll` e `stop` restano placeholder fail-fast
-finche' non saranno migrati in passi separati. Il runtime normale continua a
-usare le funzioni inotify-specifiche finche' `app.c` non verra' migrato.
+runtime inizializzati e poi azzera i puntatori borrowed del contesto. Dopo il
+passo target, anche `add_target` e' reale per target filesystem-path minimi.
+`start`, `remove_target`, `poll` e `stop` restano placeholder fail-fast finche'
+non saranno migrati in passi separati. Il runtime normale continua a usare le
+funzioni inotify-specifiche finche' `app.c` non verra' migrato.
+
+Il passo successivo ha reso concreto anche il target model minimo in
+`alfred_backend_ops.h`: `alfred_backend_target_t` supporta per ora solo
+`ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH`, nessuna flag e nessuna opzione
+backend-specifica. L'adapter inotify implementa `add_target` validando quel
+target e delegando a `inotify_backend_add_startup_watch()`. `remove_target`,
+`poll`, `start` e `stop` restano placeholder fail-fast.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
