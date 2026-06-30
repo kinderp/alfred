@@ -262,6 +262,14 @@ La roadmap plugin backend non duplica piu' la vecchia bozza di
 `alfred_backend_ops_t`: rimanda al contratto Backend API v0, all'header
 compilato e ai test, cosi' il prossimo adapter refactor ha una sola fonte di
 verita'.
+Il backend inotify espone ora il primo descriptor
+`inotify_backend_ops()` in `modules/inotify/src/inotify_backend_ops.c`. Questo
+descriptor collega nome, versione API e capabilities inotify alla forma comune
+`alfred_backend_ops_t` ed e' coperto da
+`tests/backend/test_backend_inotify_ops.c`. Le callback sono placeholder
+fail-fast e restituiscono `ERR_INVALID_ARG` se chiamate: il runtime continua a
+usare le funzioni inotify-specifiche finche' `app.c` non verra' migrato in un
+passo separato.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,

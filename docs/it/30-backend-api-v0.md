@@ -918,6 +918,25 @@ Backend API v0 dovra' riempire la tabella ops con:
 Fino a quel momento `app.c` continua a chiamare direttamente il backend inotify
 corrente.
 
+Il primo passo concreto esiste ora come skeleton:
+
+```text
+modules/inotify/src/inotify_backend_ops.c
+tests/backend/test_backend_inotify_ops.c
+```
+
+`inotify_backend_ops()` restituisce una tabella `alfred_backend_ops_t` con nome
+`inotify`, versione Backend API v0 e puntatore allo stesso descriptor statico
+di `inotify_backend_capabilities()`. Il test verifica che questa tabella passi
+`alfred_backend_ops_is_minimally_valid()`.
+
+Le callback della tabella non sono ancora il runtime reale. Se chiamate,
+falliscono con `ERR_INVALID_ARG` invece di fare finta di inizializzare o
+pollare il backend. Questa scelta e' intenzionale: il descriptor serve a
+bloccare identita', versione, capabilities e forma della tabella; la migrazione
+di `app.c` e delle funzioni `init/add_target/poll/stop/destroy` resta un passo
+successivo e dovra' avere test propri.
+
 ## Relazione con Event Model v0
 
 Backend API v0 non definisce un secondo modello eventi. Usa Event Model v0.

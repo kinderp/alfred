@@ -13,6 +13,7 @@
 #define INOTIFY_BACKEND_H
 
 #include "alfred_backend_capabilities.h"
+#include "alfred_backend_ops.h"
 #include "alfred_correlator.h"
 #include "alfred_record.h"
 #include "inotify_config.h"
@@ -171,6 +172,19 @@ typedef int (*inotify_backend_event_fn)(
  * Return: borrowed pointer to static process-lifetime metadata.
  */
 const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
+
+/*
+ * inotify_backend_ops - return the static Backend API v0 ops skeleton
+ *
+ * This descriptor connects the inotify backend identity and capabilities to the
+ * common Backend API v0 shape. The current runtime is not wired through this
+ * table yet: app.c still calls the existing inotify-specific functions
+ * directly. Until the adapter migration is implemented, lifecycle callbacks in
+ * this descriptor fail fast if called.
+ *
+ * Return: borrowed pointer to static process-lifetime metadata.
+ */
+const alfred_backend_ops_t *inotify_backend_ops(void);
 
 /*
  * inotify_backend_init - initialize descriptor and watcher table

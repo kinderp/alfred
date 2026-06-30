@@ -2,7 +2,7 @@
 
 #include "alfred_backend_capabilities.h"
 
-static const alfred_backend_capabilities_t INOTIFY_BACKEND_CAPABILITIES = {
+const alfred_backend_capabilities_t inotify_backend_capabilities_descriptor = {
     .backend_name = "inotify",
     .api_version = ALFRED_BACKEND_API_VERSION_V0,
     .flags = ALFRED_BACKEND_CAP_FILESYSTEM_EVENTS |
@@ -16,5 +16,5 @@ static const alfred_backend_capabilities_t INOTIFY_BACKEND_CAPABILITIES = {
 
 const alfred_backend_capabilities_t *inotify_backend_capabilities(void)
 {
-    return &INOTIFY_BACKEND_CAPABILITIES;
+    return &inotify_backend_capabilities_descriptor;
 }

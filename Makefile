@@ -127,6 +127,7 @@ MODULE_SRCS += \
 	$(MODULE_DIR)/inotify/src/inotify_adapter.c \
 	$(MODULE_DIR)/inotify/src/inotify_backend.c \
 	$(MODULE_DIR)/inotify/src/inotify_backend_capabilities.c \
+	$(MODULE_DIR)/inotify/src/inotify_backend_ops.c \
 	$(MODULE_DIR)/inotify/src/inotify_config.c \
 	$(MODULE_DIR)/inotify/src/watch_manager.c \
 	$(MODULE_DIR)/inotify/src/watcher.c
