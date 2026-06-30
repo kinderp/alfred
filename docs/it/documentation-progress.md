@@ -266,11 +266,16 @@ Il backend inotify espone ora il primo descriptor
 `inotify_backend_ops()` in `modules/inotify/src/inotify_backend_ops.c`. Questo
 descriptor collega nome, versione API e capabilities inotify alla forma comune
 `alfred_backend_ops_t` ed e' coperto da
-`tests/backend/test_backend_inotify_ops.c`. Le callback con valore di ritorno
-sono placeholder fail-fast e restituiscono `ERR_INVALID_ARG` se chiamate.
-`destroy` e' invece un no-op placeholder perche' la callback e' `void` e non
-puo' restituire un errore. Il runtime continua a usare le funzioni
-inotify-specifiche finche' `app.c` non verra' migrato in un passo separato.
+`tests/backend/test_backend_inotify_ops.c`. Il primo micro-step successivo ha
+reso reali `init` e `destroy` nella tabella ops usando
+`inotify_backend_ops_runtime_t` e `inotify_backend_ops_config_t` come tipi
+concreti passati attraverso l'API opaca. `init` costruisce il contesto inotify
+esistente, copia function pointer e `userdata` dell'emit boundary e chiama
+`inotify_backend_init()`. `destroy` chiama `inotify_backend_shutdown()` solo per
+runtime inizializzati e poi azzera i puntatori borrowed del contesto. `start`,
+`add_target`, `remove_target`, `poll` e `stop` restano placeholder fail-fast
+finche' non saranno migrati in passi separati. Il runtime normale continua a
+usare le funzioni inotify-specifiche finche' `app.c` non verra' migrato.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,

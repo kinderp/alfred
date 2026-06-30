@@ -2,17 +2,62 @@
  * test_backend_inotify_ops.c - inotify Backend API v0 ops skeleton contract
  *
  * This test locks down the first inotify-specific operations descriptor without
- * migrating the runtime. The descriptor must be valid metadata, but its
- * return-valued callbacks intentionally fail fast until app.c is wired through
- * Backend API v0. The destroy callback is a no-op placeholder because the
- * Backend API v0 destroy hook returns void and cannot report ERR_INVALID_ARG.
+ * migrating app.c. The descriptor must be valid metadata. init/destroy are the
+ * first real lifecycle callbacks; target management, polling, start and stop
+ * remain staged fail-fast placeholders.
  */
 
 #include "errors.h"
 #include "inotify_backend.h"
+#include "logger.h"
 
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
+
+typedef struct emit_capture {
+    int calls;
+} emit_capture_t;
+
+static int capture_emit(const alfred_record_t *record, void *userdata)
+{
+    emit_capture_t *capture = userdata;
+
+    assert(record != NULL);
+
+    if (capture != NULL)
+        capture->calls++;
+
+    return ERR_OK;
+}
+
+static void assert_runtime_initialized(
+    const inotify_backend_ops_runtime_t *runtime,
+    const inotify_config_t *config,
+    const logger_t *logger,
+    emit_capture_t *capture)
+{
+    assert(runtime != NULL);
+    assert(runtime->initialized == 1);
+    assert(runtime->runtime.fd >= 0);
+    assert(runtime->context.runtime == &runtime->runtime);
+    assert(runtime->context.config == config);
+    assert(runtime->context.logger == logger);
+    assert(runtime->context.emit_record == capture_emit);
+    assert(runtime->context.emit_record_userdata == capture);
+}
+
+static void assert_runtime_destroyed(const inotify_backend_ops_runtime_t *runtime)
+{
+    assert(runtime != NULL);
+    assert(runtime->initialized == 0);
+    assert(runtime->runtime.fd == -1);
+    assert(runtime->context.runtime == NULL);
+    assert(runtime->context.config == NULL);
+    assert(runtime->context.logger == NULL);
+    assert(runtime->context.emit_record == NULL);
+    assert(runtime->context.emit_record_userdata == NULL);
+}
 
 static void test_inotify_ops_descriptor_is_valid(void)
 {
@@ -40,28 +85,117 @@ static void test_inotify_ops_uses_inotify_capabilities(void)
                ALFRED_BACKEND_CAP_CAN_BLOCK) == 0);
 }
 
-static void test_inotify_ops_callbacks_are_not_runtime_wired_yet(void)
+static void test_inotify_ops_rejects_invalid_init_arguments(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    inotify_config_defaults(&inotify_config);
+
+    assert(ops->init(NULL, NULL, NULL) == ERR_INVALID_ARG);
+    assert(ops->init((alfred_backend_t *)&runtime, NULL, NULL) ==
+           ERR_INVALID_ARG);
+
+    config.logger = &logger;
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     NULL) == ERR_INVALID_ARG);
+
+    config.config = &inotify_config;
+    config.logger = NULL;
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     NULL) == ERR_INVALID_ARG);
+    assert(runtime.initialized == 0);
+}
+
+static void test_inotify_ops_init_destroy_lifecycle(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+    emit_capture_t capture;
+    alfred_backend_emit_t emit;
+    const char *raw_log = "/tmp/alfred_test_backend_inotify_ops.raw.log";
+    const char *event_log = "/tmp/alfred_test_backend_inotify_ops.events.log";
+    const char *error_log = "/tmp/alfred_test_backend_inotify_ops.errors.log";
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    memset(&capture, 0, sizeof(capture));
+    memset(&emit, 0, sizeof(emit));
+
+    inotify_config_defaults(&inotify_config);
+    inotify_config.watcher_capacity = 8;
+
+    assert(logger_init(&logger, raw_log, event_log, error_log) == 0);
+
+    config.config = &inotify_config;
+    config.logger = &logger;
+    emit.emit = capture_emit;
+    emit.userdata = &capture;
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+    assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
 
     /*
-     * Return-valued callbacks reject use before the runtime migration. destroy
-     * is intentionally harmless because its API contract cannot return errors.
+     * Only init/destroy are real in this micro-step. The rest of the lifecycle
+     * still rejects accidental runtime use until each step is migrated.
      */
-    assert(ops->init(NULL, NULL, NULL) == ERR_INVALID_ARG);
     assert(ops->start(NULL) == ERR_INVALID_ARG);
-    assert(ops->add_target(NULL, NULL) == ERR_INVALID_ARG);
-    assert(ops->remove_target(NULL, NULL) == ERR_INVALID_ARG);
-    assert(ops->poll(NULL, 0) == ERR_INVALID_ARG);
-    assert(ops->stop(NULL) == ERR_INVALID_ARG);
+    assert(ops->add_target((alfred_backend_t *)&runtime, NULL) ==
+           ERR_INVALID_ARG);
+    assert(ops->remove_target((alfred_backend_t *)&runtime, NULL) ==
+           ERR_INVALID_ARG);
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_INVALID_ARG);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+    assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
     ops->destroy(NULL);
+    ops->destroy((alfred_backend_t *)&runtime);
+
+    logger_close(&logger);
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
 }
 
 int main(void)
 {
     test_inotify_ops_descriptor_is_valid();
     test_inotify_ops_uses_inotify_capabilities();
-    test_inotify_ops_callbacks_are_not_runtime_wired_yet();
+    test_inotify_ops_rejects_invalid_init_arguments();
+    test_inotify_ops_init_destroy_lifecycle();
 
     return 0;
 }

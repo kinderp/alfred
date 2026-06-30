@@ -918,7 +918,7 @@ Backend API v0 dovra' riempire la tabella ops con:
 Fino a quel momento `app.c` continua a chiamare direttamente il backend inotify
 corrente.
 
-Il primo passo concreto esiste ora come skeleton:
+Il primo passo concreto esiste ora in due livelli:
 
 ```text
 modules/inotify/src/inotify_backend_ops.c
@@ -935,14 +935,31 @@ ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
 non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
 per leggere le capabilities inotify ed evita di creare una API C implicita.
 
-Le callback della tabella non sono ancora il runtime reale. Le callback con
-valore di ritorno (`init`, `start`, `add_target`, `remove_target`, `poll`,
-`stop`) falliscono con `ERR_INVALID_ARG` invece di fare finta di inizializzare o
-pollare il backend. `destroy`, invece, e' un no-op placeholder: la sua firma e'
-`void`, quindi non puo' segnalare `ERR_INVALID_ARG`. Questa scelta e'
-intenzionale: il descriptor serve a bloccare identita', versione, capabilities e
-forma della tabella; la migrazione di `app.c` e delle funzioni reali
-`init/add_target/poll/stop/destroy` resta un passo successivo e dovra' avere
+`init` e `destroy` sono il primo pezzo reale della tabella ops inotify. Per non
+trasformare subito `app.c`, il modulo espone due tipi concreti:
+
+```c
+inotify_backend_ops_runtime_t
+inotify_backend_ops_config_t
+```
+
+La Backend API v0 resta opaca (`alfred_backend_t` e
+`alfred_backend_config_t`), quindi il test e il futuro composition root passano
+questi oggetti concreti con un cast. Il runtime concreto deve essere azzerato
+prima del primo `init`. `init` costruisce il vecchio `inotify_backend_context_t`
+interno, copia function pointer e `userdata` dell'emit boundary, poi chiama il
+percorso esistente `inotify_backend_init()`. `destroy` chiama
+`inotify_backend_shutdown()` solo se `init` e' riuscito, azzera i puntatori
+borrowed del contesto e torna a uno stato distrutto riutilizzabile.
+
+Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
+chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.
+La tabella ops serve per provare il confine statico in modo incrementale.
+
+Le callback `start`, `add_target`, `remove_target`, `poll` e `stop` non sono
+ancora il runtime reale. Se chiamate, falliscono con `ERR_INVALID_ARG` invece di
+fare finta di avviare, osservare target o leggere eventi. La migrazione di
+target management, polling e `app.c` resta un passo successivo e dovra' avere
 test propri.
 
 ## Relazione con Event Model v0
