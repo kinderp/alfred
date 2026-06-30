@@ -693,7 +693,9 @@ Poiche' `recursive` e' abilitato di default, una rimozione del target root non
 puo' lasciare attivi i watch figli: quando la configurazione e' ricorsiva,
 `remove_target` rimuove anche i watch sotto quel path usando una regola di
 prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
-`/tmp/root`.
+`/tmp/root`. La root del filesystem `/` e' un caso speciale intenzionale: se e'
+un target osservato ricorsivamente, tutti i watch con path assoluto appartengono
+al suo sottoalbero e devono essere rimossi insieme alla root.
 
 ### `poll`
 

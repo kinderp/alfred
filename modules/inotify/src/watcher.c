@@ -113,8 +113,9 @@ static const char *watcher_state_name(watcher_state_t state)
  * @prefix: old root/prefix being replaced
  *
  * Prefix replacement must not treat "/tmp/src-old" as a child of "/tmp/src".
- * A match is therefore either exact equality or a slash boundary immediately
- * after the prefix.
+ * For non-root prefixes, a match is therefore either exact equality or a slash
+ * boundary immediately after the prefix. The filesystem root "/" is the one
+ * special case: it is a prefix of every absolute watcher path.
  *
  * Return: nonzero when @path should be rewritten for @prefix.
  */
@@ -129,6 +130,9 @@ static int watcher_path_matches_prefix(const char *path, const char *prefix)
 
     if (prefix_len == 0)
         return 0;
+
+    if (strcmp(prefix, "/") == 0)
+        return path[0] == '/';
 
     if (strncmp(path, prefix, prefix_len) != 0)
         return 0;
