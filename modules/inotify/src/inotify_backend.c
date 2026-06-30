@@ -2310,6 +2310,13 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * is active, then delegating each removal to watch_manager_remove() so
  * WATCH_REMOVED diagnostics stay centralized.
  *
+ * Once matching descriptors have been collected, target cleanup is completed
+ * even if a WATCH_REMOVED diagnostic reports an error. watch_manager_remove()
+ * clears kernel/table state before emitting that diagnostic, so stopping at the
+ * first error could leave configured_roots and watcher state inconsistent.
+ * The first removal error is returned after the exact configured root is
+ * removed.
+ *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
@@ -2365,19 +2372,16 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
 
     for (size_t i = 0; i < count; i++) {
         if (watch_manager_remove(ctx, wds[i]) != 0) {
-            error = ERR_INOTIFY;
-            break;
+            if (error == ERR_OK)
+                error = ERR_INOTIFY;
         }
     }
 
     free(wds);
 
-    if (error != ERR_OK)
-        return error;
-
     backend_configured_roots_remove(ctx->runtime, path);
 
-    return ERR_OK;
+    return error;
 }
 
 /*

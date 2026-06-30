@@ -697,6 +697,15 @@ prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
 un target osservato ricorsivamente, tutti i watch con path assoluto appartengono
 al suo sottoalbero e devono essere rimossi insieme alla root.
 
+Una volta raccolti i watch descriptor da rimuovere, `remove_target` completa la
+pulizia dello stato target anche se una diagnostica `WATCH_REMOVED` fallisce.
+Questo dettaglio e' importante perche' `watch_manager_remove()` rimuove il watch
+dal kernel e dalla watcher table prima di emettere il record diagnostico: un
+fallimento del callback segnala un problema di output/fail-closed, ma non deve
+lasciare `configured_roots` e watcher table fuori sincronizzazione. Per questo
+il backend ricorda il primo errore, continua a rimuovere i watch raccolti,
+rimuove la root configurata esatta e poi restituisce l'errore al chiamante.
+
 Backend API v0 rifiuta target ricorsivi sovrapposti per inotify. Per esempio,
 se `/tmp/root` e' gia' configurato, aggiungere `/tmp/root/child` fallisce; se
 `/tmp/root/child` e' gia' configurato, aggiungere `/tmp/root` fallisce. Il
@@ -1002,7 +1011,10 @@ significare "forse Alfred sta comunque osservando quel path".
 incoerenti prima di toccare la watch table e delega a
 `inotify_backend_remove_startup_watch()`. In modalita' ricorsiva rimuove il
 watch della root e i watch figli sotto quella root; in modalita' non ricorsiva
-rimuove solo il path esatto.
+rimuove solo il path esatto. Dopo che la rimozione dei watch e' iniziata, un
+errore diagnostico `WATCH_REMOVED` viene propagato al chiamante ma non interrompe
+la pulizia dello stato target: i watch raccolti vengono comunque rimossi e la
+root esatta viene tolta da `configured_roots`.
 
 Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
 chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.

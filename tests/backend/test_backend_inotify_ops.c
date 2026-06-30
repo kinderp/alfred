@@ -23,6 +23,7 @@ typedef struct emit_capture {
     int watch_added;
     int watch_removed;
     int fail_watch_added_on;
+    int fail_watch_removed_on;
 } emit_capture_t;
 
 static int capture_emit(const alfred_record_t *record, void *userdata)
@@ -39,6 +40,13 @@ static int capture_emit(const alfred_record_t *record, void *userdata)
 
     if (capture != NULL && record->type == ALFRED_RECORD_TYPE_WATCH_REMOVED)
         capture->watch_removed++;
+
+    if (capture != NULL &&
+        record->type == ALFRED_RECORD_TYPE_WATCH_REMOVED &&
+        capture->fail_watch_removed_on > 0 &&
+        capture->watch_removed == capture->fail_watch_removed_on) {
+        return ERR_IO;
+    }
 
     if (capture != NULL &&
         record->type == ALFRED_RECORD_TYPE_WATCH_ADDED &&
@@ -613,6 +621,97 @@ static void test_inotify_ops_rolls_back_failed_recursive_add(void)
     rmdir(watch_root);
 }
 
+static void test_inotify_ops_completes_recursive_remove_after_emit_failure(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+    emit_capture_t capture;
+    alfred_backend_emit_t emit;
+    alfred_backend_target_t target;
+    const char *raw_log =
+        "/tmp/alfred_test_backend_inotify_ops_remove_failure.raw.log";
+    const char *event_log =
+        "/tmp/alfred_test_backend_inotify_ops_remove_failure.events.log";
+    const char *error_log =
+        "/tmp/alfred_test_backend_inotify_ops_remove_failure.errors.log";
+    char watch_root[] =
+        "/tmp/alfred_test_backend_inotify_ops_remove_failure.XXXXXX";
+    char child_path[PATH_MAX];
+    int written;
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    memset(&capture, 0, sizeof(capture));
+    memset(&emit, 0, sizeof(emit));
+    memset(&target, 0, sizeof(target));
+
+    inotify_config_defaults(&inotify_config);
+    inotify_config.watcher_capacity = 8;
+    inotify_config.recursive = 1;
+
+    assert(logger_init(&logger, raw_log, event_log, error_log) == 0);
+
+    assert(mkdtemp(watch_root) != NULL);
+    written = snprintf(child_path,
+                       sizeof(child_path),
+                       "%s/child",
+                       watch_root);
+    assert(written > 0 && (size_t)written < sizeof(child_path));
+    assert(mkdir(child_path, 0700) == 0);
+
+    config.config = &inotify_config;
+    config.logger = &logger;
+    emit.emit = capture_emit;
+    emit.userdata = &capture;
+    target.path = watch_root;
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+    target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 2);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 2);
+
+    /*
+     * watch_manager_remove() clears kernel/table state before emitting
+     * WATCH_REMOVED. Even if that diagnostic fails, remove_target() must keep
+     * removing the collected descriptors and clear the configured root so the
+     * target state is not left half-removed.
+     */
+    capture.fail_watch_removed_on = 1;
+
+    assert(ops->remove_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INOTIFY);
+    assert(watcher_count(&runtime.runtime.watchers) == 0);
+    assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 0);
+    assert(watcher_has_path(&runtime.runtime.watchers, child_path) == 0);
+    assert(runtime.runtime.configured_roots_count == 0);
+    assert(capture.watch_removed == 2);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    logger_close(&logger);
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+    rmdir(child_path);
+    rmdir(watch_root);
+}
+
 static void test_inotify_ops_rejects_overlapping_recursive_targets(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
@@ -762,6 +861,7 @@ int main(void)
     test_inotify_ops_init_destroy_lifecycle();
     test_inotify_ops_remove_target_removes_recursive_subtree();
     test_inotify_ops_rolls_back_failed_recursive_add();
+    test_inotify_ops_completes_recursive_remove_after_emit_failure();
     test_inotify_ops_rejects_overlapping_recursive_targets();
 
     return 0;

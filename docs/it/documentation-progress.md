@@ -291,6 +291,10 @@ runtime incoerenti e target non supportati, poi delega a
 `watch_manager_remove()` per conservare i record diagnostici `WATCH_REMOVED`.
 Quando la configurazione inotify e' ricorsiva, rimuovere una root rimuove anche
 i watch figli sotto quella root con confronto di prefisso a boundary `/`.
+Se una diagnostica `WATCH_REMOVED` fallisce durante `remove_target`, il backend
+ricorda l'errore ma continua a rimuovere i watch raccolti e poi rimuove la root
+configurata esatta. Il chiamante riceve comunque `ERR_INOTIFY`, ma
+`configured_roots` e watcher table non restano in uno stato target parziale.
 Per v0, `add_target` rifiuta target ricorsivi sovrapposti padre/figlio e
 mantiene idempotenti solo i duplicati esatti, per evitare ownership ambigua dei
 watch finche' non esisteranno refcount o owner espliciti. `add_target` ha anche
