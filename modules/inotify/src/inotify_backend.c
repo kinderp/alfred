@@ -2310,6 +2310,10 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * is active, then delegating each removal to watch_manager_remove() so
  * WATCH_REMOVED diagnostics stay centralized.
  *
+ * The path must be an exact configured root. Recursive child watches are an
+ * implementation detail of their parent target; callers must not be able to
+ * remove those child watches directly through the target-management API.
+ *
  * Once matching descriptors have been collected, target cleanup is completed
  * even if a WATCH_REMOVED diagnostic reports an error. watch_manager_remove()
  * clears kernel/table state before emitting that diagnostic, so stopping at the
@@ -2337,6 +2341,9 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
     }
 
     watchers = &ctx->runtime->watchers;
+
+    if (!backend_configured_roots_has_exact(ctx->runtime, path))
+        return ERR_INVALID_ARG;
 
     if (ctx->config->recursive) {
         if (watchers->count == 0)

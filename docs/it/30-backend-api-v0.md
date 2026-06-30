@@ -685,7 +685,12 @@ target, per esempio `diagnostic + watch + WATCH_REMOVED`.
 
 Nel sottoinsieme v0 implementato per inotify, `remove_target` riceve lo stesso
 target filesystem-path usato da `add_target`. Il path e' borrowed solo durante
-la chiamata. L'adapter inotify cerca i watch attivi associati a quel path e
+la chiamata. Il path deve corrispondere esattamente a una root configurata da
+`add_target`: `remove_target` e' gestione dei target API, non rimozione
+arbitraria di watch descriptor interni. Questo impedisce a un chiamante di
+rimuovere direttamente un watch figlio creato dalla ricorsivita' di un target
+padre e di lasciare incompleta la copertura ricorsiva del padre. Dopo questa
+validazione, l'adapter inotify cerca i watch attivi associati a quel path e
 delega ogni rimozione a `watch_manager_remove()`, cosi' la diagnostica
 `WATCH_REMOVED` resta nello stesso punto del codice.
 
@@ -1011,7 +1016,10 @@ significare "forse Alfred sta comunque osservando quel path".
 incoerenti prima di toccare la watch table e delega a
 `inotify_backend_remove_startup_watch()`. In modalita' ricorsiva rimuove il
 watch della root e i watch figli sotto quella root; in modalita' non ricorsiva
-rimuove solo il path esatto. Dopo che la rimozione dei watch e' iniziata, un
+rimuove solo il path esatto. Il path deve essere una root configurata esatta:
+un child watch creato dalla ricorsivita' del parent non puo' essere rimosso come
+target autonomo se non e' stato aggiunto come target autonomo. Dopo che la
+rimozione dei watch e' iniziata, un
 errore diagnostico `WATCH_REMOVED` viene propagato al chiamante ma non interrompe
 la pulizia dello stato target: i watch raccolti vengono comunque rimossi e la
 root esatta viene tolta da `configured_roots`.

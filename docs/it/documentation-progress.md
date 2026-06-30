@@ -289,6 +289,10 @@ ops inotify. Il callback accetta lo stesso sottoinsieme di target, rifiuta
 runtime incoerenti e target non supportati, poi delega a
 `inotify_backend_remove_startup_watch()`. La rimozione passa da
 `watch_manager_remove()` per conservare i record diagnostici `WATCH_REMOVED`.
+`remove_target` accetta solo root configurate esatte: non puo' essere usato per
+rimuovere un child watch creato internamente dalla ricorsivita' di un target
+padre, perche' quello romperebbe la copertura del target padre lasciando
+`configured_roots` invariato.
 Quando la configurazione inotify e' ricorsiva, rimuovere una root rimuove anche
 i watch figli sotto quella root con confronto di prefisso a boundary `/`.
 Se una diagnostica `WATCH_REMOVED` fallisce durante `remove_target`, il backend
