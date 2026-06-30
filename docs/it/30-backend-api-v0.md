@@ -675,12 +675,25 @@ opzioni come ricorsivita', audit opt-in e policy backend-specifica.
 Rimuove un target osservato. Per inotify corrisponde oggi a una combinazione di:
 
 ```text
+inotify_backend_remove_startup_watch()
 watch_manager_remove()
 watcher_remove()
 ```
 
 Il backend deve emettere diagnostica strutturata quando smette di osservare un
 target, per esempio `diagnostic + watch + WATCH_REMOVED`.
+
+Nel sottoinsieme v0 implementato per inotify, `remove_target` riceve lo stesso
+target filesystem-path usato da `add_target`. Il path e' borrowed solo durante
+la chiamata. L'adapter inotify cerca i watch attivi associati a quel path e
+delega ogni rimozione a `watch_manager_remove()`, cosi' la diagnostica
+`WATCH_REMOVED` resta nello stesso punto del codice.
+
+Poiche' `recursive` e' abilitato di default, una rimozione del target root non
+puo' lasciare attivi i watch figli: quando la configurazione e' ricorsiva,
+`remove_target` rimuove anche i watch sotto quel path usando una regola di
+prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
+`/tmp/root`.
 
 ### `poll`
 
@@ -886,7 +899,7 @@ Queste regole sono coerenti con il comportamento corrente di
 | `init` | `inotify_backend_init()` |
 | `start` | non esplicito; no-op candidato |
 | `add_target` | `inotify_backend_add_startup_watch()` |
-| `remove_target` | `watch_manager_remove()` e cleanup watcher |
+| `remove_target` | `inotify_backend_remove_startup_watch()` -> `watch_manager_remove()` e cleanup watcher |
 | `poll` | `inotify_backend_poll()` |
 | `stop` | non esplicito; no-op candidato |
 | `destroy` | `inotify_backend_shutdown()` |
@@ -944,9 +957,9 @@ ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
 non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
 per leggere le capabilities inotify ed evita di creare una API C implicita.
 
-`init`, `destroy` e `add_target` sono il primo pezzo reale della tabella ops
-inotify. Per non trasformare subito `app.c`, il modulo espone due tipi
-concreti:
+`init`, `destroy`, `add_target` e `remove_target` sono il primo pezzo reale
+della tabella ops inotify. Per non trasformare subito `app.c`, il modulo espone
+due tipi concreti:
 
 ```c
 inotify_backend_ops_runtime_t
@@ -965,16 +978,20 @@ borrowed del contesto e torna a uno stato distrutto riutilizzabile.
 con path non vuoto, flags pari a `ALFRED_BACKEND_TARGET_FLAG_NONE` e
 `backend_options == NULL`; poi delega al percorso esistente
 `inotify_backend_add_startup_watch()`.
+`remove_target` accetta lo stesso sottoinsieme di target, rifiuta runtime
+incoerenti prima di toccare la watch table e delega a
+`inotify_backend_remove_startup_watch()`. In modalita' ricorsiva rimuove il
+watch della root e i watch figli sotto quella root; in modalita' non ricorsiva
+rimuove solo il path esatto.
 
 Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
 chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.
 La tabella ops serve per provare il confine statico in modo incrementale.
 
-Le callback `start`, `remove_target`, `poll` e `stop` non sono ancora il
-runtime reale. Se chiamate, falliscono con `ERR_INVALID_ARG` invece di fare
-finta di avviare, rimuovere target o leggere eventi. La migrazione di
-`remove_target`, polling e `app.c` resta un passo successivo e dovra' avere test
-propri.
+Le callback `start`, `poll` e `stop` non sono ancora il runtime reale. Se
+chiamate, falliscono con `ERR_INVALID_ARG` invece di fare finta di avviare o
+leggere eventi. La migrazione di polling e `app.c` resta un passo successivo e
+dovra' avere test propri.
 
 ## Relazione con Event Model v0
 

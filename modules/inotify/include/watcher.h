@@ -112,6 +112,12 @@ int watcher_get_identity(const watcher_table_t *wt,
                          ino_t *inode_id);
 int watcher_exists(const watcher_table_t *wt, int wd);
 int watcher_has_path(const watcher_table_t *wt, const char *path);
+int watcher_find_wd_by_path(const watcher_table_t *wt, const char *path);
+int watcher_collect_wds_by_path_prefix(const watcher_table_t *wt,
+                                       const char *prefix,
+                                       int *wds,
+                                       size_t max_wds,
+                                       size_t *count);
 int watcher_set_state(watcher_table_t *wt, int wd, watcher_state_t state);
 watcher_state_t watcher_get_state(const watcher_table_t *wt, int wd);
 int watcher_is_stale(const watcher_table_t *wt, int wd);

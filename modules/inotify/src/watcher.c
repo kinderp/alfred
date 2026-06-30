@@ -591,8 +591,20 @@ int watcher_exists(const watcher_table_t *wt,
  */
 int watcher_has_path(const watcher_table_t *wt, const char *path)
 {
+    return watcher_find_wd_by_path(wt, path) >= 0 ? 1 : 0;
+}
+
+/*
+ * watcher_find_wd_by_path - find the watch descriptor for an exact path
+ * @wt: table to inspect
+ * @path: path to search for
+ *
+ * Return: active watch descriptor for @path, or -1 when no active entry matches.
+ */
+int watcher_find_wd_by_path(const watcher_table_t *wt, const char *path)
+{
     if (wt == NULL || path == NULL)
-        return 0;
+        return -1;
 
     for (size_t i = 0; i < wt->capacity; i++) {
         const watcher_entry_t *slot =
@@ -602,9 +614,56 @@ int watcher_has_path(const watcher_table_t *wt, const char *path)
             continue;
 
         if (strcmp(slot->path, path) == 0)
-            return 1;
+            return slot->wd;
     }
 
+    return -1;
+}
+
+/*
+ * watcher_collect_wds_by_path_prefix - collect watches under one path prefix
+ * @wt: table to inspect
+ * @prefix: exact path or subtree root to match
+ * @wds: caller-owned output array receiving matching watch descriptors
+ * @max_wds: number of slots available in @wds
+ * @count: receives the number of matching entries
+ *
+ * Uses the same slash-boundary prefix rule as path-prefix state/rewrite helpers:
+ * "/tmp/root-old" is not treated as a child of "/tmp/root".
+ *
+ * Return: 0 on success, -1 for invalid input or insufficient output capacity.
+ */
+int watcher_collect_wds_by_path_prefix(const watcher_table_t *wt,
+                                       const char *prefix,
+                                       int *wds,
+                                       size_t max_wds,
+                                       size_t *count)
+{
+    size_t found = 0;
+
+    if (wt == NULL || prefix == NULL || wds == NULL || count == NULL)
+        return -1;
+
+    if (strlen(prefix) == 0)
+        return -1;
+
+    for (size_t i = 0; i < wt->capacity; i++) {
+        const watcher_entry_t *slot = &wt->items[i];
+
+        if (!slot->active)
+            continue;
+
+        if (!watcher_path_matches_prefix(slot->path, prefix))
+            continue;
+
+        if (found == max_wds)
+            return -1;
+
+        wds[found] = slot->wd;
+        found++;
+    }
+
+    *count = found;
     return 0;
 }
 

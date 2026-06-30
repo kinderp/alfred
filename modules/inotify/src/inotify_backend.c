@@ -654,6 +654,9 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path);
 
+static void backend_configured_roots_remove(inotify_backend_t *runtime,
+                                            const char *path);
+
 static void backend_configured_roots_destroy(inotify_backend_t *runtime);
 
 static const char *backend_configured_root_for_path(
@@ -2284,6 +2287,87 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
 }
 
 /*
+ * inotify_backend_remove_startup_watch - remove one configured startup path
+ * @ctx: initialized backend context
+ * @path: path previously supplied through target management
+ *
+ * The Backend API target model removes by path, while inotify removes by watch
+ * descriptor. This wrapper bridges the two models by collecting active watch
+ * descriptors for the exact path, or for the subtree when recursive watching
+ * is active, then delegating each removal to watch_manager_remove() so
+ * WATCH_REMOVED diagnostics stay centralized.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
+                                         const char *path)
+{
+    watcher_table_t *watchers;
+    size_t count = 0;
+    int *wds;
+    int error = ERR_OK;
+
+    if (ctx == NULL ||
+        ctx->runtime == NULL ||
+        ctx->config == NULL ||
+        ctx->logger == NULL ||
+        path == NULL ||
+        path[0] == '\0') {
+        return ERR_INVALID_ARG;
+    }
+
+    watchers = &ctx->runtime->watchers;
+
+    if (ctx->config->recursive) {
+        if (watchers->count == 0)
+            return ERR_INVALID_ARG;
+
+        wds = calloc(watchers->count, sizeof(*wds));
+        if (wds == NULL)
+            return ERR_ALLOC;
+
+        if (watcher_collect_wds_by_path_prefix(watchers,
+                                               path,
+                                               wds,
+                                               watchers->count,
+                                               &count) != 0 ||
+            count == 0) {
+            free(wds);
+            return ERR_INVALID_ARG;
+        }
+    }
+    else {
+        int wd = watcher_find_wd_by_path(watchers, path);
+
+        if (wd < 0)
+            return ERR_INVALID_ARG;
+
+        wds = calloc(1, sizeof(*wds));
+        if (wds == NULL)
+            return ERR_ALLOC;
+
+        wds[0] = wd;
+        count = 1;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        if (watch_manager_remove(ctx, wds[i]) != 0) {
+            error = ERR_INOTIFY;
+            break;
+        }
+    }
+
+    free(wds);
+
+    if (error != ERR_OK)
+        return error;
+
+    backend_configured_roots_remove(ctx->runtime, path);
+
+    return ERR_OK;
+}
+
+/*
  * backend_add_startup_watch - install one startup watch through backend context
  * @ctx: narrowed backend context with runtime, config, and logger
  * @path: path supplied on the command line
@@ -2375,6 +2459,37 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
     runtime->configured_roots_count++;
 
     return 0;
+}
+
+/*
+ * backend_configured_roots_remove - forget one configured startup root
+ * @runtime: backend runtime that owns the root list
+ * @path: startup path that should no longer be considered configured
+ *
+ * Removing a target should also remove the root used by delayed recovery. This
+ * helper removes exact configured-root matches only; child watches are handled
+ * by the watcher table removal path.
+ */
+static void backend_configured_roots_remove(inotify_backend_t *runtime,
+                                            const char *path)
+{
+    if (runtime == NULL || path == NULL)
+        return;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) != 0)
+            continue;
+
+        if (i + 1 < runtime->configured_roots_count) {
+            memmove(&runtime->configured_roots[i],
+                    &runtime->configured_roots[i + 1],
+                    (runtime->configured_roots_count - i - 1) * PATH_MAX);
+        }
+
+        runtime->configured_roots_count--;
+        runtime->configured_roots[runtime->configured_roots_count][0] = '\0';
+        return;
+    }
 }
 
 /*
