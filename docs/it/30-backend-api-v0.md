@@ -930,6 +930,11 @@ tests/backend/test_backend_inotify_ops.c
 di `inotify_backend_capabilities()`. Il test verifica che questa tabella passi
 `alfred_backend_ops_is_minimally_valid()`.
 
+Il descriptor capabilities resta privato al file che lo definisce. La tabella
+ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
+non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
+per leggere le capabilities inotify ed evita di creare una API C implicita.
+
 Le callback della tabella non sono ancora il runtime reale. Se chiamate,
 falliscono con `ERR_INVALID_ARG` invece di fare finta di inizializzare o
 pollare il backend. Questa scelta e' intenzionale: il descriptor serve a
