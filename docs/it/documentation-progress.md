@@ -302,10 +302,12 @@ configurata esatta. Il chiamante riceve comunque `ERR_INOTIFY`, ma
 Per v0, `add_target` rifiuta target ricorsivi sovrapposti padre/figlio e
 mantiene idempotenti solo i duplicati esatti, per evitare ownership ambigua dei
 watch finche' non esisteranno refcount o owner espliciti. `add_target` ha anche
-un contratto atomic-like sul target: registra la root prima di installare i
-watch e, se l'installazione fallisce, rimuove eventuali watch parziali e annulla
-la root registrata. In questo modo un errore di `add_target` non lascia una root
-configurata o watch nuovi visibili al chiamante.
+un contratto atomic-like sul target. Il duplicato esatto e' idempotente sia in
+modalita' ricorsiva sia non ricorsiva: non reinstalla watch e non emette un
+secondo `WATCH_ADDED`. Per i nuovi target, il backend registra la root prima di
+installare i watch e, se l'installazione fallisce, rimuove eventuali watch
+parziali e annulla la root registrata. In questo modo un errore di `add_target`
+non lascia una root configurata o watch nuovi visibili al chiamante.
 `poll`, `start` e `stop` restano placeholder fail-fast.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:

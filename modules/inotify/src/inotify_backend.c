@@ -2411,10 +2411,10 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path)
 {
-    if (ctx->config->recursive) {
-        if (backend_configured_roots_has_exact(ctx->runtime, path))
-            return ERR_OK;
+    if (backend_configured_roots_has_exact(ctx->runtime, path))
+        return ERR_OK;
 
+    if (ctx->config->recursive) {
         if (backend_configured_roots_has_nested_overlap(ctx->runtime, path)) {
             logger_error(ctx->logger,
                          "overlapping recursive target rejected path=%s",

@@ -711,14 +711,20 @@ lasciare `configured_roots` e watcher table fuori sincronizzazione. Per questo
 il backend ricorda il primo errore, continua a rimuovere i watch raccolti,
 rimuove la root configurata esatta e poi restituisce l'errore al chiamante.
 
-Backend API v0 rifiuta target ricorsivi sovrapposti per inotify. Per esempio,
-se `/tmp/root` e' gia' configurato, aggiungere `/tmp/root/child` fallisce; se
-`/tmp/root/child` e' gia' configurato, aggiungere `/tmp/root` fallisce. Il
-duplicato esatto resta invece idempotente. Questa scelta evita uno stato
-ambiguo in cui un watch figlio appartiene sia al target padre sia al target
-figlio: Alfred non ha ancora refcount o ownership esplicita dei watch. Path con
-prefisso testuale simile ma fuori subtree, come `/tmp/root` e `/tmp/root-old`,
-non sono considerati sovrapposti.
+Il duplicato esatto e' idempotente in tutte le modalita' inotify v0:
+richiamare `add_target(path)` con un path gia' configurato restituisce `ERR_OK`,
+non reinstalla watch e non emette un secondo `WATCH_ADDED`. Questa e' una
+regola di target management della Backend API, non un dettaglio della modalita'
+ricorsiva.
+
+Backend API v0 rifiuta invece target ricorsivi sovrapposti per inotify. Per
+esempio, se `/tmp/root` e' gia' configurato, aggiungere `/tmp/root/child`
+fallisce; se `/tmp/root/child` e' gia' configurato, aggiungere `/tmp/root`
+fallisce. Questa scelta evita uno stato ambiguo in cui un watch figlio
+appartiene sia al target padre sia al target figlio: Alfred non ha ancora
+refcount o ownership esplicita dei watch. Path con prefisso testuale simile ma
+fuori subtree, come `/tmp/root` e `/tmp/root-old`, non sono considerati
+sovrapposti.
 
 ### `poll`
 
@@ -1003,6 +1009,10 @@ borrowed del contesto e torna a uno stato distrutto riutilizzabile.
 con path non vuoto, flags pari a `ALFRED_BACKEND_TARGET_FLAG_NONE` e
 `backend_options == NULL`; poi delega al percorso esistente
 `inotify_backend_add_startup_watch()`.
+Se il path e' gia' una root configurata esatta, `add_target` e' idempotente sia
+in modalita' ricorsiva sia non ricorsiva: non chiama di nuovo
+`watch_manager_add()`/`watch_manager_add_recursive()`, non reinstalla watch e
+non produce un nuovo `WATCH_ADDED`.
 Il contratto v0 di `add_target` e' atomic-like rispetto alla gestione target:
 se l'operazione restituisce errore, il target non deve restare visibile in
 `configured_roots` e non devono restare watch nuovi installati per quel target.

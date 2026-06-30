@@ -450,6 +450,86 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     rmdir(watch_root);
 }
 
+static void test_inotify_ops_duplicate_nonrecursive_target_is_idempotent(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+    emit_capture_t capture;
+    alfred_backend_emit_t emit;
+    alfred_backend_target_t target;
+    const char *raw_log =
+        "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.raw.log";
+    const char *event_log =
+        "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.events.log";
+    const char *error_log =
+        "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.errors.log";
+    char watch_root[] =
+        "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.XXXXXX";
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    memset(&capture, 0, sizeof(capture));
+    memset(&emit, 0, sizeof(emit));
+    memset(&target, 0, sizeof(target));
+
+    inotify_config_defaults(&inotify_config);
+    inotify_config.watcher_capacity = 8;
+    inotify_config.recursive = 0;
+
+    assert(logger_init(&logger, raw_log, event_log, error_log) == 0);
+    assert(mkdtemp(watch_root) != NULL);
+
+    config.config = &inotify_config;
+    config.logger = &logger;
+    emit.emit = capture_emit;
+    emit.userdata = &capture;
+    target.path = watch_root;
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+    target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 1);
+
+    /*
+     * Exact duplicate target adds are an API-level idempotence rule, not a
+     * recursive-watch detail. Non-recursive mode must therefore avoid another
+     * inotify_add_watch() call and avoid another WATCH_ADDED diagnostic too.
+     */
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 1);
+
+    assert(ops->remove_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 0);
+    assert(runtime.runtime.configured_roots_count == 0);
+    assert(capture.watch_removed == 1);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    logger_close(&logger);
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+    rmdir(watch_root);
+}
+
 static void test_inotify_ops_remove_target_removes_recursive_subtree(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
@@ -955,6 +1035,7 @@ int main(void)
     test_inotify_ops_rejects_invalid_add_target_arguments();
     test_inotify_ops_rejects_invalid_remove_target_arguments();
     test_inotify_ops_init_destroy_lifecycle();
+    test_inotify_ops_duplicate_nonrecursive_target_is_idempotent();
     test_inotify_ops_remove_target_removes_recursive_subtree();
     test_inotify_ops_rejects_remove_of_recursive_child_watch();
     test_inotify_ops_rolls_back_failed_recursive_add();
