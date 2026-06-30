@@ -935,12 +935,15 @@ ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
 non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
 per leggere le capabilities inotify ed evita di creare una API C implicita.
 
-Le callback della tabella non sono ancora il runtime reale. Se chiamate,
-falliscono con `ERR_INVALID_ARG` invece di fare finta di inizializzare o
-pollare il backend. Questa scelta e' intenzionale: il descriptor serve a
-bloccare identita', versione, capabilities e forma della tabella; la migrazione
-di `app.c` e delle funzioni `init/add_target/poll/stop/destroy` resta un passo
-successivo e dovra' avere test propri.
+Le callback della tabella non sono ancora il runtime reale. Le callback con
+valore di ritorno (`init`, `start`, `add_target`, `remove_target`, `poll`,
+`stop`) falliscono con `ERR_INVALID_ARG` invece di fare finta di inizializzare o
+pollare il backend. `destroy`, invece, e' un no-op placeholder: la sua firma e'
+`void`, quindi non puo' segnalare `ERR_INVALID_ARG`. Questa scelta e'
+intenzionale: il descriptor serve a bloccare identita', versione, capabilities e
+forma della tabella; la migrazione di `app.c` e delle funzioni reali
+`init/add_target/poll/stop/destroy` resta un passo successivo e dovra' avere
+test propri.
 
 ## Relazione con Event Model v0
 

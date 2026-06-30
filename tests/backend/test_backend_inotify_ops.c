@@ -3,7 +3,9 @@
  *
  * This test locks down the first inotify-specific operations descriptor without
  * migrating the runtime. The descriptor must be valid metadata, but its
- * callbacks intentionally fail fast until app.c is wired through Backend API v0.
+ * return-valued callbacks intentionally fail fast until app.c is wired through
+ * Backend API v0. The destroy callback is a no-op placeholder because the
+ * Backend API v0 destroy hook returns void and cannot report ERR_INVALID_ARG.
  */
 
 #include "errors.h"
@@ -42,6 +44,10 @@ static void test_inotify_ops_callbacks_are_not_runtime_wired_yet(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
 
+    /*
+     * Return-valued callbacks reject use before the runtime migration. destroy
+     * is intentionally harmless because its API contract cannot return errors.
+     */
     assert(ops->init(NULL, NULL, NULL) == ERR_INVALID_ARG);
     assert(ops->start(NULL) == ERR_INVALID_ARG);
     assert(ops->add_target(NULL, NULL) == ERR_INVALID_ARG);

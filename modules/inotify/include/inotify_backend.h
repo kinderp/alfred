@@ -179,8 +179,10 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * This descriptor connects the inotify backend identity and capabilities to the
  * common Backend API v0 shape. The current runtime is not wired through this
  * table yet: app.c still calls the existing inotify-specific functions
- * directly. Until the adapter migration is implemented, lifecycle callbacks in
- * this descriptor fail fast if called.
+ * directly. Until the adapter migration is implemented, return-valued
+ * lifecycle callbacks in this descriptor fail fast with ERR_INVALID_ARG if
+ * called, while destroy is a no-op placeholder because it cannot return an
+ * error.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */
