@@ -12,6 +12,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,14 +93,17 @@ static void assert_add_target_rejected_without_watch(
     const alfred_backend_target_t *target)
 {
     size_t before;
+    size_t configured_roots_before;
 
     assert(ops != NULL);
     assert(runtime != NULL);
 
     before = watcher_count(&runtime->runtime.watchers);
+    configured_roots_before = runtime->runtime.configured_roots_count;
     assert(ops->add_target((alfred_backend_t *)runtime, target) ==
            ERR_INVALID_ARG);
     assert(watcher_count(&runtime->runtime.watchers) == before);
+    assert(runtime->runtime.configured_roots_count == configured_roots_before);
 }
 
 static void assert_remove_target_rejected_without_watch(
@@ -129,6 +133,7 @@ static void test_inotify_ops_rejects_invalid_add_target_arguments(void)
     alfred_backend_emit_t emit;
     alfred_backend_target_t target;
     int backend_option = 1;
+    char too_long_path[PATH_MAX + 1u];
     const char *raw_log =
         "/tmp/alfred_test_backend_inotify_ops_invalid.raw.log";
     const char *event_log =
@@ -197,6 +202,19 @@ static void test_inotify_ops_rejects_invalid_add_target_arguments(void)
 
     target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
     target.backend_options = &backend_option;
+    assert_add_target_rejected_without_watch(ops, &runtime, &target);
+
+    /*
+     * Inotify v0 stores configured roots in fixed PATH_MAX buffers. A string
+     * whose length is PATH_MAX cannot fit with the terminating NUL byte, so it
+     * is a target validation error, not an allocation failure.
+     */
+    too_long_path[0] = '/';
+    memset(too_long_path + 1, 'a', PATH_MAX - 1u);
+    too_long_path[PATH_MAX] = '\0';
+
+    target.backend_options = NULL;
+    target.path = too_long_path;
     assert_add_target_rejected_without_watch(ops, &runtime, &target);
 
     ops->destroy((alfred_backend_t *)&runtime);

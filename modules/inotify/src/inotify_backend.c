@@ -654,6 +654,8 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path);
 
+static int backend_configured_root_path_is_valid(const char *path);
+
 static int backend_configured_roots_has_exact(
     const inotify_backend_t *runtime,
     const char *path
@@ -2411,6 +2413,12 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path)
 {
+    if (!backend_configured_root_path_is_valid(path)) {
+        logger_error(ctx->logger,
+                     "invalid configured root path");
+        return ERR_INVALID_ARG;
+    }
+
     if (backend_configured_roots_has_exact(ctx->runtime, path))
         return ERR_OK;
 
@@ -2468,14 +2476,10 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path)
 {
-    size_t path_len;
-
     if (runtime == NULL || path == NULL)
         return -1;
 
-    path_len = strlen(path);
-
-    if (path_len == 0 || path_len >= PATH_MAX)
+    if (!backend_configured_root_path_is_valid(path))
         return -1;
 
     for (size_t i = 0; i < runtime->configured_roots_count; i++) {
@@ -2508,6 +2512,30 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
     runtime->configured_roots_count++;
 
     return 0;
+}
+
+/*
+ * backend_configured_root_path_is_valid - validate fixed-storage target paths
+ * @path: borrowed target path supplied by Backend API target management
+ *
+ * Inotify v0 stores configured roots and watcher paths in fixed PATH_MAX
+ * buffers. A path whose string length is PATH_MAX or larger cannot be copied
+ * into those buffers with a terminating NUL byte, so it is outside the v0
+ * target contract and must be reported as ERR_INVALID_ARG before allocation or
+ * watch installation is attempted.
+ *
+ * Return: nonzero when @path can be stored by the current inotify v0 runtime.
+ */
+static int backend_configured_root_path_is_valid(const char *path)
+{
+    size_t path_len;
+
+    if (path == NULL)
+        return 0;
+
+    path_len = strlen(path);
+
+    return path_len > 0 && path_len < PATH_MAX;
 }
 
 /*

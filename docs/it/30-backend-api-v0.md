@@ -795,6 +795,14 @@ Il path e' borrowed: il chiamante deve tenerlo valido solo durante
 interno. Il backend inotify lo fa gia' nel watch manager, che copia i path nella
 tabella dei watch.
 
+Nel sottoinsieme inotify v0, il path deve avere lunghezza maggiore di zero e
+minore di `PATH_MAX`. Il backend conserva configured roots e watcher path in
+buffer fissi `PATH_MAX`, quindi un path con `strlen(path) >= PATH_MAX` non puo'
+essere rappresentato con terminatore `NUL` dentro lo storage corrente. Questo
+caso e' un errore di validazione target (`ERR_INVALID_ARG`), non un errore di
+allocazione (`ERR_ALLOC`). `ERR_ALLOC` resta riservato a fallimenti reali di
+memoria per target altrimenti validi.
+
 ## Capabilities
 
 Capabilities iniziali consigliate:
