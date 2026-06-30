@@ -145,6 +145,37 @@ typedef struct inotify_backend_context {
 } inotify_backend_context_t;
 
 /*
+ * inotify_backend_ops_config_t - concrete config for inotify Backend API v0 ops
+ * @config: borrowed inotify backend configuration
+ * @logger: borrowed logger used by the existing inotify initialization path
+ *
+ * Backend API v0 keeps alfred_backend_config_t opaque. The static inotify
+ * adapter therefore receives this concrete module-local config object cast to
+ * const alfred_backend_config_t*. The adapter does not own either pointer.
+ */
+typedef struct inotify_backend_ops_config {
+    const inotify_config_t *config;
+    logger_t *logger;
+} inotify_backend_ops_config_t;
+
+/*
+ * inotify_backend_ops_runtime_t - concrete runtime for inotify Backend API v0
+ * @runtime: existing inotify backend state
+ * @context: existing narrowed context built from @runtime and borrowed config
+ * @initialized: nonzero after ops init succeeds and before ops destroy releases
+ *
+ * Backend API v0 keeps alfred_backend_t opaque. Callers using the static
+ * inotify ops adapter allocate this concrete runtime, zero it before first use,
+ * and pass it cast to alfred_backend_t*. This type is not a dynamic plugin ABI;
+ * it is the first static adapter bridge around the current inotify runtime.
+ */
+typedef struct inotify_backend_ops_runtime {
+    inotify_backend_t runtime;
+    inotify_backend_context_t context;
+    int initialized;
+} inotify_backend_ops_runtime_t;
+
+/*
  * inotify_backend_event_fn - deliver one raw backend event to the application
  * @raw: raw Alfred event, or NULL when the inotify record cannot be converted
  * @userdata: opaque pointer supplied to inotify_backend_poll()
@@ -177,12 +208,11 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * inotify_backend_ops - return the static Backend API v0 ops skeleton
  *
  * This descriptor connects the inotify backend identity and capabilities to the
- * common Backend API v0 shape. The current runtime is not wired through this
- * table yet: app.c still calls the existing inotify-specific functions
- * directly. Until the adapter migration is implemented, return-valued
- * lifecycle callbacks in this descriptor fail fast with ERR_INVALID_ARG if
- * called, while destroy is a no-op placeholder because it cannot return an
- * error.
+ * common Backend API v0 shape. app.c still calls the existing inotify-specific
+ * functions directly, so the normal runtime behavior is unchanged. The first
+ * lifecycle adapter step wires init/destroy through the common ops table for
+ * focused tests; target management, polling, start and stop remain staged
+ * placeholders until their own migration steps.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */
