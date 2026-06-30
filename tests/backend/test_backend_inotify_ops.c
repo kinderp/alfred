@@ -31,6 +31,34 @@ static int capture_emit(const alfred_record_t *record, void *userdata)
     return ERR_OK;
 }
 
+static void assert_runtime_initialized(
+    const inotify_backend_ops_runtime_t *runtime,
+    const inotify_config_t *config,
+    const logger_t *logger,
+    emit_capture_t *capture)
+{
+    assert(runtime != NULL);
+    assert(runtime->initialized == 1);
+    assert(runtime->runtime.fd >= 0);
+    assert(runtime->context.runtime == &runtime->runtime);
+    assert(runtime->context.config == config);
+    assert(runtime->context.logger == logger);
+    assert(runtime->context.emit_record == capture_emit);
+    assert(runtime->context.emit_record_userdata == capture);
+}
+
+static void assert_runtime_destroyed(const inotify_backend_ops_runtime_t *runtime)
+{
+    assert(runtime != NULL);
+    assert(runtime->initialized == 0);
+    assert(runtime->runtime.fd == -1);
+    assert(runtime->context.runtime == NULL);
+    assert(runtime->context.config == NULL);
+    assert(runtime->context.logger == NULL);
+    assert(runtime->context.emit_record == NULL);
+    assert(runtime->context.emit_record_userdata == NULL);
+}
+
 static void test_inotify_ops_descriptor_is_valid(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
@@ -123,13 +151,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert(ops->init((alfred_backend_t *)&runtime,
                      (const alfred_backend_config_t *)&config,
                      &emit) == ERR_OK);
-    assert(runtime.initialized == 1);
-    assert(runtime.runtime.fd >= 0);
-    assert(runtime.context.runtime == &runtime.runtime);
-    assert(runtime.context.config == &inotify_config);
-    assert(runtime.context.logger == &logger);
-    assert(runtime.context.emit_record == capture_emit);
-    assert(runtime.context.emit_record_userdata == &capture);
+    assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
 
     /*
      * Only init/destroy are real in this micro-step. The rest of the lifecycle
@@ -148,13 +170,15 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
                      &emit) == ERR_INVALID_ARG);
 
     ops->destroy((alfred_backend_t *)&runtime);
-    assert(runtime.initialized == 0);
-    assert(runtime.runtime.fd == -1);
-    assert(runtime.context.runtime == NULL);
-    assert(runtime.context.config == NULL);
-    assert(runtime.context.logger == NULL);
-    assert(runtime.context.emit_record == NULL);
-    assert(runtime.context.emit_record_userdata == NULL);
+    assert_runtime_destroyed(&runtime);
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+    assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
 
     ops->destroy(NULL);
     ops->destroy((alfred_backend_t *)&runtime);
