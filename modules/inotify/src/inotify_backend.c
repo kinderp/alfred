@@ -667,6 +667,9 @@ static int backend_configured_roots_has_nested_overlap(
 static void backend_configured_roots_remove(inotify_backend_t *runtime,
                                             const char *path);
 
+static void backend_rollback_target_watches(inotify_backend_context_t *ctx,
+                                            const char *path);
+
 static void backend_configured_roots_destroy(inotify_backend_t *runtime);
 
 static const char *backend_configured_root_for_path(
@@ -2385,6 +2388,13 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
  * This helper keeps the startup-watch decision separate from public argument
  * validation. The backend decision only needs the context and the path.
  *
+ * Target registration is intentionally ordered as a small two-phase operation:
+ * first reserve the configured root, then install the watches. If watch
+ * installation fails, the root reservation and any watches installed for this
+ * target are rolled back before the error reaches the caller. That keeps the
+ * Backend API v0 rule simple: a failed add_target() must not leave a visible
+ * configured target or newly installed watches behind.
+ *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
@@ -2400,13 +2410,6 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                          path);
             return ERR_INVALID_ARG;
         }
-
-        if (watch_manager_add_recursive(ctx, path) < 0)
-            return ERR_INOTIFY;
-    }
-    else {
-        if (watch_manager_add(ctx, path) < 0)
-            return ERR_INOTIFY;
     }
 
     if (backend_configured_roots_add(ctx->runtime, path) != 0) {
@@ -2414,6 +2417,21 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                      "configured root registration failed path=%s",
                      path);
         return ERR_ALLOC;
+    }
+
+    if (ctx->config->recursive) {
+        if (watch_manager_add_recursive(ctx, path) < 0) {
+            backend_rollback_target_watches(ctx, path);
+            backend_configured_roots_remove(ctx->runtime, path);
+            return ERR_INOTIFY;
+        }
+    }
+    else {
+        if (watch_manager_add(ctx, path) < 0) {
+            backend_rollback_target_watches(ctx, path);
+            backend_configured_roots_remove(ctx->runtime, path);
+            return ERR_INOTIFY;
+        }
     }
 
     return ERR_OK;
@@ -2570,6 +2588,66 @@ static void backend_configured_roots_remove(inotify_backend_t *runtime,
         runtime->configured_roots_count--;
         runtime->configured_roots[runtime->configured_roots_count][0] = '\0';
         return;
+    }
+}
+
+/*
+ * backend_rollback_target_watches - remove watches installed by a failed add
+ * @ctx: backend context used to remove watch descriptors
+ * @path: target path whose add_target() operation failed
+ *
+ * watch_manager_add_recursive() can fail after installing an earlier directory
+ * from the tree. Backend API v0 does not expose partial target adds, so this
+ * helper removes watches for the failed target before the configured root
+ * reservation is rolled back. It avoids allocation because rollback can run
+ * while Alfred is already handling an error path.
+ */
+static void backend_rollback_target_watches(inotify_backend_context_t *ctx,
+                                            const char *path)
+{
+    watcher_table_t *watchers;
+
+    if (ctx == NULL ||
+        ctx->runtime == NULL ||
+        ctx->config == NULL ||
+        path == NULL ||
+        path[0] == '\0') {
+        return;
+    }
+
+    watchers = &ctx->runtime->watchers;
+
+    if (watchers->count == 0)
+        return;
+
+    if (ctx->config->recursive) {
+        for (;;) {
+            int wd = -1;
+
+            for (size_t i = 0; i < watchers->capacity; i++) {
+                if (!watchers->items[i].active)
+                    continue;
+
+                if (!backend_path_matches_prefix(watchers->items[i].path,
+                                                 path)) {
+                    continue;
+                }
+
+                wd = watchers->items[i].wd;
+                break;
+            }
+
+            if (wd < 0)
+                break;
+
+            (void)watch_manager_remove(ctx, wd);
+        }
+    }
+    else {
+        int wd = watcher_find_wd_by_path(watchers, path);
+
+        if (wd >= 0)
+            (void)watch_manager_remove(ctx, wd);
     }
 }
 

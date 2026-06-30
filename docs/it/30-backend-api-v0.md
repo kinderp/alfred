@@ -989,6 +989,15 @@ borrowed del contesto e torna a uno stato distrutto riutilizzabile.
 con path non vuoto, flags pari a `ALFRED_BACKEND_TARGET_FLAG_NONE` e
 `backend_options == NULL`; poi delega al percorso esistente
 `inotify_backend_add_startup_watch()`.
+Il contratto v0 di `add_target` e' atomic-like rispetto alla gestione target:
+se l'operazione restituisce errore, il target non deve restare visibile in
+`configured_roots` e non devono restare watch nuovi installati per quel target.
+Per questo il backend registra prima la root configurata e poi installa i
+watch; se l'installazione fallisce, rimuove i watch parziali e annulla la root
+registrata prima di restituire `ERR_INOTIFY`. Se invece la registrazione della
+root fallisce con `ERR_ALLOC`, nessun watch e' ancora stato installato.
+Questa regola e' importante per i chiamanti: un `add_target()` fallito non deve
+significare "forse Alfred sta comunque osservando quel path".
 `remove_target` accetta lo stesso sottoinsieme di target, rifiuta runtime
 incoerenti prima di toccare la watch table e delega a
 `inotify_backend_remove_startup_watch()`. In modalita' ricorsiva rimuove il
