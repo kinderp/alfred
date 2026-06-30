@@ -697,6 +697,15 @@ prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
 un target osservato ricorsivamente, tutti i watch con path assoluto appartengono
 al suo sottoalbero e devono essere rimossi insieme alla root.
 
+Backend API v0 rifiuta target ricorsivi sovrapposti per inotify. Per esempio,
+se `/tmp/root` e' gia' configurato, aggiungere `/tmp/root/child` fallisce; se
+`/tmp/root/child` e' gia' configurato, aggiungere `/tmp/root` fallisce. Il
+duplicato esatto resta invece idempotente. Questa scelta evita uno stato
+ambiguo in cui un watch figlio appartiene sia al target padre sia al target
+figlio: Alfred non ha ancora refcount o ownership esplicita dei watch. Path con
+prefisso testuale simile ma fuori subtree, come `/tmp/root` e `/tmp/root-old`,
+non sono considerati sovrapposti.
+
 ### `poll`
 
 Legge o consuma eventi disponibili. Per inotify corrisponde oggi a:

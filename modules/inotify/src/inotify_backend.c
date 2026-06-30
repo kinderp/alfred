@@ -654,6 +654,16 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path);
 
+static int backend_configured_roots_has_exact(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
+static int backend_configured_roots_has_nested_overlap(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
 static void backend_configured_roots_remove(inotify_backend_t *runtime,
                                             const char *path);
 
@@ -2381,6 +2391,16 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path)
 {
     if (ctx->config->recursive) {
+        if (backend_configured_roots_has_exact(ctx->runtime, path))
+            return ERR_OK;
+
+        if (backend_configured_roots_has_nested_overlap(ctx->runtime, path)) {
+            logger_error(ctx->logger,
+                         "overlapping recursive target rejected path=%s",
+                         path);
+            return ERR_INVALID_ARG;
+        }
+
         if (watch_manager_add_recursive(ctx, path) < 0)
             return ERR_INOTIFY;
     }
@@ -2457,6 +2477,67 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
              "%s",
              path);
     runtime->configured_roots_count++;
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_has_exact - check whether a root is already configured
+ * @runtime: backend runtime containing registered startup roots
+ * @path: startup path to compare
+ *
+ * Duplicate exact roots are idempotent in Backend API v0. This avoids
+ * reinstalling the same recursive watch tree and keeps target registration
+ * stable for callers that retry the same add_target() call.
+ *
+ * Return: nonzero when @path is already configured exactly.
+ */
+static int backend_configured_roots_has_exact(const inotify_backend_t *runtime,
+                                              const char *path)
+{
+    if (runtime == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_has_nested_overlap - detect parent/child root overlap
+ * @runtime: backend runtime containing registered startup roots
+ * @path: startup path being added
+ *
+ * Recursive Backend API v0 does not track watch ownership or refcounts. Parent
+ * and child target roots would therefore share watch descriptors without a way
+ * to know whether removing one target may remove watches needed by the other.
+ * Exact duplicates are not considered overlaps here; they are handled as
+ * idempotent adds by backend_configured_roots_has_exact().
+ *
+ * Return: nonzero when @path overlaps a different configured root.
+ */
+static int backend_configured_roots_has_nested_overlap(
+    const inotify_backend_t *runtime,
+    const char *path
+)
+{
+    if (runtime == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        const char *root = runtime->configured_roots[i];
+
+        if (strcmp(root, path) == 0)
+            continue;
+
+        if (backend_path_matches_prefix(root, path) ||
+            backend_path_matches_prefix(path, root)) {
+            return 1;
+        }
+    }
 
     return 0;
 }

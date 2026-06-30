@@ -291,6 +291,9 @@ runtime incoerenti e target non supportati, poi delega a
 `watch_manager_remove()` per conservare i record diagnostici `WATCH_REMOVED`.
 Quando la configurazione inotify e' ricorsiva, rimuovere una root rimuove anche
 i watch figli sotto quella root con confronto di prefisso a boundary `/`.
+Per v0, `add_target` rifiuta target ricorsivi sovrapposti padre/figlio e
+mantiene idempotenti solo i duplicati esatti, per evitare ownership ambigua dei
+watch finche' non esisteranno refcount o owner espliciti.
 `poll`, `start` e `stop` restano placeholder fail-fast.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:

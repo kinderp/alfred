@@ -394,11 +394,13 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 1);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
     assert(capture.calls == 1);
     assert(capture.watch_added == 1);
     assert(ops->remove_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 0);
+    assert(runtime.runtime.configured_roots_count == 0);
     assert(capture.calls == 2);
     assert(capture.watch_removed == 1);
     assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
@@ -416,6 +418,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
                      &emit) == ERR_OK);
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
+    assert(runtime.runtime.configured_roots_count == 0);
 
     ops->destroy((alfred_backend_t *)&runtime);
     assert_runtime_destroyed(&runtime);
@@ -493,12 +496,14 @@ static void test_inotify_ops_remove_target_removes_recursive_subtree(void)
     assert(watcher_count(&runtime.runtime.watchers) == 2);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 1);
     assert(watcher_has_path(&runtime.runtime.watchers, child_path) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
     assert(capture.watch_added == 2);
 
     assert(ops->remove_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 0);
     assert(watcher_has_path(&runtime.runtime.watchers, child_path) == 0);
+    assert(runtime.runtime.configured_roots_count == 0);
     assert(capture.watch_removed == 2);
 
     ops->destroy((alfred_backend_t *)&runtime);
@@ -513,6 +518,145 @@ static void test_inotify_ops_remove_target_removes_recursive_subtree(void)
     rmdir(watch_root);
 }
 
+static void test_inotify_ops_rejects_overlapping_recursive_targets(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+    emit_capture_t capture;
+    alfred_backend_emit_t emit;
+    alfred_backend_target_t target;
+    const char *raw_log =
+        "/tmp/alfred_test_backend_inotify_ops_overlap.raw.log";
+    const char *event_log =
+        "/tmp/alfred_test_backend_inotify_ops_overlap.events.log";
+    const char *error_log =
+        "/tmp/alfred_test_backend_inotify_ops_overlap.errors.log";
+    char base[] = "/tmp/alfred_test_backend_inotify_ops_overlap.XXXXXX";
+    char root_path[PATH_MAX];
+    char child_path[PATH_MAX];
+    char sibling_path[PATH_MAX];
+    int written;
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    memset(&capture, 0, sizeof(capture));
+    memset(&emit, 0, sizeof(emit));
+    memset(&target, 0, sizeof(target));
+
+    inotify_config_defaults(&inotify_config);
+    inotify_config.watcher_capacity = 8;
+    inotify_config.recursive = 1;
+
+    assert(logger_init(&logger, raw_log, event_log, error_log) == 0);
+
+    assert(mkdtemp(base) != NULL);
+    written = snprintf(root_path,
+                       sizeof(root_path),
+                       "%s/root",
+                       base);
+    assert(written > 0 && (size_t)written < sizeof(root_path));
+    written = snprintf(child_path,
+                       sizeof(child_path),
+                       "%s/child",
+                       root_path);
+    assert(written > 0 && (size_t)written < sizeof(child_path));
+    written = snprintf(sibling_path,
+                       sizeof(sibling_path),
+                       "%s/root-old",
+                       base);
+    assert(written > 0 && (size_t)written < sizeof(sibling_path));
+
+    assert(mkdir(root_path, 0700) == 0);
+    assert(mkdir(child_path, 0700) == 0);
+    assert(mkdir(sibling_path, 0700) == 0);
+
+    config.config = &inotify_config;
+    config.logger = &logger;
+    emit.emit = capture_emit;
+    emit.userdata = &capture;
+    target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+    target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+
+    target.path = root_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 2);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 2);
+
+    /*
+     * Exact duplicates are idempotent. They must not reinstall watches or add
+     * another configured root.
+     */
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 2);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 2);
+
+    target.path = child_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+    assert(watcher_count(&runtime.runtime.watchers) == 2);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 2);
+
+    /*
+     * Similar textual prefixes are allowed when the slash-boundary rule says
+     * they are different subtrees.
+     */
+    target.path = sibling_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 3);
+    assert(runtime.runtime.configured_roots_count == 2);
+    assert(capture.watch_added == 3);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    memset(&capture, 0, sizeof(capture));
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     &emit) == ERR_OK);
+
+    target.path = child_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 1);
+
+    target.path = root_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 1);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    logger_close(&logger);
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+    rmdir(child_path);
+    rmdir(root_path);
+    rmdir(sibling_path);
+    rmdir(base);
+}
+
 int main(void)
 {
     test_inotify_ops_descriptor_is_valid();
@@ -522,6 +666,7 @@ int main(void)
     test_inotify_ops_rejects_invalid_remove_target_arguments();
     test_inotify_ops_init_destroy_lifecycle();
     test_inotify_ops_remove_target_removes_recursive_subtree();
+    test_inotify_ops_rejects_overlapping_recursive_targets();
 
     return 0;
 }
