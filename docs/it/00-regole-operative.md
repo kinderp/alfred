@@ -618,13 +618,21 @@ Formato consigliato da aggiungere alla descrizione della PR:
 
 Summary:
 - Brief English summary of what this review focused on.
-- Brief English summary of the architectural or correctness risk found.
+- Brief English summary of the risk found or why no findings remain.
+
+Clean review status:
+- New findings: yes/no.
+- Consecutive clean reviews: 0/1/2.
+- Draft status: keep draft / ready to mark non-draft after two clean reviews.
 
 Findings:
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of why the fix closes the finding.
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+  Fix: pending - short explanation of pending work.
+
+Validation:
+- command or CI status observed during this review round.
 ```
 
 La sezione `Review round N` deve essere scritta in inglese, come il resto della
@@ -635,10 +643,15 @@ request, creando riferimenti ambigui e non intenzionali. Deve indicare:
 - il numero del round di review;
 - il senso della review, cioe' che tipo di rischio o parte del codice e' stata
   controllata;
+- lo stato del round rispetto alla regola delle due review pulite, indicando se
+  ci sono nuovi finding, quante review consecutive sono pulite e se la PR deve
+  restare draft;
 - la lista puntata dei finding;
 - per ogni finding, il commit che lo risolve come link Markdown cliccabile alla
   pagina GitHub del commit;
-- una spiegazione breve ma chiara del perche' il fix chiude il finding.
+- una spiegazione breve ma chiara del perche' il fix chiude il finding;
+- la validazione osservata durante quel round, inclusi comandi locali o stato
+  CI.
 
 Questa regola affianca, ma non sostituisce, i commenti inline: il commento
 inline resta il punto preciso nel codice, mentre la descrizione della PR offre
