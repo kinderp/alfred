@@ -502,11 +502,14 @@ Explain in English what changed and why this closes the finding.
 
 Le regole di commit, PR, finding e review possono essere applicate in due
 modalita' operative. Se il maintainer non specifica la modalita', usare la
-modalita' supervisionata.
+modalita' supervisionata. Gli alias brevi sono convenzioni testuali del
+progetto: funzionano quando il messaggio arriva all'agente. Se un client
+intercetta i comandi slash prima di inviarli, usare il trigger testuale lungo.
 
 Modalita' supervisionata:
 
 - trigger consigliato: `modalita' supervisionata`;
+- alias breve: `/apcr super`;
 - spiegare prima i passaggi significativi;
 - chiedere conferma prima di push, apertura PR, fix di finding o decisioni che
   cambiano contratto, scope, architettura o documentazione rilevante;
@@ -518,6 +521,7 @@ Modalita' supervisionata:
 Modalita' autonoma PR loop:
 
 - trigger consigliato: `modalita' autonoma PR loop`;
+- alias breve: `/apcr auto`;
 - non chiedere conferma per passaggi meccanici gia' regolati: branch, issue
   figlia, commit, push, apertura o aggiornamento PR, label, milestone, commenti
   GitHub, review, finding inline, fix, risposta ai finding e aggiornamento del
