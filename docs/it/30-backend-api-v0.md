@@ -666,10 +666,12 @@ incoerente restituisce `ERR_INVALID_ARG`. Dopo `init()`, `start()` imposta lo
 stato `started` del runtime ops e restituisce `ERR_OK`. Chiamarlo piu' volte e'
 idempotente.
 
-Questa scelta evita di fingere che esista gia' un event loop Backend API v0:
-`poll()` non e' ancora migrato e `app.c` continua a usare il percorso inotify
-specifico. Per ora `started` serve a rendere reale il lifecycle comune e a
-preparare backend futuri con thread, subscription o provider remoti.
+Questa scelta evita di fingere che il loop principale sia gia' un event loop
+Backend API v0 completo: la `poll` della tabella ops esiste per il sottoinsieme
+non bloccante `timeout_ms == 0`, ma `app_run()` continua a usare il percorso
+raw inotify specifico per alimentare il core semantico con `alfred_raw_event_t`.
+Per ora `started` serve a rendere reale il lifecycle comune e a preparare
+backend futuri con thread, subscription o provider remoti.
 
 ### `add_target`
 
