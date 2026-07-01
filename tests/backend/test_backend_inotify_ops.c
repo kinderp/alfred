@@ -25,6 +25,9 @@ typedef struct emit_capture {
     int watch_removed;
     int normalized_raw;
     int raw_create;
+    uint32_t last_raw_create_mask;
+    alfred_source_t last_raw_create_source;
+    char last_raw_create_path[PATH_MAX];
     int fail_watch_added_on;
     int fail_watch_removed_on;
 } emit_capture_t;
@@ -50,8 +53,17 @@ static int capture_emit(const alfred_record_t *record, void *userdata)
 
     if (capture != NULL &&
         record->layer == ALFRED_RECORD_LAYER_NORMALIZED_RAW &&
-        record->type == ALFRED_RECORD_TYPE_RAW_CREATE)
+        record->type == ALFRED_RECORD_TYPE_RAW_CREATE) {
         capture->raw_create++;
+        capture->last_raw_create_mask = record->raw_mask;
+        capture->last_raw_create_source = record->source;
+        if (record->path != NULL) {
+            snprintf(capture->last_raw_create_path,
+                     sizeof(capture->last_raw_create_path),
+                     "%s",
+                     record->path);
+        }
+    }
 
     if (capture != NULL &&
         record->type == ALFRED_RECORD_TYPE_WATCH_REMOVED &&
@@ -555,6 +567,9 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
 
     assert(capture.normalized_raw > 0);
     assert(capture.raw_create > 0);
+    assert(capture.last_raw_create_source == ALFRED_SRC_INOTIFY);
+    assert((capture.last_raw_create_mask & ALFRED_RAW_CREATE) != 0);
+    assert(strcmp(capture.last_raw_create_path, created_path) == 0);
 
     assert(ops->remove_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
