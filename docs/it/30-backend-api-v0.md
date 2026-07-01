@@ -770,10 +770,29 @@ Legge o consuma eventi disponibili. Per inotify corrisponde oggi a:
 inotify_backend_poll()
 ```
 
-`timeout_ms` permette di usare la stessa API con backend polling e backend
-event-driven. Un valore da definire potra' indicare "non bloccare", "blocca per
-N millisecondi" o "blocca indefinitamente". La semantica esatta e' rimandata
-alla fase di implementazione.
+Nello staged adapter inotify gia' implementato, `poll()` e' non bloccante e
+accetta solo `timeout_ms == 0`. Qualsiasi altro valore viene rifiutato con
+`ERR_INVALID_ARG` per non fingere di supportare una semantica di timeout che il
+runtime comune non ha ancora definito. Il valore `0` significa: "leggi quello
+che e' gia' disponibile sul file descriptor inotify non bloccante e poi
+ritorna".
+
+Il callback comune non espone piu' `inotify_backend_event_fn` al chiamante della
+Backend API. L'adapter fa questo passaggio:
+
+```text
+ops->poll(backend, 0)
+-> inotify_backend_poll(&runtime->context, raw_adapter, runtime)
+-> raw_adapter(alfred_raw_event_t)
+-> alfred_record_from_raw()
+-> runtime->context.emit_record(alfred_record_t)
+```
+
+Questa e' una scelta intenzionale: il contratto comune emette record Alfred,
+non callback raw specifiche di inotify. Per questo `poll()` richiede che
+`init()` abbia ricevuto un `alfred_backend_emit_t` valido e che `start()` sia
+gia' stato chiamato. Senza emit, la poll comune non avrebbe un confine corretto
+verso cui consegnare i record normalizzati.
 
 ### `stop`
 
@@ -1015,7 +1034,8 @@ compatibile:
 ```text
 inotify_backend_poll()
 -> build alfred_raw_event_t come oggi
--> adattare a alfred_record_t quando il record comune esistera'
+-> adattare a alfred_record_t tramite alfred_record_from_raw()
+-> emit_record(alfred_record_t) nella callback Backend API v0
 ```
 
 Per la diagnostica:

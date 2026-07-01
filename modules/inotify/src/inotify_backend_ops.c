@@ -1,6 +1,31 @@
 #include "inotify_backend.h"
 
+#include "alfred_record_adapter.h"
 #include "errors.h"
+
+static int inotify_backend_ops_emit_raw_record(
+    const alfred_raw_event_t *raw,
+    void *userdata
+)
+{
+    inotify_backend_ops_runtime_t *runtime =
+        (inotify_backend_ops_runtime_t *)userdata;
+    alfred_record_t record;
+
+    if (runtime == NULL ||
+        runtime->context.emit_record == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    if (raw == NULL)
+        return ERR_OK;
+
+    if (alfred_record_from_raw(raw, &record) != 0)
+        return ERR_INVALID_ARG;
+
+    return runtime->context.emit_record(&record,
+                                        runtime->context.emit_record_userdata);
+}
 
 static int inotify_backend_ops_init(
     alfred_backend_t *backend,
@@ -113,14 +138,28 @@ static int inotify_backend_ops_remove_target(
                                                 target->path);
 }
 
-static int inotify_backend_ops_not_wired_poll(
+static int inotify_backend_ops_poll(
     alfred_backend_t *backend,
     int timeout_ms
 )
 {
-    (void)backend;
-    (void)timeout_ms;
-    return ERR_INVALID_ARG;
+    inotify_backend_ops_runtime_t *runtime =
+        (inotify_backend_ops_runtime_t *)backend;
+
+    if (runtime == NULL ||
+        !runtime->initialized ||
+        !runtime->started ||
+        runtime->context.runtime == NULL ||
+        runtime->context.config == NULL ||
+        runtime->context.logger == NULL ||
+        runtime->context.emit_record == NULL ||
+        timeout_ms != 0) {
+        return ERR_INVALID_ARG;
+    }
+
+    return inotify_backend_poll(&runtime->context,
+                                inotify_backend_ops_emit_raw_record,
+                                runtime);
 }
 
 static int inotify_backend_ops_stop(alfred_backend_t *backend)
@@ -168,7 +207,7 @@ static const alfred_backend_ops_t INOTIFY_BACKEND_OPS_TEMPLATE = {
     .start = inotify_backend_ops_start,
     .add_target = inotify_backend_ops_add_target,
     .remove_target = inotify_backend_ops_remove_target,
-    .poll = inotify_backend_ops_not_wired_poll,
+    .poll = inotify_backend_ops_poll,
     .stop = inotify_backend_ops_stop,
     .destroy = inotify_backend_ops_destroy
 };

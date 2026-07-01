@@ -2,9 +2,9 @@
  * test_backend_inotify_ops.c - inotify Backend API v0 ops skeleton contract
  *
  * This test locks down the first inotify-specific operations descriptor without
- * migrating app.c. The descriptor must be valid metadata. init/destroy and
- * add_target/remove_target are the first real callbacks; start, poll and stop
- * remain staged fail-fast placeholders until their own migration steps.
+ * migrating app.c. The descriptor must be valid metadata and the staged
+ * callbacks must delegate through the common Backend API v0 shape instead of
+ * exposing app_t or JSONL/text writers to the backend.
  */
 
 #include "errors.h"
@@ -23,6 +23,8 @@ typedef struct emit_capture {
     int calls;
     int watch_added;
     int watch_removed;
+    int normalized_raw;
+    int raw_create;
     int fail_watch_added_on;
     int fail_watch_removed_on;
 } emit_capture_t;
@@ -41,6 +43,15 @@ static int capture_emit(const alfred_record_t *record, void *userdata)
 
     if (capture != NULL && record->type == ALFRED_RECORD_TYPE_WATCH_REMOVED)
         capture->watch_removed++;
+
+    if (capture != NULL &&
+        record->layer == ALFRED_RECORD_LAYER_NORMALIZED_RAW)
+        capture->normalized_raw++;
+
+    if (capture != NULL &&
+        record->layer == ALFRED_RECORD_LAYER_NORMALIZED_RAW &&
+        record->type == ALFRED_RECORD_TYPE_RAW_CREATE)
+        capture->raw_create++;
 
     if (capture != NULL &&
         record->type == ALFRED_RECORD_TYPE_WATCH_REMOVED &&
@@ -397,6 +408,68 @@ static void test_inotify_ops_rejects_invalid_start_stop_arguments(void)
     assert(ops->stop((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
 }
 
+static void test_inotify_ops_rejects_invalid_poll_arguments(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+    inotify_backend_ops_config_t config;
+    inotify_config_t inotify_config;
+    logger_t logger;
+    const char *raw_log =
+        "/tmp/alfred_test_backend_inotify_ops_poll_invalid.raw.log";
+    const char *event_log =
+        "/tmp/alfred_test_backend_inotify_ops_poll_invalid.events.log";
+    const char *error_log =
+        "/tmp/alfred_test_backend_inotify_ops_poll_invalid.errors.log";
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&config, 0, sizeof(config));
+    memset(&logger, 0, sizeof(logger));
+    inotify_config_defaults(&inotify_config);
+    inotify_config.watcher_capacity = 8;
+
+    assert(ops->poll(NULL, 0) == ERR_INVALID_ARG);
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
+
+    /*
+     * `initialized` and `started` flags alone are not a valid poll boundary.
+     * poll() needs the context pointers installed by init() and a record emit
+     * callback because the common Backend API v0 poll path emits records, not
+     * inotify-specific raw callbacks.
+     */
+    runtime.initialized = 1;
+    runtime.started = 1;
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
+
+    memset(&runtime, 0, sizeof(runtime));
+
+    assert(logger_init(&logger, raw_log, event_log, error_log) == 0);
+
+    config.config = &inotify_config;
+    config.logger = &logger;
+
+    assert(ops->init((alfred_backend_t *)&runtime,
+                     (const alfred_backend_config_t *)&config,
+                     NULL) == ERR_OK);
+
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
+
+    ops->destroy((alfred_backend_t *)&runtime);
+    assert_runtime_destroyed(&runtime);
+
+    logger_close(&logger);
+
+    unlink(raw_log);
+    unlink(event_log);
+    unlink(error_log);
+}
+
 static void test_inotify_ops_init_destroy_lifecycle(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
@@ -407,10 +480,14 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     emit_capture_t capture;
     alfred_backend_emit_t emit;
     alfred_backend_target_t target;
+    char created_path[PATH_MAX];
     const char *raw_log = "/tmp/alfred_test_backend_inotify_ops.raw.log";
     const char *event_log = "/tmp/alfred_test_backend_inotify_ops.events.log";
     const char *error_log = "/tmp/alfred_test_backend_inotify_ops.errors.log";
     char watch_root[] = "/tmp/alfred_test_backend_inotify_ops_watch.XXXXXX";
+    FILE *created_file;
+    int written;
+    int attempts;
 
     unlink(raw_log);
     unlink(event_log);
@@ -443,31 +520,48 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
                      &emit) == ERR_OK);
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
 
-    /*
-     * init/destroy/start/stop/add_target/remove_target are real in this
-     * micro-step sequence. start/stop are explicit lifecycle markers for the
-     * common Backend API v0 shape; poll still rejects accidental use until the
-     * event-loop migration step.
-     */
     assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
     assert(runtime.started == 0);
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
     assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
     assert(runtime.started == 1);
     assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
     assert(runtime.started == 1);
+    assert(ops->poll((alfred_backend_t *)&runtime, 1) == ERR_INVALID_ARG);
+    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_OK);
     assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 1);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 1);
     assert(runtime.runtime.configured_roots_count == 1);
     assert(capture.calls == 1);
     assert(capture.watch_added == 1);
+
+    written = snprintf(created_path,
+                       sizeof(created_path),
+                       "%s/%s",
+                       watch_root,
+                       "poll-created.txt");
+    assert(written > 0 && (size_t)written < sizeof(created_path));
+
+    created_file = fopen(created_path, "w");
+    assert(created_file != NULL);
+    assert(fputs("poll through Backend API v0\n", created_file) >= 0);
+    assert(fclose(created_file) == 0);
+
+    for (attempts = 0; attempts < 50 && capture.raw_create == 0; attempts++) {
+        assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_OK);
+        usleep(10000);
+    }
+
+    assert(capture.normalized_raw > 0);
+    assert(capture.raw_create > 0);
+
     assert(ops->remove_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 0);
     assert(runtime.runtime.configured_roots_count == 0);
-    assert(capture.calls == 2);
+    assert(capture.calls >= 3);
     assert(capture.watch_removed == 1);
-    assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
     assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
     assert(runtime.started == 0);
     assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
@@ -505,6 +599,7 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     unlink(raw_log);
     unlink(event_log);
     unlink(error_log);
+    unlink(created_path);
     rmdir(watch_root);
 }
 
@@ -1371,6 +1466,7 @@ int main(void)
     test_inotify_ops_uses_inotify_capabilities();
     test_inotify_ops_rejects_invalid_init_arguments();
     test_inotify_ops_rejects_invalid_start_stop_arguments();
+    test_inotify_ops_rejects_invalid_poll_arguments();
     test_inotify_ops_rejects_invalid_add_target_arguments();
     test_inotify_ops_rejects_invalid_remove_target_arguments();
     test_inotify_ops_init_destroy_lifecycle();

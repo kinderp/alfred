@@ -17,6 +17,7 @@ cc -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 \
     "$ROOT_DIR/app/src/utils.c" \
     "$ROOT_DIR/core/src/alfred_backend_capabilities.c" \
     "$ROOT_DIR/core/src/alfred_backend_ops.c" \
+    "$ROOT_DIR/core/src/alfred_record_adapter.c" \
     "$ROOT_DIR/core/src/alfred_record_diagnostic.c" \
     "$ROOT_DIR/core/src/alfred_record_sink.c" \
     "$ROOT_DIR/core/src/alfred_record_text.c" \

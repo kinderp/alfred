@@ -174,6 +174,12 @@ typedef struct inotify_backend_ops_config {
  * resource owners. init()/destroy() still open and close the inotify fd and
  * watcher state. start()/stop() are idempotent state transitions used to make
  * the common lifecycle contract real before poll() and app.c are migrated.
+ *
+ * The inotify v0 poll callback delegates to the existing inotify poll loop, but
+ * adapts each alfred_raw_event_t into an alfred_record_t and emits it through
+ * the alfred_backend_emit_t callback copied during init(). The current staged
+ * adapter supports only timeout_ms == 0 because the underlying inotify fd is
+ * nonblocking and the common blocking-timeout semantics are not implemented yet.
  */
 typedef struct inotify_backend_ops_runtime {
     inotify_backend_t runtime;
@@ -218,8 +224,9 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * common Backend API v0 shape. app.c still calls the existing inotify-specific
  * functions directly, so the normal runtime behavior is unchanged. The staged
  * adapter path wires init/destroy/start/stop/add_target/remove_target through
- * the common ops table for focused tests; polling remains a placeholder until
- * its own migration step.
+ * the common ops table for focused tests. Polling is wired for nonblocking
+ * record emission through the init-time emit callback, while app.c still calls
+ * the existing inotify-specific function directly.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */
