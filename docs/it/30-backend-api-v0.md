@@ -813,6 +813,16 @@ caso e' un errore di validazione target (`ERR_INVALID_ARG`), non un errore di
 allocazione (`ERR_ALLOC`). `ERR_ALLOC` resta riservato a fallimenti reali di
 memoria per target altrimenti validi.
 
+Il target filesystem v0 usa identita' lessicale ristretta, non una
+canonicalizzazione completa. Questo significa che il backend confronta i path
+come stringhe dopo aver applicato poche regole di validazione. Per evitare
+alias evidenti dello stesso target, i path con slash finale sono rifiutati con
+`ERR_INVALID_ARG`, tranne la root del filesystem `/`. Quindi `/tmp/root` e'
+valido, `/tmp/root/` e' invalido, `/` resta valido. Alfred non risolve ancora
+in modo generale symlink, `..`, mount boundary, path relativi o regole
+cross-platform: quel livello di normalizzazione dovra' essere progettato come
+passo separato.
+
 ## Capabilities
 
 Capabilities iniziali consigliate:

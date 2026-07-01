@@ -313,9 +313,13 @@ modalita' ricorsiva sia non ricorsiva: non reinstalla watch e non emette un
 secondo `WATCH_ADDED`. I path target devono avere lunghezza minore di
 `PATH_MAX`, perche' inotify v0 conserva configured roots e watcher path in
 buffer fissi: un path troppo lungo viene rifiutato con `ERR_INVALID_ARG`, non
-con `ERR_ALLOC`. Per i nuovi target validi, il backend registra la root prima
-di installare i watch e, se l'installazione fallisce, rimuove eventuali watch
-parziali e annulla la root registrata. In questo modo un errore di `add_target`
+con `ERR_ALLOC`. Il target filesystem v0 usa identita' lessicale ristretta:
+non canonicalizza ancora symlink, `..`, mount boundary o path relativi, ma
+rifiuta gli alias con slash finale tranne `/`. Quindi `/tmp/root` e' valido,
+`/tmp/root/` e' `ERR_INVALID_ARG` e `/` resta valido. Per i nuovi target validi,
+il backend registra la root prima di installare i watch e, se l'installazione
+fallisce, rimuove eventuali watch parziali e annulla la root registrata. In
+questo modo un errore di `add_target`
 non lascia una root configurata o watch nuovi visibili al chiamante.
 `poll`, `start` e `stop` restano placeholder fail-fast.
 

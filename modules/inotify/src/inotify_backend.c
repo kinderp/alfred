@@ -2521,11 +2521,17 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
  * backend_configured_root_path_is_valid - validate fixed-storage target paths
  * @path: borrowed target path supplied by Backend API target management
  *
- * Inotify v0 stores configured roots and watcher paths in fixed PATH_MAX
- * buffers. A path whose string length is PATH_MAX or larger cannot be copied
- * into those buffers with a terminating NUL byte, so it is outside the v0
- * target contract and must be reported as ERR_INVALID_ARG before allocation or
- * watch installation is attempted.
+ * Inotify v0 stores configured roots and watcher paths as caller-supplied
+ * lexical strings in fixed PATH_MAX buffers. A path whose string length is
+ * PATH_MAX or larger cannot be copied into those buffers with a terminating NUL
+ * byte, so it is outside the v0 target contract and must be reported as
+ * ERR_INVALID_ARG before allocation or watch installation is attempted.
+ *
+ * V0 also rejects trailing slash aliases except for the filesystem root "/".
+ * Alfred does not yet have a full canonicalization layer for symlinks, "..",
+ * mount boundaries, or cross-platform path rules, so accepting both
+ * "/tmp/root" and "/tmp/root/" would make target identity ambiguous while
+ * configured_roots and watcher_table_t still use lexical matching.
  *
  * Return: nonzero when @path can be stored by the current inotify v0 runtime.
  */
@@ -2538,7 +2544,13 @@ static int backend_configured_root_path_is_valid(const char *path)
 
     path_len = strlen(path);
 
-    return path_len > 0 && path_len < PATH_MAX;
+    if (path_len == 0 || path_len >= PATH_MAX)
+        return 0;
+
+    if (path_len > 1 && path[path_len - 1] == '/')
+        return 0;
+
+    return 1;
 }
 
 /*

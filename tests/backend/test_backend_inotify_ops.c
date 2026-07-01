@@ -486,6 +486,8 @@ static void test_inotify_ops_duplicate_nonrecursive_target_is_idempotent(void)
         "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.errors.log";
     char watch_root[] =
         "/tmp/alfred_test_backend_inotify_ops_duplicate_nonrecursive.XXXXXX";
+    char trailing_slash_path[PATH_MAX];
+    int written;
 
     unlink(raw_log);
     unlink(event_log);
@@ -521,6 +523,27 @@ static void test_inotify_ops_duplicate_nonrecursive_target_is_idempotent(void)
     assert(watcher_count(&runtime.runtime.watchers) == 1);
     assert(runtime.runtime.configured_roots_count == 1);
     assert(capture.watch_added == 1);
+
+    written = snprintf(trailing_slash_path,
+                       sizeof(trailing_slash_path),
+                       "%s/",
+                       watch_root);
+    assert(written > 0 && (size_t)written < sizeof(trailing_slash_path));
+
+    /*
+     * V0 target identity is lexical but restricted: Alfred does not canonicalize
+     * path aliases yet, so trailing-slash aliases are rejected except for "/".
+     * This prevents /tmp/root and /tmp/root/ from becoming two configured API
+     * targets that may share one kernel watch descriptor.
+     */
+    target.path = trailing_slash_path;
+    assert(ops->add_target((alfred_backend_t *)&runtime, &target) ==
+           ERR_INVALID_ARG);
+    assert(watcher_count(&runtime.runtime.watchers) == 1);
+    assert(runtime.runtime.configured_roots_count == 1);
+    assert(capture.watch_added == 1);
+
+    target.path = watch_root;
 
     /*
      * Exact duplicate target adds are an API-level idempotence rule, not a
