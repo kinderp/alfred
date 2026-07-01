@@ -2465,15 +2465,21 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 }
 
 /*
- * backend_configured_roots_add - remember one successfully watched root
+ * backend_configured_roots_add - register one configured API target root
  * @runtime: backend runtime that owns the root list
- * @path: startup path that was accepted by watch installation
+ * @path: startup path accepted by target validation
  *
  * Lost-scope recovery needs a bounded search scope that is independent from the
  * stale path. The application passes startup paths during initialization, but
  * app.c should not be queried later from backend recovery code. This helper
- * copies each successfully installed startup root into backend-owned storage so
- * delayed recovery can find the root that originally contained a stale watch.
+ * copies each configured startup root into backend-owned storage so delayed
+ * recovery can find the root that originally contained a stale watch.
+ *
+ * Backend API v0 uses this helper as the first phase of add_target(): reserve
+ * the configured root, install the watches, then remove the reservation again
+ * if watch installation fails. A caller that invokes this helper before watch
+ * installation is therefore responsible for rolling the root back on later
+ * failure.
  *
  * Duplicate paths are ignored. Paths are stored as supplied by startup; a later
  * normalization pass can tighten this if Alfred starts canonicalizing startup
