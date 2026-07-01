@@ -579,6 +579,31 @@ Durante la review controllare almeno:
   a backend, writer, formati, OS o integrazioni future gia' previste;
 - osservabilita' e operabilita': log, diagnostica, metriche, errori e CI devono
   permettere di capire cosa succede in produzione o nei test;
+- determinismo e riproducibilita': stesso input, scenario o replay devono
+  produrre comportamento prevedibile e output stabile quando il contratto lo
+  richiede;
+- versioning e compatibilita' evolutiva: cambi a record, JSONL, config, API,
+  log o formati devono essere versionati, documentati o dichiarati come
+  breaking change;
+- uso bounded delle risorse: memoria, file descriptor, watch, code, buffer,
+  retry, log e sink devono avere limiti chiari o una politica esplicita;
+- concorrenza e thread-safety: quando una modifica prepara o tocca worker,
+  queue, sink o shutdown concorrente, controllare lock, race, lifetime e
+  ownership;
+- privacy e minimizzazione dati: non loggare segreti, path sensibili, payload o
+  dettagli personali piu' del necessario senza scelta esplicita;
+- igiene delle dipendenze e supply chain: nuove dipendenze devono essere poche,
+  motivate, leggere, sicure e con licenza chiara;
+- portabilita' dei confini: anche se il backend corrente e' Linux/inotify, il
+  core e i contratti comuni non devono diventare accidentalmente Linux-only o
+  inotify-only;
+- usabilita' ed ergonomia operativa: errori, configurazione, CLI, output e
+  documentazione devono essere comprensibili per utenti e contributori;
+- degraded mode e recovery: in caso di errore Alfred deve degradare in modo
+  comprensibile, segnalare la perdita di affidabilita' o fail-closed dove il
+  contratto lo richiede;
+- integrita' dei dati: ledger, JSONL, log e output strutturati non devono
+  produrre record parziali ambigui, corrotti o non validabili;
 - coerenza: naming, semantica, configurazione, documentazione e comportamento
   devono essere allineati fra moduli e con le decisioni precedenti;
 - tracciabilita': issue, PR, commit, finding, review round e documentazione
