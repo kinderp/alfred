@@ -442,26 +442,62 @@ Questa tabella contiene anche dimensioni che oggi sono solo previste. Per
 esempio `Perf = non misurata` non e' un giudizio negativo: indica che servono
 benchmark dedicati prima di assegnare un valore.
 
+## Aggiornamento dopo audit 2026-07-01
+
+L'audit del 2026-07-01 ha ripetuto gli scenari principali dopo il lavoro recente
+su Backend API v0, lifecycle wiring e Writer Runtime. Il commit validato e'
+`09409b7` e il diario pubblico e' la issue
+[#68](https://github.com/kinderp/alfred/issues/68).
+
+Questo aggiornamento non promuove automaticamente le funzionalita' ad alta
+maturita'. Aggiunge invece una cosa piu' precisa: freschezza della validazione
+per gli scenari realmente rieseguiti sul codice corrente.
+
+| Funzionalita' | Evidenza 2026-07-01 | Freshness | Note |
+| --- | --- | --- | --- |
+| File lifecycle | `PASS base-jsonl-lifecycle` | fresh | Validato con `raw.log`, `events.log` e `output.jsonl`. |
+| Move/rename/relocate file | `PASS moves-jsonl` | fresh | Nessuna regressione visibile dopo il wiring Backend API v0. |
+| Move/rename/relocate directory | `PASS moves-jsonl` | fresh | Copre ancora rename, move e relocate directory. |
+| Lost-scope recovery | `PASS lost-scope-jsonl` | fresh | Resta intermedia: scenario utile, ma ancora delicato e legato a watcher/scanner. |
+| Audit raw opt-in | `PASS audit-raw-events` | fresh | Rimane iniziale/intermedia perche' copre pochi raw audit event. |
+| Recursive fast `mkdir -p` | `PASS recursive-fast-mkdir-p` | fresh | Scenario edge-case rieseguito. |
+| Structured output disabled | `PASS output-disabled` | fresh | Conferma che `events.log` compatibile resta attivo e `output.jsonl` non viene prodotto. |
+| Output config validation | `PASS invalid-output-format` | fresh | Conferma fail-fast prima dell'event loop per formato strutturato invalido. |
+| JSONL light burst | `PASS light-burst-jsonl` | fresh | 80 `FILE_CREATED`, 721 righe JSONL validate riga per riga. Non e' un benchmark. |
+| Root validation | `FAIL root-file-should-fail` | needs-revalidation | Known failure ancora aperto in [#30](https://github.com/kinderp/alfred/issues/30). |
+
+Interpretazione:
+
+- gli scenari principali sono ancora coerenti sul commit `09409b7`;
+- la validazione fresca riguarda soprattutto contratto funzionale e output, non
+  performance;
+- `root-validation` resta la priorita' negativa emersa dagli audit;
+- il burst JSONL leggero migliora la fiducia operativa, ma non sostituisce i
+  benchmark dedicati di throughput, latenza, memoria e queue depth.
+
 ## Vista grafica iniziale
 
 ```mermaid
 quadrantChart
-    title Maturita' osservata dagli audit notturni
+    title Maturita' osservata dagli audit notturni dopo 2026-07-01
     x-axis Bassa varieta' --> Alta varieta'
     y-axis Molto debito --> Poco debito
     quadrant-1 Matura ma da ripetere
     quadrant-2 Ampia ma rischiosa
     quadrant-3 Fragile o poco esplorata
     quadrant-4 Stretta ma promettente
-    File lifecycle: [0.55, 0.72]
+    File lifecycle: [0.60, 0.75]
     Directory lifecycle: [0.55, 0.72]
-    File move/rename/relocate: [0.82, 0.72]
-    Directory move/rename/relocate: [0.82, 0.72]
-    Lost-scope recovery: [0.58, 0.50]
-    Audit raw opt-in: [0.35, 0.70]
-    JSONL output config: [0.55, 0.75]
+    File move/rename/relocate: [0.84, 0.75]
+    Directory move/rename/relocate: [0.84, 0.75]
+    Lost-scope recovery: [0.60, 0.55]
+    Audit raw opt-in: [0.40, 0.72]
+    JSONL output config: [0.62, 0.78]
     Watch mask config: [0.55, 0.75]
-    Recursive mkdir -p: [0.55, 0.52]
+    Recursive mkdir -p: [0.58, 0.58]
+    Output disabled config: [0.45, 0.78]
+    Invalid output config: [0.45, 0.78]
+    JSONL light burst: [0.45, 0.72]
     Root validation: [0.30, 0.18]
 ```
 

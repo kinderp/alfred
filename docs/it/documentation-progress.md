@@ -58,6 +58,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `39-principi-architetturali-futuri.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
+| Parziale | `audit/2026-07-01-audit-notturno.md` |
 | Parziale | `audit/nightly-playbook.md` |
 | Parziale | `audit/maturity-matrix.md` |
 | Parziale | `audit/maturity-data-template.csv` |
@@ -90,6 +91,12 @@ notturni: issue madre, issue figlie, report nel repository, script
 riproducibili e regole per non committare log completi. Il primo report storico
 e' `docs/it/audit/2026-06-25-audit-notturno.md`, collegato alle issue GitHub
 `#29` e `#30`.
+
+Il secondo report storico e'
+`docs/it/audit/2026-07-01-audit-notturno.md`, collegato alla issue GitHub
+`#68`. Ripete gli scenari principali dopo il lavoro recente su Backend API v0 e
+Writer Runtime, conferma che il known failure `#30` e' ancora riproducibile e
+aggiorna la freschezza della matrice di maturita' per gli scenari rieseguiti.
 
 `tests/exploratory/nightly/` contiene scenari rilanciabili che non fanno ancora
 parte della suite ufficiale. Servono a ripetere audit precedenti e a decidere
