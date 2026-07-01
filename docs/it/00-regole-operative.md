@@ -498,6 +498,13 @@ Explain in English what changed and why this closes the finding.
 
 ### Aggiornamento della descrizione PR dopo review multiple
 
+Una PR deve restare in `draft` finche' non ha superato due round di review
+consecutivi senza nuovi finding. Solo dopo due review consecutive pulite si puo'
+decidere di marcarla pronta o mergiarla. Questa regola evita di considerare
+stabile una PR subito dopo il primo giro senza problemi, soprattutto quando le
+review precedenti hanno trovato ambiguita' di contratto, bug, rischi di
+performance, ownership o copertura test insufficiente.
+
 Quando una PR riceve piu' round di review, la descrizione creata dal template
 deve essere aggiornata dopo ogni round significativo. La PR non deve contenere
 solo lo stato iniziale del branch: deve diventare anche una traccia storica di
