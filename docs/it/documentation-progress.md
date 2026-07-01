@@ -313,7 +313,11 @@ mantiene idempotenti solo i duplicati esatti, per evitare ownership ambigua dei
 watch finche' non esisteranno refcount o owner espliciti. `add_target` ha anche
 un contratto atomic-like sul target. Il duplicato esatto e' idempotente sia in
 modalita' ricorsiva sia non ricorsiva: non reinstalla watch e non emette un
-secondo `WATCH_ADDED`. I path target devono avere lunghezza minore di
+secondo `WATCH_ADDED`. Questa idempotenza e' registry-based: se la root resta
+in `configured_roots` ma i watch attivi sono gia' spariti, `add_target(path)`
+restituisce comunque `ERR_OK` senza riparare automaticamente la copertura
+kernel. Per forzare una reinstallazione bisogna fare `remove_target(path)` e poi
+`add_target(path)`. I path target devono avere lunghezza minore di
 `PATH_MAX`, perche' inotify v0 conserva configured roots e watcher path in
 buffer fissi: un path troppo lungo viene rifiutato con `ERR_INVALID_ARG`, non
 con `ERR_ALLOC`. Il target filesystem v0 usa identita' lessicale ristretta:

@@ -732,7 +732,12 @@ Il duplicato esatto e' idempotente in tutte le modalita' inotify v0:
 richiamare `add_target(path)` con un path gia' configurato restituisce `ERR_OK`,
 non reinstalla watch e non emette un secondo `WATCH_ADDED`. Questa e' una
 regola di target management della Backend API, non un dettaglio della modalita'
-ricorsiva.
+ricorsiva. L'idempotenza e' basata sul registro `configured_roots`: se il target
+e' ancora configurato ma i watch attivi sono gia' spariti, `add_target(path)`
+continua a restituire `ERR_OK` senza ripristinare automaticamente la copertura
+kernel. Questo `ERR_OK` significa "target API gia' registrato", non "watch
+attivi reinstallati". Per forzare una reinstallazione il chiamante deve prima
+eseguire `remove_target(path)` e poi chiamare di nuovo `add_target(path)`.
 
 Backend API v0 rifiuta invece target ricorsivi sovrapposti per inotify. Per
 esempio, se `/tmp/root` e' gia' configurato, aggiungere `/tmp/root/child`

@@ -2411,6 +2411,11 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
  * Backend API v0 rule simple: a failed add_target() must not leave a visible
  * configured target or newly installed watches behind.
  *
+ * Exact duplicate adds are registry-idempotent in v0. If @path is already a
+ * configured root, ERR_OK means the API target is already registered; this call
+ * does not try to repair missing active kernel watch coverage. A caller that
+ * wants a forced reinstall must remove the target first, then add it again.
+ *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
