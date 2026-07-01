@@ -26,6 +26,12 @@ altro momento, leggere questo file prima di continuare.
   almeno uno tra documentazione architetturale, contratto API, scenario/test,
   diagramma, ADR o checklist di review. Se non aggiorna nulla, chiedersi se la
   modifica sta aggiungendo complessita' non tracciata.
+- Quando cambia una regola operativa che guida il comportamento degli agenti AI
+  o il flusso di lavoro ricorrente, controllare anche se esistono skill Codex
+  collegate da aggiornare. Per esempio, modifiche a commit, PR, review,
+  finding, issue, milestone, label o tracciabilita' GitHub devono riallineare
+  anche la skill personale `alfred-pr-commit-rules`, cosi' la procedura eseguita
+  dagli agenti resta coerente con la documentazione del repository.
 
 ## Tracciamento GitHub di roadmap e decisioni
 
@@ -449,9 +455,16 @@ Quando una PR riceve finding tecnici, il flusso obbligatorio e':
 5. nel messaggio del commit corrispondente indicare che il commit risolve quel
    finding, citando la PR e il link al commento/finding.
 
+Ogni finding risolto deve lasciare anche una spiegazione in inglese nel
+commento inline del finding, indipendentemente dal fatto che il maintainer
+l'abbia chiesta esplicitamente in chat. La risposta al finding non deve dire
+solo "fixed": deve spiegare qual era il rischio, come e' stato risolto e quale
+test o contratto impedisce la regressione.
+
 Se in chat e' stata gia' data una spiegazione del finding e della soluzione
-scelta, quella spiegazione non deve restare solo nella conversazione. Quando si
-chiude il finding, riportarla in inglese:
+scelta, quella spiegazione non deve restare solo nella conversazione: va
+tradotta o sintetizzata in inglese. Quando si chiude il finding, riportare
+sempre la spiegazione:
 
 - nella risposta al commento inline, insieme al link al commit;
 - nel body del commit che risolve il finding.
@@ -483,6 +496,51 @@ Fixed in [d406dec3](https://github.com/kinderp/alfred/commit/d406dec30eae64eaa8a
 Explain in English what changed and why this closes the finding.
 ```
 
+### Modalita' operative per PR e commit
+
+Le regole di commit, PR, finding e review possono essere applicate in due
+modalita' operative. Se il maintainer non specifica la modalita', usare la
+modalita' supervisionata. Gli alias brevi sono convenzioni testuali del
+progetto: funzionano quando il messaggio arriva all'agente. Se un client
+intercetta i comandi slash prima di inviarli, usare il trigger testuale lungo.
+
+Modalita' supervisionata:
+
+- trigger consigliato: `modalita' supervisionata`;
+- alias breve: `/apcr super`;
+- spiegare prima i passaggi significativi;
+- chiedere conferma prima di push, apertura PR, fix di finding o decisioni che
+  cambiano contratto, scope, architettura o documentazione rilevante;
+- spiegare ogni finding e la soluzione prevista prima di applicarla quando il
+  maintainer sta guidando la review;
+- fermarsi dopo i passaggi principali se il maintainer sta controllando il
+  ciclo.
+
+Modalita' autonoma PR loop:
+
+- trigger consigliato: `modalita' autonoma PR loop`;
+- alias breve: `/apcr auto`;
+- non chiedere conferma per passaggi meccanici gia' regolati: branch, issue
+  figlia, commit, push, apertura o aggiornamento PR, label, milestone, commenti
+  GitHub, review, finding inline, fix, risposta ai finding e aggiornamento del
+  body PR;
+- ripetere review, fix e aggiornamento PR finche' due review consecutive non
+  trovano nuovi finding;
+- fermarsi quando la PR ha due review consecutive pulite e chiedere al
+  maintainer se vuole mergiare;
+- fermarsi prima se emergono scelte di prodotto, cambio di scope, cambio di
+  contratto non deducibile, fallimento CI non banale, limite di permessi o
+  lavoro fuori milestone.
+
+### Stato draft e merge dopo review pulite
+
+Una PR deve restare in `draft` finche' non ha superato due round di review
+consecutivi senza nuovi finding. Solo dopo due review consecutive pulite si puo'
+decidere di marcarla pronta o mergiarla. Questa regola evita di considerare
+stabile una PR subito dopo il primo giro senza problemi, soprattutto quando le
+review precedenti hanno trovato ambiguita' di contratto, bug, rischi di
+performance, ownership o copertura test insufficiente.
+
 ### Aggiornamento della descrizione PR dopo review multiple
 
 Quando una PR riceve piu' round di review, la descrizione creata dal template
@@ -491,6 +549,68 @@ solo lo stato iniziale del branch: deve diventare anche una traccia storica di
 che cosa le review successive hanno trovato e di come i finding sono stati
 risolti.
 
+### Dimensioni da controllare durante una review PR
+
+Quando si chiede una review accurata di una PR, il reviewer deve cercare
+finding rispetto a queste dimensioni. La frase guida e':
+
+```text
+Alfred deve restare piccolo, leggero, veloce, performante, affidabile, sicuro,
+facilmente estendibile, interoperabile, robusto, semplice, ben documentato,
+manutenibile, facilmente modificabile e chiaro, con API e contratti non
+ambigui e adeguatamente coperti.
+```
+
+Durante la review controllare almeno:
+
+- correttezza funzionale: il comportamento implementato corrisponde al contratto
+  dichiarato e agli scenari attesi;
+- chiarezza dei contratti: API, ownership, lifecycle, error model, schema,
+  record, writer, backend e test non devono lasciare casi ambigui;
+- copertura test: i casi nuovi, rifiutati, limite, regressivi e di ownership
+  devono essere coperti dal tipo di test giusto;
+- semplicita' e manutenibilita': il codice deve essere comprensibile,
+  modificabile e privo di astrazioni speculative;
+- performance e leggerezza: il path caldo non deve ricevere I/O, lock,
+  allocazioni, serializzazione o dispatch costosi non necessari;
+- robustezza e affidabilita': errori, cleanup, retry, overflow, stato parziale,
+  idempotenza e shutdown devono avere comportamento definito;
+- sicurezza: input, path, limiti, permessi, fail-closed/fail-open, leakage di
+  dati e uso futuro in contesti agent/runtime devono essere considerati;
+- interoperabilita' ed estendibilita': la modifica non deve chiudere la strada
+  a backend, writer, formati, OS o integrazioni future gia' previste;
+- osservabilita' e operabilita': log, diagnostica, metriche, errori e CI devono
+  permettere di capire cosa succede in produzione o nei test;
+- determinismo e riproducibilita': stesso input, scenario o replay devono
+  produrre comportamento prevedibile e output stabile quando il contratto lo
+  richiede;
+- versioning e compatibilita' evolutiva: cambi a record, JSONL, config, API,
+  log o formati devono essere versionati, documentati o dichiarati come
+  breaking change;
+- uso bounded delle risorse: memoria, file descriptor, watch, code, buffer,
+  retry, log e sink devono avere limiti chiari o una politica esplicita;
+- concorrenza e thread-safety: quando una modifica prepara o tocca worker,
+  queue, sink o shutdown concorrente, controllare lock, race, lifetime e
+  ownership;
+- privacy e minimizzazione dati: non loggare segreti, path sensibili, payload o
+  dettagli personali piu' del necessario senza scelta esplicita;
+- igiene delle dipendenze e supply chain: nuove dipendenze devono essere poche,
+  motivate, leggere, sicure e con licenza chiara;
+- portabilita' dei confini: anche se il backend corrente e' Linux/inotify, il
+  core e i contratti comuni non devono diventare accidentalmente Linux-only o
+  inotify-only;
+- usabilita' ed ergonomia operativa: errori, configurazione, CLI, output e
+  documentazione devono essere comprensibili per utenti e contributori;
+- degraded mode e recovery: in caso di errore Alfred deve degradare in modo
+  comprensibile, segnalare la perdita di affidabilita' o fail-closed dove il
+  contratto lo richiede;
+- integrita' dei dati: ledger, JSONL, log e output strutturati non devono
+  produrre record parziali ambigui, corrotti o non validabili;
+- coerenza: naming, semantica, configurazione, documentazione e comportamento
+  devono essere allineati fra moduli e con le decisioni precedenti;
+- tracciabilita': issue, PR, commit, finding, review round e documentazione
+  devono permettere di ricostruire perche' e' stata fatta la modifica.
+
 Formato consigliato da aggiungere alla descrizione della PR:
 
 ```text
@@ -498,13 +618,21 @@ Formato consigliato da aggiungere alla descrizione della PR:
 
 Summary:
 - Brief English summary of what this review focused on.
-- Brief English summary of the architectural or correctness risk found.
+- Brief English summary of the risk found or why no findings remain.
+
+Clean review status:
+- New findings: yes/no.
+- Consecutive clean reviews: 0/1/2.
+- Draft status: keep draft / ready to mark non-draft after two clean reviews.
 
 Findings:
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of why the fix closes the finding.
 - Finding: https://github.com/kinderp/alfred/pull/N#discussion_rID
-  Fix: [short-sha](https://github.com/kinderp/alfred/commit/full-sha) - short explanation of the fix.
+  Fix: pending - short explanation of pending work.
+
+Validation:
+- command or CI status observed during this review round.
 ```
 
 La sezione `Review round N` deve essere scritta in inglese, come il resto della
@@ -515,10 +643,15 @@ request, creando riferimenti ambigui e non intenzionali. Deve indicare:
 - il numero del round di review;
 - il senso della review, cioe' che tipo di rischio o parte del codice e' stata
   controllata;
+- lo stato del round rispetto alla regola delle due review pulite, indicando se
+  ci sono nuovi finding, quante review consecutive sono pulite e se la PR deve
+  restare draft;
 - la lista puntata dei finding;
 - per ogni finding, il commit che lo risolve come link Markdown cliccabile alla
   pagina GitHub del commit;
-- una spiegazione breve ma chiara del perche' il fix chiude il finding.
+- una spiegazione breve ma chiara del perche' il fix chiude il finding;
+- la validazione osservata durante quel round, inclusi comandi locali o stato
+  CI.
 
 Questa regola affianca, ma non sostituisce, i commenti inline: il commento
 inline resta il punto preciso nel codice, mentre la descrizione della PR offre
