@@ -67,6 +67,7 @@ static void assert_runtime_initialized(
 {
     assert(runtime != NULL);
     assert(runtime->initialized == 1);
+    assert(runtime->started == 0);
     assert(runtime->runtime.fd >= 0);
     assert(runtime->context.runtime == &runtime->runtime);
     assert(runtime->context.config == config);
@@ -79,6 +80,7 @@ static void assert_runtime_destroyed(const inotify_backend_ops_runtime_t *runtim
 {
     assert(runtime != NULL);
     assert(runtime->initialized == 0);
+    assert(runtime->started == 0);
     assert(runtime->runtime.fd == -1);
     assert(runtime->context.runtime == NULL);
     assert(runtime->context.config == NULL);
@@ -373,6 +375,28 @@ static void test_inotify_ops_rejects_invalid_init_arguments(void)
     assert(runtime.initialized == 0);
 }
 
+static void test_inotify_ops_rejects_invalid_start_stop_arguments(void)
+{
+    const alfred_backend_ops_t *ops = inotify_backend_ops();
+    inotify_backend_ops_runtime_t runtime;
+
+    memset(&runtime, 0, sizeof(runtime));
+
+    assert(ops->start(NULL) == ERR_INVALID_ARG);
+    assert(ops->stop(NULL) == ERR_INVALID_ARG);
+
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+
+    /*
+     * `initialized` alone is not enough for lifecycle operations. The ops
+     * adapter must have the borrowed context pointers installed by init().
+     */
+    runtime.initialized = 1;
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+}
+
 static void test_inotify_ops_init_destroy_lifecycle(void)
 {
     const alfred_backend_ops_t *ops = inotify_backend_ops();
@@ -420,11 +444,17 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
 
     /*
-     * init/destroy/add_target/remove_target are real in this micro-step
-     * sequence. The rest of the lifecycle still rejects accidental use until
-     * each step is migrated.
+     * init/destroy/start/stop/add_target/remove_target are real in this
+     * micro-step sequence. start/stop are explicit lifecycle markers for the
+     * common Backend API v0 shape; poll still rejects accidental use until the
+     * event-loop migration step.
      */
-    assert(ops->start(NULL) == ERR_INVALID_ARG);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 0);
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 1);
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 1);
     assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 1);
     assert(watcher_has_path(&runtime.runtime.watchers, watch_root) == 1);
@@ -438,7 +468,10 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert(capture.calls == 2);
     assert(capture.watch_removed == 1);
     assert(ops->poll((alfred_backend_t *)&runtime, 0) == ERR_INVALID_ARG);
-    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_INVALID_ARG);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 0);
+    assert(ops->stop((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 0);
 
     assert(ops->init((alfred_backend_t *)&runtime,
                      (const alfred_backend_config_t *)&config,
@@ -453,6 +486,13 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert_runtime_initialized(&runtime, &inotify_config, &logger, &capture);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(runtime.runtime.configured_roots_count == 0);
+
+    /*
+     * destroy() is the cleanup boundary even if callers tear down a started
+     * adapter during shutdown or error handling without calling stop() first.
+     */
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 1);
 
     ops->destroy((alfred_backend_t *)&runtime);
     assert_runtime_destroyed(&runtime);
@@ -1330,6 +1370,7 @@ int main(void)
     test_inotify_ops_descriptor_is_valid();
     test_inotify_ops_uses_inotify_capabilities();
     test_inotify_ops_rejects_invalid_init_arguments();
+    test_inotify_ops_rejects_invalid_start_stop_arguments();
     test_inotify_ops_rejects_invalid_add_target_arguments();
     test_inotify_ops_rejects_invalid_remove_target_arguments();
     test_inotify_ops_init_destroy_lifecycle();

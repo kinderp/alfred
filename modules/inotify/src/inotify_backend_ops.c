@@ -39,14 +39,27 @@ static int inotify_backend_ops_init(
     }
 
     runtime->initialized = 1;
+    runtime->started = 0;
 
     return ERR_OK;
 }
 
-static int inotify_backend_ops_not_wired_start(alfred_backend_t *backend)
+static int inotify_backend_ops_start(alfred_backend_t *backend)
 {
-    (void)backend;
-    return ERR_INVALID_ARG;
+    inotify_backend_ops_runtime_t *runtime =
+        (inotify_backend_ops_runtime_t *)backend;
+
+    if (runtime == NULL ||
+        !runtime->initialized ||
+        runtime->context.runtime == NULL ||
+        runtime->context.config == NULL ||
+        runtime->context.logger == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    runtime->started = 1;
+
+    return ERR_OK;
 }
 
 static int inotify_backend_ops_add_target(
@@ -110,10 +123,22 @@ static int inotify_backend_ops_not_wired_poll(
     return ERR_INVALID_ARG;
 }
 
-static int inotify_backend_ops_not_wired_stop(alfred_backend_t *backend)
+static int inotify_backend_ops_stop(alfred_backend_t *backend)
 {
-    (void)backend;
-    return ERR_INVALID_ARG;
+    inotify_backend_ops_runtime_t *runtime =
+        (inotify_backend_ops_runtime_t *)backend;
+
+    if (runtime == NULL ||
+        !runtime->initialized ||
+        runtime->context.runtime == NULL ||
+        runtime->context.config == NULL ||
+        runtime->context.logger == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    runtime->started = 0;
+
+    return ERR_OK;
 }
 
 static void inotify_backend_ops_destroy(alfred_backend_t *backend)
@@ -132,6 +157,7 @@ static void inotify_backend_ops_destroy(alfred_backend_t *backend)
     runtime->context.emit_record = NULL;
     runtime->context.emit_record_userdata = NULL;
     runtime->initialized = 0;
+    runtime->started = 0;
 }
 
 static const alfred_backend_ops_t INOTIFY_BACKEND_OPS_TEMPLATE = {
@@ -139,11 +165,11 @@ static const alfred_backend_ops_t INOTIFY_BACKEND_OPS_TEMPLATE = {
     .api_version = ALFRED_BACKEND_API_VERSION_V0,
     .capabilities = NULL,
     .init = inotify_backend_ops_init,
-    .start = inotify_backend_ops_not_wired_start,
+    .start = inotify_backend_ops_start,
     .add_target = inotify_backend_ops_add_target,
     .remove_target = inotify_backend_ops_remove_target,
     .poll = inotify_backend_ops_not_wired_poll,
-    .stop = inotify_backend_ops_not_wired_stop,
+    .stop = inotify_backend_ops_stop,
     .destroy = inotify_backend_ops_destroy
 };
 

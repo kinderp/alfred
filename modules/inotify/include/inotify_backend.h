@@ -163,16 +163,23 @@ typedef struct inotify_backend_ops_config {
  * @runtime: existing inotify backend state
  * @context: existing narrowed context built from @runtime and borrowed config
  * @initialized: nonzero after ops init succeeds and before ops destroy releases
+ * @started: nonzero after ops start succeeds and before ops stop resets it
  *
  * Backend API v0 keeps alfred_backend_t opaque. Callers using the static
  * inotify ops adapter allocate this concrete runtime, zero it before first use,
  * and pass it cast to alfred_backend_t*. This type is not a dynamic plugin ABI;
  * it is the first static adapter bridge around the current inotify runtime.
+ *
+ * The inotify v0 start/stop callbacks are explicit lifecycle markers, not
+ * resource owners. init()/destroy() still open and close the inotify fd and
+ * watcher state. start()/stop() are idempotent state transitions used to make
+ * the common lifecycle contract real before poll() and app.c are migrated.
  */
 typedef struct inotify_backend_ops_runtime {
     inotify_backend_t runtime;
     inotify_backend_context_t context;
     int initialized;
+    int started;
 } inotify_backend_ops_runtime_t;
 
 /*
@@ -210,9 +217,9 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * This descriptor connects the inotify backend identity and capabilities to the
  * common Backend API v0 shape. app.c still calls the existing inotify-specific
  * functions directly, so the normal runtime behavior is unchanged. The staged
- * adapter path wires init/destroy/add_target/remove_target through the common
- * ops table for focused tests; polling, start and stop remain placeholders
- * until their own migration steps.
+ * adapter path wires init/destroy/start/stop/add_target/remove_target through
+ * the common ops table for focused tests; polling remains a placeholder until
+ * its own migration step.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */
