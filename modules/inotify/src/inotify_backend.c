@@ -654,6 +654,24 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path);
 
+static int backend_configured_root_path_is_valid(const char *path);
+
+static int backend_configured_roots_has_exact(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
+static int backend_configured_roots_has_nested_overlap(
+    const inotify_backend_t *runtime,
+    const char *path
+);
+
+static void backend_configured_roots_remove(inotify_backend_t *runtime,
+                                            const char *path);
+
+static void backend_rollback_target_watches(inotify_backend_context_t *ctx,
+                                            const char *path);
+
 static void backend_configured_roots_destroy(inotify_backend_t *runtime);
 
 static const char *backend_configured_root_for_path(
@@ -2284,6 +2302,101 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
 }
 
 /*
+ * inotify_backend_remove_startup_watch - remove one configured startup path
+ * @ctx: initialized backend context
+ * @path: path previously supplied through target management
+ *
+ * The Backend API target model removes by path, while inotify removes by watch
+ * descriptor. This wrapper bridges the two models by collecting active watch
+ * descriptors for the exact path, or for the subtree when recursive watching
+ * is active, then delegating each removal to watch_manager_remove() so
+ * WATCH_REMOVED diagnostics stay centralized.
+ *
+ * The path must be an exact configured root. Recursive child watches are an
+ * implementation detail of their parent target; callers must not be able to
+ * remove those child watches directly through the target-management API.
+ *
+ * A configured target can outlive its active kernel watches. For example,
+ * IN_IGNORED can clear watcher-table state while configured_roots still records
+ * the API target. The exact configured root is therefore the removal authority:
+ * missing active watches are not an invalid target, they only mean there is no
+ * watch descriptor left to remove.
+ *
+ * Once matching descriptors have been collected, target cleanup is completed
+ * even if a WATCH_REMOVED diagnostic reports an error. watch_manager_remove()
+ * clears kernel/table state before emitting that diagnostic, so stopping at the
+ * first error could leave configured_roots and watcher state inconsistent.
+ * The first removal error is returned after the exact configured root is
+ * removed.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
+                                         const char *path)
+{
+    watcher_table_t *watchers;
+    size_t count = 0;
+    int *wds = NULL;
+    int error = ERR_OK;
+
+    if (ctx == NULL ||
+        ctx->runtime == NULL ||
+        ctx->config == NULL ||
+        ctx->logger == NULL ||
+        path == NULL ||
+        path[0] == '\0') {
+        return ERR_INVALID_ARG;
+    }
+
+    watchers = &ctx->runtime->watchers;
+
+    if (!backend_configured_roots_has_exact(ctx->runtime, path))
+        return ERR_INVALID_ARG;
+
+    if (ctx->config->recursive) {
+        if (watchers->count > 0) {
+            wds = calloc(watchers->count, sizeof(*wds));
+            if (wds == NULL)
+                return ERR_ALLOC;
+
+            if (watcher_collect_wds_by_path_prefix(watchers,
+                                                   path,
+                                                   wds,
+                                                   watchers->count,
+                                                   &count) != 0) {
+                free(wds);
+                return ERR_INVALID_ARG;
+            }
+        }
+    }
+    else {
+        int wd = watcher_find_wd_by_path(watchers, path);
+
+        if (wd >= 0) {
+            wds = calloc(1, sizeof(*wds));
+            if (wds == NULL)
+                return ERR_ALLOC;
+
+            wds[0] = wd;
+            count = 1;
+        }
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        if (watch_manager_remove(ctx, wds[i]) != 0) {
+            if (error == ERR_OK)
+                error = ERR_INOTIFY;
+        }
+    }
+
+    free(wds);
+
+    backend_configured_roots_remove(ctx->runtime, path);
+
+    return error;
+}
+
+/*
  * backend_add_startup_watch - install one startup watch through backend context
  * @ctx: narrowed backend context with runtime, config, and logger
  * @path: path supplied on the command line
@@ -2291,18 +2404,39 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * This helper keeps the startup-watch decision separate from public argument
  * validation. The backend decision only needs the context and the path.
  *
+ * Target registration is intentionally ordered as a small two-phase operation:
+ * first reserve the configured root, then install the watches. If watch
+ * installation fails, the root reservation and any watches installed for this
+ * target are rolled back before the error reaches the caller. That keeps the
+ * Backend API v0 rule simple: a failed add_target() must not leave a visible
+ * configured target or newly installed watches behind.
+ *
+ * Exact duplicate adds are registry-idempotent in v0. If @path is already a
+ * configured root, ERR_OK means the API target is already registered; this call
+ * does not try to repair missing active kernel watch coverage. A caller that
+ * wants a forced reinstall must remove the target first, then add it again.
+ *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 static int backend_add_startup_watch(inotify_backend_context_t *ctx,
                                      const char *path)
 {
-    if (ctx->config->recursive) {
-        if (watch_manager_add_recursive(ctx, path) < 0)
-            return ERR_INOTIFY;
+    if (!backend_configured_root_path_is_valid(path)) {
+        logger_error(ctx->logger,
+                     "invalid configured root path");
+        return ERR_INVALID_ARG;
     }
-    else {
-        if (watch_manager_add(ctx, path) < 0)
-            return ERR_INOTIFY;
+
+    if (backend_configured_roots_has_exact(ctx->runtime, path))
+        return ERR_OK;
+
+    if (ctx->config->recursive) {
+        if (backend_configured_roots_has_nested_overlap(ctx->runtime, path)) {
+            logger_error(ctx->logger,
+                         "overlapping recursive target rejected path=%s",
+                         path);
+            return ERR_INVALID_ARG;
+        }
     }
 
     if (backend_configured_roots_add(ctx->runtime, path) != 0) {
@@ -2312,19 +2446,40 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
         return ERR_ALLOC;
     }
 
+    if (ctx->config->recursive) {
+        if (watch_manager_add_recursive(ctx, path) < 0) {
+            backend_rollback_target_watches(ctx, path);
+            backend_configured_roots_remove(ctx->runtime, path);
+            return ERR_INOTIFY;
+        }
+    }
+    else {
+        if (watch_manager_add(ctx, path) < 0) {
+            backend_rollback_target_watches(ctx, path);
+            backend_configured_roots_remove(ctx->runtime, path);
+            return ERR_INOTIFY;
+        }
+    }
+
     return ERR_OK;
 }
 
 /*
- * backend_configured_roots_add - remember one successfully watched root
+ * backend_configured_roots_add - register one configured API target root
  * @runtime: backend runtime that owns the root list
- * @path: startup path that was accepted by watch installation
+ * @path: startup path accepted by target validation
  *
  * Lost-scope recovery needs a bounded search scope that is independent from the
  * stale path. The application passes startup paths during initialization, but
  * app.c should not be queried later from backend recovery code. This helper
- * copies each successfully installed startup root into backend-owned storage so
- * delayed recovery can find the root that originally contained a stale watch.
+ * copies each configured startup root into backend-owned storage so delayed
+ * recovery can find the root that originally contained a stale watch.
+ *
+ * Backend API v0 uses this helper as the first phase of add_target(): reserve
+ * the configured root, install the watches, then remove the reservation again
+ * if watch installation fails. A caller that invokes this helper before watch
+ * installation is therefore responsible for rolling the root back on later
+ * failure.
  *
  * Duplicate paths are ignored. Paths are stored as supplied by startup; a later
  * normalization pass can tighten this if Alfred starts canonicalizing startup
@@ -2335,14 +2490,10 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
 static int backend_configured_roots_add(inotify_backend_t *runtime,
                                         const char *path)
 {
-    size_t path_len;
-
     if (runtime == NULL || path == NULL)
         return -1;
 
-    path_len = strlen(path);
-
-    if (path_len == 0 || path_len >= PATH_MAX)
+    if (!backend_configured_root_path_is_valid(path))
         return -1;
 
     for (size_t i = 0; i < runtime->configured_roots_count; i++) {
@@ -2375,6 +2526,194 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
     runtime->configured_roots_count++;
 
     return 0;
+}
+
+/*
+ * backend_configured_root_path_is_valid - validate fixed-storage target paths
+ * @path: borrowed target path supplied by Backend API target management
+ *
+ * Inotify v0 stores configured roots and watcher paths as caller-supplied
+ * lexical strings in fixed PATH_MAX buffers. A path whose string length is
+ * PATH_MAX or larger cannot be copied into those buffers with a terminating NUL
+ * byte, so it is outside the v0 target contract and must be reported as
+ * ERR_INVALID_ARG before allocation or watch installation is attempted.
+ *
+ * V0 also rejects trailing slash aliases except for the filesystem root "/".
+ * Alfred does not yet have a full canonicalization layer for symlinks, "..",
+ * mount boundaries, or cross-platform path rules, so accepting both
+ * "/tmp/root" and "/tmp/root/" would make target identity ambiguous while
+ * configured_roots and watcher_table_t still use lexical matching.
+ *
+ * Return: nonzero when @path can be stored by the current inotify v0 runtime.
+ */
+static int backend_configured_root_path_is_valid(const char *path)
+{
+    size_t path_len;
+
+    if (path == NULL)
+        return 0;
+
+    path_len = strlen(path);
+
+    if (path_len == 0 || path_len >= PATH_MAX)
+        return 0;
+
+    if (path_len > 1 && path[path_len - 1] == '/')
+        return 0;
+
+    return 1;
+}
+
+/*
+ * backend_configured_roots_has_exact - check whether a root is already configured
+ * @runtime: backend runtime containing registered startup roots
+ * @path: startup path to compare
+ *
+ * Duplicate exact roots are idempotent in Backend API v0. This avoids
+ * reinstalling the same recursive watch tree and keeps target registration
+ * stable for callers that retry the same add_target() call.
+ *
+ * Return: nonzero when @path is already configured exactly.
+ */
+static int backend_configured_roots_has_exact(const inotify_backend_t *runtime,
+                                              const char *path)
+{
+    if (runtime == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_has_nested_overlap - detect parent/child root overlap
+ * @runtime: backend runtime containing registered startup roots
+ * @path: startup path being added
+ *
+ * Recursive Backend API v0 does not track watch ownership or refcounts. Parent
+ * and child target roots would therefore share watch descriptors without a way
+ * to know whether removing one target may remove watches needed by the other.
+ * Exact duplicates are not considered overlaps here; they are handled as
+ * idempotent adds by backend_configured_roots_has_exact().
+ *
+ * Return: nonzero when @path overlaps a different configured root.
+ */
+static int backend_configured_roots_has_nested_overlap(
+    const inotify_backend_t *runtime,
+    const char *path
+)
+{
+    if (runtime == NULL || path == NULL)
+        return 0;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        const char *root = runtime->configured_roots[i];
+
+        if (strcmp(root, path) == 0)
+            continue;
+
+        if (backend_path_matches_prefix(root, path) ||
+            backend_path_matches_prefix(path, root)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * backend_configured_roots_remove - forget one configured startup root
+ * @runtime: backend runtime that owns the root list
+ * @path: startup path that should no longer be considered configured
+ *
+ * Removing a target should also remove the root used by delayed recovery. This
+ * helper removes exact configured-root matches only; child watches are handled
+ * by the watcher table removal path.
+ */
+static void backend_configured_roots_remove(inotify_backend_t *runtime,
+                                            const char *path)
+{
+    if (runtime == NULL || path == NULL)
+        return;
+
+    for (size_t i = 0; i < runtime->configured_roots_count; i++) {
+        if (strcmp(runtime->configured_roots[i], path) != 0)
+            continue;
+
+        if (i + 1 < runtime->configured_roots_count) {
+            memmove(&runtime->configured_roots[i],
+                    &runtime->configured_roots[i + 1],
+                    (runtime->configured_roots_count - i - 1) * PATH_MAX);
+        }
+
+        runtime->configured_roots_count--;
+        runtime->configured_roots[runtime->configured_roots_count][0] = '\0';
+        return;
+    }
+}
+
+/*
+ * backend_rollback_target_watches - remove watches installed by a failed add
+ * @ctx: backend context used to remove watch descriptors
+ * @path: target path whose add_target() operation failed
+ *
+ * watch_manager_add_recursive() can fail after installing an earlier directory
+ * from the tree. Backend API v0 does not expose partial target adds, so this
+ * helper removes watches for the failed target before the configured root
+ * reservation is rolled back. It avoids allocation because rollback can run
+ * while Alfred is already handling an error path.
+ */
+static void backend_rollback_target_watches(inotify_backend_context_t *ctx,
+                                            const char *path)
+{
+    watcher_table_t *watchers;
+
+    if (ctx == NULL ||
+        ctx->runtime == NULL ||
+        ctx->config == NULL ||
+        path == NULL ||
+        path[0] == '\0') {
+        return;
+    }
+
+    watchers = &ctx->runtime->watchers;
+
+    if (watchers->count == 0)
+        return;
+
+    if (ctx->config->recursive) {
+        for (;;) {
+            int wd = -1;
+
+            for (size_t i = 0; i < watchers->capacity; i++) {
+                if (!watchers->items[i].active)
+                    continue;
+
+                if (!backend_path_matches_prefix(watchers->items[i].path,
+                                                 path)) {
+                    continue;
+                }
+
+                wd = watchers->items[i].wd;
+                break;
+            }
+
+            if (wd < 0)
+                break;
+
+            (void)watch_manager_remove(ctx, wd);
+        }
+    }
+    else {
+        int wd = watcher_find_wd_by_path(watchers, path);
+
+        if (wd >= 0)
+            (void)watch_manager_remove(ctx, wd);
+    }
 }
 
 /*

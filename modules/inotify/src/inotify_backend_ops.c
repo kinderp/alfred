@@ -74,14 +74,30 @@ static int inotify_backend_ops_add_target(
     return inotify_backend_add_startup_watch(&runtime->context, target->path);
 }
 
-static int inotify_backend_ops_not_wired_remove_target(
+static int inotify_backend_ops_remove_target(
     alfred_backend_t *backend,
     const alfred_backend_target_t *target
 )
 {
-    (void)backend;
-    (void)target;
-    return ERR_INVALID_ARG;
+    inotify_backend_ops_runtime_t *runtime =
+        (inotify_backend_ops_runtime_t *)backend;
+
+    if (runtime == NULL ||
+        !runtime->initialized ||
+        runtime->context.runtime == NULL ||
+        runtime->context.config == NULL ||
+        runtime->context.logger == NULL ||
+        target == NULL ||
+        target->target_type != ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH ||
+        target->path == NULL ||
+        target->path[0] == '\0' ||
+        target->flags != ALFRED_BACKEND_TARGET_FLAG_NONE ||
+        target->backend_options != NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    return inotify_backend_remove_startup_watch(&runtime->context,
+                                                target->path);
 }
 
 static int inotify_backend_ops_not_wired_poll(
@@ -125,7 +141,7 @@ static const alfred_backend_ops_t INOTIFY_BACKEND_OPS_TEMPLATE = {
     .init = inotify_backend_ops_init,
     .start = inotify_backend_ops_not_wired_start,
     .add_target = inotify_backend_ops_add_target,
-    .remove_target = inotify_backend_ops_not_wired_remove_target,
+    .remove_target = inotify_backend_ops_remove_target,
     .poll = inotify_backend_ops_not_wired_poll,
     .stop = inotify_backend_ops_not_wired_stop,
     .destroy = inotify_backend_ops_destroy

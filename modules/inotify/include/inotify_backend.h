@@ -210,8 +210,8 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * This descriptor connects the inotify backend identity and capabilities to the
  * common Backend API v0 shape. app.c still calls the existing inotify-specific
  * functions directly, so the normal runtime behavior is unchanged. The staged
- * adapter path wires init/destroy/add_target through the common ops table for
- * focused tests; remove_target, polling, start and stop remain placeholders
+ * adapter path wires init/destroy/add_target/remove_target through the common
+ * ops table for focused tests; polling, start and stop remain placeholders
  * until their own migration steps.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
@@ -231,13 +231,64 @@ int inotify_backend_init(inotify_backend_context_t *ctx);
  * @ctx: initialized backend context
  * @path: filesystem path to watch
  *
- * The function respects ctx->config->recursive and delegates the actual watch
- * installation to watch_manager.c.
+ * This is target registration plus watch installation for the inotify v0
+ * target model. The function respects ctx->config->recursive and delegates the
+ * actual watch installation to watch_manager.c, but it also owns the configured
+ * root bookkeeping used by target management and lost-scope recovery.
+ *
+ * The inotify v0 filesystem target format is lexical but restricted: @path
+ * must be non-empty, shorter than PATH_MAX, and must not end with a trailing
+ * slash unless it is the filesystem root "/".
+ *
+ * Exact duplicate adds are registry-idempotent: if @path is already a
+ * configured root, the function returns ERR_OK without reinstalling watches or
+ * emitting a second WATCH_ADDED diagnostic. This does not repair missing active
+ * kernel watch coverage; callers that want a forced reinstall must remove the
+ * target first, then add it again.
+ *
+ * Recursive parent/child target overlaps are rejected in v0 because the backend
+ * does not yet track watch ownership or refcounts. Exact duplicates are still
+ * accepted as idempotent adds.
+ *
+ * If watch installation fails after the configured root has been reserved, the
+ * function rolls back both the configured-root reservation and any watches
+ * installed for this target before returning an error.
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
 int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
                                       const char *path);
+
+/*
+ * inotify_backend_remove_startup_watch - remove one configured startup path
+ * @ctx: initialized backend context
+ * @path: filesystem path previously added as a startup target
+ *
+ * This is target management, not arbitrary watch-descriptor management. @path
+ * must be an exact configured root previously accepted by add_target(). In
+ * recursive mode, child watches created to implement that root are internal
+ * backend state: callers cannot remove those children directly as independent
+ * API targets.
+ *
+ * When recursive mode is active, removing the configured root also removes any
+ * active watched child paths below @path. If the configured root still exists
+ * but active kernel watches have already disappeared, removal is still valid:
+ * the function unregisters the configured root and returns ERR_OK unless an
+ * actual watch-removal callback fails.
+ *
+ * Once watch removal has started, the backend completes target cleanup even if
+ * a WATCH_REMOVED diagnostic/output callback reports an error. In that case
+ * the configured root is still removed, remaining collected watches are still
+ * processed, and the first removal error is returned afterward.
+ *
+ * The inotify v0 filesystem target format is lexical but restricted: @path
+ * must be non-empty, shorter than PATH_MAX, and must not end with a trailing
+ * slash unless it is the filesystem root "/".
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
+                                         const char *path);
 
 /*
  * inotify_backend_poll - read and dispatch available inotify records

@@ -272,17 +272,62 @@ reso reali `init` e `destroy` nella tabella ops usando
 concreti passati attraverso l'API opaca. `init` costruisce il contesto inotify
 esistente, copia function pointer e `userdata` dell'emit boundary e chiama
 `inotify_backend_init()`. `destroy` chiama `inotify_backend_shutdown()` solo per
-runtime inizializzati e poi azzera i puntatori borrowed del contesto. Dopo il
-passo target, anche `add_target` e' reale per target filesystem-path minimi.
-`start`, `remove_target`, `poll` e `stop` restano placeholder fail-fast finche'
-non saranno migrati in passi separati. Il runtime normale continua a usare le
-funzioni inotify-specifiche finche' `app.c` non verra' migrato.
+runtime inizializzati e poi azzera i puntatori borrowed del contesto. Dopo i
+passi target, anche `add_target` e `remove_target` sono reali per target
+filesystem-path minimi. `start`, `poll` e `stop` restano placeholder fail-fast
+finche' non saranno migrati in passi separati. Il runtime normale continua a
+usare le funzioni inotify-specifiche finche' `app.c` non verra' migrato.
 
 Il passo successivo ha reso concreto anche il target model minimo in
 `alfred_backend_ops.h`: `alfred_backend_target_t` supporta per ora solo
 `ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH`, nessuna flag e nessuna opzione
 backend-specifica. L'adapter inotify implementa `add_target` validando quel
-target e delegando a `inotify_backend_add_startup_watch()`. `remove_target`,
+target e delegando a `inotify_backend_add_startup_watch()`.
+
+Il micro-step successivo ha implementato anche `remove_target` nella tabella
+ops inotify. Il callback accetta lo stesso sottoinsieme di target, rifiuta
+runtime incoerenti e target non supportati, poi delega a
+`inotify_backend_remove_startup_watch()`. La rimozione passa da
+`watch_manager_remove()` per conservare i record diagnostici `WATCH_REMOVED`.
+`remove_target` accetta solo root configurate esatte: non puo' essere usato per
+rimuovere un child watch creato internamente dalla ricorsivita' di un target
+padre, perche' quello romperebbe la copertura del target padre lasciando
+`configured_roots` invariato.
+Quando la configurazione inotify e' ricorsiva, rimuovere una root rimuove anche
+i watch figli sotto quella root con confronto di prefisso a boundary `/`.
+`configured_roots` resta pero' l'autorita' per la ownership del target API:
+se un watch attivo e' gia' sparito per manutenzione backend o per un evento
+kernel come `IN_IGNORED`, `remove_target` deve comunque poter rimuovere la root
+configurata esatta. L'assenza di watch attivi non rende invalido il target;
+significa solo che non ci sono descriptor kernel da pulire prima di aggiornare
+il registro dei target configurati.
+Se una diagnostica `WATCH_REMOVED` fallisce durante `remove_target`, il backend
+ricorda l'errore ma continua a rimuovere i watch raccolti e poi rimuove la root
+configurata esatta. Il chiamante riceve comunque `ERR_INOTIFY`, ma
+`configured_roots` e watcher table non restano in uno stato target parziale.
+Il helper watcher che raccoglie i descriptor per prefisso azzera `count` su
+errore, cosi' il percorso di rimozione non puo' riusare accidentalmente un
+conteggio vecchio o un risultato parziale dopo un fallimento della raccolta.
+Per v0, `add_target` rifiuta target ricorsivi sovrapposti padre/figlio e
+mantiene idempotenti solo i duplicati esatti, per evitare ownership ambigua dei
+watch finche' non esisteranno refcount o owner espliciti. `add_target` ha anche
+un contratto atomic-like sul target. Il duplicato esatto e' idempotente sia in
+modalita' ricorsiva sia non ricorsiva: non reinstalla watch e non emette un
+secondo `WATCH_ADDED`. Questa idempotenza e' registry-based: se la root resta
+in `configured_roots` ma i watch attivi sono gia' spariti, `add_target(path)`
+restituisce comunque `ERR_OK` senza riparare automaticamente la copertura
+kernel. Per forzare una reinstallazione bisogna fare `remove_target(path)` e poi
+`add_target(path)`. I path target devono avere lunghezza minore di
+`PATH_MAX`, perche' inotify v0 conserva configured roots e watcher path in
+buffer fissi: un path troppo lungo viene rifiutato con `ERR_INVALID_ARG`, non
+con `ERR_ALLOC`. Il target filesystem v0 usa identita' lessicale ristretta:
+non canonicalizza ancora symlink, `..`, mount boundary o path relativi, ma
+rifiuta gli alias con slash finale tranne `/`. Quindi `/tmp/root` e' valido,
+`/tmp/root/` e' `ERR_INVALID_ARG` e `/` resta valido. Per i nuovi target validi,
+il backend registra la root prima di installare i watch e, se l'installazione
+fallisce, rimuove eventuali watch parziali e annulla la root registrata. In
+questo modo un errore di `add_target`
+non lascia una root configurata o watch nuovi visibili al chiamante.
 `poll`, `start` e `stop` restano placeholder fail-fast.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:

@@ -315,6 +315,85 @@ static void test_set_state_prefix_updates_only_subtree(void)
 }
 
 /*
+ * test_collect_wds_by_path_prefix_uses_directory_boundaries - collect subtrees
+ *
+ * Backend API remove_target() removes recursive targets by asking the watcher
+ * table which active watch descriptors belong to the removed path. This helper
+ * owns the textual subtree boundary: it must include exact matches and real
+ * children, reject similar names such as /tmp/root-old, and treat the filesystem
+ * root "/" as the parent of every absolute watched path.
+ */
+static void test_collect_wds_by_path_prefix_uses_directory_boundaries(void)
+{
+    watcher_table_t table;
+    int wds[8];
+    size_t count = 0;
+
+    assert(watcher_init(&table, 1) == 0);
+
+    assert(watcher_store(&table, 1, "/") == 0);
+    assert(watcher_store(&table, 2, "/tmp/root") == 0);
+    assert(watcher_store(&table, 3, "/tmp/root/child") == 0);
+    assert(watcher_store(&table, 4, "/tmp/root-old") == 0);
+    assert(watcher_store(&table, 5, "/home/user") == 0);
+    assert(watcher_store(&table, 6, "relative/path") == 0);
+
+    assert(watcher_find_wd_by_path(&table, "/tmp/root") == 2);
+    assert(watcher_find_wd_by_path(&table, "/tmp/missing") == -1);
+
+    assert(watcher_collect_wds_by_path_prefix(&table,
+                                              "/tmp/root",
+                                              wds,
+                                              8,
+                                              &count) == 0);
+    assert(count == 2);
+    assert(wds[0] == 2);
+    assert(wds[1] == 3);
+
+    /*
+     * The root prefix is special: "/" is already the separator, so absolute
+     * children like /tmp/root and /home/user must match without requiring a
+     * second slash after the prefix.
+     */
+    assert(watcher_collect_wds_by_path_prefix(&table,
+                                              "/",
+                                              wds,
+                                              8,
+                                              &count) == 0);
+    assert(count == 5);
+    assert(wds[0] == 1);
+    assert(wds[1] == 2);
+    assert(wds[2] == 3);
+    assert(wds[3] == 4);
+    assert(wds[4] == 5);
+
+    assert(watcher_collect_wds_by_path_prefix(&table,
+                                              "/tmp/root",
+                                              wds,
+                                              1,
+                                              &count) == -1);
+    assert(count == 0);
+
+    count = 77;
+    assert(watcher_collect_wds_by_path_prefix(&table,
+                                              "",
+                                              wds,
+                                              8,
+                                              &count) == -1);
+    assert(count == 0);
+
+    count = 77;
+    assert(watcher_collect_wds_by_path_prefix(NULL,
+                                              "/tmp/root",
+                                              wds,
+                                              8,
+                                              &count) == -1);
+    assert(count == 0);
+
+    watcher_destroy(&table);
+}
+
+/*
  * test_state_can_be_marked_stale_and_restored - exercise active-state changes
  *
  * The important distinction is that STALE and RESYNCING are still active
@@ -612,6 +691,7 @@ int main(void)
     test_update_path_preserves_state_and_identity();
     test_update_path_prefix_preserves_subtree_state();
     test_set_state_prefix_updates_only_subtree();
+    test_collect_wds_by_path_prefix_uses_directory_boundaries();
     test_state_can_be_marked_stale_and_restored();
     test_remove_clears_state();
     test_invalid_state_changes_fail();
