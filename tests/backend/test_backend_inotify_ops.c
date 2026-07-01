@@ -487,6 +487,13 @@ static void test_inotify_ops_init_destroy_lifecycle(void)
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(runtime.runtime.configured_roots_count == 0);
 
+    /*
+     * destroy() is the cleanup boundary even if callers tear down a started
+     * adapter during shutdown or error handling without calling stop() first.
+     */
+    assert(ops->start((alfred_backend_t *)&runtime) == ERR_OK);
+    assert(runtime.started == 1);
+
     ops->destroy((alfred_backend_t *)&runtime);
     assert_runtime_destroyed(&runtime);
 
