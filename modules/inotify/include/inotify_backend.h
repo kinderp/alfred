@@ -173,7 +173,8 @@ typedef struct inotify_backend_ops_config {
  * The inotify v0 start/stop callbacks are explicit lifecycle markers, not
  * resource owners. init()/destroy() still open and close the inotify fd and
  * watcher state. start()/stop() are idempotent state transitions used to make
- * the common lifecycle contract real before poll() and app.c are migrated.
+ * the common lifecycle contract real while app_run() still uses the legacy raw
+ * poll bridge.
  *
  * The inotify v0 poll callback delegates to the existing inotify poll loop, but
  * adapts each alfred_raw_event_t into an alfred_record_t and emits it through
@@ -221,12 +222,12 @@ const alfred_backend_capabilities_t *inotify_backend_capabilities(void);
  * inotify_backend_ops - return the static Backend API v0 ops skeleton
  *
  * This descriptor connects the inotify backend identity and capabilities to the
- * common Backend API v0 shape. app.c still calls the existing inotify-specific
- * functions directly, so the normal runtime behavior is unchanged. The staged
- * adapter path wires init/destroy/start/stop/add_target/remove_target through
- * the common ops table for focused tests. Polling is wired for nonblocking
- * record emission through the init-time emit callback, while app.c still calls
- * the existing inotify-specific function directly.
+ * common Backend API v0 shape. app.c uses this table for lifecycle and startup
+ * target management, while app_run() still calls the existing inotify-specific
+ * raw poll bridge so the semantic core continues to receive alfred_raw_event_t.
+ * Polling is also wired in the ops table for nonblocking record emission
+ * through the init-time emit callback, but that path is not yet the main
+ * application event loop.
  *
  * Return: borrowed pointer to static process-lifetime metadata.
  */

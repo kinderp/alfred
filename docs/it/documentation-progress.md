@@ -1270,3 +1270,15 @@ timeout non sara' definita. La poll della tabella ops delega alla
 `tests/backend/test_backend_inotify_ops.c` copre ora anche il requisito di
 `start()`, l'emit obbligatorio per la poll comune e un evento reale `RAW_CREATE`
 emesso attraverso la tabella ops.
+
+Aggiornamento successivo: `app.c` usa la tabella statica
+`inotify_backend_ops()` come composition root parziale per lifecycle e target
+management. `app_init()` chiama ora `init`, `add_target` e `start` tramite
+`alfred_backend_ops_t`; `app_shutdown()` chiama `stop` e `destroy` tramite la
+stessa tabella. Il loop `app_run()` resta intenzionalmente sul ponte raw diretto
+`inotify_backend_poll()` per continuare ad alimentare il core semantico con
+`alfred_raw_event_t`. La migrazione del loop principale alla `poll` Backend API
+v0 resta un micro-step separato perche' il path ops emette record normalizzati,
+non raw event per `alfred_process()`. Prima di chiamare `init`, `app.c` valida
+la tabella con `alfred_backend_ops_is_minimally_valid()` per fallire in modo
+esplicito se il descriptor statico non rispetta il contratto minimo.

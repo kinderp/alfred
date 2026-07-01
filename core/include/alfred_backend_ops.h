@@ -1,9 +1,11 @@
 /* ============================================================================
  * alfred_backend_ops.h - Backend API v0 operations contract
  *
- * This header defines the first compile-tested shape of Backend API v0. Current
- * runtime wiring still uses the inotify backend directly, while focused staged
- * commits adapt selected inotify callbacks to this common shape.
+ * This header defines the first compile-tested shape of Backend API v0. Runtime
+ * wiring is being migrated incrementally: app.c already uses the ops table for
+ * lifecycle and startup target management, while the main app_run() loop still
+ * uses the legacy inotify raw poll bridge until the semantic core can consume
+ * the staged Backend API polling path.
  * ========================================================================== */
 
 #ifndef ALFRED_BACKEND_OPS_H

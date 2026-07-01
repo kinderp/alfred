@@ -3,13 +3,13 @@
  *
  * This header defines the process-wide application context used by alfred.
  * The application layer currently owns configuration, logging, core state, and
- * a transitional inotify backend context.
+ * the first staged Backend API v0 inotify runtime.
  *
  * app_t is still a practical orchestration object: it wires configuration,
  * logging, the inotify backend, and the core together. The semantic state is
  * already owned by the core engine. The inotify backend runtime is embedded
- * here, but backend functions receive an explicit inotify_backend_context_t
- * built by app.c instead of receiving the whole app_t object.
+ * through the staged Backend API v0 adapter, while app_run() still uses the
+ * legacy raw poll bridge until that final runtime path is migrated.
  * ============================================================================
  */
 
@@ -71,9 +71,9 @@ typedef struct {
  * each subsystem into this object, app_run() uses it while polling inotify,
  * and app_shutdown() releases resources in the reverse direction.
  *
- * The current design still embeds inotify_backend_t here. app.c exposes it to
- * backend functions through inotify_backend_context_t together with borrowed
- * configuration and logger pointers. The backend never owns app_t; app_t is
+ * The current design embeds the staged inotify Backend API v0 runtime here.
+ * app.c owns the composition root and wires the ops table, concrete config,
+ * emit callback, logger and core. The backend never owns app_t; app_t is
  * only passed back as opaque callback userdata at the app/core boundary.
  */
 typedef struct app {
@@ -89,11 +89,15 @@ typedef struct app {
     config_t config;
 
     /*
-     * inotify backend state. This owns the nonblocking descriptor and watch
-     * descriptor table. Backend functions access it through
-     * inotify_backend_context_t, not through app_t.
+     * Active backend wiring. For v0 this is still the static inotify adapter,
+     * not a dynamic plugin ABI. Lifecycle and target management use
+     * backend_ops; app_run() still builds a raw inotify context from
+     * inotify_backend.runtime for the legacy raw/core poll bridge.
      */
-    inotify_backend_t inotify;
+    const alfred_backend_ops_t *backend_ops;
+    inotify_backend_ops_runtime_t inotify_backend;
+    inotify_backend_ops_config_t inotify_backend_config;
+    alfred_backend_emit_t backend_emit;
 
     /* Raw, semantic, and error log sink. */
     logger_t logger;
