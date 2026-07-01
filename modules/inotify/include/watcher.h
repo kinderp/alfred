@@ -112,7 +112,33 @@ int watcher_get_identity(const watcher_table_t *wt,
                          ino_t *inode_id);
 int watcher_exists(const watcher_table_t *wt, int wd);
 int watcher_has_path(const watcher_table_t *wt, const char *path);
+
+/*
+ * watcher_find_wd_by_path - find the active watch descriptor for an exact path
+ * @wt: table to inspect
+ * @path: path to search for
+ *
+ * Return: active watch descriptor for @path, or -1 for invalid input or no
+ * exact active match.
+ */
 int watcher_find_wd_by_path(const watcher_table_t *wt, const char *path);
+
+/*
+ * watcher_collect_wds_by_path_prefix - collect active watches under a prefix
+ * @wt: table to inspect
+ * @prefix: exact path or subtree root to match
+ * @wds: caller-owned output array receiving matching watch descriptors
+ * @max_wds: number of slots available in @wds
+ * @count: receives the number of matching entries
+ *
+ * Matching uses exact equality, slash-boundary children, and the filesystem
+ * root "/" as a prefix of every absolute watched path. Output descriptors are
+ * valid only when the function returns 0. When @count is a valid pointer,
+ * failure resets *@count to 0 so callers cannot reuse a stale count or partial
+ * output after invalid input or insufficient output capacity.
+ *
+ * Return: 0 on success, -1 on invalid input or insufficient output capacity.
+ */
 int watcher_collect_wds_by_path_prefix(const watcher_table_t *wt,
                                        const char *prefix,
                                        int *wds,
