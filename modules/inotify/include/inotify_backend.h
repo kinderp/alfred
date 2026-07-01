@@ -244,9 +244,26 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * @ctx: initialized backend context
  * @path: filesystem path previously added as a startup target
  *
- * Removes the exact watched path. When recursive mode is active, also removes
- * watched child paths below @path so a target removal does not leave nested
- * watches active behind the Backend API boundary.
+ * This is target management, not arbitrary watch-descriptor management. @path
+ * must be an exact configured root previously accepted by add_target(). In
+ * recursive mode, child watches created to implement that root are internal
+ * backend state: callers cannot remove those children directly as independent
+ * API targets.
+ *
+ * When recursive mode is active, removing the configured root also removes any
+ * active watched child paths below @path. If the configured root still exists
+ * but active kernel watches have already disappeared, removal is still valid:
+ * the function unregisters the configured root and returns ERR_OK unless an
+ * actual watch-removal callback fails.
+ *
+ * Once watch removal has started, the backend completes target cleanup even if
+ * a WATCH_REMOVED diagnostic/output callback reports an error. In that case
+ * the configured root is still removed, remaining collected watches are still
+ * processed, and the first removal error is returned afterward.
+ *
+ * The inotify v0 filesystem target format is lexical but restricted: @path
+ * must be non-empty, shorter than PATH_MAX, and must not end with a trailing
+ * slash unless it is the filesystem root "/".
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
