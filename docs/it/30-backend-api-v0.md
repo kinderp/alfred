@@ -657,6 +657,20 @@ ma per backend futuri potrebbe:
 - caricare programmi eBPF;
 - connettersi a un provider remoto.
 
+Nel sottoinsieme inotify v0 implementato nella tabella ops, `start` e' una
+transizione di lifecycle esplicita ma non possiede risorse: `init()` ha gia'
+aperto l'fd inotify e inizializzato watcher table e code backend, mentre
+`destroy()` resta il punto che rilascia quelle risorse. `start()` richiede un
+runtime inizializzato e un contesto completo; prima di `init()` o con un runtime
+incoerente restituisce `ERR_INVALID_ARG`. Dopo `init()`, `start()` imposta lo
+stato `started` del runtime ops e restituisce `ERR_OK`. Chiamarlo piu' volte e'
+idempotente.
+
+Questa scelta evita di fingere che esista gia' un event loop Backend API v0:
+`poll()` non e' ancora migrato e `app.c` continua a usare il percorso inotify
+specifico. Per ora `started` serve a rendere reale il lifecycle comune e a
+preparare backend futuri con thread, subscription o provider remoti.
+
 ### `add_target`
 
 Aggiunge un target osservato. Per inotify corrisponde oggi a:
@@ -770,6 +784,18 @@ v0 puo' essere quasi no-op. Per backend futuri serve a:
 - disabilitare subscription;
 - fare flush ordinato;
 - preparare shutdown pulito.
+
+Nel sottoinsieme inotify v0 implementato nella tabella ops, `stop()` e'
+idempotente e non chiude l'fd inotify. Richiede un runtime inizializzato e un
+contesto completo; prima di `init()` restituisce `ERR_INVALID_ARG`. Dopo
+`init()`, anche se `start()` non era ancora stato chiamato, `stop()` restituisce
+`ERR_OK` e porta `started` a zero. `destroy()` resta il confine di cleanup.
+
+Per questa fase `start/stop` non governano ancora `add_target()` e
+`remove_target()`: il target management resta valido per runtime inizializzati.
+Questo mantiene piccolo il passo corrente. La semantica piu' restrittiva
+"target changes only while stopped" o "poll only while started" andra' decisa
+nel micro-step `poll`/runtime loop, quando il lifecycle avra' effetti reali.
 
 ### `destroy`
 
@@ -1031,9 +1057,9 @@ ops lo ottiene passando dall'accessor pubblico `inotify_backend_capabilities()`,
 non da un simbolo globale condiviso. Questo mantiene una sola porta ufficiale
 per leggere le capabilities inotify ed evita di creare una API C implicita.
 
-`init`, `destroy`, `add_target` e `remove_target` sono il primo pezzo reale
-della tabella ops inotify. Per non trasformare subito `app.c`, il modulo espone
-due tipi concreti:
+`init`, `destroy`, `start`, `stop`, `add_target` e `remove_target` sono il primo
+pezzo reale della tabella ops inotify. Per non trasformare subito `app.c`, il
+modulo espone due tipi concreti:
 
 ```c
 inotify_backend_ops_runtime_t
@@ -1045,9 +1071,12 @@ La Backend API v0 resta opaca (`alfred_backend_t` e
 questi oggetti concreti con un cast. Il runtime concreto deve essere azzerato
 prima del primo `init`. `init` costruisce il vecchio `inotify_backend_context_t`
 interno, copia function pointer e `userdata` dell'emit boundary, poi chiama il
-percorso esistente `inotify_backend_init()`. `destroy` chiama
-`inotify_backend_shutdown()` solo se `init` e' riuscito, azzera i puntatori
-borrowed del contesto e torna a uno stato distrutto riutilizzabile.
+percorso esistente `inotify_backend_init()`. `start` e `stop` sono transizioni
+di stato idempotenti del runtime ops: validano che `init` abbia installato un
+contesto completo, impostano o azzerano `started`, ma non aprono, chiudono o
+leggono eventi. `destroy` chiama `inotify_backend_shutdown()` solo se `init` e'
+riuscito, azzera i puntatori borrowed del contesto, resetta `started` e torna a
+uno stato distrutto riutilizzabile.
 `add_target` accetta solo target `ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH`
 con path non vuoto, flags pari a `ALFRED_BACKEND_TARGET_FLAG_NONE` e
 `backend_options == NULL`; poi delega al percorso esistente
@@ -1083,10 +1112,9 @@ Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
 chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.
 La tabella ops serve per provare il confine statico in modo incrementale.
 
-Le callback `start`, `poll` e `stop` non sono ancora il runtime reale. Se
-chiamate, falliscono con `ERR_INVALID_ARG` invece di fare finta di avviare o
-leggere eventi. La migrazione di polling e `app.c` resta un passo successivo e
-dovra' avere test propri.
+La callback `poll` non e' ancora il runtime reale. Se chiamata, fallisce con
+`ERR_INVALID_ARG` invece di fare finta di leggere eventi. La migrazione di
+polling e `app.c` resta un passo successivo e dovra' avere test propri.
 
 ## Relazione con Event Model v0
 

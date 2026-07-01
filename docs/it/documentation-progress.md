@@ -274,9 +274,13 @@ esistente, copia function pointer e `userdata` dell'emit boundary e chiama
 `inotify_backend_init()`. `destroy` chiama `inotify_backend_shutdown()` solo per
 runtime inizializzati e poi azzera i puntatori borrowed del contesto. Dopo i
 passi target, anche `add_target` e `remove_target` sono reali per target
-filesystem-path minimi. `start`, `poll` e `stop` restano placeholder fail-fast
-finche' non saranno migrati in passi separati. Il runtime normale continua a
-usare le funzioni inotify-specifiche finche' `app.c` non verra' migrato.
+filesystem-path minimi. Il passo lifecycle successivo ha reso reali anche
+`start` e `stop` come transizioni idempotenti dell'adapter ops: richiedono un
+runtime inizializzato e un contesto completo, impostano o azzerano `started`,
+ma non aprono fd, non chiudono risorse e non leggono eventi. `poll` resta
+placeholder fail-fast finche' non sara' migrato nel suo passo dedicato. Il
+runtime normale continua a usare le funzioni inotify-specifiche finche' `app.c`
+non verra' migrato.
 
 Il passo successivo ha reso concreto anche il target model minimo in
 `alfred_backend_ops.h`: `alfred_backend_target_t` supporta per ora solo
@@ -328,7 +332,19 @@ il backend registra la root prima di installare i watch e, se l'installazione
 fallisce, rimuove eventuali watch parziali e annulla la root registrata. In
 questo modo un errore di `add_target`
 non lascia una root configurata o watch nuovi visibili al chiamante.
-`poll`, `start` e `stop` restano placeholder fail-fast.
+
+Il micro-step lifecycle successivo ha implementato `start` e `stop` nella
+tabella ops inotify senza cambiare il runtime normale. `start()` prima di
+`init()` o su runtime incoerente restituisce `ERR_INVALID_ARG`; dopo `init()`
+restituisce `ERR_OK`, imposta `started=1` ed e' idempotente. `stop()` prima di
+`init()` o su runtime incoerente restituisce `ERR_INVALID_ARG`; dopo `init()`
+restituisce `ERR_OK`, imposta `started=0` ed e' idempotente anche se `start()`
+non era stato chiamato. `destroy()` resta il confine che rilascia fd, watcher
+table, configured roots e puntatori borrowed. Per ora `start/stop` non
+governano `add_target` e `remove_target`: target management resta vincolato a
+runtime inizializzato, mentre la semantica piu' restrittiva del lifecycle verra'
+decisa quando `poll` e l'event loop saranno migrati.
+`poll` resta placeholder fail-fast.
 
 Il raw runtime bridge e' ora completo per i raw principali di questo branch:
 `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`, `RAW_CLOSE_WRITE`,
