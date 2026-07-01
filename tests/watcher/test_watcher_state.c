@@ -372,16 +372,23 @@ static void test_collect_wds_by_path_prefix_uses_directory_boundaries(void)
                                               wds,
                                               1,
                                               &count) == -1);
+    assert(count == 0);
+
+    count = 77;
     assert(watcher_collect_wds_by_path_prefix(&table,
                                               "",
                                               wds,
                                               8,
                                               &count) == -1);
+    assert(count == 0);
+
+    count = 77;
     assert(watcher_collect_wds_by_path_prefix(NULL,
                                               "/tmp/root",
                                               wds,
                                               8,
                                               &count) == -1);
+    assert(count == 0);
 
     watcher_destroy(&table);
 }

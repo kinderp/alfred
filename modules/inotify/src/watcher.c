@@ -634,6 +634,9 @@ int watcher_find_wd_by_path(const watcher_table_t *wt, const char *path)
  *
  * Uses the same slash-boundary prefix rule as path-prefix state/rewrite helpers:
  * "/tmp/root-old" is not treated as a child of "/tmp/root".
+ * Output descriptors are valid only when the function returns 0. When @count
+ * is a valid pointer, failure resets *@count to 0 so callers cannot accidentally
+ * reuse a stale count after invalid input or insufficient output capacity.
  *
  * Return: 0 on success, -1 for invalid input or insufficient output capacity.
  */
@@ -644,6 +647,9 @@ int watcher_collect_wds_by_path_prefix(const watcher_table_t *wt,
                                        size_t *count)
 {
     size_t found = 0;
+
+    if (count != NULL)
+        *count = 0;
 
     if (wt == NULL || prefix == NULL || wds == NULL || count == NULL)
         return -1;
@@ -660,8 +666,10 @@ int watcher_collect_wds_by_path_prefix(const watcher_table_t *wt,
         if (!watcher_path_matches_prefix(slot->path, prefix))
             continue;
 
-        if (found == max_wds)
+        if (found == max_wds) {
+            *count = 0;
             return -1;
+        }
 
         wds[found] = slot->wd;
         found++;

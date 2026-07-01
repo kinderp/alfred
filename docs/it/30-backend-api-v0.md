@@ -702,6 +702,13 @@ prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
 un target osservato ricorsivamente, tutti i watch con path assoluto appartengono
 al suo sottoalbero e devono essere rimossi insieme alla root.
 
+Il helper che raccoglie i watch descriptor per prefisso deve avere un contratto
+di output semplice: i descriptor raccolti e `count` sono validi solo quando la
+funzione restituisce successo. Se la raccolta fallisce, per input invalido o
+capacita' insufficiente dell'array di output, `count` viene azzerato. In questo
+modo `remove_target` non rischia di usare un conteggio vecchio o un risultato
+parziale dopo un errore.
+
 `configured_roots` e' il registro dei target API configurati; la watcher table
 e' invece stato operativo dei watch kernel attivi. Questi due livelli possono
 divergere temporaneamente: per esempio un `IN_IGNORED` puo' far sparire un
