@@ -498,6 +498,38 @@ Explain in English what changed and why this closes the finding.
 
 ### Aggiornamento della descrizione PR dopo review multiple
 
+### Modalita' operative per PR e commit
+
+Le regole di commit, PR, finding e review possono essere applicate in due
+modalita' operative. Se il maintainer non specifica la modalita', usare la
+modalita' supervisionata.
+
+Modalita' supervisionata:
+
+- trigger consigliato: `modalita' supervisionata`;
+- spiegare prima i passaggi significativi;
+- chiedere conferma prima di push, apertura PR, fix di finding o decisioni che
+  cambiano contratto, scope, architettura o documentazione rilevante;
+- spiegare ogni finding e la soluzione prevista prima di applicarla quando il
+  maintainer sta guidando la review;
+- fermarsi dopo i passaggi principali se il maintainer sta controllando il
+  ciclo.
+
+Modalita' autonoma PR loop:
+
+- trigger consigliato: `modalita' autonoma PR loop`;
+- non chiedere conferma per passaggi meccanici gia' regolati: branch, issue
+  figlia, commit, push, apertura o aggiornamento PR, label, milestone, commenti
+  GitHub, review, finding inline, fix, risposta ai finding e aggiornamento del
+  body PR;
+- ripetere review, fix e aggiornamento PR finche' due review consecutive non
+  trovano nuovi finding;
+- fermarsi quando la PR ha due review consecutive pulite e chiedere al
+  maintainer se vuole mergiare;
+- fermarsi prima se emergono scelte di prodotto, cambio di scope, cambio di
+  contratto non deducibile, fallimento CI non banale, limite di permessi o
+  lavoro fuori milestone.
+
 Una PR deve restare in `draft` finche' non ha superato due round di review
 consecutivi senza nuovi finding. Solo dopo due review consecutive pulite si puo'
 decidere di marcarla pronta o mergiarla. Questa regola evita di considerare
