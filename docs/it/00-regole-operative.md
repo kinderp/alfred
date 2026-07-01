@@ -455,9 +455,16 @@ Quando una PR riceve finding tecnici, il flusso obbligatorio e':
 5. nel messaggio del commit corrispondente indicare che il commit risolve quel
    finding, citando la PR e il link al commento/finding.
 
+Ogni finding risolto deve lasciare anche una spiegazione in inglese nel
+commento inline del finding, indipendentemente dal fatto che il maintainer
+l'abbia chiesta esplicitamente in chat. La risposta al finding non deve dire
+solo "fixed": deve spiegare qual era il rischio, come e' stato risolto e quale
+test o contratto impedisce la regressione.
+
 Se in chat e' stata gia' data una spiegazione del finding e della soluzione
-scelta, quella spiegazione non deve restare solo nella conversazione. Quando si
-chiude il finding, riportarla in inglese:
+scelta, quella spiegazione non deve restare solo nella conversazione: va
+tradotta o sintetizzata in inglese. Quando si chiude il finding, riportare
+sempre la spiegazione:
 
 - nella risposta al commento inline, insieme al link al commit;
 - nel body del commit che risolve il finding.
