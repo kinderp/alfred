@@ -2,9 +2,9 @@
  * test_backend_inotify_ops.c - inotify Backend API v0 ops skeleton contract
  *
  * This test locks down the first inotify-specific operations descriptor without
- * migrating app.c. The descriptor must be valid metadata. init/destroy are the
- * first real lifecycle callbacks; target management, polling, start and stop
- * remain staged fail-fast placeholders.
+ * migrating app.c. The descriptor must be valid metadata. init/destroy and
+ * add_target/remove_target are the first real callbacks; start, poll and stop
+ * remain staged fail-fast placeholders until their own migration steps.
  */
 
 #include "errors.h"
