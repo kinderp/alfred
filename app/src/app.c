@@ -6,8 +6,8 @@
  * are delegated to modules/inotify.
  *
  * The current boundary is intentionally narrow: app.c decides startup and
- * shutdown order, then repeatedly calls inotify_backend_poll(). It does not
- * parse inotify records and does not classify filesystem semantics.
+ * shutdown order, then repeatedly calls the current raw inotify poll bridge.
+ * It does not parse inotify records and does not classify filesystem semantics.
  * ============================================================================
  */
 
@@ -68,20 +68,21 @@ enum {
 static app_t *g_app = NULL;
 
 /*
- * app_build_inotify_backend_context - expose backend dependencies explicitly
+ * app_build_inotify_backend_context - expose inotify poll dependencies
  * @app: application context that owns runtime, config, and logger
  * @ctx: backend context to fill with borrowed pointers
  *
- * app_t remains the ownership root, but the clean backend lifecycle APIs no
- * longer receive the full application object. app.c builds the narrow context
- * at the orchestration boundary and passes only what the backend needs.
+ * Lifecycle and target management now go through the staged Backend API v0 ops
+ * table. The event loop still uses the existing raw/core poll bridge, so app.c
+ * builds the narrow inotify context from the ops runtime without exposing app_t
+ * to the backend.
  */
 static void app_build_inotify_backend_context(
     app_t *app,
     inotify_backend_context_t *ctx
 )
 {
-    ctx->runtime = &app->inotify;
+    ctx->runtime = &app->inotify_backend.runtime;
     ctx->config = &app->config.inotify;
     ctx->logger = &app->logger;
     ctx->emit_record = app_emit_output_record_callback;
@@ -747,7 +748,8 @@ int app_init(app_t *app, int argc, char **argv)
     memset(app, 0, sizeof(*app));
 
     app->running = 1;
-    app->inotify.fd = -1;
+    app->backend_ops = inotify_backend_ops();
+    app->inotify_backend.runtime.fd = -1;
 
     /*
      * Defaults are loaded before any subsystem initialization so later steps
@@ -825,10 +827,23 @@ int app_init(app_t *app, int argc, char **argv)
     if (error != ERR_OK)
         goto fail;
 
-    inotify_backend_context_t backend_ctx;
-    app_build_inotify_backend_context(app, &backend_ctx);
+    if (!alfred_backend_ops_is_minimally_valid(app->backend_ops)) {
+        logger_error(&app->logger,
+                     "backend ops descriptor is invalid");
+        error = ERR_INVALID_ARG;
+        goto fail;
+    }
 
-    error = inotify_backend_init(&backend_ctx);
+    app->inotify_backend_config.config = &app->config.inotify;
+    app->inotify_backend_config.logger = &app->logger;
+    app->backend_emit.emit = app_emit_output_record_callback;
+    app->backend_emit.userdata = app;
+
+    error = app->backend_ops->init(
+        (alfred_backend_t *)&app->inotify_backend,
+        (const alfred_backend_config_t *)&app->inotify_backend_config,
+        &app->backend_emit
+    );
     if (error != ERR_OK)
         goto fail;
 
@@ -854,10 +869,26 @@ int app_init(app_t *app, int argc, char **argv)
     }
 
     for (int i = 1; i < argc; i++) {
-        error = inotify_backend_add_startup_watch(&backend_ctx, argv[i]);
+        alfred_backend_target_t target;
+
+        memset(&target, 0, sizeof(target));
+        target.path = argv[i];
+        target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
+        target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
+
+        error = app->backend_ops->add_target(
+            (alfred_backend_t *)&app->inotify_backend,
+            &target
+        );
         if (error != ERR_OK)
             goto fail;
     }
+
+    error = app->backend_ops->start(
+        (alfred_backend_t *)&app->inotify_backend
+    );
+    if (error != ERR_OK)
+        goto fail;
 
     logger_info(&app->logger,
                 "application startup complete");
@@ -935,9 +966,18 @@ int app_shutdown(app_t *app)
     logger_info(&app->logger,
                 "shutdown started");
 
-    inotify_backend_context_t backend_ctx;
-    app_build_inotify_backend_context(app, &backend_ctx);
-    inotify_backend_shutdown(&backend_ctx);
+    if (app->backend_ops != NULL && app->inotify_backend.initialized) {
+        if (app->backend_ops->stop(
+                (alfred_backend_t *)&app->inotify_backend) != ERR_OK) {
+            logger_error(&app->logger,
+                         "backend stop failed during shutdown");
+            shutdown_status = ERR_IO;
+        }
+
+        app->backend_ops->destroy(
+            (alfred_backend_t *)&app->inotify_backend
+        );
+    }
 
     if (app_shutdown_output_pipeline(app) != 0) {
         shutdown_status = ERR_IO;

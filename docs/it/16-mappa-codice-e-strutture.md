@@ -141,7 +141,7 @@ Il backend modifica stato solo quando quello stato appartiene al backend:
 
 | Stato | Modificato da | Perche' appartiene al backend |
 | --- | --- | --- |
-| `inotify_backend_t.fd` | `inotify_backend_init()`, `inotify_backend_shutdown()` | e' il descrittore Linux letto dal backend |
+| `inotify_backend_ops_runtime_t.runtime.fd` | `backend_ops->init()`, `backend_ops->destroy()`, poll raw in `app_run()` | e' il descrittore Linux letto dal backend inotify |
 | `watcher_table_t` | `watcher_store_identity()`, `watcher_remove()` | serve a tradurre `wd` in path e conservare identita' backend |
 | watch ricorsivi startup | `watch_manager_add_recursive()` + `fs_scan_tree()` | installano watch sull'albero gia' esistente senza raw sintetici |
 | watch ricorsivi runtime | `backend_handle_dir_create()` + `fs_scan_tree()` | riparano nuove directory annidate e mantengono la policy raw sintetica nel backend |
@@ -623,19 +623,26 @@ Le strutture dati principali del backend inotify sono:
 
 ```mermaid
 flowchart TD
-    A["app_t"] --> B["inotify_backend_t inotify"]
-    B --> C["int fd"]
-    B --> D["watcher_table_t watchers"]
-    D --> E["watcher_entry_t items[]"]
-    E --> F["wd"]
-    E --> G["active"]
-    E --> H["path[PATH_MAX]"]
+    A["app_t"] --> B["const alfred_backend_ops_t *backend_ops"]
+    A --> C["inotify_backend_ops_runtime_t inotify_backend"]
+    C --> D["inotify_backend_t runtime"]
+    D --> E["int fd"]
+    D --> F["watcher_table_t watchers"]
+    F --> G["watcher_entry_t items[]"]
+    G --> H["wd"]
+    G --> I["active"]
+    G --> J["path[PATH_MAX]"]
 ```
 
-`app_t` contiene ancora il backend inotify perche' il progetto e' in fase di
-integrazione. La direzione finale e' avere un backend sempre piu' autonomo, ma
-oggi il campo `app_t.inotify` rende esplicito dove vivono `fd` e tabella dei
-watch.
+`app_t` contiene ancora il runtime concreto del backend inotify perche' il
+progetto e' in fase di integrazione. La differenza rispetto alla fase
+precedente e' che lo contiene dentro `inotify_backend_ops_runtime_t` e conserva
+anche `backend_ops`, cioe' la tabella statica Backend API v0. In pratica:
+
+- lifecycle e target management passano gia' da `backend_ops`;
+- `fd` e tabella dei watch restano posseduti dal runtime inotify;
+- `app_run()` usa ancora il ponte raw storico per il polling, leggendo
+  `app->inotify_backend.runtime`.
 
 ### Dipendenze backend da `app_t`
 
@@ -647,25 +654,27 @@ watch e lascia la semantica al core.
 
 ```mermaid
 flowchart TD
-    A["app_t ownership root"] --> B["app->inotify"]
-    A --> C["app->config"]
-    A --> D["app->logger"]
-    A --> E["callback verso app/core"]
+    A["app_t ownership root"] --> B["app->backend_ops"]
+    A --> C["app->inotify_backend"]
+    A --> D["app->config"]
+    A --> E["app->logger"]
+    A --> F["callback verso app/core"]
 
-    B --> B1["fd"]
-    B --> B2["watcher_table_t"]
-    C --> C0["inotify_config_t"]
-    C0 --> C1["recursive"]
-    C0 --> C2["watch_mask"]
-    C0 --> C3["watcher_capacity"]
+    C --> C1["runtime.fd"]
+    C --> C2["runtime.watcher_table_t"]
+    C --> C3["initialized/started"]
+    A --> G["app->inotify_backend_config"]
+    G --> G1["borrowed inotify_config_t"]
+    G --> G2["borrowed logger_t"]
 ```
 
 Tabella di lettura:
 
 | Dipendenza | Dove serve | Perche' serve | Dovrebbe restare visibile al backend finale? |
 | --- | --- | --- | --- |
-| `app->inotify.fd` | `inotify_backend_poll()` tramite `ctx.runtime`, `watch_manager_add()`, `watch_manager_remove()` | leggere eventi e modificare watch kernel | si', come stato backend |
-| `app->inotify.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend |
+| `app->backend_ops` | `app_init()` e `app_shutdown()` | chiamare `init`, `add_target`, `start`, `stop`, `destroy` senza dipendere da funzioni inotify-specifiche | si', come porta Backend API v0 statica |
+| `app->inotify_backend.runtime.fd` | poll raw tramite `ctx.runtime`, watch manager, lifecycle ops | leggere eventi e modificare watch kernel | si', come stato backend concreto |
+| `app->inotify_backend.runtime.watchers` | poll tramite `ctx.runtime`, add/remove watch, discovery ricorsiva | tradurre `wd` in path e mantenere mapping | si', come stato backend concreto |
 | `app->config.inotify.recursive` | startup watch e `backend_handle_dir_create()` lo leggono tramite `ctx.config` | decidere se mantenere watch ricorsivi | si', come configurazione backend |
 | `app->config.inotify.watch_mask` | `watch_manager_add()` | scegliere quali eventi inotify ascoltare | si', come configurazione backend |
 | `app->config.inotify.watcher_capacity` | `inotify_backend_init()` tramite `ctx.config` | dimensione iniziale watcher table | si', come configurazione backend |
@@ -680,9 +689,10 @@ spesso vengono confuse:
 
 Storicamente `app_t` risolveva entrambi i problemi in modo pratico ma largo: il
 backend riceveva tutto il contenitore, anche se usava solo una parte. Il
-refactor recente ha gia' corretto questo confine per il backend: ora il codice
-inotify riceve context esplicito e callback raw/core. Il bridge shadow non
-esiste piu'.
+refactor recente ha gia' corretto una parte di questo confine: `app.c` chiama
+il lifecycle e il target management tramite `alfred_backend_ops_t`, mentre il
+codice inotify riceve context esplicito e callback raw/core per il poll runtime
+ancora legacy. Il bridge shadow non esiste piu'.
 
 Il micro-refactor iniziale su `inotify_backend_init()` ha seguito questa
 direzione restringendo prima il corpo della funzione. Dopo il successivo cambio
@@ -711,9 +721,14 @@ al runtime applicativo corrente. `app.c` rifiuta `event_engine=shadow` come
 normale valore di configurazione non valido; i file legacy sono stati rimossi
 dal codice corrente.
 
-### Context backend proposto
+### Context backend e runtime ops
 
-La proposta scelta e' introdurre un context separato. In questo modo
+Oggi convivono due forme perche' la migrazione e' intenzionalmente
+incrementale: la tabella ops governa lifecycle e target management, mentre il
+context inotify stretto resta necessario al poll raw storico e ai helper
+inotify gia' esistenti.
+
+La proposta scelta in origine era introdurre un context separato. In questo modo
 `inotify_backend_t` continua a rappresentare lo stato posseduto dal backend,
 mentre il context rappresenta le dipendenze prese in prestito.
 
@@ -801,17 +816,18 @@ Frame logico del nuovo passaggio:
 
 ```text
 app_t app
-  app.inotify  -> stato runtime
-  app.config   -> configurazione
-  app.logger   -> diagnostica
+  app.backend_ops       -> tabella Backend API v0
+  app.inotify_backend   -> runtime concreto inotify ops
+  app.config            -> configurazione
+  app.logger            -> diagnostica
 
 app_build_inotify_backend_context(app, &ctx):
-  ctx.runtime = &app->inotify
+  ctx.runtime = &app->inotify_backend.runtime
   ctx.config = &app->config.inotify
   ctx.logger = &app->logger
 
-inotify_backend_init(&ctx):
-  backend_init(ctx)
+backend_ops->init(&app->inotify_backend, &config, &emit):
+  costruisce il context interno e chiama inotify_backend_init(&ctx)
 
 backend_init(ctx):
   ctx->runtime->fd = -1
@@ -821,8 +837,11 @@ backend_init(ctx):
 app_init(app):
   se ALFRED_EVENT_ENGINE non e' "core":
     errore di configurazione
+  alfred_backend_ops_is_minimally_valid(app.backend_ops)
 
-inotify_backend_add_startup_watch(&ctx, path):
+backend_ops->add_target(&app->inotify_backend, target):
+  valida il target Backend API v0
+  poi chiama inotify_backend_add_startup_watch(&ctx, path)
   backend_add_startup_watch(ctx, path)
 
 backend_add_startup_watch(ctx, path):
@@ -834,16 +853,16 @@ watch_manager_add(&ctx, path):
   usa ctx.config->watch_mask
   usa ctx.logger
 
-inotify_backend_shutdown(&ctx):
-  backend_shutdown(ctx)
+app_shutdown(app):
+  backend_ops->stop(&app->inotify_backend)
+  backend_ops->destroy(&app->inotify_backend)
+
+backend_ops->destroy(&app->inotify_backend):
+  chiama inotify_backend_shutdown(&ctx)
 
 backend_shutdown(ctx):
   chiude ctx->runtime->fd
   watcher_destroy(&ctx->runtime->watchers)
-
-app_shutdown(app):
-  distrugge core
-  chiude logger
 ```
 
 Anche la discovery ricorsiva usa ora lo stesso context:

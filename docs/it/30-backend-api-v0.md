@@ -1013,15 +1013,15 @@ Queste regole sono coerenti con il comportamento corrente di
 
 | Backend API v0 | Codice corrente |
 | --- | --- |
-| `alfred_backend_t` | `inotify_backend_t` |
-| `alfred_backend_config_t` | `inotify_config_t` dentro `config_t` |
-| `init` | `inotify_backend_init()` |
-| `start` | non esplicito; no-op candidato |
-| `add_target` | `inotify_backend_add_startup_watch()` |
+| `alfred_backend_t` | `inotify_backend_ops_runtime_t` passato come oggetto opaco alla tabella ops inotify |
+| `alfred_backend_config_t` | `inotify_backend_ops_config_t` con puntatori borrowed a `inotify_config_t` e `logger_t` |
+| `init` | `app.c` chiama `inotify_backend_ops()->init()`, che delega a `inotify_backend_init()` |
+| `start` | `app.c` chiama `inotify_backend_ops()->start()` dopo l'installazione dei target startup |
+| `add_target` | `app.c` costruisce `alfred_backend_target_t` e chiama `inotify_backend_ops()->add_target()` |
 | `remove_target` | `inotify_backend_remove_startup_watch()` -> `watch_manager_remove()` e cleanup watcher |
-| `poll` | `inotify_backend_poll()` |
-| `stop` | non esplicito; no-op candidato |
-| `destroy` | `inotify_backend_shutdown()` |
+| `poll` | la tabella ops espone `poll()`, ma `app_run()` usa ancora il ponte raw diretto `inotify_backend_poll()` |
+| `stop` | `app.c` chiama `inotify_backend_ops()->stop()` durante shutdown |
+| `destroy` | `app.c` chiama `inotify_backend_ops()->destroy()`, che delega a `inotify_backend_shutdown()` |
 | emit normalized raw | callback `inotify_backend_event_fn` con `alfred_raw_event_t` |
 | emit diagnostic | `logger_event()` con righe `WATCH_*` |
 | adapter native -> raw | `inotify_adapter_build_raw()` |
@@ -1047,18 +1047,21 @@ gia' migrati
 -> text writer produce la stessa riga leggibile
 ```
 
-Lo scheletro `alfred_backend_ops_t` permette di preparare questa migrazione
-senza cambiare ancora il comportamento esterno. Il futuro adapter inotify verso
-Backend API v0 dovra' riempire la tabella ops con:
+Lo scheletro `alfred_backend_ops_t` ha preparato questa migrazione senza
+cambiare il comportamento esterno. L'adapter inotify verso Backend API v0 ora
+riempie la tabella ops con:
 
 - `name = "inotify"`;
 - `api_version = ALFRED_BACKEND_API_VERSION_V0`;
 - `capabilities = inotify_backend_capabilities()`;
-- callback verso le funzioni inotify correnti o wrapper sottili;
-- no-op espliciti per lifecycle non ancora necessari.
+- wrapper sottili verso le funzioni inotify correnti;
+- lifecycle `init/start/stop/destroy`;
+- target management `add_target/remove_target`;
+- `poll` comune non bloccante, ancora testato fuori dal loop principale.
 
-Fino a quel momento `app.c` continua a chiamare direttamente il backend inotify
-corrente.
+`app.c` usa gia' la tabella ops per lifecycle e target management. Il pezzo che
+resta diretto e' il loop runtime: `app_run()` chiama ancora
+`inotify_backend_poll()` per ricevere raw event e passarli al core semantico.
 
 Il primo passo concreto esiste ora in due livelli:
 
@@ -1128,13 +1131,32 @@ valida: viene tolta la root esatta da `configured_roots` e il backend restituisc
 stato target: i watch raccolti vengono comunque rimossi e la root esatta viene
 tolta da `configured_roots`.
 
-Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
-chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.
-La tabella ops serve per provare il confine statico in modo incrementale.
+Il composition root applicativo usa ora una parte della tabella ops reale:
+`app_init()` chiama `init`, `add_target` e `start` attraverso
+`inotify_backend_ops()`, mentre `app_shutdown()` chiama `stop` e `destroy`
+attraverso la stessa tabella. Questo riduce la dipendenza diretta di `app.c`
+dalle funzioni lifecycle inotify-specifiche.
+Prima di chiamare `init`, `app.c` valida la tabella con
+`alfred_backend_ops_is_minimally_valid()`: un descriptor statico incompleto
+fallisce durante startup con errore esplicito, invece di arrivare a una callback
+`NULL` nel composition root.
 
-La callback `poll` non e' ancora il runtime reale. Se chiamata, fallisce con
-`ERR_INVALID_ARG` invece di fare finta di leggere eventi. La migrazione di
-polling e `app.c` resta un passo successivo e dovra' avere test propri.
+Il runtime principale non e' ancora completamente migrato: `app_run()` continua
+a costruire un `inotify_backend_context_t` stretto e a chiamare direttamente
+`inotify_backend_poll()` per consegnare `alfred_raw_event_t` al core. La
+callback `poll` della tabella ops esiste ed e' testata, ma collegarla al loop
+principale richiede un micro-step separato perche' quel path emette record
+normalizzati, mentre il loop corrente deve ancora alimentare il core semantico
+con raw event.
+
+La callback `poll` della tabella ops e' reale per il sottoinsieme v0 gia'
+definito: richiede runtime inizializzato, `start()` gia' eseguito, emit
+callback valida e `timeout_ms == 0`. In quel caso delega alla
+`inotify_backend_poll()` esistente, converte i raw event in record
+`normalized_raw` e li consegna a `alfred_backend_emit_t`. Non e' ancora il
+runtime principale di `app_run()`: quella migrazione resta un passo successivo
+perche' il loop applicativo corrente deve ancora alimentare direttamente il
+core semantico con `alfred_raw_event_t`.
 
 ## Relazione con Event Model v0
 

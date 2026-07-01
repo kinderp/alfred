@@ -56,7 +56,10 @@ typedef struct app {
     volatile sig_atomic_t running;
 
     config_t config;
-    inotify_backend_t inotify;
+    const alfred_backend_ops_t *backend_ops;
+    inotify_backend_ops_runtime_t inotify_backend;
+    inotify_backend_ops_config_t inotify_backend_config;
+    alfred_backend_emit_t backend_emit;
     logger_t logger;
     alfred_record_output_pipeline_t output_pipeline;
     FILE *output_stream;
@@ -77,8 +80,18 @@ Campi importanti:
   deve continuare e viene portata a `0` dal signal handler quando Alfred riceve
   segnali come `SIGINT` o `SIGTERM`
 - `config`: configurazione runtime
-- `inotify`: stato del backend inotify, cioe' file descriptor e tabella watch
-  descriptor -> path
+- `backend_ops`: tabella statica Backend API v0 usata da `app.c` per chiamare
+  lifecycle e target management del backend attivo. Per ora punta sempre a
+  `inotify_backend_ops()`
+- `inotify_backend`: runtime concreto dello staged adapter inotify. Contiene il
+  vecchio runtime inotify (`fd`, watch table e stato target) piu' lo stato
+  necessario alla tabella ops
+- `inotify_backend_config`: piccolo oggetto di configurazione passato a
+  `backend_ops->init()`. Contiene puntatori borrowed alla configurazione
+  inotify e al logger
+- `backend_emit`: callback comune che il backend ops puo' usare per consegnare
+  record strutturati alla pipeline applicativa. La callback usa `app_t` solo
+  come `userdata` opaco
 - `logger`: gestore dei file di log
 - `output_pipeline`: pipeline strutturata opzionale usata per `output.jsonl`
   quando `output_enabled=true`
@@ -101,10 +114,17 @@ handler; si limita a cambiare una flag che il ciclo principale controlla in modo
 cooperativo.
 
 Nota architetturale: `inotify_fd` e `watchers` non sono piu' campi diretti di
-`app_t`; sono incapsulati in `inotify_backend_t`. Le funzioni del backend
-ricevono un `inotify_backend_context_t *`, cioe' un context stretto con runtime,
-configurazione e logger. La vecchia cache move legacy non esiste piu' nel
-runtime corrente.
+`app_t`; vivono dentro il runtime inotify posseduto da
+`inotify_backend_ops_runtime_t`. `app.c` usa ora la tabella
+`alfred_backend_ops_t` per `init`, `add_target`, `start`, `stop` e `destroy`.
+Prima di usare la tabella, `app.c` la valida con
+`alfred_backend_ops_is_minimally_valid()`: se un backend statico non espone il
+contratto minimo, Alfred fallisce durante startup invece di dereferenziare
+callback mancanti. Il ciclo `app_run()` usa ancora il ponte raw storico per
+`poll`, costruendo un `inotify_backend_context_t` stretto a partire dal runtime
+ops. Questa forma e' voluta: il lifecycle e' gia' passato dalla Backend API v0,
+mentre la migrazione del poll runtime verra' fatta in un micro-step separato
+con test dedicati.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
 Oggi e' lo stream semantico ufficiale di default. Lo shadow mode non e' piu'
