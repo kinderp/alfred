@@ -160,6 +160,12 @@ Regola:
   colleghi ogni elemento della checklist a commit, PR o issue figlie rilevanti;
 - aggiornare quella tabella a ogni progress update significativo, indicando
   cosa e' concluso, cosa e' in corso e quali commit sono solo preparatori;
+- se la issue madre contiene sia una checklist sintetica sia una tabella
+  `Implementation traceability`, tenerle sempre in sync nello stesso update.
+  La checklist deve riassumere lo stato corrente; la traceability deve
+  conservare la storia dettagliata con issue, PR e commit. Quando una voce viene
+  marcata `Done`, `In progress`, `Partially done` o `Todo` in una tabella,
+  controllare l'altra e aggiornare anche le note se lo stato e' cambiato;
 - per ogni micro-step non banale di una issue madre, creare una issue figlia
   dedicata e una PR dedicata. La issue figlia deve linkare la issue madre e la
   PR; la PR deve linkare la issue figlia con `Closes #...` quando il merge deve
