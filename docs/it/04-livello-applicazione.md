@@ -121,9 +121,11 @@ Prima di usare la tabella, `app.c` la valida con
 `alfred_backend_ops_is_minimally_valid()`: se un backend statico non espone il
 contratto minimo, Alfred fallisce durante startup invece di dereferenziare
 callback mancanti. Il ciclo `app_run()` usa ancora il ponte raw storico per
-`poll`, costruendo un `inotify_backend_context_t` stretto a partire dal runtime
-ops. Questa forma e' voluta: il lifecycle e' gia' passato dalla Backend API v0,
-mentre la migrazione del poll runtime verra' fatta in un micro-step separato
+`poll`, ma la chiamata diretta a `inotify_backend_poll()` e' ora confinata in
+`app_poll_legacy_raw_backend_once()`. `app_run()` costruisce un
+`inotify_backend_context_t` stretto a partire dal runtime ops e lo passa a quel
+helper. Questa forma e' voluta: il lifecycle e' gia' passato dalla Backend API
+v0, mentre la migrazione del poll runtime verra' fatta in un micro-step separato
 con test dedicati.
 
 Il core e' stato aggiunto ad `app_t` perche' deve vivere quanto l'applicazione.
@@ -179,13 +181,14 @@ gli eventi semantici attraverso `logger_event()`.
 
 ```mermaid
 flowchart TD
-    A[app_run] --> B[poll backend]
-    B --> C[read fd]
-    C --> D[raw log]
-    D --> E[raw event]
-    E --> F[callback]
-    F --> G[core]
-    B --> K[watch repair]
+    A[app_run] --> B[app_poll_legacy_raw_backend_once]
+    B --> C[poll backend]
+    C --> D[read fd]
+    D --> E[raw log]
+    E --> F[raw event]
+    F --> G[callback]
+    G --> H[core]
+    C --> K[watch repair]
     K --> A
 ```
 
@@ -202,6 +205,8 @@ eventi raw tramite callback e li inoltra al core.
 
 Legenda del diagramma:
 
+- `app_poll_legacy_raw_backend_once`: helper applicativo che contiene l'unica
+  chiamata diretta rimasta al ponte raw storico
 - `poll backend`: `inotify_backend_poll()`
 - `read fd`: lettura del file descriptor inotify non bloccante
 - `raw log`: scrittura del log grezzo del backend
@@ -532,8 +537,8 @@ marca `app.output_failed`. Il percorso e' diviso in due fasi:
 `app_emit_output_record()` resta sul lato producer e chiama solo
 `app_enqueue_output_record()`, che accoda il record owned nella coda bounded. Il
 ciclo applicativo `app_run()` chiama poi `app_drain_output_pipeline()` dopo ogni
-`inotify_backend_poll()`: quella fase consuma la coda e chiama dispatcher e
-writer.
+`app_poll_legacy_raw_backend_once()`: quella fase consuma la coda e chiama
+dispatcher e writer.
 
 La v0 e' ancora single-threaded. Un singolo `inotify_backend_poll()` puo'
 consegnare una burst di eventi piu' grande della coda prima che il controllo

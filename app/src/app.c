@@ -89,6 +89,29 @@ static void app_build_inotify_backend_context(
     ctx->emit_record_userdata = app;
 }
 
+/*
+ * app_poll_legacy_raw_backend_once - poll the current raw/core bridge once
+ * @app: application context passed back as backend callback userdata
+ * @ctx: prebuilt inotify context with borrowed runtime/config/logger pointers
+ *
+ * This helper is the only remaining application-level direct call to the legacy
+ * inotify raw poll path. It intentionally does not use backend_ops->poll():
+ * the staged Backend API v0 poll path emits normalized alfred_record_t values,
+ * while the current semantic core still consumes alfred_raw_event_t through
+ * handle_backend_event().
+ *
+ * Return: ERR_OK on successful polling, or the backend callback error.
+ */
+static error_t app_poll_legacy_raw_backend_once(
+    app_t *app,
+    inotify_backend_context_t *ctx
+)
+{
+    return inotify_backend_poll(ctx,
+                                handle_backend_event,
+                                app);
+}
+
 /* ============================================================================
  * Signal Handling
  * ========================================================================== */
@@ -925,9 +948,7 @@ int app_run(app_t *app)
 
     while (app->running) {
 
-        error = inotify_backend_poll(&backend_ctx,
-                                     handle_backend_event,
-                                     app);
+        error = app_poll_legacy_raw_backend_once(app, &backend_ctx);
         if (app_drain_output_pipeline(app) != 0) {
             logger_error(&app->logger,
                          "structured output failed; stopping event loop");
