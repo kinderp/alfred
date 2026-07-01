@@ -30,8 +30,10 @@ typedef struct alfred_backend_config alfred_backend_config_t;
  * This first concrete target model is intentionally small. It gives the
  * Backend API a compile-tested target boundary without pretending that all
  * future domains are filesystem-shaped. For v0, callers pass a borrowed path
- * that must remain valid for the duration of add_target(); the backend must
- * copy anything it needs after the call returns.
+ * that must remain valid for the duration of the backend operation receiving
+ * the target, currently add_target() or remove_target(). The backend must copy
+ * anything it needs after the call returns and must not store the caller-owned
+ * pointer directly.
  */
 typedef struct alfred_backend_target {
     const char *path;

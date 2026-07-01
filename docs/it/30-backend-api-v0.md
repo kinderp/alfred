@@ -800,10 +800,13 @@ Decisione v0: non rendere subito generico tutto il mondo. Il target iniziale
 puo' essere filesystem-oriented, ma deve lasciare spazio a target futuri non
 filesystem.
 
-Il path e' borrowed: il chiamante deve tenerlo valido solo durante
-`add_target()`. Se il backend deve conservarlo, deve copiarlo nel proprio stato
-interno. Il backend inotify lo fa gia' nel watch manager, che copia i path nella
-tabella dei watch.
+Il path e' borrowed: il chiamante deve tenerlo valido solo durante l'operazione
+backend che riceve il target, oggi `add_target()` o `remove_target()`. Se il
+backend deve conservarlo dopo il ritorno della chiamata, deve copiarlo nel
+proprio stato interno e non deve salvare direttamente il puntatore posseduto dal
+chiamante. Il backend inotify lo fa gia' nel watch manager, che copia i path
+nella tabella dei watch, e in `configured_roots`, che conserva copie proprie
+delle root configurate.
 
 Nel sottoinsieme inotify v0, il path deve avere lunghezza maggiore di zero e
 minore di `PATH_MAX`. Il backend conserva configured roots e watcher path in
