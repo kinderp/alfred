@@ -547,6 +547,43 @@ solo lo stato iniziale del branch: deve diventare anche una traccia storica di
 che cosa le review successive hanno trovato e di come i finding sono stati
 risolti.
 
+### Dimensioni da controllare durante una review PR
+
+Quando si chiede una review accurata di una PR, il reviewer deve cercare
+finding rispetto a queste dimensioni. La frase guida e':
+
+```text
+Alfred deve restare piccolo, leggero, veloce, performante, affidabile, sicuro,
+facilmente estendibile, interoperabile, robusto, semplice, ben documentato,
+manutenibile, facilmente modificabile e chiaro, con API e contratti non
+ambigui e adeguatamente coperti.
+```
+
+Durante la review controllare almeno:
+
+- correttezza funzionale: il comportamento implementato corrisponde al contratto
+  dichiarato e agli scenari attesi;
+- chiarezza dei contratti: API, ownership, lifecycle, error model, schema,
+  record, writer, backend e test non devono lasciare casi ambigui;
+- copertura test: i casi nuovi, rifiutati, limite, regressivi e di ownership
+  devono essere coperti dal tipo di test giusto;
+- semplicita' e manutenibilita': il codice deve essere comprensibile,
+  modificabile e privo di astrazioni speculative;
+- performance e leggerezza: il path caldo non deve ricevere I/O, lock,
+  allocazioni, serializzazione o dispatch costosi non necessari;
+- robustezza e affidabilita': errori, cleanup, retry, overflow, stato parziale,
+  idempotenza e shutdown devono avere comportamento definito;
+- sicurezza: input, path, limiti, permessi, fail-closed/fail-open, leakage di
+  dati e uso futuro in contesti agent/runtime devono essere considerati;
+- interoperabilita' ed estendibilita': la modifica non deve chiudere la strada
+  a backend, writer, formati, OS o integrazioni future gia' previste;
+- osservabilita' e operabilita': log, diagnostica, metriche, errori e CI devono
+  permettere di capire cosa succede in produzione o nei test;
+- coerenza: naming, semantica, configurazione, documentazione e comportamento
+  devono essere allineati fra moduli e con le decisioni precedenti;
+- tracciabilita': issue, PR, commit, finding, review round e documentazione
+  devono permettere di ricostruire perche' e' stata fatta la modifica.
+
 Formato consigliato da aggiungere alla descrizione della PR:
 
 ```text
