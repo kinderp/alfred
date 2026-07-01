@@ -496,8 +496,6 @@ Fixed in [d406dec3](https://github.com/kinderp/alfred/commit/d406dec30eae64eaa8a
 Explain in English what changed and why this closes the finding.
 ```
 
-### Aggiornamento della descrizione PR dopo review multiple
-
 ### Modalita' operative per PR e commit
 
 Le regole di commit, PR, finding e review possono essere applicate in due
@@ -534,12 +532,16 @@ Modalita' autonoma PR loop:
   contratto non deducibile, fallimento CI non banale, limite di permessi o
   lavoro fuori milestone.
 
+### Stato draft e merge dopo review pulite
+
 Una PR deve restare in `draft` finche' non ha superato due round di review
 consecutivi senza nuovi finding. Solo dopo due review consecutive pulite si puo'
 decidere di marcarla pronta o mergiarla. Questa regola evita di considerare
 stabile una PR subito dopo il primo giro senza problemi, soprattutto quando le
 review precedenti hanno trovato ambiguita' di contratto, bug, rischi di
 performance, ownership o copertura test insufficiente.
+
+### Aggiornamento della descrizione PR dopo review multiple
 
 Quando una PR riceve piu' round di review, la descrizione creata dal template
 deve essere aggiornata dopo ogni round significativo. La PR non deve contenere
