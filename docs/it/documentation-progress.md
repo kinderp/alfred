@@ -1259,3 +1259,14 @@ solo funzioni reali (`alfred_record_build_watch_diagnostic()`,
 `alfred_record_build_watch_diagnostic_with_os_error()` e
 `alfred_record_build_stale_event_dropped()`) e spiega in prosa che il builder
 diagnostico watch copre anche molti record `WATCH_RESYNC_*` e `WATCH_LOST_*`.
+
+Aggiornamento successivo: lo staged adapter inotify per Backend API v0 collega
+anche `poll()`. Il callback comune resta non bloccante e accetta solo
+`timeout_ms == 0`; valori diversi sono rifiutati finche' la semantica comune dei
+timeout non sara' definita. La poll della tabella ops delega alla
+`inotify_backend_poll()` esistente, ma converte ogni `alfred_raw_event_t` con
+`alfred_record_from_raw()` e consegna il record normalizzato al callback
+`alfred_backend_emit_t` copiato da `init()`. Il test
+`tests/backend/test_backend_inotify_ops.c` copre ora anche il requisito di
+`start()`, l'emit obbligatorio per la poll comune e un evento reale `RAW_CREATE`
+emesso attraverso la tabella ops.
