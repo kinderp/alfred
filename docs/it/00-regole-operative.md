@@ -26,6 +26,12 @@ altro momento, leggere questo file prima di continuare.
   almeno uno tra documentazione architetturale, contratto API, scenario/test,
   diagramma, ADR o checklist di review. Se non aggiorna nulla, chiedersi se la
   modifica sta aggiungendo complessita' non tracciata.
+- Quando cambia una regola operativa che guida il comportamento degli agenti AI
+  o il flusso di lavoro ricorrente, controllare anche se esistono skill Codex
+  collegate da aggiornare. Per esempio, modifiche a commit, PR, review,
+  finding, issue, milestone, label o tracciabilita' GitHub devono riallineare
+  anche la skill personale `alfred-pr-commit-rules`, cosi' la procedura eseguita
+  dagli agenti resta coerente con la documentazione del repository.
 
 ## Tracciamento GitHub di roadmap e decisioni
 
