@@ -702,14 +702,24 @@ prefisso con separatore `/`. Quindi `/tmp/root-old` non e' considerato figlio di
 un target osservato ricorsivamente, tutti i watch con path assoluto appartengono
 al suo sottoalbero e devono essere rimossi insieme alla root.
 
-Una volta raccolti i watch descriptor da rimuovere, `remove_target` completa la
-pulizia dello stato target anche se una diagnostica `WATCH_REMOVED` fallisce.
-Questo dettaglio e' importante perche' `watch_manager_remove()` rimuove il watch
-dal kernel e dalla watcher table prima di emettere il record diagnostico: un
-fallimento del callback segnala un problema di output/fail-closed, ma non deve
-lasciare `configured_roots` e watcher table fuori sincronizzazione. Per questo
-il backend ricorda il primo errore, continua a rimuovere i watch raccolti,
-rimuove la root configurata esatta e poi restituisce l'errore al chiamante.
+`configured_roots` e' il registro dei target API configurati; la watcher table
+e' invece stato operativo dei watch kernel attivi. Questi due livelli possono
+divergere temporaneamente: per esempio un `IN_IGNORED` puo' far sparire un
+watch attivo mentre la root resta ancora un target configurato. Per questo
+l'autorita' per `remove_target` e' la root configurata esatta, non l'esistenza
+istantanea di un watch attivo. Se non ci sono piu' watch associati a quel
+target, `remove_target` rimuove comunque la root da `configured_roots` e
+restituisce `ERR_OK`.
+
+Una volta raccolti eventuali watch descriptor da rimuovere, `remove_target`
+completa la pulizia dello stato target anche se una diagnostica `WATCH_REMOVED`
+fallisce. Questo dettaglio e' importante perche' `watch_manager_remove()`
+rimuove il watch dal kernel e dalla watcher table prima di emettere il record
+diagnostico: un fallimento del callback segnala un problema di
+output/fail-closed, ma non deve lasciare `configured_roots` e watcher table
+fuori sincronizzazione. Per questo il backend ricorda il primo errore, continua
+a rimuovere i watch raccolti, rimuove la root configurata esatta e poi
+restituisce l'errore al chiamante.
 
 Il duplicato esatto e' idempotente in tutte le modalita' inotify v0:
 richiamare `add_target(path)` con un path gia' configurato restituisce `ERR_OK`,
@@ -1036,11 +1046,13 @@ incoerenti prima di toccare la watch table e delega a
 watch della root e i watch figli sotto quella root; in modalita' non ricorsiva
 rimuove solo il path esatto. Il path deve essere una root configurata esatta:
 un child watch creato dalla ricorsivita' del parent non puo' essere rimosso come
-target autonomo se non e' stato aggiunto come target autonomo. Dopo che la
-rimozione dei watch e' iniziata, un
-errore diagnostico `WATCH_REMOVED` viene propagato al chiamante ma non interrompe
-la pulizia dello stato target: i watch raccolti vengono comunque rimossi e la
-root esatta viene tolta da `configured_roots`.
+target autonomo se non e' stato aggiunto come target autonomo. Se la root
+configurata esiste ma i watch attivi sono gia' spariti, la rimozione resta
+valida: viene tolta la root esatta da `configured_roots` e il backend restituisce
+`ERR_OK`. Dopo che la rimozione dei watch e' iniziata, un errore diagnostico
+`WATCH_REMOVED` viene propagato al chiamante ma non interrompe la pulizia dello
+stato target: i watch raccolti vengono comunque rimossi e la root esatta viene
+tolta da `configured_roots`.
 
 Questo passo non cambia il runtime normale di Alfred: `app.c` continua a
 chiamare direttamente `inotify_backend_init()` e `inotify_backend_shutdown()`.

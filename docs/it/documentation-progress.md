@@ -295,6 +295,12 @@ padre, perche' quello romperebbe la copertura del target padre lasciando
 `configured_roots` invariato.
 Quando la configurazione inotify e' ricorsiva, rimuovere una root rimuove anche
 i watch figli sotto quella root con confronto di prefisso a boundary `/`.
+`configured_roots` resta pero' l'autorita' per la ownership del target API:
+se un watch attivo e' gia' sparito per manutenzione backend o per un evento
+kernel come `IN_IGNORED`, `remove_target` deve comunque poter rimuovere la root
+configurata esatta. L'assenza di watch attivi non rende invalido il target;
+significa solo che non ci sono descriptor kernel da pulire prima di aggiornare
+il registro dei target configurati.
 Se una diagnostica `WATCH_REMOVED` fallisce durante `remove_target`, il backend
 ricorda l'errore ma continua a rimuovere i watch raccolti e poi rimuove la root
 configurata esatta. Il chiamante riceve comunque `ERR_INOTIFY`, ma

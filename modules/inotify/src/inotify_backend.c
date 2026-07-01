@@ -2316,6 +2316,12 @@ int inotify_backend_add_startup_watch(inotify_backend_context_t *ctx,
  * implementation detail of their parent target; callers must not be able to
  * remove those child watches directly through the target-management API.
  *
+ * A configured target can outlive its active kernel watches. For example,
+ * IN_IGNORED can clear watcher-table state while configured_roots still records
+ * the API target. The exact configured root is therefore the removal authority:
+ * missing active watches are not an invalid target, they only mean there is no
+ * watch descriptor left to remove.
+ *
  * Once matching descriptors have been collected, target cleanup is completed
  * even if a WATCH_REMOVED diagnostic reports an error. watch_manager_remove()
  * clears kernel/table state before emitting that diagnostic, so stopping at the
@@ -2330,7 +2336,7 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
 {
     watcher_table_t *watchers;
     size_t count = 0;
-    int *wds;
+    int *wds = NULL;
     int error = ERR_OK;
 
     if (ctx == NULL ||
@@ -2348,35 +2354,32 @@ int inotify_backend_remove_startup_watch(inotify_backend_context_t *ctx,
         return ERR_INVALID_ARG;
 
     if (ctx->config->recursive) {
-        if (watchers->count == 0)
-            return ERR_INVALID_ARG;
+        if (watchers->count > 0) {
+            wds = calloc(watchers->count, sizeof(*wds));
+            if (wds == NULL)
+                return ERR_ALLOC;
 
-        wds = calloc(watchers->count, sizeof(*wds));
-        if (wds == NULL)
-            return ERR_ALLOC;
-
-        if (watcher_collect_wds_by_path_prefix(watchers,
-                                               path,
-                                               wds,
-                                               watchers->count,
-                                               &count) != 0 ||
-            count == 0) {
-            free(wds);
-            return ERR_INVALID_ARG;
+            if (watcher_collect_wds_by_path_prefix(watchers,
+                                                   path,
+                                                   wds,
+                                                   watchers->count,
+                                                   &count) != 0) {
+                free(wds);
+                return ERR_INVALID_ARG;
+            }
         }
     }
     else {
         int wd = watcher_find_wd_by_path(watchers, path);
 
-        if (wd < 0)
-            return ERR_INVALID_ARG;
+        if (wd >= 0) {
+            wds = calloc(1, sizeof(*wds));
+            if (wds == NULL)
+                return ERR_ALLOC;
 
-        wds = calloc(1, sizeof(*wds));
-        if (wds == NULL)
-            return ERR_ALLOC;
-
-        wds[0] = wd;
-        count = 1;
+            wds[0] = wd;
+            count = 1;
+        }
     }
 
     for (size_t i = 0; i < count; i++) {
