@@ -1021,7 +1021,7 @@ Queste regole sono coerenti con il comportamento corrente di
 | `start` | `app.c` chiama `inotify_backend_ops()->start()` dopo l'installazione dei target startup |
 | `add_target` | `app.c` costruisce `alfred_backend_target_t` e chiama `inotify_backend_ops()->add_target()` |
 | `remove_target` | `inotify_backend_remove_startup_watch()` -> `watch_manager_remove()` e cleanup watcher |
-| `poll` | la tabella ops espone `poll()`, ma `app_run()` usa ancora il ponte raw diretto `inotify_backend_poll()` |
+| `poll` | la tabella ops espone `poll()`, ma il runtime principale usa ancora il ponte raw `app_run()` -> `app_poll_legacy_raw_backend_once()` -> `inotify_backend_poll()` |
 | `stop` | `app.c` chiama `inotify_backend_ops()->stop()` durante shutdown |
 | `destroy` | `app.c` chiama `inotify_backend_ops()->destroy()`, che delega a `inotify_backend_shutdown()` |
 | emit normalized raw | callback `inotify_backend_event_fn` con `alfred_raw_event_t` |
@@ -1062,8 +1062,10 @@ riempie la tabella ops con:
 - `poll` comune non bloccante, ancora testato fuori dal loop principale.
 
 `app.c` usa gia' la tabella ops per lifecycle e target management. Il pezzo che
-resta diretto e' il loop runtime: `app_run()` chiama ancora
-`inotify_backend_poll()` per ricevere raw event e passarli al core semantico.
+resta legacy e' il loop runtime: `app_run()` chiama
+`app_poll_legacy_raw_backend_once()`, e quel helper contiene l'unica chiamata
+diretta rimasta a `inotify_backend_poll()` per ricevere raw event e passarli al
+core semantico.
 
 Il primo passo concreto esiste ora in due livelli:
 
@@ -1144,12 +1146,13 @@ fallisce durante startup con errore esplicito, invece di arrivare a una callback
 `NULL` nel composition root.
 
 Il runtime principale non e' ancora completamente migrato: `app_run()` continua
-a costruire un `inotify_backend_context_t` stretto e a chiamare direttamente
-`inotify_backend_poll()` per consegnare `alfred_raw_event_t` al core. La
-callback `poll` della tabella ops esiste ed e' testata, ma collegarla al loop
-principale richiede un micro-step separato perche' quel path emette record
-normalizzati, mentre il loop corrente deve ancora alimentare il core semantico
-con raw event.
+a costruire un `inotify_backend_context_t` stretto, ma passa il polling a
+`app_poll_legacy_raw_backend_once()`. Quel helper e' il solo punto applicativo
+che chiama direttamente `inotify_backend_poll()` per consegnare
+`alfred_raw_event_t` al core. La callback `poll` della tabella ops esiste ed e'
+testata, ma collegarla al loop principale richiede un micro-step separato
+perche' quel path emette record normalizzati, mentre il loop corrente deve
+ancora alimentare il core semantico con raw event.
 
 La callback `poll` della tabella ops e' reale per il sottoinsieme v0 gia'
 definito: richiede runtime inizializzato, `start()` gia' eseguito, emit

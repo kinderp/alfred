@@ -1275,10 +1275,20 @@ Aggiornamento successivo: `app.c` usa la tabella statica
 `inotify_backend_ops()` come composition root parziale per lifecycle e target
 management. `app_init()` chiama ora `init`, `add_target` e `start` tramite
 `alfred_backend_ops_t`; `app_shutdown()` chiama `stop` e `destroy` tramite la
-stessa tabella. Il loop `app_run()` resta intenzionalmente sul ponte raw diretto
-`inotify_backend_poll()` per continuare ad alimentare il core semantico con
-`alfred_raw_event_t`. La migrazione del loop principale alla `poll` Backend API
-v0 resta un micro-step separato perche' il path ops emette record normalizzati,
-non raw event per `alfred_process()`. Prima di chiamare `init`, `app.c` valida
-la tabella con `alfred_backend_ops_is_minimally_valid()` per fallire in modo
+stessa tabella. In quel momento il loop `app_run()` restava intenzionalmente sul
+ponte raw diretto `inotify_backend_poll()` per continuare ad alimentare il core
+semantico con `alfred_raw_event_t`; il passo successivo lo ha poi isolato in un
+helper dedicato. La migrazione del loop principale alla `poll` Backend API v0
+resta un micro-step separato perche' il path ops emette record normalizzati, non
+raw event per `alfred_process()`. Prima di chiamare `init`, `app.c` valida la
+tabella con `alfred_backend_ops_is_minimally_valid()` per fallire in modo
 esplicito se il descriptor statico non rispetta il contratto minimo.
+
+Aggiornamento successivo: il ponte runtime raw rimasto in `app_run()` e' stato
+isolato in `app_poll_legacy_raw_backend_once()`. Il comportamento non cambia:
+il helper chiama ancora `inotify_backend_poll()` con `handle_backend_event()` e
+`app` come userdata, cosi' il core semantico continua a ricevere
+`alfred_raw_event_t`. La differenza e' architetturale: `app_run()` non contiene
+piu' direttamente la chiamata al backend inotify-specifico. Questo rende piu'
+visibile l'unico punto legacy da sostituire quando il loop principale potra'
+consumare il percorso `backend_ops->poll()` basato su record normalizzati.

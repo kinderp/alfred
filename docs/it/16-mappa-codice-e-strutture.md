@@ -58,7 +58,8 @@ flowchart TD
     G --> H["watch_manager_add()<br/>o recursive add"]
     H --> I["watcher_store_identity()"]
     A --> L["app_run()"]
-    L --> M["inotify_backend_poll()"]
+    L --> K["app_poll_legacy_raw_backend_once()"]
+    K --> M["inotify_backend_poll()"]
     M --> N["watcher_get_path()"]
     M --> O["inotify_adapter_build_raw()"]
     M --> P["handle_backend_event()"]
@@ -77,8 +78,9 @@ Lettura della mappa:
   applicativo.
 - `app_init()` costruisce i sottosistemi nell'ordine in cui servono:
   configurazione, logger, core, backend e watch iniziali.
-- `app_run()` non interpreta eventi: chiama il backend e lascia che sia il
-  backend a leggere dal file descriptor.
+- `app_run()` non interpreta eventi: guida il ciclo principale e chiama
+  `app_poll_legacy_raw_backend_once()`, il helper che contiene il ponte raw
+  temporaneo verso il backend.
 - `inotify_backend_poll()` e' il confine tecnico con Linux: legge
   `struct inotify_event`, recupera il path parent, costruisce un raw event
   Alfred e lo consegna all'app.
@@ -641,8 +643,10 @@ anche `backend_ops`, cioe' la tabella statica Backend API v0. In pratica:
 
 - lifecycle e target management passano gia' da `backend_ops`;
 - `fd` e tabella dei watch restano posseduti dal runtime inotify;
-- `app_run()` usa ancora il ponte raw storico per il polling, leggendo
-  `app->inotify_backend.runtime`.
+- `app_run()` usa ancora il ponte raw storico per il polling, ma la chiamata
+  diretta a `inotify_backend_poll()` e' confinata in
+  `app_poll_legacy_raw_backend_once()`, che legge
+  `app->inotify_backend.runtime` attraverso un context stretto.
 
 ### Dipendenze backend da `app_t`
 
@@ -892,11 +896,13 @@ typedef int (*inotify_backend_event_fn)(
 ```
 
 Quindi il backend consegna solo il raw event e un puntatore opaco. Nel runtime
-attuale `app_run()` passa `app` come `userdata`, e `handle_backend_event()` lo
-ricostruisce:
+attuale `app_run()` chiama `app_poll_legacy_raw_backend_once()`, il helper passa
+`app` come `userdata`, e `handle_backend_event()` lo ricostruisce:
 
 ```text
-inotify_backend_poll(&ctx, handle_backend_event, app)
+app_poll_legacy_raw_backend_once(app, &ctx)
+  inotify_backend_poll(&ctx, handle_backend_event, app)
+
 handle_backend_event(raw, userdata)
   app = userdata
   alfred_process(app->core, raw)
