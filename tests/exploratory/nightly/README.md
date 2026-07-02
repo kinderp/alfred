@@ -40,6 +40,28 @@ INCLUDE_KNOWN_FAILURES=1 tests/exploratory/nightly/run_all.sh
 
 Artifacts are kept under `/tmp` so they can be inspected after the run.
 
+## Audit modes
+
+The current scripts mostly support short smoke and scenario-based audits.
+Alfred also needs two future modes:
+
+| Mode | Purpose |
+| --- | --- |
+| `nightly smoke audit` | Fast regression check after PRs, merges or refactors. |
+| `nightly user-session audit` | Longer realistic session that chains user operations for one to three hours. |
+| `nightly fuzzy audit` | Generated random or semi-random operation sequences checked through invariants. |
+
+For user-session audits, keep a command trace when possible. The command trace
+is context, not ground truth: one shell command can spawn children or create
+temporary files that only OS-level observation can explain. GUI actions should
+be noted manually until Alfred has lower-level process/syscall or desktop
+integration.
+
+For fuzzy audits, prefer invariant checks over exact log text. Examples:
+Alfred does not crash, JSONL remains valid line by line, records do not contain
+impossible field combinations, and semantic paths do not contradict stale watch
+diagnostics.
+
 ## Scripts
 
 | Script | Purpose |
@@ -67,6 +89,8 @@ Artifacts are kept under `/tmp` so they can be inspected after the run.
 | `alfred.stdout` | Process stdout. |
 | `alfred.stderr` | Process stderr and sanitizer output, if any. |
 | `assertions.log` | Scenario-level assertion failures. |
+| `commands.log` | Optional user command trace for long user-session audits. |
+| `alfred-status.log` | Optional process/resource snapshot for long, fuzzy or suspicious runs. |
 
 When a script fails, start from `assertions.log`, then compare `raw.log`,
 `events.log` and `output.jsonl`.

@@ -28,6 +28,65 @@ Una sessione notturna deve:
 7. aggiornare la matrice di maturita' se emergono dati utili;
 8. lasciare un report finale leggibile al mattino.
 
+## Scegliere la modalita'
+
+Prima di iniziare, dichiarare quale modalita' di audit si sta eseguendo.
+
+| Modalita' | Quando usarla | Durata indicativa |
+| --- | --- | --- |
+| `nightly smoke audit` | Dopo PR, merge o refactor per controllare regressioni note | minuti |
+| `nightly user-session audit` | Quando si vuole simulare il lavoro di un utente reale | 1-3 ore |
+| `nightly fuzzy audit` | Quando si vogliono cercare crash e violazioni di invarianti con sequenze generate | variabile |
+
+La modalita' va scritta nella issue madre. Se non viene specificata, partire da
+`nightly smoke audit`, perche' e' la piu' breve e riproducibile.
+
+### Nightly smoke audit
+
+Procedura minima:
+
+1. build;
+2. `tests/exploratory/nightly/run_all.sh`;
+3. known failure rilevanti;
+4. uno o due scenari extra vicini alle modifiche recenti;
+5. report e upload artifact.
+
+### Nightly user-session audit
+
+Procedura minima:
+
+1. scegliere una storia utente realistica;
+2. avviare Alfred e lasciarlo attivo per tutta la sessione;
+3. eseguire comandi concatenati, non solo test isolati;
+4. registrare comandi principali, tempi approssimativi e aspettative;
+5. controllare coerenza tra azioni, `raw.log`, `events.log` e `output.jsonl`;
+6. controllare stabilita' del processo Alfred: exit status, memoria, stderr e
+   shutdown;
+7. aprire issue solo per bug o divergenze con evidenza sufficiente.
+
+Esempi di storie utente:
+
+- lavorare su un mini progetto C;
+- simulare salvataggi di editor con file temporanei;
+- generare e pulire directory di build;
+- spostare asset tra directory;
+- eseguire script che creano molti file in piu' fasi.
+
+### Nightly fuzzy audit
+
+La modalita' fuzzy va introdotta con cautela. Non deve confrontare solo output
+letterali, ma invarianti generali:
+
+- Alfred non crasha;
+- JSONL resta valido riga per riga;
+- non compaiono record strutturalmente incompatibili;
+- non ci sono path impossibili;
+- non ci sono riferimenti semantici a path stale non dichiarati;
+- gli errori producono diagnostica, non silenzio.
+
+Per ora questa modalita' e' roadmap: prima servono generatori, seed
+riproducibili, limiti di durata e artifact leggibili.
+
 ## Bootstrap iniziale
 
 Prima di lanciare test:
@@ -120,6 +179,36 @@ tests/exploratory/nightly/recursive-fast-mkdir-p.sh
 Per scenari non ancora scriptati, creare una cartella sotto `/tmp` e annotare
 comandi, config, log attesi e log reali nella issue madre.
 
+## Registrare comandi e aspettative
+
+Negli user-session audit, registrare almeno i comandi principali lanciati da
+terminale e l'output Alfred atteso ad alto livello. La registrazione puo' essere
+manuale nel report o automatizzata in futuro da un wrapper.
+
+Esempio:
+
+```text
+Command trace:
+1. mkdir src
+2. touch src/main.c
+3. mv src/main.c src/app.c
+
+Expected Alfred story:
+- DIR_CREATED src
+- FILE_CREATED src/main.c
+- FILE_RENAMED old=src/main.c new=src/app.c
+```
+
+Questa traccia non e' una fonte di verita' completa. I comandi sono un livello
+alto: un singolo comando puo' aprire processi figli, creare file temporanei o
+fare operazioni non ovvie. Quando Alfred avra' backend process/syscall, la
+traccia comandi potra' essere correlata con PID, cwd, exit status e sessione.
+
+Per azioni fatte da interfaccia grafica, annotare manualmente l'azione nel
+report quando e' importante. Non assumere che una GUI sia osservabile tramite
+shell. La correlazione affidabile richiedera' backend OS piu' bassi o
+integrazioni dedicate.
+
 ## Analisi dei log
 
 Per ogni scenario fallito o sospetto, controllare in questo ordine:
@@ -141,6 +230,35 @@ Regola pratica:
 - `output.jsonl` mostra il contratto strutturato;
 - `stderr` puo' contenere sanitizer o errori di runtime.
 
+## Snapshot di automonitoraggio
+
+Quando uno scenario e' lungo, fuzzy o sospetto, raccogliere anche segnali sul
+processo Alfred stesso. Il runner dovrebbe salvare negli artifact:
+
+- exit status;
+- segnale di terminazione, se presente;
+- stderr e stdout;
+- ultimi record/log prima del problema;
+- memoria residente approssimativa, se disponibile;
+- CPU approssimativa, se disponibile;
+- numero file descriptor e watch, se disponibile;
+- branch, commit e configurazione usata.
+
+Se Alfred crasha, si blocca o usa risorse in modo anomalo, aprire una issue
+figlia solo se gli artifact permettono di spiegare:
+
+```text
+cosa stava facendo l'utente
+cosa ci si aspettava
+cosa ha fatto Alfred
+quale segnale indica crash, hang, leak o consumo anomalo
+```
+
+L'invio automatico di snapshot a un server non e' parte dello scope corrente.
+Per ora gli snapshot restano artifact locali o archivio Drive collegato alla
+issue madre. Prima di qualsiasi upload automatico servono consenso esplicito,
+data minimization e protezione dei segreti.
+
 ## Quando aprire una issue figlia
 
 Aprire una issue figlia solo se il problema e' riproducibile o ha evidenza
@@ -151,10 +269,12 @@ La issue figlia deve contenere:
 - link alla issue madre;
 - scenario minimo;
 - comando eseguito;
+- traccia comandi o azioni utente, se disponibile;
 - configurazione;
 - comportamento atteso;
 - comportamento reale;
 - estratti log;
+- eventuale snapshot di automonitoraggio;
 - motivo per cui e' bug o divergenza dal contratto;
 - link agli artifact completi, se disponibili.
 

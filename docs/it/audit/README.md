@@ -21,23 +21,155 @@ Se un audit trova un bug confermato, il bug deve diventare una issue separata
 su GitHub. Se lo scenario e' importante, deve poi essere trasformato in test
 ufficiale o golden test.
 
-## Differenza rispetto ai fuzzy test
+## Tre modalita' di audit notturno
 
-Gli audit notturni attuali non sono fuzzy test in senso stretto. Sono scenari
-esplorativi riproducibili: un umano sceglie operazioni realistiche, le codifica
-in script, raccoglie log e valuta se Alfred si comporta come documentato.
+Gli audit notturni non devono essere tutti uguali. Alfred ha bisogno di tre
+modalita' distinte, perche' misurano rischi diversi.
 
-Un fuzzy test vero genererebbe automaticamente molte sequenze casuali o
-semi-casuali e controllerebbe proprieta' generali come "non crashare",
-"produrre sempre JSONL valido" o "non generare record contraddittori".
+| Modalita' | Durata tipica | Obiettivo | Cosa scopre bene |
+| --- | --- | --- | --- |
+| Nightly smoke audit | minuti | Ripetere scenari noti e regressioni recenti | rotture evidenti, known failure, problemi di configurazione |
+| Nightly user-session audit | 1-3 ore | Simulare una sessione reale di lavoro utente | incoerenze tra azioni realistiche e log, problemi di stabilita' nel tempo |
+| Nightly fuzzy audit | variabile, anche molte ore | Generare sequenze casuali o semi-casuali | crash, invarianti violate, combinazioni non previste |
+
+La sessione del 2026-07-01 e' stata uno smoke audit: utile per controllare che
+Backend API v0 e Writer Runtime non avessero rotto gli scenari principali, ma
+non ancora abbastanza lunga per simulare davvero il lavoro di un utente.
+
+### Smoke audit
+
+Lo smoke audit e' breve e ripetibile. Serve quando:
+
+- e' stato appena fatto un refactor;
+- si vuole controllare una PR o un merge recente;
+- bisogna verificare se un known failure e' ancora riproducibile;
+- si vuole aggiornare velocemente la freschezza della matrice di maturita'.
+
+Esempio: lanciare `run_all.sh`, riprodurre un known failure, aggiungere uno o
+due scenari mirati di configurazione.
+
+### User-session audit
+
+Lo user-session audit e' quello piu' vicino all'idea di "usare Alfred come un
+utente vero". Non deve essere solo una sequenza di test isolati: deve costruire
+una piccola storia operativa.
+
+Esempi di sessione:
+
+- creare e modificare un mini progetto;
+- rinominare file e directory mentre Alfred osserva;
+- simulare un editor che salva file temporanei;
+- eseguire build o script che generano molti file;
+- pulire directory, spostare artefatti, cancellare output;
+- mantenere Alfred attivo abbastanza a lungo da osservare stabilita', memoria,
+  log e comportamento in shutdown.
+
+Questo tipo di audit e' piu' costoso, ma aiuta a capire se Alfred resta
+comprensibile e affidabile quando le operazioni sono concatenate come in una
+sessione reale.
+
+### Fuzzy audit
+
+Il fuzzy audit non parte da uno scenario umano leggibile. Genera molte sequenze
+casuali o semi-casuali e controlla proprieta' generali come:
+
+- Alfred non deve crashare;
+- `output.jsonl` deve restare JSONL valido;
+- un record non deve avere campi incompatibili tra loro;
+- una directory osservata non deve produrre path impossibili;
+- un evento semantico non deve riferirsi a un path stale dopo recovery.
 
 Questa distinzione e' importante:
 
-- gli audit esplorativi sono leggibili e spiegano bene il comportamento reale;
-- i fuzzy test sono piu' adatti a scoprire bug imprevisti su moltissime
-  combinazioni;
-- in futuro Alfred potra' avere entrambi, ma oggi gli script nightly sono
-  scenario-based tests.
+- gli smoke audit proteggono velocemente le regressioni;
+- gli user-session audit simulano meglio utenti reali;
+- i fuzzy audit cercano bug imprevisti su molte combinazioni.
+
+Per ora gli script in `tests/exploratory/nightly` sono soprattutto smoke e
+scenario-based tests. La modalita' user-session e la modalita' fuzzy vanno
+introdotte gradualmente, senza confonderle con la suite ufficiale.
+
+## Registrare comandi, aspettative e output
+
+Per i primi utenti reali puo' essere molto utile registrare la sequenza dei
+comandi lanciati da terminale insieme ai log di Alfred. Questo permetterebbe di
+scrivere report del tipo:
+
+```text
+Comandi osservati:
+1. mkdir src
+2. touch src/main.c
+3. mv src/main.c src/app.c
+
+Output atteso:
+- DIR_CREATED src
+- FILE_CREATED src/main.c
+- FILE_RENAMED old=src/main.c new=src/app.c
+
+Output reale:
+- ...
+```
+
+Vantaggi:
+
+- rende gli audit piu' riproducibili;
+- aiuta un utente a spiegare cosa ha fatto;
+- aiuta a confrontare azione umana, `events.log`, `raw.log` e `output.jsonl`;
+- puo' diventare la base di issue molto piu' precise.
+
+Limiti:
+
+- i comandi shell sono un livello alto: `make`, `npm install` o un editor
+  possono generare molte syscall ed eventi filesystem non ovvi;
+- le azioni fatte da GUI non passano necessariamente da una shell registrabile;
+- un comando non dice sempre quale processo figlio ha prodotto ogni evento;
+- senza backend process/syscall, la correlazione comando -> evento resta
+  approssimativa.
+
+Quindi il command recorder e' utile come strumento di supporto e riproduzione,
+non come fonte di verita' del modello Alfred. La fonte di verita' deve restare
+cio' che Alfred osserva dal sistema operativo. In futuro, quando esisteranno
+backend per processi, exec e syscall, il recorder potra' essere integrato con
+PID, processo padre, cwd, exit status e sessione agente.
+
+Per le operazioni grafiche, la soluzione non e' fingere che tutto passi dalla
+shell. Le opzioni future sono:
+
+- chiedere all'utente di annotare manualmente l'azione GUI nel report;
+- registrare finestre/app attive solo se disponibile e rispettando privacy;
+- usare backend OS piu' bassi, quando esisteranno, per correlare processo,
+  file, rete e syscall;
+- trattare le azioni GUI come contesto umano, non come evidenza primaria.
+
+## Automonitoraggio di Alfred
+
+Gli audit devono anche pensare al caso in cui Alfred stesso si comporti male:
+crash, uso memoria anomalo, CPU alta, blocchi, log corrotti o shutdown non
+pulito.
+
+Per questo e' utile prevedere, come roadmap operativa, un layer di
+automonitoraggio leggero. Non deve stare nel percorso caldo dell'evento e non
+deve trasformare Alfred in un agente pesante. Deve raccogliere solo dati
+diagnostici utili quando qualcosa va storto.
+
+Segnali utili:
+
+- exit status e segnale di terminazione;
+- ultimo timestamp osservato;
+- RSS/memoria residente;
+- CPU approssimativa;
+- numero file descriptor;
+- numero watch;
+- dimensione code e record droppati, quando disponibili;
+- ultimi N record o righe di log;
+- stderr, sanitizer output o core dump se configurato;
+- configurazione usata, branch e commit.
+
+In caso di malfunzionamento, Alfred o il runner di audit dovrebbe salvare uno
+snapshot locale negli artifact. L'invio automatico a un server va rimandato:
+prima servono consenso esplicito, data minimization e regole chiare su privacy
+e segreti. Per ora la scelta piu' sicura e' salvare localmente e caricare gli
+artifact solo quando l'audit lo richiede.
 
 La maturita' osservata dagli audit e' documentata in
 [maturity-matrix.md](maturity-matrix.md).

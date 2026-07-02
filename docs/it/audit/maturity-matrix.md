@@ -159,6 +159,16 @@ Misura quanto la funzionalita' e' stata stressata con casi limite. Esempi:
 - path root non valido;
 - perdita temporanea dello scope osservato.
 
+La robustezza cresce in modo diverso a seconda del tipo di audit:
+
+- uno smoke audit conferma che i casi noti non sono rotti;
+- uno user-session audit mostra se Alfred regge una sequenza lunga e realistica;
+- un fuzzy audit cerca combinazioni impreviste, crash e invarianti violate.
+
+Per questo una feature provata solo da smoke audit puo' restare
+`intermedia`, anche se passa piu' volte: manca ancora evidenza di durata,
+varieta' reale e stress casuale.
+
 #### Contratto log/output
 
 Misura se i tre livelli principali raccontano la stessa storia:
@@ -325,6 +335,17 @@ Misura quanto una funzionalita' e' facile da usare, debuggare e diagnosticare:
 
 Operability riguarda l'esperienza pratica: quando qualcosa va storto, un utente
 o contributore deve capire cosa e' successo.
+
+Negli audit lunghi, l'operabilita' migliora se il report contiene anche:
+
+- traccia dei comandi o delle azioni utente;
+- output Alfred atteso ad alto livello;
+- output reale osservato;
+- snapshot del processo Alfred in caso di crash, hang o uso risorse anomalo.
+
+Una traccia comandi aiuta la riproducibilita', ma non sostituisce i log di
+Alfred. E' contesto operativo. La fonte primaria resta cio' che Alfred osserva
+dal sistema operativo.
 
 ### Security Posture
 
@@ -524,6 +545,27 @@ ogni scenario:
 | Issue collegate | `#30` |
 | Artifact | link Drive o path locale |
 | Note | timing, ambiente, cosa e' stato osservato |
+
+Per gli user-session audit aggiungere anche:
+
+| Campo | Esempio |
+| --- | --- |
+| Modalita' audit | `nightly user-session audit` |
+| Durata | `2h 15m` |
+| Traccia comandi | `commands.log` o sezione nel report |
+| Output atteso | sequenza sintetica di eventi Alfred previsti |
+| Snapshot Alfred | `alfred-status.log`, `exit.status`, `stderr`, memoria/CPU se disponibili |
+| Azioni GUI | annotazione manuale o `not captured` |
+
+Per i fuzzy audit aggiungere:
+
+| Campo | Esempio |
+| --- | --- |
+| Seed | `seed=20260702-001` |
+| Generatore | `fs-random-sequence-v0` |
+| Numero operazioni | `10000` |
+| Invarianti controllate | `jsonl-valid`, `no-crash`, `no-impossible-path` |
+| Riduzione caso minimo | link allo scenario minimizzato, se disponibile |
 
 In futuro gli script in `tests/exploratory/nightly` potranno dichiarare
 metadata leggibili automaticamente, per esempio:
