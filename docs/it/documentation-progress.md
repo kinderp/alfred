@@ -126,6 +126,16 @@ milestone prevede data di fine orientativa, durata stimata, durata reale,
 dipendenze, motivazione della priorita', cosa viene sbloccato e link a issue,
 PR e documenti stabili.
 
+Aggiornamento successivo: dopo la chiusura di Backend API v0 come staged
+subset, la milestone operativa successiva e' `Inotify backend conforms to
+Backend API v0`. Il registro milestone punta alla GitHub Milestone #3, alla
+issue madre #71, alla prima issue figlia tecnica #72 e alla issue/PR di setup
+documentale #73/#74. Il primo passo tecnico non e' una riscrittura del main
+loop, ma un audit dei gap tra implementazione inotify corrente e contratto
+Backend API v0, con particolare attenzione a lifecycle, target management,
+capabilities, poll/emit boundary, ownership, diagnostica, test e
+documentazione.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
