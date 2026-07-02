@@ -219,32 +219,35 @@ Questo percorso serve per capire dove sta andando il progetto.
    performance suite e backend complessi.
 2. [Backend API v0](30-backend-api-v0.md)
    definisce lifecycle, target, capabilities e record emessi dai backend.
-3. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
+3. [Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md)
+   mappa cosa del backend inotify e' gia' conforme allo staged subset e cosa
+   resta da chiudere prima dei micro-step di codice.
+4. [Roadmap plugin backend](23-roadmap-plugin-backend.md)
    descrive l'idea di una API comune per backend inotify, fanotify, audit, eBPF,
    Windows e macOS.
-4. [Writer API v0](32-writer-api-v0.md)
+5. [Writer API v0](32-writer-api-v0.md)
    definisce writer, sink, ownership, queue, dispatcher e output strutturato.
-5. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
+6. [Roadmap Writer Runtime v0](33-writer-runtime-roadmap-v0.md)
    ordina i passi per spostare text, JSONL e futuri writer fuori dal percorso
    caldo tramite coda, dispatcher e benchmark.
-6. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
+7. [Roadmap AI agent guardrail](24-roadmap-ai-agent-guardrail.md)
    collega Alfred all'obiettivo piu' ampio: runtime security per agenti AI.
-7. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
+8. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
-8. [Modello licenze](18-modello-licenze.md)
+9. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
-9. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+10. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
-10. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+11. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
-11. [Visione Observation Runtime](38-visione-observation-runtime.md)
+12. [Visione Observation Runtime](38-visione-observation-runtime.md)
    descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
    come motore di eventi filesystem.
-12. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+13. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
    traduce quella visione in regole pratiche: provenance, log append-only,
    backend come sensori e percorso caldo corto.
 
@@ -320,7 +323,7 @@ queste domande:
 | File ready / close-write | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [14](14-scenari-test.md) |
 | Fork e pull request | [11](11-come-contribuire.md) |
 | GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr) |
-| Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
+| Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [40](40-audit-inotify-backend-api-v0.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
 | Log e copertura JSONL | [22](22-contratto-log.md#copertura-record-sink-e-output-jsonl), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
@@ -333,7 +336,7 @@ queste domande:
 | Posizionamento, competitor e integrazioni | [36](36-use-cases-posizionamento-integrazioni.md), [24](24-roadmap-ai-agent-guardrail.md), [32](32-writer-api-v0.md), [25](25-roadmap-unificata-dossier.md) |
 | Observation Runtime e visione cognitiva | [38](38-visione-observation-runtime.md), [39](39-principi-architetturali-futuri.md), [24](24-roadmap-ai-agent-guardrail.md) |
 | Qualita' prodotto | [35](35-qualita-prodotto-software.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [34](34-report-benchmark-prestazioni.md) |
-| Plugin backend | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Plugin backend | [30](30-backend-api-v0.md), [40](40-audit-inotify-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [25](25-roadmap-unificata-dossier.md) |
 | Plugin writer | [32](32-writer-api-v0.md#plugin-writer), [29](29-event-model-v0.md), [30](30-backend-api-v0.md) |
 | Prossimi debiti da discutere | [28](28-audit-documentazione-e-debiti.md), [25](25-roadmap-unificata-dossier.md) |
 | Regex nei test shell | [10](10-debugging-test-e-strumenti.md#leggere-le-regex-nei-test-shell) |

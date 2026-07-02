@@ -1603,6 +1603,11 @@ Questa chiusura e' sufficiente per dire che Backend API v0 esiste come primo
 input-port contract. Non e' sufficiente per dire che il runtime Alfred e'
 backend-agnostic end-to-end.
 
+L'audit specifico del backend Linux inotify vive in
+[Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md). Quel
+documento verifica quali parti del backend inotify sono gia' conformi allo
+staged subset e quali restano lavoro successivo.
+
 ### Cosa resta intenzionalmente fuori
 
 Restano fuori da Backend API v0:

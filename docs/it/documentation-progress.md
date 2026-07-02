@@ -56,6 +56,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `37-roadmap-milestone-progetto.md` |
 | Parziale | `38-visione-observation-runtime.md` |
 | Parziale | `39-principi-architetturali-futuri.md` |
+| Parziale | `40-audit-inotify-backend-api-v0.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/2026-07-01-audit-notturno.md` |
@@ -135,6 +136,13 @@ loop, ma un audit dei gap tra implementazione inotify corrente e contratto
 Backend API v0, con particolare attenzione a lifecycle, target management,
 capabilities, poll/emit boundary, ownership, diagnostica, test e
 documentazione.
+
+Aggiornamento successivo: `40-audit-inotify-backend-api-v0.md` raccoglie il
+primo audit della issue #72. Il documento distingue cosa e' gia' conforme per
+il subset staged, cosa resta ponte intenzionale e quali micro-step conviene
+aprire dopo. La decisione operativa e' che il raw bridge del main loop non e'
+una non-conformita' nascosta: resta deliberato finche' non viene deciso e
+misurato il modello di input del core.
 
 ## Aggiornamento visione Observation Runtime
 
