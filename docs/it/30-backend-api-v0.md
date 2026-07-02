@@ -1630,10 +1630,10 @@ runtime esistenti:
 | --- | --- |
 | Ops shape e validator | `tests/backend/test_backend_ops.c`, `tests/backend/test_backend_ops.sh` |
 | Inotify ops staged | `tests/backend/test_backend_inotify_ops.c`, `tests/backend/test_backend_inotify_ops.sh` |
-| Capabilities inotify | test backend focused collegati al descriptor capabilities |
-| Target management | test focused su `add_target`/`remove_target` nel backend inotify ops |
-| App lifecycle wiring | test backend diagnostics e runtime che passano da startup/shutdown applicativo |
-| Output/runtime compatibility | test Writer Runtime e JSONL gia' esistenti, per verificare che la separazione non rompa output osservabile |
+| Capabilities inotify | `tests/backend/test_backend_capabilities.c`, `tests/backend/test_backend_capabilities.sh`, piu' gli assert capability in `tests/backend/test_backend_inotify_ops.c` |
+| Target management | `tests/backend/test_backend_inotify_ops.c`, `tests/backend/test_backend_inotify_ops.sh`, con scenari `add_target`/`remove_target`, duplicati, subtree ricorsivi, rollback, failure e overlap |
+| App lifecycle wiring | test backend/runtime che avviano e fermano Alfred, per esempio `tests/backend/test_output_counter_runtime.sh`, `tests/backend/test_output_pipeline_runtime.sh` e i test diagnostici backend |
+| Output/runtime compatibility | test Writer Runtime e JSONL esistenti, per esempio `tests/backend/test_output_pipeline_runtime.sh`, `tests/backend/test_record_output_pipeline.sh`, `tests/backend/test_record_jsonl_writer.sh` |
 
 Questa copertura e' accettabile per il sottoinsieme staged. Ogni futura
 migrazione del main loop deve aggiungere test propri, perche' tocchera' il
