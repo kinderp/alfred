@@ -158,9 +158,11 @@ esplicitamente rimandata.
    La migrazione richiede prima una scelta sul core input model e benchmark sul
    percorso caldo.
 
-## Decisione proposta
+## Decisione adottata
 
-Per questa milestone, "inotify conforms to Backend API v0" dovrebbe significare:
+La issue [#76](https://github.com/kinderp/alfred/issues/76) fissa
+l'endpoint di questa milestone. Per questa milestone, "inotify conforms to
+Backend API v0" significa:
 
 ```text
 inotify e' il backend reference per il subset staged:
@@ -173,3 +175,8 @@ non una non-conformita' nascosta.
 
 Questa definizione e' pragmatica: chiude il contratto usabile oggi senza
 promettere un runtime multi-backend che non esiste ancora.
+
+Di conseguenza, ogni PR successiva della milestone deve essere valutata rispetto
+a questo endpoint. Se una modifica prova a migrare il main loop o a cambiare il
+tipo di input del core, non e' piu' un micro-step di conformita' inotify: e' una
+decisione architetturale separata, con test e benchmark propri.

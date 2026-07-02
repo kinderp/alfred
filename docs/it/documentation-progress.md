@@ -144,6 +144,13 @@ aprire dopo. La decisione operativa e' che il raw bridge del main loop non e'
 una non-conformita' nascosta: resta deliberato finche' non viene deciso e
 misurato il modello di input del core.
 
+Aggiornamento successivo: la issue #76 rende esplicito l'endpoint della
+milestone `Inotify backend conforms to Backend API v0`. La conformita' inotify
+vale per il sottoinsieme staged: ops statiche, capabilities conservative,
+lifecycle, target management, emit boundary, poll staged e test focused. Non
+include ancora runtime backend-agnostic end-to-end, migrazione del main loop o
+core semantico basato su `alfred_record_t`.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
