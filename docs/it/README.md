@@ -52,6 +52,7 @@ leggerlo e quando.
 | [37 - Registro milestone del progetto](37-roadmap-milestone-progetto.md) | Milestone in ordine cronologico, durata prevista/reale, dipendenze, priorita', GitHub tracking e documenti collegati. | Maintainer, contributori, agenti AI. | Quando si decide o si ricostruisce l'evoluzione del progetto. |
 | [38 - Visione Observation Runtime](38-visione-observation-runtime.md) | Visione lunga: Alfred come runtime di osservazioni, memoria, provenance, replay, feedback e sistemi intelligenti. | Maintainer e architettura. | Per orientare scelte future senza allargare lo scope corrente. |
 | [39 - Principi architetturali futuri](39-principi-architetturali-futuri.md) | Principi pratici: provenance, osservazioni/inferenze separate, backend come sensori, log append-only e percorso caldo corto. | Maintainer, contributori esperti, agenti AI. | Prima di introdurre concetti comuni o nuove API architetturali. |
+| [40 - Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md) | Gap list tra backend inotify corrente e Backend API v0 staged subset: lifecycle, target, capabilities, poll, ownership e test. | Chi lavora sulla milestone inotify Backend API v0. | Prima di aprire micro-step di codice sulla conformita' inotify. |
 | [Glossario](glossario.md) | Definizioni dei termini ricorrenti del progetto. | Tutti. | Quando un termine non e' chiaro. |
 
 ## Audit esplorativi
