@@ -1576,6 +1576,90 @@ capabilities incoerente, capability vuote e callback lifecycle non valorizzate.
 Non esercita il runtime inotify e non misura performance: blocca solo la forma
 minima della tabella operations prima del refactor successivo.
 
+## Chiusura Backend API v0 come staged subset
+
+Backend API v0 viene chiusa come sottoinsieme staged, non come migrazione totale
+del runtime. Questa e' una scelta esplicita: il milestone endpoint e' un confine
+backend comune reale, compilato, testato e documentato, ma non ancora il solo
+percorso del main event loop.
+
+### Cosa e' implementato
+
+Il sottoinsieme v0 implementato include:
+
+- `alfred_backend_ops_t` come tabella statica di operations;
+- validazione minima di nome backend, versione API, capabilities e callback;
+- descriptor capabilities statico per il backend inotify;
+- `alfred_backend_emit_t` con ownership chiara di callback e `userdata`;
+- lifecycle staged `init`, `start`, `stop`, `destroy`;
+- target management staged `add_target` e `remove_target` per filesystem path;
+- `poll()` comune non bloccante con `timeout_ms == 0`;
+- conversione `alfred_raw_event_t -> alfred_record_t` dentro la poll staged;
+- app lifecycle wiring attraverso `inotify_backend_ops()` per init, target,
+  start, stop e destroy;
+- raw poll bridge isolato in `app_poll_legacy_raw_backend_once()`.
+
+Questa chiusura e' sufficiente per dire che Backend API v0 esiste come primo
+input-port contract. Non e' sufficiente per dire che il runtime Alfred e'
+backend-agnostic end-to-end.
+
+### Cosa resta intenzionalmente fuori
+
+Restano fuori da Backend API v0:
+
+- migrazione del main loop da `app_poll_legacy_raw_backend_once()` a
+  `backend_ops->poll()`;
+- cambio del core semantico da `alfred_raw_event_t` a `alfred_record_t`;
+- ponte record -> raw/core non ancora giustificato da benchmark;
+- semantica generale di `timeout_ms` diversa da `0`;
+- error taxonomy completa recoverable/unrecoverable;
+- multi-backend runtime;
+- fanotify, audit, eBPF, Windows e macOS;
+- dynamic plugin ABI;
+- policy, Agent Guard ed enforcement.
+
+La decisione importante e' che questi punti non sono dimenticanze. Sono lavoro
+successivo con contratti propri.
+
+### Test che coprono il subset
+
+La copertura del subset implementato e' distribuita tra test focused e test
+runtime esistenti:
+
+| Area | Copertura |
+| --- | --- |
+| Ops shape e validator | `tests/backend/test_backend_ops.c`, `tests/backend/test_backend_ops.sh` |
+| Inotify ops staged | `tests/backend/test_backend_inotify_ops.c`, `tests/backend/test_backend_inotify_ops.sh` |
+| Capabilities inotify | test backend focused collegati al descriptor capabilities |
+| Target management | test focused su `add_target`/`remove_target` nel backend inotify ops |
+| App lifecycle wiring | test backend diagnostics e runtime che passano da startup/shutdown applicativo |
+| Output/runtime compatibility | test Writer Runtime e JSONL gia' esistenti, per verificare che la separazione non rompa output osservabile |
+
+Questa copertura e' accettabile per il sottoinsieme staged. Ogni futura
+migrazione del main loop deve aggiungere test propri, perche' tocchera' il
+confine tra backend, app e core semantico.
+
+### Benchmark debt
+
+Backend API v0 non introduce un nuovo hot path runtime: il main loop continua a
+usare il raw bridge isolato. Per questo non serve fingere una misura di costo
+che non esiste nel percorso attuale.
+
+Il benchmark debt resta pero' esplicito:
+
+```text
+qualsiasi futura migrazione del main loop a backend_ops->poll()
+deve confrontare il raw bridge corrente con il percorso scelto
+e misurare almeno costo per evento, copie, allocazioni, latenza,
+throughput e impatto su JSONL/output runtime.
+```
+
+La regola pratica e':
+
+```text
+nessuna astrazione entra nel percorso caldo senza numeri.
+```
+
 ## Decisioni rimandate
 
 Restano da decidere nella fase codice:

@@ -1308,3 +1308,11 @@ staged reale: lifecycle, target management, capabilities, emit boundary e poll
 comune sono implementati e testati, ma il raw bridge isolato resta il percorso
 runtime principale finche' non viene decisa e misurata la migrazione del core
 input model.
+
+Aggiornamento successivo: `30-backend-api-v0.md` contiene ora la sezione di
+chiusura del milestone endpoint. Backend API v0 e' documentata come staged
+subset: ops statiche, validator, capabilities, emit boundary, lifecycle,
+target management, poll non bloccante e app lifecycle wiring sono implementati
+e coperti per il sottoinsieme corrente. La migrazione del main loop, il core
+input model basato su record e il benchmark hot-path restano debiti espliciti,
+non ambiguita' nascoste.
