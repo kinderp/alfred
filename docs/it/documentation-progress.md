@@ -1299,3 +1299,12 @@ il helper chiama ancora `inotify_backend_poll()` con `handle_backend_event()` e
 piu' direttamente la chiamata al backend inotify-specifico. Questo rende piu'
 visibile l'unico punto legacy da sostituire quando il loop principale potra'
 consumare il percorso `backend_ops->poll()` basato su record normalizzati.
+
+Aggiornamento successivo: la issue GitHub `#67` ha chiarito che la migrazione
+del main loop a `backend_ops->poll()` non e' un cambio meccanico. Il percorso
+ops staged emette `alfred_record_t`, mentre il core semantico consuma ancora
+`alfred_raw_event_t`. Backend API v0 viene quindi trattata come sottoinsieme
+staged reale: lifecycle, target management, capabilities, emit boundary e poll
+comune sono implementati e testati, ma il raw bridge isolato resta il percorso
+runtime principale finche' non viene decisa e misurata la migrazione del core
+input model.

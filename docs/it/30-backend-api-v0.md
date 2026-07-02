@@ -796,6 +796,50 @@ non callback raw specifiche di inotify. Per questo `poll()` richiede che
 gia' stato chiamato. Senza emit, la poll comune non avrebbe un confine corretto
 verso cui consegnare i record normalizzati.
 
+#### Decisione sul loop principale
+
+La `poll()` della tabella ops non viene collegata subito al loop principale di
+`app_run()`. La decisione della issue
+[#67](https://github.com/kinderp/alfred/issues/67) e' di chiudere Backend API v0
+come sottoinsieme staged e rimandare la migrazione del main loop.
+
+Il motivo e' un mismatch reale di contratto, non una semplice chiamata mancante:
+
+```text
+percorso runtime corrente:
+inotify_backend_poll()
+-> handle_backend_event(alfred_raw_event_t)
+-> alfred_process(core, alfred_raw_event_t)
+
+percorso staged Backend API v0:
+backend_ops->poll()
+-> inotify_backend_poll()
+-> alfred_record_from_raw()
+-> emit(alfred_record_t)
+```
+
+Il core semantico corrente consuma ancora `alfred_raw_event_t`, mentre la
+`poll()` Backend API v0 emette `alfred_record_t`. Collegare ora
+`backend_ops->poll()` al loop principale significherebbe scegliere una di queste
+strade:
+
+- cambiare il core per consumare record;
+- introdurre un ponte record -> raw/core;
+- mantenere due percorsi paralleli.
+
+Tutte e tre hanno costo architetturale e prestazionale. Per v0 la scelta
+conservativa e' quindi:
+
+```text
+Backend API v0 definisce e testa il backend contract staged.
+Il main runtime loop resta sul raw bridge isolato.
+La migrazione del loop richiede una decisione separata e benchmark dedicati.
+```
+
+Qualsiasi futuro tentativo di sostituire `app_poll_legacy_raw_backend_once()`
+deve misurare il costo hot-path e documentare ownership, copie, allocazioni,
+latenza e compatibilita' dei record prodotti.
+
 ### `stop`
 
 Ferma l'osservazione senza necessariamente distruggere il runtime. Per inotify
@@ -1153,6 +1197,13 @@ che chiama direttamente `inotify_backend_poll()` per consegnare
 testata, ma collegarla al loop principale richiede un micro-step separato
 perche' quel path emette record normalizzati, mentre il loop corrente deve
 ancora alimentare il core semantico con raw event.
+
+La decisione corrente, tracciata nella issue
+[#67](https://github.com/kinderp/alfred/issues/67), e' di non forzare quel
+micro-step dentro Backend API v0. Backend API v0 resta quindi un sottoinsieme
+staged ma reale: lifecycle, target management, capabilities, emit boundary e
+poll comune sono implementati e testati; il main loop resta intenzionalmente
+sul raw bridge finche' non viene deciso il contratto di input del core.
 
 La callback `poll` della tabella ops e' reale per il sottoinsieme v0 gia'
 definito: richiede runtime inizializzato, `start()` gia' eseguito, emit
@@ -1535,7 +1586,10 @@ Restano da decidere nella fase codice:
 - layout concreto di `alfred_backend_target_t`;
 - semantica precisa di `timeout_ms` in `poll`;
 - elenco definitivo dei codici errore strutturati;
-- migrazione del raw path runtime verso record e sink comune;
+- migrazione del main runtime loop da `app_poll_legacy_raw_backend_once()` a un
+  percorso Backend API v0;
+- se il core semantico dovra' consumare `alfred_record_t` o se serve un ponte
+  temporaneo misurato tra record e `alfred_raw_event_t`;
 - come collegare piu' backend contemporanei;
 - come gestire backpressure se `emit()` fallisce;
 - quando introdurre `list_targets`;
