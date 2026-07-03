@@ -166,6 +166,14 @@ backend-owned, duplicati idempotenti, overlap ricorsivi rifiutati, rollback
 degli add falliti, autorita' delle root configurate, cleanup ricorsivo e
 propagazione degli errori diagnostici dopo la pulizia dello stato.
 
+Aggiornamento successivo: la issue #82 avvia la mappa capabilities inotify v0
+dentro `40-audit-inotify-backend-api-v0.md`. La sezione collega
+`inotify_backend_capabilities()`, `alfred_backend_capabilities_has()` e
+`alfred_backend_ops_is_minimally_valid()` ai flag dichiarati e a quelli
+intenzionalmente assenti. Il punto centrale e' che inotify dichiara solo
+capability osservazionali filesystem/recovery e non promette audit API-level,
+process context, network context, permission events o blocking/enforcement.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
