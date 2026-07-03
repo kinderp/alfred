@@ -378,6 +378,53 @@ richiederebbe un ponte record -> raw/core. Questa migrazione deve essere una
 decisione separata, misurata con benchmark e documentata come modifica del
 percorso caldo.
 
+### Mappa errori e diagnostica backend v0
+
+La issue [#86](https://github.com/kinderp/alfred/issues/86) chiarisce il
+rapporto tra errori tecnici, diagnostica osservabile e eventi semantici. Il
+principio e':
+
+```text
+un errore tecnico decide se una chiamata deve fermarsi;
+un record diagnostico spiega cosa Alfred ha osservato o deciso internamente;
+un evento semantico descrive un fatto filesystem stabile per l'applicazione.
+```
+
+Queste tre cose non vanno fuse. Per esempio `WATCH_STALE` puo' far fallire la
+poll se il record strutturato non viene emesso in modalita' fail-closed, ma il
+suo significato resta "il mapping wd -> path non e' piu' affidabile", non
+`DIR_MOVED` o `DIR_DELETED`.
+
+| Famiglia | Funzioni principali | Osservabilita' corrente | Errore restituito | Significato del contratto |
+| --- | --- | --- | --- | --- |
+| Watch lifecycle base | `watch_manager_log_simple_watch_diagnostic()`, `backend_log_watch_stale()`, `backend_log_stale_event_dropped()` | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` passano da record diagnostici e text sink; quando `emit_record` e' configurato vengono offerti anche all'output strutturato. | Il fallimento di `emit_record` viene propagato come errore backend, dopo aver scritto o tentato il log compatibile. | Diagnostica dello stato osservativo di Alfred; non sono eventi filesystem semantici. |
+| Resync locale | `backend_log_resync_failure()`, `backend_log_resync_record()`, `backend_resync_watch()` | `WATCH_RESYNC_*` descrive inizio, scan, classificazione, reinstall, rollback, fallimento e fine del tentativo locale. `WATCH_RESYNC_SCAN_FAILED` conserva il canale `errors.log`; gli altri restano `events.log`. | Se la diagnostica strutturata non puo' essere emessa quando richiesta, il resync ritorna errore e la poll puo' fermarsi. | La recovery resta conservativa: senza evidenza completa Alfred non deve tornare a fidarsi del path. |
+| Lost-scope recovery | `backend_enqueue_lost_scope()`, `backend_lost_scope_recover_*()`, `backend_log_lost_scope_record()` | `WATCH_LOST_*` documenta queue, scan, found/not-found, prefix update, coverage, reinstall, retry, gave-up e recovery end. | `BACKEND_LOST_SCOPE_RECOVERY_OUTPUT_FAILED` separa il fallimento di output dal risultato filesystem della recovery. | Il backend distingue "non ho trovato l'identita'", "la recovery tecnica e' fallita" e "non riesco a registrare il diagnostico strutturato". |
+| Overflow | `backend_build_overflow_raw()` -> `alfred_record_from_raw()` -> core | `IN_Q_OVERFLOW` diventa `ALFRED_RAW_OVERFLOW` con path vuoto; il core puo' produrre `OVERFLOW`. | La costruzione raw e' trattata come fatto dispatchabile; errori successivi seguono il normale percorso callback/poll. | Overflow e' stream-integrity evidence: segnala che lo stream puo' essere incompleto, non una mutazione di un singolo path. |
+| Poll/runtime I/O | `backend_poll()` | `EAGAIN`/`EWOULDBLOCK` sono idle poll riuscite; `EINTR` e' ignorato come poll riuscita; EOF/read error vanno in `errors.log`. | Errori di read, EOF, recovery o callback vengono propagati come `ERR_IO` o errore callback. | Errore tecnico di runtime: non e' ancora un record `diagnostic/backend` uniforme. |
+| Output callback | `ctx->emit_record(...)`, `app_emit_output_record()` | Le diagnostiche gia' sink-capable raggiungono output strutturato quando `output_enabled=true`. | Il backend propaga il fallimento della callback per non perdere silenziosamente il ledger strutturato. | Fail-closed sul ledger: se Alfred promette output strutturato, non deve continuare come se il diagnostico fosse stato registrato. |
+
+La regola operativa per questa milestone e':
+
+```text
+diagnostica osservativa = record diagnostico quando il modello lo supporta;
+errore tecnico = codice di ritorno che decide se continuare;
+semantica filesystem = solo core semantic event.
+```
+
+Questo evita due bug futuri:
+
+- trasformare diagnostica backend in falsi eventi utente;
+- nascondere errori di output strutturato dietro log testuali riusciti.
+
+Non tutto e' ancora un record uniforme. Errori generici di configurazione,
+inizializzazione, allocazione o I/O restano soprattutto `errors.log` e codici
+`ERR_*`. Prima di serializzarli in JSONL o in un backend-agnostic diagnostic
+stream serve un contratto dedicato, per esempio `diagnostic/backend` o
+`diagnostic/lifecycle`, con campi stabili per fase, codice, errno, recoverable e
+azione consigliata. Per v0 questo resta debito dichiarato, non una
+non-conformita' nascosta.
+
 ## Test gia' collegati
 
 | Test | Cosa copre |
@@ -385,6 +432,9 @@ percorso caldo.
 | `tests/backend/test_backend_ops.c` | Forma minima di `alfred_backend_ops_t`, validator e ownership dell'emit envelope. |
 | `tests/backend/test_backend_capabilities.c` | Flag capabilities inotify e assenza di capability non supportate. |
 | `tests/backend/test_backend_inotify_ops.c` | Descriptor inotify, init/destroy, start/stop, target validation, duplicate target, rollback, recursive overlaps, remove target, poll staged e record raw emesso. |
+| `tests/backend/test_record_diagnostic_builder.c` | Builder diagnostici `WATCH_*`, payload watch/recovery e distinzione da eventi semantici. |
+| `tests/backend/test_lost_scope_*` | Famiglie `WATCH_LOST_*`, routing output, retry/completion e recovery conservativa. |
+| `tests/backend/test_overflow_raw_bridge.c` | Bridging `IN_Q_OVERFLOW` -> `ALFRED_RAW_OVERFLOW` -> record raw overflow. |
 | `tests/backend/test_output_counter_runtime.sh` | Runtime applicativo con output counter e compatibilita' del percorso app/output. |
 | `tests/backend/test_output_pipeline_runtime.sh` | Runtime applicativo con output pipeline e JSONL/counter boundary. |
 

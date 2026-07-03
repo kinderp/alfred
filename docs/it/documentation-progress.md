@@ -185,6 +185,15 @@ runtime principale ancora raw-oriented
 raw `NULL` come no-op, propagazione errori e motivo per cui la migrazione del
 main loop resta una decisione separata da misurare.
 
+Aggiornamento successivo: la issue #86 avvia la mappa errori e diagnostica
+backend inotify v0 dentro `40-audit-inotify-backend-api-v0.md`. La sezione
+separa errore tecnico, record diagnostico osservabile ed evento semantico:
+watch lifecycle, resync, lost-scope, overflow, poll/runtime I/O e callback
+output hanno responsabilita' diverse. Il punto centrale e' che Alfred deve
+rendere visibile la diagnostica gia' modellata come record, propagare gli errori
+di output strutturato in modalita' fail-closed e non trasformare diagnostica
+backend in falsi eventi filesystem semantici.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
