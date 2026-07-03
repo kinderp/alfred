@@ -1,9 +1,12 @@
 # Audit inotify vs Backend API v0
 
-Questo documento e' l'audit iniziale della issue GitHub
-[#72](https://github.com/kinderp/alfred/issues/72). Serve a capire quanto il
-backend Linux `inotify` e' gia' conforme a Backend API v0 e quali micro-step
-restano prima di poterlo trattare come backend di riferimento.
+Questo documento nasce come audit iniziale della issue GitHub
+[#72](https://github.com/kinderp/alfred/issues/72) ed e' stato poi aggiornato
+durante i micro-step della milestone
+[`Inotify backend conforms to Backend API v0`](https://github.com/kinderp/alfred/issues/71).
+Serve a capire perche' il backend Linux `inotify` puo' ora essere trattato come
+backend di riferimento per il sottoinsieme staged di Backend API v0 e quali
+debiti restano deliberatamente fuori da questo endpoint.
 
 L'audit non cambia il runtime. Il suo scopo e' evitare refactor guidati
 dall'intuizione: prima si mappano confini, test, gap e debiti; poi si aprono
@@ -11,8 +14,8 @@ issue/PR piccole.
 
 ## Risultato sintetico
 
-`inotify` e' gia' molto vicino al ruolo di reference backend per il sottoinsieme
-staged di Backend API v0:
+`inotify` e' ora il reference backend per il sottoinsieme staged di Backend API
+v0:
 
 - esiste una tabella statica `alfred_backend_ops_t`;
 - esiste un descriptor capabilities conservativo;
@@ -21,9 +24,9 @@ staged di Backend API v0:
 - `poll()` e' implementata nella tabella ops e produce record normalizzati;
 - il main loop mantiene intenzionalmente il raw bridge legacy per il core;
 - i test focused coprono descriptor, capabilities, lifecycle, target
-  management e poll staged.
+  management, diagnostica, overflow, lost-scope recovery e poll staged.
 
-Il punto non chiuso e' il runtime end-to-end:
+Il punto deliberatamente non chiuso e' il runtime end-to-end:
 
 ```text
 app_run()
@@ -46,7 +49,8 @@ backend_ops->poll()
 
 Quindi il prossimo lavoro non deve essere "sostituire una chiamata con
 un'altra". Deve decidere se il core dovra' consumare record, oppure se serve un
-ponte misurato record -> raw/core.
+ponte misurato record -> raw/core. Questa decisione esce dalla conformita'
+inotify staged e richiede benchmark sul percorso caldo.
 
 ## Tabella di conformita'
 
@@ -492,22 +496,41 @@ Quando uno di questi debiti diventera' codice, il relativo micro-step dovra'
 aggiungere test nuovi. Fino ad allora la suite focused deve proteggere il
 contratto realmente implementato, non simulare un runtime futuro.
 
-## Micro-step consigliati
+## Micro-step completati
 
-1. **Documentare questo audit**.
-   Deve chiudere #72 come mappa iniziale, senza cambiare runtime.
+La milestone ha chiuso questi micro-step:
 
-2. **Aggiornare la documentazione Backend API v0 con un link all'audit**.
-   Il lettore deve arrivare facilmente dal contratto generale alla conformita'
-   specifica inotify.
+| Micro-step | Issue / PR | Risultato |
+| --- | --- | --- |
+| Audit implementazione corrente | [#72](https://github.com/kinderp/alfred/issues/72), [PR #75](https://github.com/kinderp/alfred/pull/75) | Prima mappa dei gap tra inotify e Backend API v0 staged subset. |
+| Endpoint di conformita' | [#76](https://github.com/kinderp/alfred/issues/76), [PR #77](https://github.com/kinderp/alfred/pull/77) | Definito cosa significa "conforme" senza promettere il main loop backend-agnostic. |
+| Lifecycle | [#78](https://github.com/kinderp/alfred/issues/78), [PR #79](https://github.com/kinderp/alfred/pull/79) | Mappati `init`, `start`, `add_target`, `remove_target`, `poll`, `stop`, `destroy`. |
+| Target management | [#80](https://github.com/kinderp/alfred/issues/80), [PR #81](https://github.com/kinderp/alfred/pull/81) | Documentato il target filesystem-path v0, inclusi ownership, duplicati, overlap e rollback. |
+| Capabilities | [#82](https://github.com/kinderp/alfred/issues/82), [PR #83](https://github.com/kinderp/alfred/pull/83) | Dichiarate capability conservative e assenza di process/network/permission/blocking. |
+| Poll/emit boundary | [#84](https://github.com/kinderp/alfred/issues/84), [PR #85](https://github.com/kinderp/alfred/pull/85) | Separato runtime raw bridge corrente dalla staged poll Backend API v0. |
+| Errori e diagnostica | [#86](https://github.com/kinderp/alfred/issues/86), [PR #87](https://github.com/kinderp/alfred/pull/87) | Separati errore tecnico, record diagnostico ed evento semantico. |
+| Focused tests | [#88](https://github.com/kinderp/alfred/issues/88), [PR #89](https://github.com/kinderp/alfred/pull/89) | Collegata ogni parte del contratto ai test focused esistenti; nessun gap test uncovered trovato. |
 
-3. **Aprire micro-step solo per gap concreti**.
-   Esempi: chiarire error taxonomy, migliorare test diagnostici, o isolare
-   ulteriormente app composition root se utile.
+## Debiti rimandati
 
-4. **Non migrare il main loop senza decisione separata**.
-   La migrazione richiede prima una scelta sul core input model e benchmark sul
-   percorso caldo.
+Questi debiti restano fuori dal subset staged e devono avere issue/PR proprie
+quando diventeranno lavoro operativo:
+
+1. **Migrazione main loop**.
+   `app_run()` usa ancora il raw bridge perche' il core consuma
+   `alfred_raw_event_t`. Migrare a `backend_ops->poll()` richiede una decisione
+   sul core input model e benchmark sul percorso caldo.
+2. **Poll bloccante o con deadline**.
+   `timeout_ms != 0` e' rifiutato: Alfred non ha ancora un contratto comune per
+   sleep, deadline, integrazione event loop o poll bloccanti.
+3. **Diagnostica backend generica**.
+   Errori init/config/I/O/lifecycle non sono ancora tutti record
+   backend-agnostic; molti restano `errors.log` e codici `ERR_*`.
+4. **Registry multi-backend**.
+   Inotify e' il reference backend statico, non esiste ancora selezione runtime
+   tra piu' backend.
+5. **Backend futuri**.
+   Fanotify, audit, eBPF, Windows e macOS non rientrano in questa milestone.
 
 ## Decisione adottata
 

@@ -166,6 +166,45 @@ ponte misurato tra record e raw/core.
 L'audit di riferimento e'
 [Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md).
 
+## Stato di chiusura del sottoinsieme staged
+
+La milestone `Inotify backend conforms to Backend API v0` e' chiusa come
+sottoinsieme staged. Questo non significa che Alfred abbia gia' un runtime
+multi-backend end-to-end; significa che il backend inotify puo' essere usato
+come implementazione di riferimento per il contratto Backend API v0 oggi
+realmente implementato.
+
+Risultato consolidato:
+
+- `inotify_backend_ops()` espone una tabella statica valida e verificata;
+- `inotify_backend_capabilities()` dichiara capability conservative e non
+  promette process context, network context, permission events o blocking;
+- `app.c` usa le ops per init, target startup, start, stop e destroy;
+- `add_target()` e `remove_target()` hanno un contratto filesystem-path v0
+  documentato;
+- `backend_ops->poll(timeout_ms = 0)` esiste come poll staged e puo' emettere
+  record raw normalizzati;
+- ownership di target path, emit callback, `userdata` e record borrowed e'
+  documentata;
+- diagnostica, errori, overflow e lost-scope recovery sono mappati rispetto al
+  subset staged;
+- i focused test esistenti sono stati collegati esplicitamente alle parti di
+  contratto che proteggono.
+
+I debiti rimandati restano deliberati:
+
+- migrazione del main loop a `backend_ops->poll()`;
+- scelta del modello di input del core tra `alfred_raw_event_t`,
+  `alfred_record_t` o un ponte misurato;
+- semantica comune per `timeout_ms != 0`, deadline o poll bloccanti;
+- diagnostica backend-agnostic uniforme per init/config/I/O/lifecycle generici;
+- registry multi-backend e selezione backend;
+- backend futuri come fanotify, audit, eBPF, Windows o macOS.
+
+Questi debiti non sono non-conformita' nascoste della milestone. Sono il
+perimetro esplicitamente rimandato per evitare di cambiare il percorso caldo
+senza numeri e senza una decisione sul core input model.
+
 ## Deliverable gia' consolidati
 
 Questa milestone eredita lavoro gia' chiuso da milestone precedenti:
