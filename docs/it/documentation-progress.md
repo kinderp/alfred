@@ -203,6 +203,15 @@ decisione e' che nuovi test vanno aggiunti quando cambia un contratto o si
 chiude un gap reale; per questo micro-step la copertura viene resa esplicita
 in una matrice invece di duplicare assert gia' protetti.
 
+Aggiornamento successivo: la issue #90 chiude la documentazione della milestone
+`Inotify backend conforms to Backend API v0`. `31-milestone-inotify-reference-backend.md`
+ora distingue il risultato chiuso dal perimetro rimandato: inotify e' reference
+backend per il subset staged, ma non esiste ancora runtime multi-backend
+end-to-end. `37-roadmap-milestone-progetto.md` registra la milestone come done
+e `40-audit-inotify-backend-api-v0.md` elenca micro-step completati e debiti
+rimandati: main-loop migration, `timeout_ms != 0`, diagnostica backend
+generica, registry multi-backend e backend futuri.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
