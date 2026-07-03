@@ -1606,7 +1606,11 @@ backend-agnostic end-to-end.
 L'audit specifico del backend Linux inotify vive in
 [Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md). Quel
 documento verifica quali parti del backend inotify sono gia' conformi allo
-staged subset e quali restano lavoro successivo.
+staged subset e quali restano lavoro successivo. In particolare, la sezione
+`Mappa dettagliata del lifecycle v0` collega ogni callback `init`, `start`,
+`add_target`, `remove_target`, `poll`, `stop` e `destroy` alle funzioni reali,
+alle risorse possedute o rilasciate, alle precondizioni e ai test che
+proteggono il contratto.
 
 ### Cosa resta intenzionalmente fuori
 
