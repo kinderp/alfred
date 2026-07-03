@@ -100,6 +100,40 @@ Questa parte e' gia' collegata alla tabella ops. `app.c` resta composition root:
 sceglie il backend statico `inotify_backend_ops()` e costruisce la configurazione
 concreta.
 
+### Mappa dettagliata del lifecycle v0
+
+La issue [#78](https://github.com/kinderp/alfred/issues/78) rende esplicito il
+contratto lifecycle del backend inotify staged. Questa mappa serve a evitare un
+equivoco importante: avere le callback `init`, `start`, `stop` e `destroy` nella
+tabella comune non significa ancora che il runtime principale sia
+backend-agnostic end-to-end. Significa che il backend inotify puo' gia' essere
+inizializzato, avviato logicamente, fermato logicamente e distrutto attraverso
+la forma comune `alfred_backend_ops_t`.
+
+| Callback | Funzioni coinvolte | Responsabilita' corrente | Risorse possedute o rilasciate | Precondizioni e comportamento di errore | Test principali |
+| --- | --- | --- | --- | --- | --- |
+| `init` | `app_init()` -> `backend_ops->init()` -> `inotify_backend_ops_init()` -> `inotify_backend_init()` | Costruisce il vecchio `inotify_backend_context_t`, copia i puntatori borrowed a config/logger, copia function pointer e `userdata` dell'emit boundary, inizializza il runtime inotify esistente. | Apre e inizializza le risorse backend tramite `inotify_backend_init()`: fd inotify, watcher table, code e registri backend. Non osserva ancora target startup finche' `add_target()` non viene chiamata. | Richiede runtime azzerato/non inizializzato, config concreta valida, logger valido. Rifiuta un secondo `init()` su runtime gia' inizializzato con `ERR_INVALID_ARG`. Se l'inizializzazione fallisce, ripulisce i puntatori del context. | `test_inotify_ops_rejects_invalid_init_arguments`, `test_inotify_ops_init_destroy_lifecycle` |
+| `add_target` | `app_init()` -> `backend_ops->add_target()` -> `inotify_backend_ops_add_target()` -> `inotify_backend_add_startup_watch()` | Registra una root filesystem-path e installa i watch secondo la configurazione inotify. In v0 e' target management, non policy. | Aggiunge stato in `configured_roots` e nella watcher table. In caso di errore durante l'installazione deve fare rollback del target parziale. | Richiede runtime inizializzato e target filesystem path non vuoto, flags `NONE`, `backend_options == NULL`. Per v0 non richiede `started == 1`: `app_init()` aggiunge target prima di `start()`. | `test_inotify_ops_rejects_invalid_add_target_arguments` e gli scenari target in `test_backend_inotify_ops.c` |
+| `start` | `app_init()` -> `backend_ops->start()` -> `inotify_backend_ops_start()` | Porta il runtime ops nello stato operativo logico impostando `started = 1`. | Non apre fd, non installa watch, non avvia thread, non legge eventi. Le risorse kernel sono gia' state create da `init()` e verranno rilasciate da `destroy()`. | Richiede runtime inizializzato e context completo. Prima di `init()` o con context incoerente restituisce `ERR_INVALID_ARG`. Chiamarlo piu' volte dopo `init()` e' idempotente. | `test_inotify_ops_rejects_invalid_start_stop_arguments`, `test_inotify_ops_init_destroy_lifecycle` |
+| `poll` | `backend_ops->poll()` -> `inotify_backend_ops_poll()` -> `inotify_backend_poll()` -> `inotify_backend_ops_emit_raw_record()` -> `alfred_record_from_raw()` -> `emit(alfred_record_t)` | Espone una poll comune staged che legge eventi disponibili e li converte in record `normalized_raw`. | Non possiede risorse nuove. Usa l'fd non bloccante gia' inizializzato e l'emit callback copiato da `init()`. | Richiede runtime inizializzato, `started == 1`, context completo, emit callback valida e `timeout_ms == 0`. Rifiuta timeout diversi per non promettere blocking semantics non implementate. Non e' ancora il main loop di `app_run()`. | `test_inotify_ops_rejects_invalid_poll_arguments`, `test_inotify_ops_init_destroy_lifecycle` |
+| `stop` | `app_shutdown()` -> `backend_ops->stop()` -> `inotify_backend_ops_stop()` | Ferma logicamente il backend portando `started = 0`. | Non chiude fd, non rimuove watch, non fa flush di risorse kernel. Il cleanup resta responsabilita' di `destroy()`. | Richiede runtime inizializzato e context completo. Dopo `init()` restituisce `ERR_OK` anche se `start()` non era stato chiamato. Chiamarlo piu' volte e' idempotente. | `test_inotify_ops_rejects_invalid_start_stop_arguments`, `test_inotify_ops_init_destroy_lifecycle` |
+| `destroy` | `app_shutdown()` -> `backend_ops->destroy()` -> `inotify_backend_ops_destroy()` -> `inotify_backend_shutdown()` | E' il confine di cleanup reale. Rilascia il runtime inotify esistente e riporta l'ops runtime in stato riutilizzabile dopo un nuovo `init()`. | Chiude fd, rilascia watcher table, configured roots e lost-scope state tramite `inotify_backend_shutdown()`. Azzera context, `initialized` e `started`. | E' safe su `NULL` e su runtime non inizializzato. Deve funzionare anche se il chiamante distrugge un backend ancora `started`, per gestire shutdown o failure path. | `test_inotify_ops_init_destroy_lifecycle` |
+
+La scelta piu' importante e' che `start()` e `stop()` sono marker di lifecycle,
+non proprietari di risorse. Questo e' accettabile nello staged subset perche'
+inotify non ha ancora thread, subscription remote o programmi kernel caricati da
+`start()`. Un backend futuro potrebbe invece dover rendere `start()` e `stop()`
+molto piu' forti: per esempio avviare un worker, agganciare tracepoint,
+sottoscrivere un provider o fare flush ordinato.
+
+Il vincolo per i prossimi micro-step e' quindi:
+
+```text
+non assumere che start/stop siano no-op universali;
+documentare e testare sempre quali risorse appartengono a init/destroy
+e quali appartengono a start/stop per ogni backend.
+```
+
 ### Poll runtime corrente
 
 ```text
