@@ -57,6 +57,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `38-visione-observation-runtime.md` |
 | Parziale | `39-principi-architetturali-futuri.md` |
 | Parziale | `40-audit-inotify-backend-api-v0.md` |
+| Parziale | `41-tracepoint-lab-roadmap-mvp.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/2026-07-01-audit-notturno.md` |
@@ -211,6 +212,13 @@ end-to-end. `37-roadmap-milestone-progetto.md` registra la milestone come done
 e `40-audit-inotify-backend-api-v0.md` elenca micro-step completati e debiti
 rimandati: main-loop migration, `timeout_ms != 0`, diagnostica backend
 generica, registry multi-backend e backend futuri.
+
+Aggiornamento successivo: la milestone operativa passa a `Tracepoint and Lab
+MVP`, con GitHub Milestone #4 e issue madre #92. Il primo micro-step #93 e'
+documentale: creare una roadmap dedicata, aggiornare il registro milestone e
+chiarire che il Lab MVP non e' ancora una dashboard o un tracing runtime
+pesante. `41-tracepoint-lab-roadmap-mvp.md` definisce tracepoint logici,
+scenari MVP, formato scenario Lab v0, non-obiettivi e criteri di chiusura.
 
 ## Aggiornamento visione Observation Runtime
 
