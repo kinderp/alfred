@@ -272,6 +272,24 @@ app_run()
 Questo e' il percorso runtime principale. E' ancora raw-oriented perche' il core
 semantico deve ricevere `alfred_raw_event_t`.
 
+La funzione `app_poll_legacy_raw_backend_once()` esiste proprio per rendere
+visibile questo ponte temporaneo. Non e' un backend generico: costruisce e usa
+un `inotify_backend_context_t` concreto, poi consegna gli eventi raw alla
+callback applicativa `handle_backend_event()`.
+
+`handle_backend_event()` fa due cose distinte:
+
+1. quando il raw event e' sink-capable, lo adatta con
+   `alfred_record_from_raw()` per alimentare il raw log compatibile e l'output
+   strutturato;
+2. passa comunque il raw event originale al core con `alfred_process()`, perche'
+   il core semantico corrente lavora ancora su `alfred_raw_event_t`.
+
+Questa duplicita' non deve essere confusa con il contratto finale. E' il ponte
+scelto per mantenere stabile il core mentre Backend API v0 viene resa reale a
+pezzi piccoli. Il punto architetturale e' che la trasformazione raw -> record
+nel main loop oggi serve all'output, non ha ancora sostituito l'input del core.
+
 ### Poll staged Backend API v0
 
 ```text
@@ -285,6 +303,80 @@ backend_ops->poll(runtime, 0)
 
 Questo percorso e' reale e testato, ma non e' ancora il main loop. Serve a
 dimostrare che il backend puo' emettere record tramite la forma comune.
+
+La issue [#84](https://github.com/kinderp/alfred/issues/84) rende esplicito il
+contratto di questo confine. La staged poll comune entra da
+`alfred_backend_ops_t.poll`, quindi il chiamante non vede piu' callback raw
+specifiche di inotify. Il backend ops adapter usa ancora la poll inotify
+esistente, ma la incapsula dietro il confine comune:
+
+| Step | Funzioni coinvolte | Dato passato | Responsabilita' |
+| --- | --- | --- | --- |
+| Entrata API | `backend_ops->poll()` -> `inotify_backend_ops_poll()` | `alfred_backend_t *`, `timeout_ms` | Validare runtime, stato `started`, emit callback e semantica `timeout_ms == 0`. |
+| Lettura backend | `inotify_backend_poll()` -> `backend_poll()` | `inotify_backend_context_t`, callback raw interna | Leggere fd inotify non bloccante, costruire raw event quando l'evento e' dispatchabile e gestire diagnostica/watch repair. |
+| Adattamento raw | `inotify_backend_ops_emit_raw_record()` -> `alfred_record_from_raw()` | `alfred_raw_event_t` borrowed -> `alfred_record_t` stack-local | Tradurre il fatto raw in un record `NORMALIZED_RAW` del modello comune. |
+| Emit comune | `runtime->context.emit_record(&record, userdata)` | `alfred_record_t` borrowed | Consegnare il record al chiamante Backend API v0 senza sapere se a valle ci sara' queue, sink, test capture o writer. |
+
+Precondizioni v0:
+
+- il runtime ops deve essere stato inizializzato da `init()`;
+- `start()` deve essere gia' stato chiamato e `started` deve essere `1`;
+- il context interno deve avere runtime/config/logger validi;
+- `init()` deve aver ricevuto una callback `alfred_backend_emit_t.emit` valida;
+- `timeout_ms` deve essere `0`.
+
+`timeout_ms == 0` significa solo: prova a consumare quello che e' gia'
+disponibile sull'fd inotify non bloccante. Valori diversi sono rifiutati con
+`ERR_INVALID_ARG` perche' Alfred non ha ancora definito una semantica comune per
+poll bloccanti, deadline, sleep o integrazione con un event loop esterno.
+
+Ownership:
+
+- `alfred_backend_emit_t` e' caller-owned; `init()` copia solo function pointer
+  e `userdata`, non conserva il puntatore alla envelope;
+- `userdata` resta caller-owned e deve restare valido finche' il backend puo'
+  emettere record, normalmente fino a `stop()`/`destroy()`;
+- il raw event passato da `inotify_backend_poll()` alla callback e' borrowed;
+- il record creato da `inotify_backend_ops_emit_raw_record()` e' stack-local e
+  borrowed durante `emit()`;
+- se il consumer vuole conservare il record oltre la callback, deve clonarlo o
+  accodarlo con ownership propria, come fa la futura coda bounded.
+
+Comportamento su eventi non dispatchabili:
+
+`backend_poll()` puo' chiamare la callback raw con `NULL` quando l'evento letto
+serve solo a manutenzione backend, diagnostica o watch repair e non deve
+raggiungere il core come raw Alfred event. La staged adapter
+`inotify_backend_ops_emit_raw_record()` tratta `raw == NULL` come no-op
+riuscito e non emette nessun record. Questo evita di trasformare segnali
+backend-interni in record raw falsi.
+
+Comportamento di errore:
+
+- runtime non inizializzato, non started, context incompleto, emit mancante o
+  timeout diverso da zero producono `ERR_INVALID_ARG`;
+- se `alfred_record_from_raw()` rifiuta la maschera raw, l'adapter restituisce
+  `ERR_INVALID_ARG`;
+- se la callback `emit_record()` fallisce, l'errore viene propagato alla poll;
+- se la poll inotify incontra errori di I/O, diagnostica o recovery, propaga il
+  relativo errore gia' usato dal backend esistente.
+
+Perche' il main loop non usa ancora questa poll:
+
+```text
+runtime attuale:
+alfred_raw_event_t -> alfred_process(core, raw) -> alfred_event_t
+
+staged Backend API v0:
+alfred_raw_event_t -> alfred_record_from_raw() -> alfred_record_t -> emit()
+```
+
+Il primo percorso alimenta il core semantico. Il secondo alimenta il confine
+comune di output/record. Sostituire ora `app_poll_legacy_raw_backend_once()` con
+`backend_ops->poll()` cambierebbe il contratto di input del core o
+richiederebbe un ponte record -> raw/core. Questa migrazione deve essere una
+decisione separata, misurata con benchmark e documentata come modifica del
+percorso caldo.
 
 ## Test gia' collegati
 
