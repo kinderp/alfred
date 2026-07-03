@@ -194,6 +194,15 @@ rendere visibile la diagnostica gia' modellata come record, propagare gli errori
 di output strutturato in modalita' fail-closed e non trasformare diagnostica
 backend in falsi eventi filesystem semantici.
 
+Aggiornamento successivo: la issue #88 audita la copertura focused del subset
+staged Backend API v0 dentro `40-audit-inotify-backend-api-v0.md`. La sezione
+non introduce nuovo comportamento: collega descriptor, capabilities,
+lifecycle, target management, poll staged, ownership, diagnostica, overflow,
+lost-scope recovery e compatibilita' runtime ai test gia' esistenti. La
+decisione e' che nuovi test vanno aggiunti quando cambia un contratto o si
+chiude un gap reale; per questo micro-step la copertura viene resa esplicita
+in una matrice invece di duplicare assert gia' protetti.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come

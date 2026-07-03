@@ -442,6 +442,56 @@ Questi test sono sufficienti per il subset staged attuale. Non dimostrano ancora
 che il main loop sia backend-agnostic end-to-end, perche' quella migrazione e'
 esplicitamente rimandata.
 
+### Mappa focused tests Backend API v0
+
+La issue [#88](https://github.com/kinderp/alfred/issues/88) chiarisce che il
+micro-step "Add/update focused tests" non richiede automaticamente nuovi test.
+La regola e':
+
+```text
+se il micro-step cambia comportamento o chiude un gap di contratto,
+aggiungere un test mirato;
+se il micro-step e' un audit di copertura,
+documentare quali test proteggono gia' il contratto e dichiarare i debiti.
+```
+
+Per il subset staged corrente la seconda opzione e' quella corretta. Le PR
+precedenti hanno gia' introdotto test focused mentre chiarivano i singoli
+contratti. Aggiungere un secondo test che ripete lo stesso assert renderebbe la
+suite piu' costosa senza aumentare la fiducia. Il valore di questo step e'
+rendere leggibile la copertura: chi modifica il backend deve sapere quale test
+romperebbe se violasse una regola.
+
+| Area del contratto | Test focused principali | Funzioni o scenari protetti | Cosa dimostrano |
+| --- | --- | --- | --- |
+| Descriptor Backend API v0 | `tests/backend/test_backend_ops.c` | `test_ops_accepts_complete_v0_descriptor`, `test_ops_rejects_missing_or_empty_name`, `test_ops_rejects_invalid_version`, `test_ops_rejects_missing_capabilities`, `test_ops_rejects_missing_callbacks` | Una `alfred_backend_ops_t` valida deve avere nome, versione, capabilities e callback obbligatorie. Il validator rifiuta descriptor incompleti prima che entrino nel runtime. |
+| Coerenza ops/capabilities | `tests/backend/test_backend_ops.c`, `tests/backend/test_backend_inotify_ops.c` | `test_ops_rejects_capability_name_mismatch`, `test_ops_rejects_capability_version_mismatch`, `test_ops_rejects_zero_capabilities`, `test_inotify_ops_descriptor_is_valid`, `test_inotify_ops_uses_inotify_capabilities` | Il nome/versione della tabella ops e del descriptor capabilities devono coincidere. Inotify espone una tabella statica valida e agganciata alle sue capabilities reali. |
+| Ownership emit envelope | `tests/backend/test_backend_ops.c`, `tests/backend/test_backend_inotify_ops.c` | test helper sul fake backend, `test_inotify_ops_init_destroy_lifecycle` | `init()` copia function pointer e `userdata` dall'envelope caller-owned, ma non possiede la envelope. `destroy()` deve cancellare il context e lasciare il runtime riutilizzabile dopo nuova init. |
+| Capability dichiarate | `tests/backend/test_backend_capabilities.c` | `test_capability_helper_rejects_ambiguous_input`, `test_inotify_declares_observational_filesystem_capabilities`, `test_inotify_does_not_claim_enforcement_or_context` | Il helper rifiuta query ambigue e inotify dichiara solo capability osservazionali filesystem/recovery. Non promette audit API-level, process context, network context, permission events o blocking. |
+| Lifecycle init/start/stop/destroy | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_rejects_invalid_init_arguments`, `test_inotify_ops_rejects_invalid_start_stop_arguments`, `test_inotify_ops_init_destroy_lifecycle` | Il runtime ops rifiuta argomenti invalidi, `start/stop` sono marker idempotenti nello staged subset e `destroy` rilascia le risorse possedute da `init`. |
+| Target validation | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_rejects_invalid_add_target_arguments`, `test_inotify_ops_rejects_invalid_remove_target_arguments` | Il target v0 accetta solo filesystem path validi, flags `NONE` e `backend_options == NULL`. Target non filesystem o parametri non supportati restano fuori contratto. |
+| Target ownership e idempotenza | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_duplicate_nonrecursive_target_is_idempotent`, `test_inotify_ops_duplicate_target_does_not_repair_missing_watch` | Il path e' borrowed durante la chiamata e copiato dal backend se accettato. Un duplicato exact significa "target gia' registrato", non "ripara la copertura kernel". |
+| Overlap e rollback ricorsivo | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_rejects_overlapping_recursive_targets`, `test_inotify_ops_rolls_back_failed_recursive_add` | V0 rifiuta root ricorsive sovrapposte per evitare ownership/refcount non definiti. Se un add ricorsivo fallisce, root e watch parziali vengono rimossi. |
+| Remove target | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_remove_target_removes_recursive_subtree`, `test_inotify_ops_rejects_remove_of_recursive_child_watch`, `test_inotify_ops_remove_nonrecursive_target_without_active_watch`, `test_inotify_ops_remove_recursive_target_without_active_watches`, `test_inotify_ops_completes_recursive_remove_after_emit_failure` | `remove_target()` lavora su root API configurate, non su watch descriptor arbitrari. Deve pulire subtree ricorsivi e non lasciare stato mezzo rimosso anche se una diagnostica di output fallisce. |
+| Poll staged | `tests/backend/test_backend_inotify_ops.c` | `test_inotify_ops_rejects_invalid_poll_arguments`, `test_inotify_ops_init_destroy_lifecycle` | `backend_ops->poll(timeout_ms = 0)` richiede runtime inizializzato, `started == 1`, emit callback valida e timeout non bloccante. La poll staged puo' emettere un record raw normalizzato attraverso `alfred_record_from_raw()`. |
+| Diagnostic builder | `tests/backend/test_record_diagnostic_builder.c` | `test_watch_stale_builds_watch_diagnostic`, `test_stale_event_dropped_builds_watch_diagnostic`, `test_resync_failed_builds_recovery_diagnostic`, `test_resync_failed_can_carry_os_error`, `test_invalid_inputs_are_rejected` | I record `WATCH_*` sono diagnostica strutturata con payload watch/recovery, non eventi filesystem semantici. I builder rifiutano input incompleti. |
+| Diagnostic output fail-closed | `tests/backend/test_watch_diagnostic_output_failure.c`, `tests/backend/test_watch_stale_output_failure.c` | scenari diretti su diagnostica watch e stale | Se Alfred promette output strutturato, un fallimento dell'emit diagnostico deve propagarsi invece di essere nascosto da un log testuale riuscito. |
+| Lost-scope recovery diagnostics | `tests/backend/test_lost_scope_queue_output_routing.c`, `tests/backend/test_lost_scope_scan_output_routing.c`, `tests/backend/test_lost_scope_completion_output_routing.c`, `tests/backend/test_lost_scope_recovery.c`, `tests/backend/test_lost_scope_runtime_recovery.sh` | queue, scan, found/not-found, retry/completion e recovery runtime | Le famiglie `WATCH_LOST_*` restano diagnostica di recovery e documentano la ricerca conservativa dell'identita' filesystem. |
+| Overflow | `tests/backend/test_overflow_raw_bridge.c`, `tests/jsonl/test_overflow_raw_jsonl.sh`, `tests/jsonl/test_overflow_core_jsonl.sh` | `test_overflow_event_builds_global_raw`, `test_non_overflow_event_is_ignored`, scenari JSONL raw/core | `IN_Q_OVERFLOW` diventa evidenza di integrita' dello stream (`ALFRED_RAW_OVERFLOW`) e non una mutazione path-specific. |
+| Runtime output compatibility | `tests/backend/test_output_counter_runtime.sh`, `tests/backend/test_output_pipeline_runtime.sh` | output counter, output JSONL/counter, shutdown/flush/error boundary | Il runtime applicativo conserva compatibilita' mentre l'output strutturato e' opt-in. Questi test non trasformano il main loop in backend-agnostic runtime. |
+
+La mappa lascia intenzionalmente fuori tre debiti, perche' non sono mancanze di
+test sul subset staged ma decisioni future:
+
+- migrazione del main loop da `inotify_backend_poll()` a
+  `backend_ops->poll()`;
+- semantica comune per `timeout_ms != 0`, deadline o poll bloccanti;
+- diagnostica backend-agnostic uniforme per init/config/I/O/lifecycle generici.
+
+Quando uno di questi debiti diventera' codice, il relativo micro-step dovra'
+aggiungere test nuovi. Fino ad allora la suite focused deve proteggere il
+contratto realmente implementato, non simulare un runtime futuro.
+
 ## Micro-step consigliati
 
 1. **Documentare questo audit**.
