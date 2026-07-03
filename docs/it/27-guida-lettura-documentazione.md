@@ -235,19 +235,23 @@ Questo percorso serve per capire dove sta andando il progetto.
 8. [Roadmap documentazione avanzata](17-roadmap-documentazione-avanzata.md)
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
-9. [Modello licenze](18-modello-licenze.md)
+9. [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md)
+   definisce la milestone corrente per rendere Alfred spiegabile tramite
+   tracepoint logici, scenari Lab, mappe funzioni/test e percorsi didattici
+   senza introdurre subito una UI o un tracing pesante.
+10. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
-10. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+11. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
-11. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+12. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
-12. [Visione Observation Runtime](38-visione-observation-runtime.md)
+13. [Visione Observation Runtime](38-visione-observation-runtime.md)
    descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
    come motore di eventi filesystem.
-13. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+14. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
    traduce quella visione in regole pratiche: provenance, log append-only,
    backend come sensori e percorso caldo corto.
 
@@ -329,6 +333,7 @@ queste domande:
 | Man page | [19](19-roadmap-cli-e-man-page.md), [docs/man](../man/) |
 | Memoria C, lifetime, ownership e leak | [08](08-guida-c-usato-nel-progetto.md#lifetime-della-memoria), [29](29-event-model-v0.md#ownership-dei-campi), [32](32-writer-api-v0.md#ownership-e-record-accodati) |
 | Milestone, dipendenze e durata prevista | [37](37-roadmap-milestone-progetto.md), [31](31-milestone-inotify-reference-backend.md), [25](25-roadmap-unificata-dossier.md) |
+| Tracepoint logici e Alfred Lab MVP | [41](41-tracepoint-lab-roadmap-mvp.md), [25](25-roadmap-unificata-dossier.md#fase-5---tracepoint-logici), [17](17-roadmap-documentazione-avanzata.md#fase-6-animazioni), [16](16-mappa-codice-e-strutture.md#vista-dinamica-futura) |
 | Queue, dispatcher e sink record | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [16](16-mappa-codice-e-strutture.md), [29](29-event-model-v0.md) |
 | Move, rename, relocate | [13](13-semantica-eventi.md#rename-move-e-relocate), [14](14-scenari-test.md) |
 | Output strutturato futuro | [32](32-writer-api-v0.md), [33](33-writer-runtime-roadmap-v0.md), [22](22-contratto-log.md#testo-oggi-protocollo-domani), [25](25-roadmap-unificata-dossier.md) |
@@ -385,6 +390,9 @@ riferimento veloce:
 - [Registro milestone del progetto](37-roadmap-milestone-progetto.md):
   per capire ordine cronologico, durata, dipendenze e priorita' delle
   milestone.
+- [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md):
+  per capire la milestone corrente su tracepoint logici, scenari Lab e mappe
+  funzione/test prima di introdurre una UI o tracing runtime.
 - [Principi architetturali futuri](39-principi-architetturali-futuri.md):
   per controllare che una nuova astrazione non leghi Alfred al solo filesystem
   o a un singolo backend.
