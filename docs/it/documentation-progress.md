@@ -228,6 +228,14 @@ chiarisce naming, stati `candidate` / `stable-doc` / `public-output` /
 percorso caldo, esempi, anti-pattern e criteri prima di introdurre qualunque
 output trace pubblico.
 
+Aggiornamento successivo: la issue #97 seleziona il primo set scenari
+Tracepoint/Lab MVP. Il set resta piccolo: create file, close-write/file-ready,
+rename/move/relocate e watch stale/recovery. `41-tracepoint-lab-roadmap-mvp.md`
+spiega perche' questi scenari entrano nell'MVP e perche' overflow, recursive
+mkdir, output pipeline end-to-end, policy/agent guardrail e performance trace
+restano rimandati. `42-tracepoint-model-v0.md` promuove solo i tracepoint
+necessari a `stable-doc`, senza introdurre output trace runtime.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
