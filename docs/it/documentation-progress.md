@@ -158,6 +158,14 @@ chiarendo che per lo staged subset `init/destroy` possiedono le risorse kernel
 e backend mentre `start/stop` sono marker di stato idempotenti. Il documento
 rimanda anche ai test focused che proteggono queste regole.
 
+Aggiornamento successivo: la issue #80 avvia la mappa target-management inotify
+v0 dentro `40-audit-inotify-backend-api-v0.md`. La sezione chiarisce che
+`add_target` e `remove_target` gestiscono target API filesystem-path, non watch
+descriptor arbitrari: documenta validazione, path borrowed, copie
+backend-owned, duplicati idempotenti, overlap ricorsivi rifiutati, rollback
+degli add falliti, autorita' delle root configurate, cleanup ricorsivo e
+propagazione degli errori diagnostici dopo la pulizia dello stato.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come

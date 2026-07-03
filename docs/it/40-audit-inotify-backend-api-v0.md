@@ -135,6 +135,62 @@ documentare e testare sempre quali risorse appartengono a init/destroy
 e quali appartengono a start/stop per ogni backend.
 ```
 
+### Mappa dettagliata target management v0
+
+La issue [#80](https://github.com/kinderp/alfred/issues/80) rende esplicito il
+contratto target-management del backend inotify staged. Questa mappa serve a
+evitare un secondo equivoco: `add_target()` e `remove_target()` non sono wrapper
+generici intorno a `inotify_add_watch()` e `inotify_rm_watch()`. Sono l'API con
+cui Alfred registra e rimuove target osservati. I watch descriptor creati dal
+backend sono un dettaglio operativo interno.
+
+Nel sottoinsieme v0, il solo target supportato e':
+
+```text
+target_type      = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH
+path             = path filesystem borrowed dal chiamante
+flags            = ALFRED_BACKEND_TARGET_FLAG_NONE
+backend_options  = NULL
+```
+
+Qualsiasi altro tipo, flag diverso da `NONE` o opzioni backend-specifiche
+produce `ERR_INVALID_ARG`. Questa scelta e' intenzionalmente stretta: Alfred
+vuole un punto di estensione per target futuri, ma non deve fingere di
+supportare oggi processi, rete, mount, container o opzioni non implementate.
+
+| Aspetto | Contratto inotify v0 | Funzioni coinvolte | Test principali |
+| --- | --- | --- | --- |
+| Validazione target | Il runtime ops deve essere inizializzato e avere context completo. Il target deve essere filesystem-path, path non `NULL`, non vuoto, piu' corto di `PATH_MAX`, senza slash finale salvo `/`, flags `NONE`, `backend_options == NULL`. | `inotify_backend_ops_add_target()`, `inotify_backend_ops_remove_target()`, `backend_configured_root_path_is_valid()` | `test_inotify_ops_rejects_invalid_add_target_arguments`, `test_inotify_ops_rejects_invalid_remove_target_arguments`, `test_inotify_ops_duplicate_nonrecursive_target_is_idempotent` |
+| Ownership del path | Il path nel target e' borrowed solo durante la chiamata. Se il target viene accettato, il backend copia la stringa nei propri buffer `configured_roots` e nella watcher table. Il chiamante non deve mantenere vivo il target dopo il ritorno per far funzionare il backend. | `backend_configured_roots_add()`, `watch_manager_add()`, `watch_manager_add_recursive()` | Scenari target in `test_backend_inotify_ops.c` che verificano `configured_roots_count` e watcher table dopo le chiamate. |
+| Add riuscito | `add_target()` registra prima la root in `configured_roots`, poi installa i watch. In modalita' ricorsiva installa la root e i figli esistenti; in modalita' non ricorsiva installa solo il path esatto. | `backend_add_startup_watch()`, `backend_configured_roots_add()`, `watch_manager_add_recursive()`, `watch_manager_add()` | `test_inotify_ops_init_destroy_lifecycle`, `test_inotify_ops_remove_target_removes_recursive_subtree` |
+| Duplicato esatto | Un path gia' presente in `configured_roots` restituisce `ERR_OK`, non reinstalla watch e non emette un secondo `WATCH_ADDED`. Se i watch attivi sono spariti ma la root resta configurata, il duplicato resta idempotente: significa "target API gia' registrato", non "copertura kernel riparata". La reinstallazione forzata e' `remove_target()` seguito da `add_target()`. | `backend_configured_roots_has_exact()`, `backend_add_startup_watch()` | `test_inotify_ops_duplicate_nonrecursive_target_is_idempotent`, `test_inotify_ops_duplicate_target_does_not_repair_missing_watch`, `test_inotify_ops_rejects_overlapping_recursive_targets` |
+| Overlap ricorsivo | In modalita' ricorsiva, target padre/figlio diversi sono rifiutati perche' v0 non ha ownership/refcount dei watch. Exact duplicate e' accettato. Prefissi testuali simili ma fuori subtree, per esempio `/tmp/root` e `/tmp/root-old`, sono accettati grazie alla regola con separatore `/`. | `backend_configured_roots_has_nested_overlap()`, `backend_path_matches_prefix()` | `test_inotify_ops_rejects_overlapping_recursive_targets` |
+| Rollback add fallito | `add_target()` e' atomic-like rispetto allo stato target: se fallisce dopo aver riservato la root, rimuove i watch parziali e cancella la root da `configured_roots` prima di restituire errore. Se fallisce la registrazione della root, nessun watch e' ancora installato. | `backend_add_startup_watch()`, `backend_rollback_target_watches()`, `backend_configured_roots_remove()` | `test_inotify_ops_rolls_back_failed_recursive_add` |
+| Autorita' della remove | `remove_target()` puo' rimuovere solo una root esatta presente in `configured_roots`. Un watch figlio creato dalla ricorsivita' del padre non e' un target autonomo, quindi viene rifiutato se non e' stato registrato come root. | `inotify_backend_remove_startup_watch()`, `backend_configured_roots_has_exact()` | `test_inotify_ops_rejects_remove_of_recursive_child_watch` |
+| Remove senza watch attivi | La root configurata e' l'autorita' API. Se i watch attivi sono gia' spariti, per esempio dopo una manutenzione backend o un `IN_IGNORED`, `remove_target()` rimuove comunque la root da `configured_roots` e restituisce `ERR_OK`, salvo errori reali di rimozione. | `inotify_backend_remove_startup_watch()`, `backend_configured_roots_remove()` | `test_inotify_ops_remove_nonrecursive_target_without_active_watch`, `test_inotify_ops_remove_recursive_target_without_active_watches` |
+| Cleanup ricorsivo | In modalita' ricorsiva, la rimozione della root raccoglie tutti i watch sotto la root con prefisso sicuro. La root `/` e' il caso speciale: se configurata ricorsivamente, copre tutti i path assoluti osservati. In modalita' non ricorsiva viene rimosso solo il path esatto. | `watcher_collect_wds_by_path_prefix()`, `watch_manager_remove()` | `test_inotify_ops_remove_target_removes_recursive_subtree` |
+| Errore diagnostico durante remove | Dopo che i watch descriptor da rimuovere sono stati raccolti, il backend completa la pulizia anche se una diagnostica `WATCH_REMOVED` fallisce. L'errore viene propagato al chiamante, ma `configured_roots` e watcher table non restano a meta'. | `inotify_backend_remove_startup_watch()`, `watch_manager_remove()` | `test_inotify_ops_completes_recursive_remove_after_emit_failure` |
+
+Il punto architetturale e' che `configured_roots` rappresenta i target API
+configurati, mentre la watcher table rappresenta i watch kernel attivi. I due
+stati sono collegati, ma non sono la stessa cosa. Questa separazione rende
+possibile distinguere:
+
+- un target configurato ma temporaneamente senza watch attivi;
+- un watch figlio creato dalla ricorsivita' e non registrato come target API;
+- un duplicato exact che e' un retry idempotente, non una richiesta di repair;
+- un remove valido della root anche quando la copertura kernel e' gia' sparita.
+
+Non-goal v0:
+
+- target non filesystem;
+- target flags diversi da `ALFRED_BACKEND_TARGET_FLAG_NONE`;
+- `backend_options` concrete;
+- ownership/refcount di watch condivisi tra root sovrapposte;
+- `list_targets`;
+- repair automatico della copertura kernel tramite duplicate `add_target()`;
+- policy o decisioni di sicurezza dentro target management.
+
 ### Poll runtime corrente
 
 ```text
