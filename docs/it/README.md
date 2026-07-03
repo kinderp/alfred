@@ -54,6 +54,7 @@ leggerlo e quando.
 | [39 - Principi architetturali futuri](39-principi-architetturali-futuri.md) | Principi pratici: provenance, osservazioni/inferenze separate, backend come sensori, log append-only e percorso caldo corto. | Maintainer, contributori esperti, agenti AI. | Prima di introdurre concetti comuni o nuove API architetturali. |
 | [40 - Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md) | Gap list tra backend inotify corrente e Backend API v0 staged subset: lifecycle, target, capabilities, poll, ownership e test. | Chi lavora sulla milestone inotify Backend API v0. | Prima di aprire micro-step di codice sulla conformita' inotify. |
 | [41 - Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md) | Roadmap della milestone Tracepoint/Lab: tracepoint logici, scenari MVP, mappa funzioni/test e limiti del primo Lab. | Maintainer, studenti, contributori e agenti AI. | Prima di definire tracepoint, scenari Lab, documentazione animabile o percorsi didattici del runtime. |
+| [42 - Tracepoint Model v0](42-tracepoint-model-v0.md) | Contratto documentale dei tracepoint logici: naming, stabilita', metadati, vincoli hot-path, esempi e anti-pattern. | Chi definisce tracepoint, scenari Lab o futuro output trace. | Prima di promuovere un tracepoint a contratto stabile o implementare tracing runtime. |
 | [Glossario](glossario.md) | Definizioni dei termini ricorrenti del progetto. | Tutti. | Quando un termine non e' chiaro. |
 
 ## Audit esplorativi

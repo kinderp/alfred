@@ -58,6 +58,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `39-principi-architetturali-futuri.md` |
 | Parziale | `40-audit-inotify-backend-api-v0.md` |
 | Parziale | `41-tracepoint-lab-roadmap-mvp.md` |
+| Parziale | `42-tracepoint-model-v0.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/2026-07-01-audit-notturno.md` |
@@ -219,6 +220,13 @@ documentale: creare una roadmap dedicata, aggiornare il registro milestone e
 chiarire che il Lab MVP non e' ancora una dashboard o un tracing runtime
 pesante. `41-tracepoint-lab-roadmap-mvp.md` definisce tracepoint logici,
 scenari MVP, formato scenario Lab v0, non-obiettivi e criteri di chiusura.
+
+Aggiornamento successivo: la issue #95 definisce il primo Tracepoint Model v0
+come contratto documentale, non come codice runtime. `42-tracepoint-model-v0.md`
+chiarisce naming, stati `candidate` / `stable-doc` / `public-output` /
+`deprecated`, metadati minimi, rapporto con `alfred_record_t`, vincoli del
+percorso caldo, esempi, anti-pattern e criteri prima di introdurre qualunque
+output trace pubblico.
 
 ## Aggiornamento visione Observation Runtime
 
