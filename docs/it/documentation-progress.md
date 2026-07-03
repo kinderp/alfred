@@ -153,10 +153,10 @@ core semantico basato su `alfred_record_t`.
 
 Aggiornamento successivo: la issue #78 dettaglia il lifecycle inotify v0 dentro
 `40-audit-inotify-backend-api-v0.md`. La nuova mappa collega `init`, `start`,
-`add_target`, `poll`, `stop` e `destroy` alle funzioni reali, chiarendo che per
-lo staged subset `init/destroy` possiedono le risorse kernel e backend mentre
-`start/stop` sono marker di stato idempotenti. Il documento rimanda anche ai
-test focused che proteggono queste regole.
+`add_target`, `remove_target`, `poll`, `stop` e `destroy` alle funzioni reali,
+chiarendo che per lo staged subset `init/destroy` possiedono le risorse kernel
+e backend mentre `start/stop` sono marker di stato idempotenti. Il documento
+rimanda anche ai test focused che proteggono queste regole.
 
 ## Aggiornamento visione Observation Runtime
 
