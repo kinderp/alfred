@@ -118,24 +118,68 @@ Esempi di concetti specifici di inotify:
 La distinzione non significa perdere informazioni. Significa conservarle nel
 livello corretto.
 
-## Deliverable della milestone
+## Endpoint della milestone corrente
 
-La milestone puo' considerarsi chiusa quando:
+La milestone `Inotify backend conforms to Backend API v0` puo' chiudersi quando
+`inotify` e' documentato e testato come backend di riferimento per il
+sottoinsieme staged di Backend API v0.
 
-- il backend inotify usa il confine Backend API v0 stabilito;
-- gli eventi principali passano attraverso record comuni;
-- i log testuali compatibili vengono prodotti da record, non da stringhe sparse;
-- il percorso caldo non aspetta writer, serializzazione o I/O lento;
-- la Writer API v0 e' documentata come roadmap per text, JSONL, protobuf,
-  MessagePack, socket e futuri plugin writer;
-- il Writer Runtime v0 chiarisce quali passi servono per non far aspettare i
-  backend su writer, serializzazione, flush o socket;
-- il writer JSONL minimo esiste ed e' testato;
-- i test core/backend/golden coprono il contratto osservabile;
-- i limiti di inotify sono documentati;
-- la documentazione spiega chiaramente quali parti sono runtime corrente e quali
-  sono roadmap futura;
-- il codice non contiene decisioni di policy o sicurezza dentro il backend.
+Questo significa:
+
+- `inotify_backend_ops()` espone una tabella statica `alfred_backend_ops_t`
+  valida;
+- `inotify_backend_capabilities()` dichiara solo capability realmente
+  supportate dal backend inotify;
+- `app.c` usa la tabella ops per init, target startup, start, stop e destroy;
+- `add_target()` e `remove_target()` coprono il target filesystem-path v0;
+- `backend_ops->poll(timeout_ms = 0)` esiste, delega al poll inotify esistente
+  e converte `alfred_raw_event_t` in `alfred_record_t`;
+- ownership di target path, emit callback, `userdata` e record borrowed e'
+  documentata e coperta dai test focused;
+- i test focused coprono descriptor, capabilities, lifecycle, target
+  management e poll staged;
+- i limiti e i ponti intenzionali sono documentati.
+
+Non significa ancora:
+
+- runtime Alfred backend-agnostic end-to-end;
+- main loop migrato a `backend_ops->poll()`;
+- core semantico capace di consumare direttamente `alfred_record_t`;
+- supporto multi-backend;
+- fanotify, audit, eBPF, Windows o macOS;
+- enforcement/policy Agent Guard.
+
+Il main loop raw bridge resta quindi un ponte intenzionale:
+
+```text
+app_run()
+-> app_poll_legacy_raw_backend_once()
+-> inotify_backend_poll()
+-> handle_backend_event(alfred_raw_event_t)
+-> alfred_process(core, raw)
+```
+
+Non e' una non-conformita' nascosta. E' il confine scelto finche' non viene
+deciso e misurato se il core dovra' consumare record, oppure se servira' un
+ponte misurato tra record e raw/core.
+
+L'audit di riferimento e'
+[Audit inotify vs Backend API v0](40-audit-inotify-backend-api-v0.md).
+
+## Deliverable gia' consolidati
+
+Questa milestone eredita lavoro gia' chiuso da milestone precedenti:
+
+- Event Model v0 e record strutturati comuni;
+- Writer API v0;
+- Writer Runtime v0 con queue bounded, dispatcher e output opt-in;
+- writer JSONL minimo e test collegati;
+- log testuali compatibili prodotti attraverso record/sink per i percorsi gia'
+  migrati;
+- documentazione del percorso caldo e del debito benchmark.
+
+Questi deliverable restano prerequisiti e contesto, ma non vanno confusi con
+l'endpoint specifico della conformita' inotify Backend API v0.
 
 ## Documenti da leggere per questa milestone
 
