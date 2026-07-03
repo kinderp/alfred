@@ -44,6 +44,12 @@ linguaggio prima di costruire strumenti automatici.
 Un tracepoint logico e' un nome stabile che descrive un fatto interno di Alfred.
 Non e' necessariamente una riga di log e non e' necessariamente una funzione.
 
+Il contratto iniziale vive in
+[Tracepoint Model v0](42-tracepoint-model-v0.md). Questo documento di roadmap
+spiega la milestone; il modello v0 definisce naming, stabilita', metadati,
+non-obiettivi, vincoli di percorso caldo e condizioni per diventare output
+pubblico.
+
 Esempi candidati:
 
 ```text
@@ -215,7 +221,7 @@ La issue madre GitHub e' il piano operativo della milestone:
 Checklist iniziale:
 
 1. setup documentazione e registro milestone;
-2. definire Tracepoint Model v0;
+2. definire [Tracepoint Model v0](42-tracepoint-model-v0.md);
 3. scegliere gli scenari MVP;
 4. mappare tracepoint, funzioni, strutture dati e test;
 5. decidere formato scenario Lab v0;
