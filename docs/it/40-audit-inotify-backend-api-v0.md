@@ -67,6 +67,74 @@ ponte misurato record -> raw/core.
 | Hot path | Accettabile per v0 | Il percorso caldo runtime continua a usare raw bridge; output strutturato enqueua record e draina fuori dal callback producer. | Ogni futura migrazione di poll/core deve avere benchmark. |
 | Test focused | Buono per subset staged | `test_backend_ops.c`, `test_backend_capabilities.c`, `test_backend_inotify_ops.c`. | Aggiungere test nuovi solo quando un micro-step cambia un contratto o chiude un gap specifico. |
 
+## Mappa capabilities inotify v0
+
+La issue [#82](https://github.com/kinderp/alfred/issues/82) rende esplicito il
+contratto capabilities del backend inotify staged. Le capabilities sono
+metadata statici del backend, non opzioni di configurazione e non stato per
+evento. Servono a rispondere in modo conservativo alla domanda:
+
+```text
+che tipo di evidenza o controllo puo' fornire questo backend,
+quando e' configurato nel modo giusto?
+```
+
+Questa distinzione e' importante per la roadmap futura di policy e backend
+multipli. Una policy non deve dedurre dal nome `inotify` cosa e' possibile:
+deve guardare le capabilities. Se una capability non e' dichiarata, il core o
+il policy engine futuro devono trattarla come non disponibile e degradare in
+modo esplicito, per esempio da `block` a `alert/would-block` quando il backend
+non puo' bloccare.
+
+### Descriptor statico
+
+```text
+inotify_backend_ops()
+-> ops.capabilities = inotify_backend_capabilities()
+-> static const alfred_backend_capabilities_t INOTIFY_BACKEND_CAPABILITIES
+```
+
+Il descriptor e' statico e process-lifetime. Il chiamante riceve un puntatore
+borrowed: non deve modificarlo e non deve liberarlo. Il validator comune
+`alfred_backend_ops_is_minimally_valid()` controlla che:
+
+- `ops->capabilities` esista;
+- `ops->name` e `capabilities->backend_name` coincidano;
+- `ops->api_version` e `capabilities->api_version` coincidano;
+- la bitmask capabilities non sia vuota.
+
+Il helper `alfred_backend_capabilities_has()` accetta una sola capability alla
+volta. Se riceve `NULL`, `0` o una maschera con piu' bit restituisce `0`. Questa
+regola evita query ambigue come "ha almeno una di queste capability?" oppure
+"ha tutte queste capability?".
+
+### Capability dichiarate
+
+| Capability | Perche' inotify la dichiara | Evidenza corrente | Test principali |
+| --- | --- | --- | --- |
+| `ALFRED_BACKEND_CAP_FILESYSTEM_EVENTS` | Il backend osserva mutazioni filesystem tramite inotify e le converte in raw event/record filesystem. | `inotify_backend_poll()`, adapter raw, core filesystem corrente. | `test_backend_capabilities.c`, `test_inotify_ops_uses_inotify_capabilities` |
+| `ALFRED_BACKEND_CAP_RECURSIVE_WATCH` | Il backend puo' installare watch ricorsivi sulle directory esistenti e aggiungere watch su directory create durante il runtime. | `watch_manager_add_recursive()`, discovery ricorsiva, target management ricorsivo. | `test_backend_capabilities.c`, test target ricorsivi in `test_backend_inotify_ops.c` |
+| `ALFRED_BACKEND_CAP_METADATA_EVENTS` | Il backend puo' osservare eventi metadata inotify, oggi esposti come raw/backend diagnostics dove supportato dal modello corrente. | Maschere inotify e matrice eventi; non implica process context o policy. | `test_backend_capabilities.c` |
+| `ALFRED_BACKEND_CAP_SELF_EVENTS` | Il backend gestisce eventi sul watch stesso, come move/delete/ignored/unmount, per marcare stato stale, rimuovere watch o avviare recovery. | self events in watcher/recovery path, diagnostica `WATCH_STALE` e cleanup. | `test_backend_capabilities.c`, test backend diagnostics e recovery esistenti |
+| `ALFRED_BACKEND_CAP_OVERFLOW_EVENTS` | Il backend riconosce overflow della coda inotify e lo rende osservabile invece di perderlo silenziosamente. | mapping overflow raw/semantico e diagnostica backend. | `test_backend_capabilities.c`, scenari overflow esistenti |
+| `ALFRED_BACKEND_CAP_IDENTITY_TRACKING` | Il backend conserva identita' filesystem `device_id`/`inode_id` quando disponibile per distinguere oggetti oltre il solo path testuale. | watcher identity, record identity e lost-scope evidence. | `test_backend_capabilities.c`, test identity/JSONL e recovery collegati |
+| `ALFRED_BACKEND_CAP_LOST_SCOPE_RECOVERY` | Il backend puo' tentare recovery di scope stale cercando l'identita' filesystem dentro root configurate. | lost-scope queue, scanner/resync e fallback root configurate. | `test_backend_capabilities.c`, scenari lost-scope/recovery esistenti |
+
+### Capability non dichiarate
+
+| Capability non dichiarata | Motivo |
+| --- | --- |
+| `ALFRED_BACKEND_CAP_AUDIT_EVENTS` | `inotify_audit_events` puo' aumentare il rumore del raw log con `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE`, ma non produce ancora record audit API-level. Finche' questi fatti non attraversano `alfred_record_t` come audit strutturato, la capability resta assente. |
+| `ALFRED_BACKEND_CAP_PERMISSION_EVENTS` | Inotify osserva dopo o durante l'evento, ma non espone permission events pre-access come fanotify permission mode. |
+| `ALFRED_BACKEND_CAP_PROCESS_CONTEXT` | Inotify non fornisce in modo affidabile pid, ppid, uid, exe, cmdline o process tree per ogni evento filesystem. |
+| `ALFRED_BACKEND_CAP_NETWORK_CONTEXT` | Inotify non osserva rete, socket, connessioni o indirizzi remoti. |
+| `ALFRED_BACKEND_CAP_CAN_BLOCK` | Inotify non puo' negare l'operazione prima che avvenga. Per v0 puo' osservare e diagnosticare; non puo' fare enforcement. |
+
+Questa assenza e' parte del contratto, non una mancanza nascosta. Quando Alfred
+avra' fanotify, audit, eBPF o backend di sistema operativi diversi, saranno
+quei backend a dichiarare permission events, process context, network context o
+blocking se li implementano davvero.
+
 ## Call path correnti
 
 ### Lifecycle applicativo
