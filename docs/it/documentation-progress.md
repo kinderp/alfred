@@ -174,6 +174,17 @@ intenzionalmente assenti. Il punto centrale e' che inotify dichiara solo
 capability osservazionali filesystem/recovery e non promette audit API-level,
 process context, network context, permission events o blocking/enforcement.
 
+Aggiornamento successivo: la issue #84 avvia la mappa poll/emit boundary
+inotify v0 dentro `40-audit-inotify-backend-api-v0.md`. La sezione distingue il
+runtime principale ancora raw-oriented
+`app_run()` -> `app_poll_legacy_raw_backend_once()` -> `inotify_backend_poll()`
+-> `handle_backend_event()` dal percorso staged Backend API v0
+`backend_ops->poll()` -> `inotify_backend_ops_poll()` ->
+`inotify_backend_ops_emit_raw_record()` -> `alfred_record_from_raw()` ->
+`emit(alfred_record_t)`. Documenta precondizioni, ownership, `timeout_ms == 0`,
+raw `NULL` come no-op, propagazione errori e motivo per cui la migrazione del
+main loop resta una decisione separata da misurare.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
