@@ -136,7 +136,7 @@ codice runtime.
 | Tracepoint | Scenario principale | Perche' serve |
 | --- | --- | --- |
 | `BACKEND_RAW_EVENT_READ` | tutti gli scenari filesystem | Indica che Alfred parte da evidenza backend/OS, non da un evento inventato dal Lab. |
-| `RAW_RECORD_BUILT` | create, close-write, rename/move | Indica il passaggio dal fatto backend al record comune o alla forma raw normalizzata. |
+| `RAW_EVENT_NORMALIZED` | create, close-write, rename/move | Indica il passaggio dal fatto backend alla forma raw Alfred usata dal core corrente. |
 | `CORE_SEMANTIC_EVENT_EMITTED` | create, close-write, rename/move | Indica che il core ha prodotto semantica stabile, per esempio `FILE_CREATED`, `FILE_READY` o `FILE_RELOCATED`. |
 | `MOVE_FROM_STORED` | rename/move/relocate | Indica che il core ha conservato la prima meta' del move in attesa del possibile match. |
 | `MOVE_MATCH_FOUND` | rename/move/relocate | Indica che il core ha collegato `MOVED_FROM` e `MOVED_TO` usando cookie e contesto. |

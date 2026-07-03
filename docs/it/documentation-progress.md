@@ -234,7 +234,8 @@ rename/move/relocate e watch stale/recovery. `41-tracepoint-lab-roadmap-mvp.md`
 spiega perche' questi scenari entrano nell'MVP e perche' overflow, recursive
 mkdir, output pipeline end-to-end, policy/agent guardrail e performance trace
 restano rimandati. `42-tracepoint-model-v0.md` promuove solo i tracepoint
-necessari a `stable-doc`, senza introdurre output trace runtime.
+necessari a `stable-doc`, distinguendo `RAW_EVENT_NORMALIZED` dal candidato
+`RAW_RECORD_BUILT`, senza introdurre output trace runtime.
 
 ## Aggiornamento visione Observation Runtime
 

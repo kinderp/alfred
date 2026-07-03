@@ -237,7 +237,8 @@ Lab. Non significa output pubblico e non introduce codice runtime.
 | Tracepoint | Stato | Dominio | Significato |
 | --- | --- | --- | --- |
 | `BACKEND_RAW_EVENT_READ` | stable-doc | backend | Il backend ha letto o ricevuto un fatto raw dalla sorgente OS. |
-| `RAW_RECORD_BUILT` | stable-doc | record | Un raw event e' stato convertito nel record model comune o nella forma raw normalizzata usata dal percorso spiegato. |
+| `RAW_EVENT_NORMALIZED` | stable-doc | backend | Un fatto backend e' stato normalizzato nella forma raw Alfred usata dal core corrente. |
+| `RAW_RECORD_BUILT` | candidate | record | Un raw event e' stato convertito nel record model comune. Resta candidato finche' uno scenario MVP sceglie esplicitamente il percorso record/output. |
 | `CORE_SEMANTIC_EVENT_EMITTED` | stable-doc | core | Il core ha prodotto un evento semantico. |
 | `MOVE_FROM_STORED` | stable-doc | core | Il core ha conservato la prima meta' di un move/rename in attesa del match. |
 | `MOVE_MATCH_FOUND` | stable-doc | core | Il core ha collegato `MOVED_FROM` e `MOVED_TO` in una coppia coerente. |
@@ -257,9 +258,9 @@ Il primo set MVP contiene quattro scenari.
 
 | Scenario | Tracepoint principali | Motivo della selezione |
 | --- | --- | --- |
-| create file | `BACKEND_RAW_EVENT_READ`, `RAW_RECORD_BUILT`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Percorso minimo da fatto backend a evento semantico e output. |
-| close-write / file ready | `BACKEND_RAW_EVENT_READ`, `RAW_RECORD_BUILT`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Spiega perche' `FILE_READY` e' diverso da una modifica tecnica. |
-| rename / move / relocate | `BACKEND_RAW_EVENT_READ`, `RAW_RECORD_BUILT`, `MOVE_FROM_STORED`, `MOVE_MATCH_FOUND`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Mostra correlazione, cache move e classificazione semantica. |
+| create file | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Percorso minimo da fatto backend a evento semantico e output. |
+| close-write / file ready | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Spiega perche' `FILE_READY` e' diverso da una modifica tecnica. |
+| rename / move / relocate | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `MOVE_FROM_STORED`, `MOVE_MATCH_FOUND`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Mostra correlazione, cache move e classificazione semantica. |
 | watch stale / recovery | `BACKEND_RAW_EVENT_READ`, `WATCH_DIAGNOSTIC_EMITTED`, `SINK_RECORD_EMITTED` | Mostra diagnostica e affidabilita' del monitoraggio, non solo eventi filesystem. |
 
 Questa selezione e' volutamente stretta. Se il primo Lab prova a coprire subito
