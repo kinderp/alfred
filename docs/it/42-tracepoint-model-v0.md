@@ -226,22 +226,46 @@ Non-goal:
 La sezione `Non-goal` e' importante: impedisce che un nome venga interpretato
 piu' di quanto Alfred possa garantire.
 
-## Tracepoint iniziali candidati
+## Tracepoint iniziali
 
-Questa e' una lista di partenza, non ancora output pubblico.
+Questa lista separa tracepoint gia' promossi a `stable-doc` per gli scenari MVP
+da tracepoint ancora candidati.
+
+`stable-doc` significa che il nome puo' essere usato in documentazione e scenari
+Lab. Non significa output pubblico e non introduce codice runtime.
 
 | Tracepoint | Stato | Dominio | Significato |
 | --- | --- | --- | --- |
-| `BACKEND_RAW_EVENT_READ` | candidate | backend | Il backend ha letto o ricevuto un fatto raw dalla sorgente OS. |
-| `RAW_RECORD_BUILT` | candidate | record | Un raw event e' stato convertito nel record model comune. |
-| `CORE_SEMANTIC_EVENT_EMITTED` | candidate | core | Il core ha prodotto un evento semantico. |
-| `WATCH_DIAGNOSTIC_EMITTED` | candidate | diagnostic | Alfred ha prodotto diagnostica osservabile sullo stato di un watch. |
+| `BACKEND_RAW_EVENT_READ` | stable-doc | backend | Il backend ha letto o ricevuto un fatto raw dalla sorgente OS. |
+| `RAW_EVENT_NORMALIZED` | stable-doc | backend | Un fatto backend e' stato normalizzato nella forma raw Alfred usata dal core corrente. |
+| `RAW_RECORD_BUILT` | candidate | record | Un raw event e' stato convertito nel record model comune. Resta candidato finche' uno scenario MVP sceglie esplicitamente il percorso record/output. |
+| `CORE_SEMANTIC_EVENT_EMITTED` | stable-doc | core | Il core ha prodotto un evento semantico. |
+| `MOVE_FROM_STORED` | stable-doc | core | Il core ha conservato la prima meta' di un move/rename in attesa del match. |
+| `MOVE_MATCH_FOUND` | stable-doc | core | Il core ha collegato `MOVED_FROM` e `MOVED_TO` in una coppia coerente. |
+| `WATCH_DIAGNOSTIC_EMITTED` | stable-doc | diagnostic | Alfred ha prodotto diagnostica osservabile sullo stato di un watch. |
+| `SINK_RECORD_EMITTED` | stable-doc | output | Un sink concreto ha ricevuto un record da emettere. |
 | `OUTPUT_RECORD_ENQUEUED` | candidate | output | Un record borrowed e' stato clonato/accodato nel percorso output opt-in. |
 | `OUTPUT_RECORD_DISPATCHED` | candidate | output | Un record e' stato estratto dalla coda e passato al dispatcher. |
-| `SINK_RECORD_EMITTED` | candidate | output | Un sink concreto ha ricevuto un record da emettere. |
 
-La prossima milestone figlia dovra' scegliere quali di questi diventano
-`stable-doc` per gli scenari MVP. Non tutti devono diventarlo subito.
+I tracepoint output-pipeline restano `candidate` perche' il primo set MVP
+spiega semantica e diagnostica filesystem. Diventeranno `stable-doc` quando uno
+scenario Lab scegliera' esplicitamente la pipeline `queue -> dispatcher -> sink`
+come oggetto principale.
+
+## Scenari MVP selezionati
+
+Il primo set MVP contiene quattro scenari.
+
+| Scenario | Tracepoint principali | Motivo della selezione |
+| --- | --- | --- |
+| create file | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Percorso minimo da fatto backend a evento semantico e output. |
+| close-write / file ready | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Spiega perche' `FILE_READY` e' diverso da una modifica tecnica. |
+| rename / move / relocate | `BACKEND_RAW_EVENT_READ`, `RAW_EVENT_NORMALIZED`, `MOVE_FROM_STORED`, `MOVE_MATCH_FOUND`, `CORE_SEMANTIC_EVENT_EMITTED`, `SINK_RECORD_EMITTED` | Mostra correlazione, cache move e classificazione semantica. |
+| watch stale / recovery | `BACKEND_RAW_EVENT_READ`, `WATCH_DIAGNOSTIC_EMITTED`, `SINK_RECORD_EMITTED` | Mostra diagnostica e affidabilita' del monitoraggio, non solo eventi filesystem. |
+
+Questa selezione e' volutamente stretta. Se il primo Lab prova a coprire subito
+overflow, recursive mkdir, output pipeline completa e policy, diventa troppo
+grande per essere verificabile e didattico.
 
 ## Anti-pattern
 

@@ -107,18 +107,58 @@ non va trattato come protocollo pubblico.
 ## Scenari MVP
 
 La milestone deve partire da pochi scenari gia' maturi, non da tutti i casi
-possibili.
+possibili. Il primo set MVP e' scelto per coprire quattro forme diverse di
+spiegazione:
+
+- un evento filesystem semplice;
+- un evento che richiede interpretazione temporale;
+- un evento che richiede correlazione interna;
+- un evento diagnostico in cui Alfred spiega affidabilita' e recovery, non solo
+  semantica filesystem.
 
 | Scenario | Perche' e' utile | Funzioni e contratti coinvolti |
 | --- | --- | --- |
-| create file | Percorso base da evento backend a evento semantico. | inotify adapter, raw event, core, record, text/JSONL output. |
-| close-write / file ready | Spiega la differenza fra modifica tecnica e file consumabile. | core semantic, debounce/ready, eventi `FILE_MODIFIED` e `FILE_READY`. |
-| rename/move/relocate | Mostra correlazione `MOVED_FROM` + `MOVED_TO`, cookie e classificazione. | move cache, `classify_move()`, eventi rename/move/relocate. |
-| watch stale / recovery | Mostra diagnostica backend e differenza tra fatto osservato e affidabilita' del watch. | watcher state, diagnostic record, log diagnostici, recovery. |
+| create file | Percorso base da evento backend a evento semantico. E' lo scenario piu' piccolo per spiegare `backend -> raw -> core -> output`. | inotify adapter, raw event, core, record, text/JSONL output. |
+| close-write / file ready | Spiega la differenza fra modifica tecnica e file consumabile. E' importante per backup, indicizzatori e scanner. | core semantic, debounce/ready, eventi `FILE_MODIFIED` e `FILE_READY`. |
+| rename/move/relocate | Mostra correlazione `MOVED_FROM` + `MOVED_TO`, cookie e classificazione. E' il primo scenario in cui Alfred fa piu' che inoltrare eventi raw. | move cache, `classify_move()`, eventi rename/move/relocate. |
+| watch stale / recovery | Mostra diagnostica backend e differenza tra fatto osservato e affidabilita' del watch. E' il primo scenario Lab non puramente semantico. | watcher state, diagnostic record, log diagnostici, recovery. |
 
 Altri scenari, come overflow, recursive mkdir, output pipeline completa e
 future policy, possono essere aggiunti dopo. Il criterio e': prima pochi
 percorsi spiegati bene, poi copertura piu' ampia.
+
+### Tracepoint promossi per gli scenari MVP
+
+Per questi scenari diventano `stable-doc` solo i tracepoint necessari a
+spiegare il percorso. `stable-doc` non significa output pubblico e non introduce
+codice runtime.
+
+| Tracepoint | Scenario principale | Perche' serve |
+| --- | --- | --- |
+| `BACKEND_RAW_EVENT_READ` | tutti gli scenari filesystem | Indica che Alfred parte da evidenza backend/OS, non da un evento inventato dal Lab. |
+| `RAW_EVENT_NORMALIZED` | create, close-write, rename/move | Indica il passaggio dal fatto backend alla forma raw Alfred usata dal core corrente. |
+| `CORE_SEMANTIC_EVENT_EMITTED` | create, close-write, rename/move | Indica che il core ha prodotto semantica stabile, per esempio `FILE_CREATED`, `FILE_READY` o `FILE_RELOCATED`. |
+| `MOVE_FROM_STORED` | rename/move/relocate | Indica che il core ha conservato la prima meta' del move in attesa del possibile match. |
+| `MOVE_MATCH_FOUND` | rename/move/relocate | Indica che il core ha collegato `MOVED_FROM` e `MOVED_TO` usando cookie e contesto. |
+| `WATCH_DIAGNOSTIC_EMITTED` | watch stale / recovery | Indica che Alfred sta spiegando stato e affidabilita' del watch, non un falso evento filesystem. |
+| `SINK_RECORD_EMITTED` | tutti gli scenari con output osservabile | Indica che un sink ha ricevuto un record per produrre output umano o macchina. |
+
+Tracepoint lasciati `candidate`:
+
+| Tracepoint | Motivo del rinvio |
+| --- | --- |
+| `OUTPUT_RECORD_ENQUEUED` | Serve quando il primo scenario Lab include davvero la pipeline output opt-in `queue -> dispatcher -> sink`. |
+| `OUTPUT_RECORD_DISPATCHED` | Come sopra: utile per Writer Runtime, ma non necessario al primo set scenario. |
+
+### Scenari rimandati
+
+| Scenario rimandato | Motivo |
+| --- | --- |
+| overflow | Importante, ma introduce perdita eventi e diagnostica di affidabilita' globale; va trattato dopo avere il linguaggio base. |
+| recursive mkdir veloce | Utile e didattico, ma richiede spiegare scan sintetici e recovery discovery; meglio dopo gli scenari base. |
+| output pipeline end-to-end | Serve per writer/runtime, ma rischia di spostare il primo Lab su queue/dispatcher invece che su semantica eventi. |
+| policy / agent guardrail | Visione futura: richiede agent session, process context e policy, non ancora parte del Lab MVP. |
+| performance trace | Deve aspettare benchmark e decisione esplicita su output trace opt-in. |
 
 ## Formato scenario Lab v0
 
