@@ -237,6 +237,14 @@ restano rimandati. `42-tracepoint-model-v0.md` promuove solo i tracepoint
 necessari a `stable-doc`, distinguendo `RAW_EVENT_NORMALIZED` dal candidato
 `RAW_RECORD_BUILT`, senza introdurre output trace runtime.
 
+Aggiornamento successivo: la issue #99 collega i tracepoint `stable-doc` a
+funzioni, strutture dati e test rappresentativi. `42-tracepoint-model-v0.md`
+contiene la mappa principale tracepoint -> funzioni -> dati -> copertura,
+`41-tracepoint-lab-roadmap-mvp.md` la riassume per scenario e
+`16-mappa-codice-e-strutture.md` aggiunge una vista didattica per seguire il
+percorso nel codice. Anche questo passo resta documentale: nessun output trace
+runtime e nessun cambio al percorso caldo.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come

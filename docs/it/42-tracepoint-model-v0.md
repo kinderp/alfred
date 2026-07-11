@@ -267,6 +267,36 @@ Questa selezione e' volutamente stretta. Se il primo Lab prova a coprire subito
 overflow, recursive mkdir, output pipeline completa e policy, diventa troppo
 grande per essere verificabile e didattico.
 
+## Mappa tracepoint, funzioni e test
+
+Questa tabella e' il primo collegamento tra il vocabolario Lab e il codice
+corrente. Non introduce runtime tracing: dice solo quali funzioni realizzano
+oggi lo step logico e quali test lo rendono osservabile.
+
+| Tracepoint | Funzioni principali oggi | Dati attraversati | Copertura esistente | Gap o nota |
+| --- | --- | --- | --- | --- |
+| `BACKEND_RAW_EVENT_READ` | `inotify_backend_poll()` -> `backend_poll()` | `struct inotify_event`, `watcher_table_t`, path parent, raw diagnostic line | `tests/backend/test_raw_create_record_sink.sh`, `tests/backend/test_raw_close_write_record_sink.sh`, `tests/backend/test_raw_move_record_sink.sh`, test JSONL che controllano `raw.log` | Il tracepoint e' logico: non significa che esista un record trace runtime. |
+| `RAW_EVENT_NORMALIZED` | `inotify_adapter_build_raw()` chiamata da `backend_poll()` | `struct inotify_event` + parent path -> `alfred_raw_event_t` borrowed | `tests/backend/test_raw_create_record_sink.sh`, `tests/backend/test_raw_close_write_record_sink.sh`, `tests/backend/test_raw_delete_record_sink.sh`, `tests/backend/test_raw_modify_record_sink.sh`, `tests/backend/test_raw_move_record_sink.sh`, `tests/backend/test_backend_inotify_ops.c` | Diverso da `RAW_RECORD_BUILT`: qui il core riceve ancora `alfred_raw_event_t`, non un record owned. |
+| `CORE_SEMANTIC_EVENT_EMITTED` | `handle_backend_event()` -> `alfred_process()` -> `emit()` -> `core_logger_on_event()` | `alfred_raw_event_t` -> `alfred_event_t` -> semantic `alfred_record_t` quando il logger usa il record adapter | `tests/core/test_create_file.sh`, `tests/core/test_modify_file.sh`, `tests/core/test_rename_file.sh`, `tests/core/test_move_file.sh`, `tests/core/test_move_rename_file.sh`, test JSONL semantic golden | Il tracepoint non promette che ogni raw event emetta un evento: `MODIFY` puo' essere debounce e `MOVED_FROM` viene solo conservato. |
+| `MOVE_FROM_STORED` | `alfred_process()` -> `alfred_move_insert()` | `alfred_raw_event_t` con `ALFRED_RAW_MOVED_FROM`, cookie, path, `moves[]` | Coperto indirettamente da `tests/core/test_rename_file.sh`, `tests/core/test_move_file.sh`, `tests/core/test_move_rename_file.sh` e dai test JSONL move/rename/relocate | Non ha ancora un test che asserisce direttamente lo stato interno `moves[]`; per v0 e' accettato come evidenza indiretta. |
+| `MOVE_MATCH_FOUND` | `alfred_process()` -> `alfred_move_take()` -> `classify_move()` -> `emit()` | pending move + `ALFRED_RAW_MOVED_TO` -> `FILE_RENAMED`, `FILE_MOVED` o `FILE_RELOCATED` | `tests/core/test_rename_file.sh`, `tests/core/test_move_file.sh`, `tests/core/test_move_rename_file.sh`, `tests/jsonl/test_rename_file_jsonl.sh`, `tests/jsonl/test_file_moved_jsonl.sh`, `tests/jsonl/test_file_relocated_jsonl.sh` | Il match richiede cookie e contesto coerenti; `MOVED_TO` senza match resta fallback create. |
+| `WATCH_DIAGNOSTIC_EMITTED` | `backend_log_watch_stale()`, `backend_log_stale_event_dropped()`, `backend_log_watch_diagnostic_record()`, `backend_log_resync_record()` | watch state, `alfred_record_t` diagnostic, `WATCH_STALE`, `WATCH_RESYNC_*`, `WATCH_STALE_EVENT_DROPPED` | `tests/backend/test_watch_stale_output_failure.c`, `tests/backend/test_resync_output_routing.c`, `tests/jsonl/test_self_move_recovery_jsonl.sh`, `tests/jsonl/test_lost_scope_runtime_recovery_jsonl.sh` | Diagnostica backend, non semantica filesystem: non deve diventare `FILE_*` falso. |
+| `SINK_RECORD_EMITTED` | `alfred_record_sink_emit()` -> sink concreto, per esempio `alfred_record_text_sink_emit()` o `alfred_record_jsonl_sink_emit()` | borrowed `alfred_record_t` consegnato a sink; payload testo/JSONL a valle | `tests/backend/test_record_text_sink.c`, `tests/backend/test_record_jsonl_sink.c`, `tests/backend/test_record_counter_sink.c`, test runtime JSONL | Indica consegna al sink, non necessariamente flush su file o completamento durable del writer. |
+
+### Mappa per scenario MVP
+
+| Scenario | Percorso funzione principale | Test rappresentativi |
+| --- | --- | --- |
+| create file | `inotify_backend_poll()` -> `inotify_adapter_build_raw()` -> `handle_backend_event()` -> `alfred_process()` -> `core_logger_on_event()` -> `alfred_record_sink_emit()` | `tests/core/test_create_file.sh`, `tests/backend/test_raw_create_record_sink.sh`, `tests/jsonl/test_create_file_and_dir_jsonl.sh` |
+| close-write / file ready | `inotify_backend_poll()` -> `inotify_adapter_build_raw()` -> `handle_backend_event()` -> `alfred_process()` branch `ALFRED_RAW_CLOSE_WRITE` -> `emit(FILE_READY)` | `tests/core/test_create_file.sh`, `tests/core/test_modify_file.sh`, `tests/backend/test_raw_close_write_record_sink.sh`, `tests/jsonl/test_modify_file_jsonl.sh` |
+| rename / move / relocate | `inotify_backend_poll()` -> `inotify_adapter_build_raw()` -> `alfred_process()` branch `MOVED_FROM`/`MOVED_TO` -> `alfred_move_insert()`/`alfred_move_take()` -> `classify_move()` -> `emit()` | `tests/core/test_rename_file.sh`, `tests/core/test_move_file.sh`, `tests/core/test_move_rename_file.sh`, `tests/jsonl/test_rename_file_jsonl.sh`, `tests/jsonl/test_file_moved_jsonl.sh`, `tests/jsonl/test_file_relocated_jsonl.sh` |
+| watch stale / recovery | `inotify_backend_poll()` -> watcher stale detection -> `backend_log_watch_stale()` / resync helpers -> `backend_log_watch_diagnostic_record()` or `backend_log_resync_record()` -> `alfred_record_sink_emit()` | `tests/backend/test_watch_stale_output_failure.c`, `tests/backend/test_resync_output_routing.c`, `tests/jsonl/test_self_move_recovery_jsonl.sh`, `tests/jsonl/test_lost_scope_runtime_recovery_jsonl.sh` |
+
+La colonna `Test rappresentativi` non significa che ogni test conosca il nome
+del tracepoint. Significa che quel test prova il comportamento osservabile che
+oggi giustifica il tracepoint. Se in futuro il tracepoint diventa
+`public-output`, serviranno test focused sul nome e sul formato trace.
+
 ## Anti-pattern
 
 ### Usare tracepoint come logger verbose
@@ -323,7 +353,7 @@ Tracepoint candidati attraversati:
 
 ```text
 BACKEND_RAW_EVENT_READ
-RAW_RECORD_BUILT
+RAW_EVENT_NORMALIZED
 CORE_SEMANTIC_EVENT_EMITTED
 SINK_RECORD_EMITTED
 ```
@@ -331,7 +361,7 @@ SINK_RECORD_EMITTED
 Interpretazione:
 
 - il backend vede un evento filesystem;
-- Alfred costruisce un record raw normalizzato;
+- Alfred costruisce un `alfred_raw_event_t` normalizzato per il core corrente;
 - il core produce un evento semantico come `FILE_CREATED`;
 - un sink emette output umano o macchina.
 
