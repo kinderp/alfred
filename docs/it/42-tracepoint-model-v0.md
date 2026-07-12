@@ -431,7 +431,7 @@ destroy.
 
 ## Criteri per il prossimo step
 
-Prima di implementare tracing runtime bisogna completare almeno:
+Prima di implementare tracing runtime bisognava completare almeno:
 
 1. scelta degli scenari MVP;
 2. promozione di pochi tracepoint da `candidate` a `stable-doc`;
@@ -439,5 +439,17 @@ Prima di implementare tracing runtime bisogna completare almeno:
 4. decisione sul formato scenario Lab v0;
 5. decisione esplicita se serve davvero un output `trace.jsonl` nel breve.
 
-Questa sequenza evita di aggiungere codice prima di sapere che cosa il codice
-deve dimostrare.
+La decisione #103 chiude il punto 5 per il MVP corrente: non si implementa
+runtime trace adesso. I tracepoint restano `stable-doc`, non `public-output`.
+
+Il prossimo passo e' scrivere scenari Lab concreti con il formato Markdown v0.
+Solo dopo quegli scenari si potra' riaprire la domanda:
+
+```text
+quale informazione manca davvero senza trace runtime?
+```
+
+Se la risposta e' concreta, il nuovo output trace dovra' essere progettato come
+contratto separato: opt-in, versionato, testato, documentato e valutato rispetto
+al percorso caldo. Questa sequenza evita di aggiungere codice prima di sapere
+che cosa il codice deve dimostrare.
