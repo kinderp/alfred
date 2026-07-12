@@ -441,6 +441,7 @@ Per ora esiste:
 | Scenario | Stato | Cosa verifica |
 | --- | --- | --- |
 | [Create file](lab/scenarios/create-file.md) | `stable-doc` | Percorso minimo da `IN_CREATE` a `RAW_CREATE`, `FILE_CREATED` e sink/output. |
+| [Close-write / file-ready](lab/scenarios/file-ready.md) | `stable-doc` | Differenza fra `RAW_MODIFY`/`FILE_MODIFIED` e `RAW_CLOSE_WRITE`/`FILE_READY`. |
 
 ## Primo percorso architetturale
 
