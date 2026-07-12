@@ -179,17 +179,45 @@ ricondotto a funzioni e test reali.
 
 ## Formato scenario Lab v0
 
-Uno scenario Lab v0 dovrebbe contenere almeno:
+Decisione v0: uno scenario Lab e' un documento Markdown leggibile a mano, con
+sezioni strutturate e nomi stabili. Non e' ancora YAML, JSON o un formato
+parsato dal runtime.
+
+Questa scelta e' intenzionale:
+
+- uno studente deve poter leggere lo scenario senza strumenti speciali;
+- un contributor deve poter collegare scenario, funzioni e test nella stessa
+  pagina;
+- le intestazioni stabili lasciano aperta la possibilita' di generare un
+  formato macchina in futuro;
+- non trasformiamo il Lab in un nuovo contratto runtime prima di avere scenari
+  reali e verificati.
+
+### Campi obbligatori
+
+Ogni scenario Lab v0 deve contenere almeno:
 
 ```text
 id:
   nome stabile dello scenario
 
+title:
+  titolo umano breve
+
 goal:
   cosa deve capire il lettore
 
+status:
+  draft, stable-doc, public-output o deprecated
+
+scenario kind:
+  filesystem, diagnostic, output-pipeline o altro dominio futuro
+
 trigger:
   comando o azione che produce il fatto osservato
+
+expected evidence:
+  fatti osservabili minimi, per esempio raw event, record, log o test
 
 expected records:
   raw, semantic o diagnostic record attesi
@@ -207,14 +235,172 @@ expected outputs:
   eventi testuali, JSONL o diagnostici osservabili
 
 tests:
-  test C o shell che proteggono il comportamento
+  test C o shell che proteggono il comportamento, oppure test mancanti
 
 common failures:
   errori tipici, race, limiti backend o differenze ambientali
+
+non-goals:
+  cosa lo scenario non promette e non deve testare
 ```
 
-Questo formato e' pensato per essere leggibile a mano e generabile in futuro.
-Non richiede ancora un parser.
+Il campo `tests` puo' dichiarare tre stati:
+
+```text
+existing:
+  test gia' presenti che proteggono il comportamento osservabile
+
+missing:
+  test necessari prima di promuovere lo scenario
+
+future:
+  test utili solo quando esistera' tracing runtime o output Lab pubblico
+```
+
+Questa distinzione evita due errori: fingere che un comportamento non testato
+sia gia' stabile, oppure bloccare la documentazione perche' un test futuro non
+puo' ancora esistere.
+
+### Campi opzionali
+
+Uno scenario puo' aggiungere:
+
+```text
+fixtures:
+  directory, file o setup necessari
+
+timing notes:
+  debounce, race o attese intenzionali
+
+environment assumptions:
+  dipendenze Linux, filesystem, permessi o limiti CI
+
+known flakiness:
+  casi in cui l'ambiente puo' cambiare l'ordine o la presenza degli eventi
+
+future parser hints:
+  nomi o blocchi che un parser futuro potrebbe estrarre
+
+related docs:
+  link a modello tracepoint, contratto log, test o roadmap
+```
+
+### Esempio: create file
+
+````markdown
+# Scenario: create file
+
+id: lab.fs.create-file.v0
+title: Create a file and observe the semantic event
+status: stable-doc
+scenario kind: filesystem
+
+## Goal
+
+Show the shortest current path from an inotify create event to a semantic
+`FILE_CREATED` record emitted through the sink boundary.
+
+## Trigger
+
+```text
+touch a.txt
+```
+
+## Expected Evidence
+
+- one backend raw create fact is read from inotify;
+- the adapter builds one `alfred_raw_event_t`;
+- the core emits one semantic `FILE_CREATED` event;
+- the sink receives one corresponding `alfred_record_t`.
+
+## Expected Records
+
+- raw/normalized evidence for create;
+- semantic filesystem record with type `FILE_CREATED`;
+- no diagnostic record in the normal path.
+
+## Logical Tracepoints
+
+- `BACKEND_RAW_EVENT_READ`
+- `RAW_EVENT_NORMALIZED`
+- `CORE_SEMANTIC_EVENT_EMITTED`
+- `SINK_RECORD_EMITTED`
+
+## Function Path
+
+```text
+inotify_backend_poll()
+-> backend_poll()
+-> inotify_adapter_build_raw()
+-> handle_backend_event()
+-> alfred_process()
+-> core_logger_on_event()
+-> alfred_record_sink_emit()
+```
+
+## State Changes
+
+- `watcher_table_t` resolves the watched parent path;
+- `alfred_raw_event_t` carries mask, cookie and borrowed path fields;
+- the core emits a new `alfred_event_t`;
+- the logger adapter builds a semantic `alfred_record_t`.
+
+## Expected Outputs
+
+- text sink may emit compatibility text;
+- JSONL sink may emit a structured semantic record;
+- exact human log formatting is not the primary Lab contract.
+
+## Tests
+
+existing:
+- `tests/core/test_create_file.sh`
+- `tests/backend/test_raw_create_record_sink.sh`
+- `tests/jsonl/test_create_file_and_dir_jsonl.sh`
+
+missing:
+- none for the documentation-only scenario v0
+
+future:
+- focused Lab output test if scenarios become machine-rendered
+
+## Common Failures
+
+- asserting a full text log line instead of the semantic record;
+- expecting `FILE_READY`, which belongs to close-write/file-ready;
+- treating the backend raw fact as final product semantics.
+
+## Non-goals
+
+- no runtime trace output is required;
+- no queue/dispatcher behavior is asserted;
+- no policy or agent guardrail decision is involved.
+````
+
+### Esempi brevi per gli altri scenari MVP
+
+```text
+close-write / file-ready:
+  trigger: scrivere e chiudere un file
+  focus: differenza tra modifica tecnica e file consumabile
+  tracepoint: CORE_SEMANTIC_EVENT_EMITTED con tipo FILE_READY
+  errore tipico: leggere il file prima della close-write
+
+rename / move / relocate:
+  trigger: mv old new, mv file dir/, move fuori scope
+  focus: MOVED_FROM conservato, MOVED_TO correlato, classify_move()
+  tracepoint: MOVE_FROM_STORED, MOVE_MATCH_FOUND
+  errore tipico: aspettarsi due eventi semantici invece di uno
+
+watch stale / recovery:
+  trigger: spostamento o perdita affidabilita' di un watch
+  focus: diagnostica backend e recovery, non falso FILE_*
+  tracepoint: WATCH_DIAGNOSTIC_EMITTED
+  errore tipico: trasformare un problema di monitoraggio in evento filesystem
+```
+
+Il formato scenario Lab v0 resta documentazione strutturata. Non richiede un
+parser, non aggiunge I/O e non cambia il percorso caldo.
 
 ## Primo percorso architetturale
 
