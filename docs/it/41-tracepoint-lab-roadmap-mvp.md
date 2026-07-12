@@ -432,6 +432,16 @@ issue dedicata con:
 - regole di perdita, best-effort o criticalita';
 - documentazione per studenti, contributor e utenti.
 
+## Scenari Lab concreti
+
+Gli scenari concreti vivono in [Alfred Lab](lab/README.md).
+
+Per ora esiste:
+
+| Scenario | Stato | Cosa verifica |
+| --- | --- | --- |
+| [Create file](lab/scenarios/create-file.md) | `stable-doc` | Percorso minimo da `IN_CREATE` a `RAW_CREATE`, `FILE_CREATED` e sink/output. |
+
 ## Primo percorso architetturale
 
 Il percorso didattico da rendere esplicito e':

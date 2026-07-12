@@ -260,6 +260,12 @@ usando tracepoint `stable-doc`, record, output e test gia' esistenti; solo se
 gli scenari mostrano una mancanza reale si riaprira' una issue per un output
 trace opt-in, versionato, testato e misurato rispetto al percorso caldo.
 
+Aggiornamento successivo: la issue #105 introduce il primo scenario Lab concreto.
+`docs/it/lab/scenarios/create-file.md` applica il formato Markdown v0 al
+percorso minimo `IN_CREATE -> RAW_CREATE -> FILE_CREATED -> sink/output`.
+`docs/it/lab/README.md` diventa l'indice degli scenari Lab concreti e
+`41-tracepoint-lab-roadmap-mvp.md` linka lo scenario dalla roadmap.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
