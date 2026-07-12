@@ -245,6 +245,14 @@ contiene la mappa principale tracepoint -> funzioni -> dati -> copertura,
 percorso nel codice. Anche questo passo resta documentale: nessun output trace
 runtime e nessun cambio al percorso caldo.
 
+Aggiornamento successivo: la issue #101 decide il formato scenario Lab v0.
+`41-tracepoint-lab-roadmap-mvp.md` stabilisce che il formato iniziale e'
+Markdown-first con sezioni strutturate, non YAML/JSON e non parser runtime.
+La scelta mantiene gli scenari leggibili per studenti e contributor, ma usa
+campi stabili per poter generare in futuro un formato macchina.
+`42-tracepoint-model-v0.md` chiarisce che gli scenari possono citare tracepoint `stable-doc`
+senza trasformarli in output pubblico o contratto interno primario.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come

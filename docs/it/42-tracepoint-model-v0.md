@@ -297,6 +297,41 @@ del tracepoint. Significa che quel test prova il comportamento osservabile che
 oggi giustifica il tracepoint. Se in futuro il tracepoint diventa
 `public-output`, serviranno test focused sul nome e sul formato trace.
 
+## Relazione con il formato scenario Lab v0
+
+Il formato scenario Lab v0 e' definito in
+[Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md#formato-scenario-lab-v0).
+Uno scenario puo' citare i tracepoint di questo documento, ma non li trasforma
+automaticamente in output pubblico.
+
+Per v0 la relazione e':
+
+```text
+scenario Lab Markdown
+-> nomi tracepoint stable-doc
+-> funzioni e strutture dati reali
+-> test rappresentativi
+-> spiegazione didattica
+```
+
+Quindi uno scenario deve essere abbastanza strutturato da indicare:
+
+- quali tracepoint attraversa;
+- quali funzioni realizzano oggi quei passaggi;
+- quali record, raw facts o diagnostiche sono attesi;
+- quali test proteggono il comportamento osservabile;
+- quali parti restano non-obiettivi o lavoro futuro.
+
+Uno scenario non deve invece promettere:
+
+- che esista un record `trace` runtime;
+- che ogni tracepoint venga scritto su file;
+- che il Lab dipenda da stringhe testuali complete;
+- che i tracepoint diventino il contratto interno primario.
+
+Il contratto interno primario resta `alfred_record_t`. Il formato scenario e'
+un ponte documentale tra codice, test e futura interfaccia Lab.
+
 ## Anti-pattern
 
 ### Usare tracepoint come logger verbose

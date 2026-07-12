@@ -223,6 +223,9 @@ I test che rendono osservabili questi passaggi sono elencati in
 [Tracepoint Model v0](42-tracepoint-model-v0.md#mappa-tracepoint-funzioni-e-test).
 Il punto importante e' che, per ora, i tracepoint sono `stable-doc`: spiegano il
 percorso e guidano il futuro Lab, ma non aggiungono tracing runtime.
+Il formato degli scenari Lab v0 e' documentato in
+[Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md#formato-scenario-lab-v0):
+per ora e' Markdown strutturato, non YAML/JSON e non output runtime.
 
 ## Strutture dati Event Model, queue, dispatcher e sink
 
