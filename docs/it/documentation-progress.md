@@ -253,6 +253,13 @@ campi stabili per poter generare in futuro un formato macchina.
 `42-tracepoint-model-v0.md` chiarisce che gli scenari possono citare tracepoint `stable-doc`
 senza trasformarli in output pubblico o contratto interno primario.
 
+Aggiornamento successivo: la issue #103 decide di non implementare runtime
+trace output nel Tracepoint/Lab MVP corrente. `41-tracepoint-lab-roadmap-mvp.md`
+documenta la scelta: prima si scrivono scenari Lab concreti in Markdown v0,
+usando tracepoint `stable-doc`, record, output e test gia' esistenti; solo se
+gli scenari mostrano una mancanza reale si riaprira' una issue per un output
+trace opt-in, versionato, testato e misurato rispetto al percorso caldo.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come

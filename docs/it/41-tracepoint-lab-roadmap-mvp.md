@@ -402,6 +402,36 @@ watch stale / recovery:
 Il formato scenario Lab v0 resta documentazione strutturata. Non richiede un
 parser, non aggiunge I/O e non cambia il percorso caldo.
 
+## Decisione su output trace runtime
+
+Decisione #103: il Tracepoint/Lab MVP non implementa adesso `trace.jsonl` o
+altro output trace runtime.
+
+La scelta corrente e' deferire il runtime trace e scrivere prima scenari Lab
+concreti usando il formato Markdown v0. Gli scenari devono appoggiarsi a:
+
+- tracepoint `stable-doc`;
+- funzioni e strutture dati reali;
+- record Alfred gia' esistenti;
+- output testuale/JSONL gia' disponibili;
+- test rappresentativi gia' presenti o test mancanti dichiarati.
+
+Questa decisione evita di introdurre un nuovo contratto pubblico prima di sapere
+quali informazioni mancano davvero al Lab. Evita anche costi nel percorso caldo,
+I/O aggiuntivo, confusione tra tracepoint e `alfred_record_t`, e test fragili
+basati su un formato trace ancora non necessario.
+
+Il runtime trace potra' essere riaperto solo dopo avere scritto scenari reali e
+avere identificato una mancanza concreta. In quel caso dovra' nascere da una
+issue dedicata con:
+
+- campo e schema proposti;
+- stato `public-output` dei tracepoint coinvolti;
+- test focused su nomi, campi e ordering;
+- vincoli di costo e comportamento nel percorso caldo;
+- regole di perdita, best-effort o criticalita';
+- documentazione per studenti, contributor e utenti.
+
 ## Primo percorso architetturale
 
 Il percorso didattico da rendere esplicito e':
@@ -468,9 +498,10 @@ Checklist iniziale:
 3. scegliere gli scenari MVP;
 4. mappare tracepoint, funzioni, strutture dati e test;
 5. decidere formato scenario Lab v0;
-6. implementare output trace minimo solo se serve e solo opt-in;
-7. aggiungere test focused per ogni nuovo contratto;
-8. chiudere audit finale e debiti rimandati.
+6. decidere se serve output trace runtime nel breve;
+7. scrivere scenari Lab concreti prima di aggiungere un nuovo output trace;
+8. aggiungere test focused solo per contratti nuovi realmente introdotti;
+9. chiudere audit finale e debiti rimandati.
 
 ## Non obiettivi della milestone
 
@@ -496,7 +527,9 @@ La milestone puo' chiudersi quando:
 - almeno tre scenari MVP hanno mappa scenario -> tracepoint -> funzioni -> test;
 - la documentazione spiega il percorso con abbastanza dettaglio per studenti e
   contributori;
-- ogni eventuale output nuovo e' opt-in, versionato se pubblico e coperto da
+- l'eventuale assenza di output trace runtime e' una scelta esplicita, non una
+  lacuna nascosta;
+- ogni output nuovo futuro sara' opt-in, versionato se pubblico e coperto da
   test;
 - i debiti rimandati sono dichiarati nella issue madre e nel registro milestone.
 
