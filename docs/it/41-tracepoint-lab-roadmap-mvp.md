@@ -160,6 +160,23 @@ Tracepoint lasciati `candidate`:
 | policy / agent guardrail | Visione futura: richiede agent session, process context e policy, non ancora parte del Lab MVP. |
 | performance trace | Deve aspettare benchmark e decisione esplicita su output trace opt-in. |
 
+### Mappa iniziale funzioni, dati e test
+
+La mappa dettagliata vive in
+[Tracepoint Model v0](42-tracepoint-model-v0.md#mappa-tracepoint-funzioni-e-test).
+Per orientarsi rapidamente, i quattro scenari MVP attraversano questi percorsi:
+
+| Scenario | Percorso da spiegare nel Lab | Test da citare come evidenza |
+| --- | --- | --- |
+| create file | `inotify_backend_poll()` -> `inotify_adapter_build_raw()` -> `handle_backend_event()` -> `alfred_process()` -> `core_logger_on_event()` -> sink | `tests/core/test_create_file.sh`, `tests/backend/test_raw_create_record_sink.sh`, `tests/jsonl/test_create_file_and_dir_jsonl.sh` |
+| close-write / file ready | raw `CLOSE_WRITE` normalizzato -> `alfred_process()` -> `FILE_READY` -> record/sink | `tests/core/test_modify_file.sh`, `tests/backend/test_raw_close_write_record_sink.sh`, `tests/jsonl/test_modify_file_jsonl.sh` |
+| rename/move/relocate | `MOVED_FROM` salvato -> `MOVED_TO` correlato -> `classify_move()` -> evento semantico finale | `tests/core/test_rename_file.sh`, `tests/core/test_move_file.sh`, `tests/core/test_move_rename_file.sh`, test JSONL move/relocate |
+| watch stale / recovery | watch state backend -> diagnostica `WATCH_*` -> record diagnostico -> sink/output | `tests/backend/test_watch_stale_output_failure.c`, `tests/backend/test_resync_output_routing.c`, test JSONL recovery |
+
+Questa tabella non rende i tracepoint output pubblico. Serve a impedire che il
+Lab venga costruito su supposizioni vaghe: ogni nome deve poter essere
+ricondotto a funzioni e test reali.
+
 ## Formato scenario Lab v0
 
 Uno scenario Lab v0 dovrebbe contenere almeno:

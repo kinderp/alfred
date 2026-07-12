@@ -203,6 +203,27 @@ Questo e' il motivo per cui la cache move legacy non deve tornare nel percorso
 runtime normale. La correlazione dei move e' semantica, quindi appartiene al
 core.
 
+## Mappa Tracepoint/Lab MVP
+
+La milestone Tracepoint/Lab MVP usa nomi logici per spiegare passaggi interni
+senza legarsi a righe di codice fragili. Questa sezione collega quei nomi alla
+mappa del codice corrente.
+
+| Tracepoint | Dove si vede nel codice | Strutture dati principali | Cosa deve capire lo studente |
+| --- | --- | --- | --- |
+| `BACKEND_RAW_EVENT_READ` | `inotify_backend_poll()` e `backend_poll()` | `struct inotify_event`, `watcher_table_t`, path parent | Alfred parte da un fatto osservato dal backend, non da una semantica inventata. |
+| `RAW_EVENT_NORMALIZED` | `inotify_adapter_build_raw()` | `alfred_raw_event_t`, `mask`, `cookie`, `path` borrowed | La normalizzazione traduce dettagli inotify in raw facts Alfred, ma non decide ancora `FILE_*`. |
+| `CORE_SEMANTIC_EVENT_EMITTED` | `alfred_process()` ed `emit()` | `alfred_raw_event_t`, `alfred_event_t` | La semantica stabile nasce nel core, non nel backend. |
+| `MOVE_FROM_STORED` | ramo `ALFRED_RAW_MOVED_FROM` in `alfred_process()` | `moves[]`, `alfred_move_entry_t`, cookie | La prima meta' di un move non e' ancora un evento utente completo. |
+| `MOVE_MATCH_FOUND` | ramo `ALFRED_RAW_MOVED_TO`, `alfred_move_take()`, `classify_move()` | pending move + raw `MOVED_TO` | Alfred collega due raw facts e produce una sola semantica: rename, move o relocate. |
+| `WATCH_DIAGNOSTIC_EMITTED` | helper `backend_log_watch_*()` e `backend_log_resync_record()` | watch state, record diagnostici `WATCH_*` | Un problema di affidabilita' del monitor e' diagnostica backend, non falso evento filesystem. |
+| `SINK_RECORD_EMITTED` | `core_logger_on_event()` -> `alfred_record_sink_emit()` o helper diagnostici -> sink | `alfred_record_t`, `alfred_record_sink_t`, sink testuale/JSONL/counter | Il sink riceve un record per output umano o macchina, ma non e' il punto in cui il backend decide il formato finale. |
+
+I test che rendono osservabili questi passaggi sono elencati in
+[Tracepoint Model v0](42-tracepoint-model-v0.md#mappa-tracepoint-funzioni-e-test).
+Il punto importante e' che, per ora, i tracepoint sono `stable-doc`: spiegano il
+percorso e guidano il futuro Lab, ma non aggiungono tracing runtime.
+
 ## Strutture dati Event Model, queue, dispatcher e sink
 
 Questa sezione descrive le strutture introdotte per portare Alfred verso un
