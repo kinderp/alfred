@@ -266,6 +266,12 @@ percorso minimo `IN_CREATE -> RAW_CREATE -> FILE_CREATED -> sink/output`.
 `docs/it/lab/README.md` diventa l'indice degli scenari Lab concreti e
 `41-tracepoint-lab-roadmap-mvp.md` linka lo scenario dalla roadmap.
 
+Aggiornamento successivo: la issue #107 aggiunge lo scenario Lab
+close-write/file-ready. `docs/it/lab/scenarios/file-ready.md` chiarisce la
+differenza tra `RAW_MODIFY`/`FILE_MODIFIED` e
+`RAW_CLOSE_WRITE`/`FILE_READY`, senza introdurre runtime trace, parser o nuovo
+codice.
+
 ## Aggiornamento visione Observation Runtime
 
 `38-visione-observation-runtime.md` documenta la visione lunga di Alfred come
