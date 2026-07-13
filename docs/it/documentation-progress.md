@@ -57,8 +57,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `38-visione-observation-runtime.md` |
 | Parziale | `39-principi-architetturali-futuri.md` |
 | Parziale | `40-audit-inotify-backend-api-v0.md` |
-| Parziale | `41-tracepoint-lab-roadmap-mvp.md` |
-| Parziale | `42-tracepoint-model-v0.md` |
+| Completo | `41-tracepoint-lab-roadmap-mvp.md` |
+| Completo | `42-tracepoint-model-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -286,6 +286,20 @@ close-write/file-ready. `docs/it/lab/scenarios/file-ready.md` chiarisce la
 differenza tra `RAW_MODIFY`/`FILE_MODIFIED` e
 `RAW_CLOSE_WRITE`/`FILE_READY`, senza introdurre runtime trace, parser o nuovo
 codice.
+
+Aggiornamento successivo: le issue #109 e #111 completano il primo set di
+scenari Lab concreti. `docs/it/lab/scenarios/rename-move-relocate.md` spiega
+correlazione `MOVED_FROM`/`MOVED_TO`, cookie, move table e classificazione
+rename/move/relocate. `docs/it/lab/scenarios/watch-stale-recovery.md` spiega
+diagnostica `WATCH_*`, path stale, resync locale e lost-scope recovery senza
+inventare semantica filesystem falsa.
+
+Aggiornamento successivo: la issue #113 chiude la milestone `Tracepoint and Lab
+MVP` come MVP documentale `stable-doc`. Il risultato stabile e': Tracepoint
+Model v0, quattro scenari Markdown v0, mappa tracepoint/funzioni/test e
+decisione esplicita di non introdurre ancora `trace.jsonl`, parser, UI,
+tracepoint `public-output`, nuovo I/O nel percorso caldo o test focused per
+formati macchina non esistenti.
 
 ## Aggiornamento visione Observation Runtime
 
