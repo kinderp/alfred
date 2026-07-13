@@ -57,6 +57,46 @@ I benchmark attuali servono a rispondere a domande molto concrete:
 7. Quando il runtime reale produce una burst, la coda bounded resta osservabile
    tramite contatori locali?
 
+## Milestone Performance suite v0
+
+La milestone `Performance suite v0` trasforma questo report da memoria storica
+di misurazioni manuali a primo contratto operativo per i benchmark di Alfred.
+Non significa ancora introdurre soglie di rilascio o promettere prestazioni di
+produzione. Significa decidere quali percorsi misuriamo, come li nominiamo, quali
+campi CSV leggiamo e quali decisioni architetturali richiedono numeri prima di
+essere implementate.
+
+Per v0 il perimetro resta piccolo:
+
+- benchmark sintetici in memoria per sink, formatter, queue, dispatcher e output
+  pipeline;
+- benchmark runtime reali gia' disponibili per il percorso inotify/app/output;
+- spiegazione chiara dei campi CSV e dei limiti metodologici;
+- separazione fra misure orientative e futuri contratti piu' stabili;
+- regola di refresh quando cambiano queue, dispatcher, writer, JSONL, output
+  pipeline o percorso runtime misurato.
+
+Restano fuori dalla milestone:
+
+- worker thread e code per sink;
+- benchmark con lock, condition variable o concorrenza reale;
+- p95/p99 latency e distribuzioni statistiche complete;
+- benchmark socket, disco reale controllato, protobuf, MessagePack o writer
+  binari;
+- gate automatici di performance in CI;
+- ottimizzazioni non giustificate da un confronto riproducibile.
+
+Il principio e':
+
+```text
+prima misurare e rendere confrontabile,
+poi decidere se cambiare architettura.
+```
+
+Questa milestone e' quindi una protezione architetturale: evita di introdurre
+thread, code separate o formati nuovi senza sapere quale costo hanno oggi il
+percorso record, la copia owned, la queue bounded, il dispatcher e i writer.
+
 ## Comandi usati
 
 Le misure di questo report sono state raccolte con:
