@@ -144,6 +144,78 @@ Di conseguenza, le differenze piccole tra due righe non vanno interpretate come
 righe sono vicine, la conclusione corretta e' che non vediamo overhead evidente
 nel run corrente.
 
+## Tassonomia benchmark v0
+
+Performance suite v0 divide i benchmark in famiglie. Questa distinzione e'
+importante per non confrontare righe che misurano cose diverse.
+
+| Famiglia | Righe | Cosa isola | Confronti sensati |
+| --- | --- | --- | --- |
+| Baseline sink | `counter` | Costo minimo di attraversare un sink quasi vuoto | Confrontare con formatter e dispatcher per capire l'ordine di grandezza del lavoro non-I/O |
+| Formatter diretti | `text`, `jsonl` | Costo della serializzazione senza queue e senza dispatcher | Confrontare text vs JSONL e confrontare formatter diretti con dispatcher equivalenti |
+| Queue/ownership | `queue-counter` | Clone owned, push/pop queue e destroy senza formattazione | Confrontare con `counter` per stimare il costo del confine borrowed -> owned |
+| Dispatcher | `dispatcher-counter`, `dispatcher-text`, `dispatcher-jsonl`, `dispatcher-counter-text-jsonl` | Routing e fan-out sincrono senza queue | Confrontare dispatcher con formatter diretti per stimare il costo del routing |
+| Queue + dispatcher | `queue-dispatcher-counter`, `queue-dispatcher-text`, `queue-dispatcher-jsonl`, `queue-dispatcher-counter-text-jsonl` | Confine queue/ownership piu' routing verso sink | Confrontare con righe dispatcher equivalenti e con `queue-counter` |
+| Output pipeline sintetica | `output-pipeline-jsonl` | Wrapper `alfred_record_output_pipeline_t` in memoria | Confrontare con `queue-dispatcher-jsonl` per vedere se la pipeline composta aggiunge overhead macroscopico |
+| Runtime reale | `runtime-output compat-only`, `runtime-output counter-output`, `runtime-output jsonl-output` | `app_run()`, inotify reale, filesystem, drain runtime e output opt-in | Confrontare tra modalita' runtime; non confrontare direttamente con micro-benchmark sintetici come se misurassero lo stesso mondo |
+
+Regole pratiche:
+
+- `counter` e' una baseline, non una prestazione attesa di Alfred reale;
+- `text` e `jsonl` misurano soprattutto serializzazione e byte prodotti;
+- `queue-counter` misura il costo di sicurezza/lifetime del record owned;
+- `dispatcher-*` misura routing e fan-out senza ownership queue;
+- `queue-dispatcher-*` misura il primo confine runtime single-threaded;
+- `output-pipeline-jsonl` serve a controllare il costo del wrapper pipeline,
+  non a dimostrare che la pipeline sia piu' veloce del percorso manuale;
+- `runtime-output *` misura un percorso end-to-end piu' realistico, ma include
+  anche filesystem, shell, scheduler, startup, settle e shutdown.
+
+I confronti piu' utili per le decisioni architetturali sono:
+
+```text
+counter
+-> text/jsonl
+```
+
+per capire quanto costa serializzare rispetto a non fare quasi nulla;
+
+```text
+counter
+-> queue-counter
+```
+
+per capire il costo del confine borrowed -> owned;
+
+```text
+jsonl
+-> dispatcher-jsonl
+-> queue-dispatcher-jsonl
+-> output-pipeline-jsonl
+```
+
+per capire se dispatcher, queue e wrapper pipeline aggiungono overhead
+macroscopico sopra JSONL;
+
+```text
+runtime-output compat-only
+-> runtime-output counter-output
+-> runtime-output jsonl-output
+```
+
+per capire il costo osservabile della pipeline nel runtime reale.
+
+Confronti da evitare:
+
+- non usare `records_per_sec_avg` di `counter` come promessa di throughput reale;
+- non confrontare direttamente `runtime-output jsonl-output` con `jsonl` come se
+  entrambi misurassero solo il formatter;
+- non trarre conclusioni forti da differenze piccole quando `runs=1`;
+- non usare benchmark sintetici per decidere da soli worker thread, lock,
+  backpressure o code per sink;
+- non introdurre ottimizzazioni se non e' chiaro quale famiglia di benchmark
+  peggiora e quale contratto operativo viene protetto.
+
 ## Significato delle righe principali
 
 | Riga CSV | Cosa misura | Perche' ci interessa |
