@@ -137,13 +137,20 @@ filesystem. Per v0 resta documentazione `stable-doc`: non introduce parser,
 
 ## Aggiornamento Performance suite v0
 
-La milestone `Performance suite v0` parte dopo la chiusura del Lab MVP. Il
-riferimento principale e' `34-report-benchmark-prestazioni.md`: il documento
-conserva i numeri storici gia' raccolti e ora definisce il perimetro della
-milestone. L'obiettivo non e' ottimizzare a sensazione, ma stabilizzare
-tassonomia dei benchmark, comandi, significato dei campi CSV, limiti
-metodologici e regole di refresh prima di prendere decisioni su worker thread,
-code per sink, writer binari o nuovi formati.
+La milestone `Performance suite v0` e' chiusa come contratto documentale
+iniziale. Il riferimento principale e'
+`34-report-benchmark-prestazioni.md`: il documento conserva i numeri storici
+gia' raccolti e definisce tassonomia dei benchmark, significato dei campi CSV,
+politica di refresh, limiti metodologici, debiti accettati e gate test/script.
+L'obiettivo non e' ottimizzare a sensazione, ma impedire decisioni su worker
+thread, code per sink, writer binari o nuovi formati senza numeri espliciti e
+confrontabili.
+
+Restano rimandati i benchmark piu' forti: ripetizioni statistiche, p95/p99,
+ambiente normalizzato, I/O reale, socket, thread/lock, backpressure asincrona,
+code per sink, writer binari, allocazioni e backend non-inotify. Questi debiti
+sono ora espliciti e devono diventare benchmark mirati prima delle decisioni
+architetturali corrispondenti.
 
 ## Aggiornamento registro milestone
 
