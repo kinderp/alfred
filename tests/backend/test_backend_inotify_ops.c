@@ -12,6 +12,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -159,6 +160,15 @@ static void test_inotify_ops_rejects_invalid_add_target_arguments(void)
     alfred_backend_target_t target;
     int backend_option = 1;
     char too_long_path[PATH_MAX + 1u];
+    char regular_file_path[] =
+        "/tmp/alfred_test_backend_inotify_ops_file_root.XXXXXX";
+    char symlink_base[] =
+        "/tmp/alfred_test_backend_inotify_ops_symlink.XXXXXX";
+    char symlink_target_path[PATH_MAX];
+    char symlink_path[PATH_MAX];
+    char *symlink_base_dir;
+    int regular_file_fd;
+    int written;
     const char *raw_log =
         "/tmp/alfred_test_backend_inotify_ops_invalid.raw.log";
     const char *event_log =
@@ -242,11 +252,52 @@ static void test_inotify_ops_rejects_invalid_add_target_arguments(void)
     target.path = too_long_path;
     assert_add_target_rejected_without_watch(ops, &runtime, &target);
 
+    /*
+     * Backend API v0 inotify targets are directory roots. A regular file root
+     * must be rejected before it can become a configured root with no active
+     * watches; otherwise app startup can enter the event loop while observing
+     * nothing.
+     */
+    regular_file_fd = mkstemp(regular_file_path);
+    assert(regular_file_fd >= 0);
+    close(regular_file_fd);
+
+    target.path = regular_file_path;
+    assert_add_target_rejected_without_watch(ops, &runtime, &target);
+
+    /*
+     * The recursive startup scanner uses no-follow semantics for root
+     * classification. A symlink to a directory must therefore be rejected at
+     * the Backend API boundary instead of being accepted as a configured root
+     * that the scanner later treats as empty.
+     */
+    symlink_base_dir = mkdtemp(symlink_base);
+    assert(symlink_base_dir != NULL);
+    written = snprintf(symlink_target_path,
+                       sizeof(symlink_target_path),
+                       "%s/target",
+                       symlink_base_dir);
+    assert(written > 0 && (size_t)written < sizeof(symlink_target_path));
+    written = snprintf(symlink_path,
+                       sizeof(symlink_path),
+                       "%s/link",
+                       symlink_base_dir);
+    assert(written > 0 && (size_t)written < sizeof(symlink_path));
+    assert(mkdir(symlink_target_path, 0700) == 0);
+    assert(symlink(symlink_target_path, symlink_path) == 0);
+
+    target.path = symlink_path;
+    assert_add_target_rejected_without_watch(ops, &runtime, &target);
+
     ops->destroy((alfred_backend_t *)&runtime);
     assert_runtime_destroyed(&runtime);
 
     logger_close(&logger);
 
+    unlink(symlink_path);
+    rmdir(symlink_target_path);
+    rmdir(symlink_base_dir);
+    unlink(regular_file_path);
     unlink(raw_log);
     unlink(event_log);
     unlink(error_log);
@@ -783,10 +834,17 @@ static void test_inotify_ops_duplicate_target_does_not_repair_missing_watch(void
      * maintenance has already cleared the active watch while configured_roots
      * still records the API target, a duplicate add returns ERR_OK but does not
      * reinstall kernel coverage. Forced reinstall is remove_target() + add_target().
+     * This remains true even if the lexical path no longer resolves to a
+     * directory: an already registered target is handled by the registry
+     * idempotence rule, while a new non-directory target is rejected by the
+     * validation tests above.
      */
     watcher_remove(&runtime.runtime.watchers, wd);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(runtime.runtime.configured_roots_count == 1);
+    assert(rmdir(watch_root) == 0);
+    assert((wd = creat(watch_root, 0600)) >= 0);
+    close(wd);
 
     assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
@@ -804,7 +862,7 @@ static void test_inotify_ops_duplicate_target_does_not_repair_missing_watch(void
     unlink(raw_log);
     unlink(event_log);
     unlink(error_log);
-    rmdir(watch_root);
+    unlink(watch_root);
 }
 
 static void test_inotify_ops_remove_target_removes_recursive_subtree(void)

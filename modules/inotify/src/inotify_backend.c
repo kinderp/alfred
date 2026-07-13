@@ -656,6 +656,8 @@ static int backend_configured_roots_add(inotify_backend_t *runtime,
 
 static int backend_configured_root_path_is_valid(const char *path);
 
+static int backend_configured_root_is_directory(const char *path);
+
 static int backend_configured_roots_has_exact(
     const inotify_backend_t *runtime,
     const char *path
@@ -2430,6 +2432,13 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
     if (backend_configured_roots_has_exact(ctx->runtime, path))
         return ERR_OK;
 
+    if (!backend_configured_root_is_directory(path)) {
+        logger_error(ctx->logger,
+                     "configured root is not a directory path=%s",
+                     path);
+        return ERR_INVALID_ARG;
+    }
+
     if (ctx->config->recursive) {
         if (backend_configured_roots_has_nested_overlap(ctx->runtime, path)) {
             logger_error(ctx->logger,
@@ -2562,6 +2571,36 @@ static int backend_configured_root_path_is_valid(const char *path)
         return 0;
 
     return 1;
+}
+
+/*
+ * backend_configured_root_is_directory - validate target filesystem kind
+ * @path: borrowed target path supplied by Backend API target management
+ *
+ * Inotify Backend API v0 targets are directory roots. File activity is observed
+ * through parent-directory watches, not by accepting a regular file as a root.
+ * The recursive startup scanner treats a non-directory root as an empty scan,
+ * which is correct for a generic scanner but wrong for add_target(): a running
+ * Alfred process with zero installed watches looks healthy while observing
+ * nothing. Validate the target kind before reserving configured_roots.
+ *
+ * The check intentionally uses lstat() semantics. The current recursive watch
+ * policy does not follow symlink roots, so a symlink must not be accepted here
+ * only to become an empty scan later.
+ *
+ * Return: nonzero when @path exists and is a directory.
+ */
+static int backend_configured_root_is_directory(const char *path)
+{
+    struct stat st;
+
+    if (path == NULL)
+        return 0;
+
+    if (lstat(path, &st) != 0)
+        return 0;
+
+    return S_ISDIR(st.st_mode);
 }
 
 /*

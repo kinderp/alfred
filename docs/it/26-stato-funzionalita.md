@@ -81,7 +81,7 @@ del core, anche se possono generare raw sintetici per il core.
 | Rimozione watch su directory cancellata | Quando il kernel rimuove un watch, il backend aggiorna la watcher table | `WATCH_REMOVED` | Supportato diagnostico | `tests/backend/test_watch_removed_delete_dir.sh` |
 | Creazione ricorsiva lenta | Directory create con pause sufficienti per installare watch intermedi | `DIR_CREATED` per ogni directory, `WATCH_ADDED` per le directory osservate | Supportato | `tests/backend/test_recursive_slow_watch_tree.sh` |
 | Creazione ricorsiva veloce | Directory annidate create prima che Alfred possa watchare ogni livello | raw sintetici `ALFRED_RAW_CREATE | ALFRED_RAW_ISDIR` per directory scoperte | Supportato | `tests/core/test_recursive_create_nested_dir.sh` |
-| Root non directory | `IN_ONLYDIR` fa fallire atomicamente il watch su un file root | errore controllato, niente `WATCH_ADDED` falso | Supportato hardening | `tests/backend/test_onlydir_rejects_file_root.sh` |
+| Root non directory | Il backend inotify accetta solo root directory: `add_target()` rifiuta file e symlink prima di registrare il target; `IN_ONLYDIR` resta hardening del watch manager | startup fallisce, niente `application startup complete`, niente `event loop started`, niente `WATCH_ADDED` falso | Supportato hardening | `tests/backend/test_onlydir_rejects_file_root.sh`, `tests/backend/test_root_file_rejects_startup.sh` |
 
 ## Configurazione inotify
 
