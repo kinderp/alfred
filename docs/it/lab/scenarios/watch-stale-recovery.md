@@ -147,7 +147,7 @@ watch.reason=IN_MOVE_SELF
 
 ```text
 layer=diagnostic
-category=watch
+category=recovery
 type=WATCH_RESYNC_FAILED
 backend=inotify
 path=*/watched-root
