@@ -216,6 +216,71 @@ Confronti da evitare:
 - non introdurre ottimizzazioni se non e' chiaro quale famiglia di benchmark
   peggiora e quale contratto operativo viene protetto.
 
+## Interpretazione campi CSV v0
+
+I benchmark non producono tutti le stesse colonne. I micro-benchmark sintetici
+misurano record in memoria; il benchmark runtime misura Alfred reale con
+inotify, filesystem, processo, artifact e output opzionale. Per questo i campi
+vanno letti per famiglia.
+
+| Campo | Famiglia | Come leggerlo in v0 |
+| --- | --- | --- |
+| `sink` | Identificativo sintetico | Nome della riga benchmark nei micro-benchmark. Serve a capire quale percorso viene misurato, per esempio `queue-dispatcher-jsonl`. |
+| `mode` | Identificativo runtime | Nome della modalita' runtime reale, per esempio `compat-only`, `counter-output` o `jsonl-output`. |
+| `run` | Identificativo runtime | Numero del run dentro una stessa modalita'. Oggi e' utile soprattutto quando aumenteremo `runs`. |
+| `records` | Dimensione workload sintetico | Numero di record sintetici generati dal micro-benchmark. Permette confronti solo fra righe con stesso `records` e stesso ambiente. |
+| `files` | Dimensione workload runtime | Numero di file creati dal benchmark runtime. Non equivale al numero di record: un file puo' generare piu' raw, eventi e record. |
+| `runs` | Ripetizioni sintetiche | Numero di ripetizioni aggregate dal micro-benchmark. Con `runs=1` i valori sono orientativi, non statistici. |
+| `min_us`, `avg_us`, `max_us` | Timing sintetico | Tempo minimo, medio e massimo dei micro-benchmark. Con `runs=1` coincidono e non descrivono una distribuzione. |
+| `startup_us` | Timing runtime | Tempo di avvio del processo Alfred e setup iniziale nel benchmark runtime. Non misura solo il percorso evento. |
+| `emit_us` | Timing runtime | Tempo impiegato dallo script a generare il workload sul filesystem. Include shell, filesystem e scheduler, non solo Alfred. |
+| `settle_us` | Timing runtime | Tempo atteso/osservato per lasciare smaltire gli eventi e drenare output prima dello shutdown. |
+| `total_us` | Timing runtime | Tempo complessivo del run runtime. E' utile per confrontare modalita' runtime, ma include startup, workload, settle e shutdown. |
+| `records_per_sec_avg` | Throughput sintetico | Derivato da `records / avg_us`. E' utile per confronti relativi fra micro-benchmark compatibili, non come promessa di throughput reale. |
+| `files_per_sec` | Throughput runtime | Derivato dal workload di file creati. Include costo esterno di shell/filesystem e non va confrontato direttamente con `records_per_sec_avg`. |
+| `bytes_last` | Output sintetico | Byte prodotti dall'ultima ripetizione del micro-benchmark. Aiuta a capire quanto output text/JSONL viene generato. |
+| `counter_total_last` | Output sintetico | Numero di record osservati dal counter sink nell'ultima ripetizione. Deve corrispondere al workload atteso nei percorsi counter. |
+| `raw_lines`, `event_lines` | Output runtime | Righe osservate nei log compatibili. Servono a verificare che il runtime abbia davvero visto e processato il workload. |
+| `jsonl_lines`, `jsonl_bytes` | Output runtime | Dimensione del ledger JSONL runtime. In `counter-output` devono restare a zero; in `jsonl-output` indicano il costo dell'output strutturato. |
+| `enqueue_attempts` | Queue/runtime | Record offerti alla pipeline strutturata. In `compat-only` e' zero perche' la pipeline output e' disabilitata. |
+| `enqueue_success` | Queue/runtime | Record entrati nella queue bounded. Va letto insieme a `enqueue_attempts` e `enqueue_failures`. |
+| `enqueue_failures` | Queue/runtime | Record non accodati. Se e' maggiore di zero, il run non dimostra un ledger completo. |
+| `pressure_drains` | Queue/runtime | Numero di drain di pressione eseguiti per liberare spazio nella queue v0 single-threaded. E' diagnostico, non un obiettivo da massimizzare. |
+| `drain_calls` | Queue/runtime | Numero di tentativi di drain della pipeline. Aiuta a capire quanto spesso il runtime ha provato a svuotare la queue. |
+| `drained_records` | Queue/runtime | Record consegnati al dispatcher e ai sink. In un run sano deve essere coerente con `enqueue_success`. |
+| `max_pending` | Queue/runtime | Massimo riempimento osservato della queue. Valori vicini alla capacita' indicano pressione sulla coda bounded. |
+| `process_status` | Diagnostico runtime | Exit status del processo misurato. Non e' una metrica di performance: serve a sapere se il run e' valido. |
+| `artifact_dir` | Diagnostico runtime | Directory locale con log e artifact del run. Serve per ispezione manuale e debugging, non per confronti numerici. |
+
+Classificazione pratica:
+
+- campi identificativi: `sink`, `mode`, `run`, `artifact_dir`;
+- campi dimensione workload: `records`, `files`, `runs`;
+- campi temporali: `min_us`, `avg_us`, `max_us`, `startup_us`, `emit_us`,
+  `settle_us`, `total_us`;
+- campi throughput: `records_per_sec_avg`, `files_per_sec`;
+- campi output: `bytes_last`, `counter_total_last`, `raw_lines`,
+  `event_lines`, `jsonl_lines`, `jsonl_bytes`;
+- campi queue/runtime: `enqueue_attempts`, `enqueue_success`,
+  `enqueue_failures`, `pressure_drains`, `drain_calls`, `drained_records`,
+  `max_pending`;
+- campi diagnostici: `process_status`, `artifact_dir`.
+
+Per Performance suite v0 nessun campo e' ancora una soglia di rilascio. Alcuni
+campi pero' sono piu' candidati di altri a diventare contrattuali in futuro:
+
+| Tipo | Campi | Uso attuale |
+| --- | --- | --- |
+| Informativi | `min_us`, `max_us`, `startup_us`, `emit_us`, `settle_us`, `total_us`, `bytes_last`, `jsonl_bytes` | Aiutano a capire il run, ma non sono ancora soglie. |
+| Comparativi | `avg_us`, `records_per_sec_avg`, `files_per_sec` | Utili solo fra benchmark della stessa famiglia, stesso workload e stesso ambiente. |
+| Diagnostici | `process_status`, `artifact_dir`, `raw_lines`, `event_lines`, `jsonl_lines`, `counter_total_last` | Dicono se il run e gli artifact sono credibili. |
+| Runtime health | `enqueue_attempts`, `enqueue_success`, `enqueue_failures`, `drained_records`, `max_pending`, `pressure_drains` | Misurano se la pipeline bounded ha retto il workload senza perdere record. |
+
+La regola e': prima controllare i campi diagnostici, poi leggere i tempi. Un run
+con `process_status != 0`, artifact mancanti o `enqueue_failures > 0` non deve
+essere usato per dire che una versione e' piu' veloce o piu' lenta: prima va
+capito perche' il run non e' affidabile.
+
 ## Significato delle righe principali
 
 | Riga CSV | Cosa misura | Perche' ci interessa |
