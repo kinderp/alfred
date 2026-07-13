@@ -124,6 +124,13 @@ dell'agente.
 
 Un obiettivo pratico di Alfred e' produrre un ledger delle azioni osservate.
 
+Il primo contratto operativo di questa idea e'
+[Agent workspace observe ledger v0](43-agent-workspace-observe-ledger-v0.md).
+Quel documento e' volutamente piu' stretto di questa roadmap: per ora definisce
+una vista observe-mode sugli effetti filesystem e sulla diagnostica gia'
+rappresentabili come `alfred_record_t`, senza promettere attribuzione processo,
+sessione agente, policy o enforcement.
+
 Il ledger dovrebbe poter contenere:
 
 - file letti;

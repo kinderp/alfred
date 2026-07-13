@@ -59,6 +59,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `40-audit-inotify-backend-api-v0.md` |
 | Completo | `41-tracepoint-lab-roadmap-mvp.md` |
 | Completo | `42-tracepoint-model-v0.md` |
+| Completo | `43-agent-workspace-observe-ledger-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -167,6 +168,13 @@ con precisione cosa Alfred puo' osservare oggi tramite record/JSONL da cio' che
 richiede campi futuri di sessione agente, processo, workspace e decisione
 policy. Ogni proposta runtime dovra' rispettare Event Model v0, Writer Runtime
 v0 e i vincoli emersi nella Performance suite v0.
+
+`43-agent-workspace-observe-ledger-v0.md` definisce questo primo contratto:
+il ledger v0 e' una vista osservazionale sui record correnti, non un nuovo tipo
+C e non una nuova semantica JSONL. Il documento dichiara quali effetti
+filesystem e diagnostici sono credibili oggi, quali campi agent/session/process
+sono futuri e quali claim sono vietati finche' non esistono backend, policy e
+test dedicati.
 
 ## Aggiornamento registro milestone
 
