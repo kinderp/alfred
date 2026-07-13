@@ -144,6 +144,81 @@ Di conseguenza, le differenze piccole tra due righe non vanno interpretate come
 righe sono vicine, la conclusione corretta e' che non vediamo overhead evidente
 nel run corrente.
 
+## Politica di refresh v0
+
+La Performance suite v0 conserva numeri storici, ma non tutti i numeri storici
+restano confrontabili dopo una modifica. Un benchmark vecchio puo' restare utile
+per capire il percorso che stavamo studiando in quel momento, ma non deve essere
+usato come prova che il codice attuale sia piu' veloce o piu' lento se il
+percorso misurato e' cambiato.
+
+La regola base e':
+
+```text
+se cambia il percorso misurato, i numeri vanno rinfrescati prima di decidere.
+```
+
+Refresh obbligatorio:
+
+- cambia la queue, per esempio capacita', ownership, clone owned, push/pop,
+  drain o politica di overflow;
+- cambia il dispatcher, per esempio ordine dei sink, fan-out, gestione errori o
+  comportamento fail-closed;
+- cambia un sink o writer misurato, per esempio text, JSONL, counter o un writer
+  futuro;
+- cambia la serializzazione JSONL, il buffering, il flush o la gestione degli
+  errori di output;
+- cambia il percorso runtime misurato da `make perf-runtime-output`, per esempio
+  startup, shutdown, output pipeline, drain runtime o opzioni di configurazione;
+- cambia il benchmark runner, il formato CSV o il significato di una colonna;
+- cambia il workload di riferimento, per esempio `records`, `runs`, numero di
+  file, modalita' runtime o scenario generato.
+
+Refresh parziale:
+
+- se cambia solo un writer, vanno rinfrescate almeno le righe che attraversano
+  quel writer e le righe composte che lo includono;
+- se cambia solo la queue, vanno rinfrescate almeno `queue-counter`,
+  `queue-dispatcher-*` e `output-pipeline-*`;
+- se cambia solo il dispatcher, vanno rinfrescate almeno `dispatcher-*`,
+  `queue-dispatcher-*` e le pipeline che usano il dispatcher;
+- se cambia solo il runtime output, vanno rinfrescate almeno le righe
+  `runtime-output *`.
+
+Refresh consigliato ma non sempre obbligatorio:
+
+- cambia compilatore, flags di build o ambiente CI;
+- cambia kernel, filesystem, VM, container o risorse disponibili;
+- cambia il carico della macchina durante i run;
+- si vuole confrontare una PR importante con il baseline piu' recente.
+
+Refresh non necessario:
+
+- modifica solo documentazione che non cambia comandi, significato dei campi o
+  interpretazione dei risultati;
+- modifica solo commenti nel codice senza cambiare comportamento compilato;
+- modifica test non usati dai benchmark e non collegati al percorso misurato.
+
+Quando si rinfrescano i numeri, non bisogna cancellare i run vecchi se servono a
+spiegare la storia del progetto. Bisogna invece aggiungere una nuova sezione con:
+
+- data del run;
+- branch o commit misurato;
+- comandi eseguiti;
+- ambiente essenziale, per esempio VM, kernel se rilevante e note sul carico;
+- CSV prodotto o estratto rilevante;
+- interpretazione breve;
+- motivo del refresh, per esempio "queue changed" o "JSONL formatter changed".
+
+I numeri vecchi diventano quindi contesto storico. I numeri nuovi diventano il
+baseline corrente solo per la stessa famiglia di benchmark, stesso workload e
+stesso ambiente ragionevolmente confrontabile.
+
+Esempio pratico: se cambiamo `alfred_record_queue_push()`, non possiamo usare un
+vecchio `queue-dispatcher-jsonl` come prova del costo della queue attuale. Quel
+numero resta utile per capire come ragionavamo prima, ma il confronto
+architetturale deve usare un run nuovo.
+
 ## Tassonomia benchmark v0
 
 Performance suite v0 divide i benchmark in famiglie. Questa distinzione e'
