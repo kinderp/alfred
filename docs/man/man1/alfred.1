@@ -37,6 +37,10 @@ Filesystem root to observe. At least one path is required for a normal
 monitoring run. Each startup path is passed to the inotify backend, which
 installs a directory-scoped watch and recursively discovers subdirectories when
 recursive watching is enabled.
+.IP
+The current inotify backend accepts directory roots only. Passing a regular
+file, symlink, or other non-directory path as a startup root makes startup fail
+before Alfred reports successful startup or enters the event loop.
 .SH ENVIRONMENT
 .TP
 .B ALFRED_CONFIG

@@ -180,6 +180,15 @@ runtime, ma dentro una sottostruttura dedicata al backend inotify.
 watch. Alfred lo aggiunge sempre nel watch manager perche' il backend inotify
 osserva directory root e subdirectory ricorsive, non file singoli.
 
+Il confine Backend API v0 fa anche una validazione piu' alta: un target
+`add_target()` deve essere una directory esistente. Se l'utente passa un file
+regolare come root di startup, Alfred deve fallire durante `app_init()` prima di
+registrare la root, prima di scrivere `application startup complete` e prima di
+entrare nel ciclo eventi. Questa regola evita un processo apparentemente sano
+ma con zero watch installati. Lo scanner filesystem generico puo' trattare una
+root non directory come scansione vuota; il backend inotify invece non puo'
+accettarla come target monitorabile.
+
 La maschera e' configurabile da file con:
 
 ```text
