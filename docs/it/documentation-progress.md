@@ -174,7 +174,11 @@ il ledger v0 e' una vista osservazionale sui record correnti, non un nuovo tipo
 C e non una nuova semantica JSONL. Il documento dichiara quali effetti
 filesystem e diagnostici sono credibili oggi, quali campi agent/session/process
 sono futuri e quali claim sono vietati finche' non esistono backend, policy e
-test dedicati.
+test dedicati. Il documento contiene anche la mappa record/JSONL corrente:
+semantica filesystem, raw Alfred normalizzati e diagnostica watch/recovery
+possono contribuire al ledger osservazionale; fatti kernel `IN_*`, audit
+inotify opt-in, lifecycle, errori generici, trace e policy restano non-goal o
+future famiglie di contratto.
 
 ## Aggiornamento registro milestone
 
