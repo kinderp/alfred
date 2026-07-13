@@ -219,6 +219,52 @@ vecchio `queue-dispatcher-jsonl` come prova del costo della queue attuale. Quel
 numero resta utile per capire come ragionavamo prima, ma il confronto
 architetturale deve usare un run nuovo.
 
+## Debiti benchmark v0
+
+Performance suite v0 non prova a risolvere tutti i problemi di misurazione.
+Serve prima a rendere chiaro cosa misuriamo oggi e cosa non possiamo ancora
+affermare. I debiti sotto sono accettabili per v0, ma devono restare espliciti:
+se li dimentichiamo, rischiamo di prendere decisioni architetturali su numeri
+troppo deboli.
+
+| Debito | Perche' conta | Stato v0 | Prima decisione bloccata |
+| --- | --- | --- | --- |
+| Ripetizioni insufficienti | Con `runs=1` non sappiamo quanto il risultato sia stabile tra run diversi. | Accettato come misura orientativa. | Non usare differenze piccole per scegliere ottimizzazioni o refactor. |
+| Percentili mancanti | Media, minimo e massimo non descrivono p95/p99 latency. | Rimandato. | Non promettere latenze di coda o writer in produzione. |
+| Ambiente non normalizzato | CPU governor, carico VM, kernel, filesystem e cache possono cambiare i numeri. | Da annotare meglio nei refresh futuri. | Non confrontare run fatti in ambienti molto diversi come se fossero equivalenti. |
+| Metadata macchina incompleti | Senza commit, kernel, CPU, filesystem e build flags e' difficile riprodurre un run. | Parzialmente coperto da note manuali. | Non usare vecchi run come baseline forte se manca contesto essenziale. |
+| Disco reale non controllato | JSONL su file temporaneo non equivale a carichi disco reali, fsync, device lenti o saturazione I/O. | Rimandato. | Non decidere policy di flush o durability sulla base dei benchmark attuali. |
+| Socket e integrazioni esterne assenti | Fluent Bit, OpenTelemetry, SIEM, socket e processi esterni aggiungono backpressure e failure mode diversi. | Rimandato. | Non stimare costo delle integrazioni esterne dai soli writer in memoria/file locale. |
+| Thread e lock non misurati | La pipeline v0 e' ancora single-threaded; worker, mutex, condition variable e wakeup cambieranno il costo. | Rimandato finche' non si introduce un worker reale. | Non decidere worker thread o code per sink senza benchmark dedicati. |
+| Backpressure asincrona assente | `pressure_drains` misura una valvola v0 single-threaded, non una politica completa di drop, retry o blocco. | Accettato come diagnostica locale. | Non scegliere policy critical/best-effort/debug solo da questi numeri. |
+| Code per sink non misurate | Una coda comune e code per sink hanno costi, isolamento e failure mode diversi. | Rimandato. | Non scegliere per-sink queues senza misure comparative. |
+| Writer binari assenti | MessagePack, Protobuf o formati binari avranno costi e dimensioni diverse da JSONL/text. | Rimandato. | Non assumere che JSONL rappresenti il costo dei writer futuri. |
+| Memoria e allocazioni non tracciate | I benchmark attuali guardano soprattutto tempo e contatori, non allocazioni, RSS o frammentazione. | Rimandato. | Non dichiarare il percorso caldo allocation-free senza misure dedicate. |
+| Kernel/backend reali limitati | Il runtime benchmark copre inotify, ma non fanotify, audit, eBPF o backend futuri. | Accettato per la milestone inotify. | Non generalizzare i risultati a backend con semantica diversa. |
+
+Questi debiti non rendono inutili i benchmark attuali. Li rendono onesti. Oggi
+possiamo usare Performance suite v0 per:
+
+- verificare che le righe benchmark funzionino;
+- capire ordini di grandezza;
+- confrontare percorsi simili nello stesso ambiente;
+- evitare regressioni macroscopiche;
+- documentare quali numeri servono prima di cambiare architettura.
+
+Non possiamo ancora usarla per:
+
+- stabilire soglie CI automatiche;
+- promettere throughput o latenza di produzione;
+- decidere worker thread, code per sink o policy di backpressure;
+- confrontare in modo forte macchine diverse;
+- dimostrare costi di writer futuri non implementati.
+
+La regola pratica e': un debito diventa blocker quando la decisione che vogliamo
+prendere dipende proprio da quel dato. Per esempio, prima di introdurre code per
+sink bisogna misurare almeno una coda comune contro una variante per-sink; prima
+di promettere latenza bisogna avere ripetizioni e percentili; prima di cambiare
+policy di flush bisogna misurare I/O reale.
+
 ## Tassonomia benchmark v0
 
 Performance suite v0 divide i benchmark in famiglie. Questa distinzione e'
