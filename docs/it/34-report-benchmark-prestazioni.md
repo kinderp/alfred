@@ -97,6 +97,33 @@ Questa milestone e' quindi una protezione architetturale: evita di introdurre
 thread, code separate o formati nuovi senza sapere quale costo hanno oggi il
 percorso record, la copia owned, la queue bounded, il dispatcher e i writer.
 
+## Stato di chiusura Performance suite v0
+
+Performance suite v0 e' chiusa come contratto documentale iniziale. Non chiude
+il lavoro sulle prestazioni di Alfred; chiude il primo livello di disciplina:
+sappiamo quali benchmark esistono, come leggerli, quando rinfrescarli e quali
+debiti impediscono decisioni piu' forti.
+
+Risultato consolidato:
+
+- tassonomia dei benchmark v0 definita;
+- campi CSV principali spiegati;
+- distinzione fra benchmark sintetici e runtime benchmark documentata;
+- politica di refresh definita;
+- debiti e limiti accettati resi espliciti;
+- decisione registrata che non servono nuovi test o script per gli step
+  documentation-only della milestone;
+- nessuna soglia di rilascio o gate CI introdotti.
+
+La milestone autorizza confronti prudenti tra percorsi simili nello stesso
+ambiente e con lo stesso workload. Non autorizza ancora promesse di throughput,
+latenza, p95/p99, comportamento su disco reale, socket, thread, code per sink o
+backend diversi da inotify.
+
+Il prossimo lavoro sulle prestazioni dovra' partire da uno dei debiti elencati
+sotto e trasformarlo in un benchmark mirato prima di usarlo per cambiare
+architettura.
+
 ## Comandi usati
 
 Le misure di questo report sono state raccolte con:
