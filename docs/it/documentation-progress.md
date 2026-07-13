@@ -59,6 +59,11 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `40-audit-inotify-backend-api-v0.md` |
 | Parziale | `41-tracepoint-lab-roadmap-mvp.md` |
 | Parziale | `42-tracepoint-model-v0.md` |
+| Completo | `lab/README.md` |
+| Completo | `lab/scenarios/create-file.md` |
+| Completo | `lab/scenarios/file-ready.md` |
+| Completo | `lab/scenarios/rename-move-relocate.md` |
+| Completo | `lab/scenarios/watch-stale-recovery.md` |
 | Parziale | `audit/README.md` |
 | Parziale | `audit/2026-06-25-audit-notturno.md` |
 | Parziale | `audit/2026-07-01-audit-notturno.md` |
@@ -119,6 +124,16 @@ upload artifact, aggiornamento maturita' e report finale.
 dimensioni usate nella matrice di maturita': correttezza funzionale,
 robustezza, affidabilita', stabilita', performance, leggerezza, sicurezza,
 coerenza, semplicita', manutenibilita', operabilita' e documentazione.
+
+## Aggiornamento Tracepoint e Lab MVP
+
+La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
+attualmente disponibili coprono create file, close-write/file-ready,
+rename/move/relocate e watch stale/recovery. Il quarto scenario chiude il primo
+set MVP documentando la diagnostica `WATCH_*`: path stale, resync locale,
+handoff lost-scope e differenza tra affidabilita' del monitoraggio e semantica
+filesystem. Per v0 resta documentazione `stable-doc`: non introduce parser,
+`trace.jsonl`, UI o nuovo I/O nel percorso caldo.
 
 ## Aggiornamento registro milestone
 

@@ -121,7 +121,7 @@ spiegazione:
 | create file | Percorso base da evento backend a evento semantico. E' lo scenario piu' piccolo per spiegare `backend -> raw -> core -> output`. | inotify adapter, raw event, core, record, text/JSONL output. |
 | close-write / file ready | Spiega la differenza fra modifica tecnica e file consumabile. E' importante per backup, indicizzatori e scanner. | core semantic, debounce/ready, eventi `FILE_MODIFIED` e `FILE_READY`. |
 | rename/move/relocate | Mostra correlazione `MOVED_FROM` + `MOVED_TO`, cookie e classificazione. E' il primo scenario in cui Alfred fa piu' che inoltrare eventi raw. | move cache, `classify_move()`, eventi rename/move/relocate. |
-| watch stale / recovery | Mostra diagnostica backend e differenza tra fatto osservato e affidabilita' del watch. E' il primo scenario Lab non puramente semantico. | watcher state, diagnostic record, log diagnostici, recovery. |
+| [watch stale / recovery](lab/scenarios/watch-stale-recovery.md) | Mostra diagnostica backend e differenza tra fatto osservato e affidabilita' del watch. E' il primo scenario Lab non puramente semantico. | watcher state, diagnostic record, log diagnostici, recovery. |
 
 Altri scenari, come overflow, recursive mkdir, output pipeline completa e
 future policy, possono essere aggiunti dopo. Il criterio e': prima pochi
