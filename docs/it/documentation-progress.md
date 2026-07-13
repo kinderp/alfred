@@ -135,6 +135,16 @@ handoff lost-scope e differenza tra affidabilita' del monitoraggio e semantica
 filesystem. Per v0 resta documentazione `stable-doc`: non introduce parser,
 `trace.jsonl`, UI o nuovo I/O nel percorso caldo.
 
+## Aggiornamento Performance suite v0
+
+La milestone `Performance suite v0` parte dopo la chiusura del Lab MVP. Il
+riferimento principale e' `34-report-benchmark-prestazioni.md`: il documento
+conserva i numeri storici gia' raccolti e ora definisce il perimetro della
+milestone. L'obiettivo non e' ottimizzare a sensazione, ma stabilizzare
+tassonomia dei benchmark, comandi, significato dei campi CSV, limiti
+metodologici e regole di refresh prima di prendere decisioni su worker thread,
+code per sink, writer binari o nuovi formati.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
