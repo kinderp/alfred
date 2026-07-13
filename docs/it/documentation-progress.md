@@ -180,6 +180,16 @@ possono contribuire al ledger osservazionale; fatti kernel `IN_*`, audit
 inotify opt-in, lifecycle, errori generici, trace e policy restano non-goal o
 future famiglie di contratto.
 
+Aggiornamento successivo: il documento definisce anche i campi minimi
+workspace/session candidati per i prossimi micro-step. `workspace_root`,
+`workspace_id` e `ledger_session_id` sono il set meno rischioso per descrivere
+una sessione osservazionale Alfred senza fingere una vera agent session.
+`agent_session_id`, `agent_name`, `task_id`, `declared_intent`, process tree e
+decisioni policy restano futuri finche' non esistono una fonte esplicita,
+backend adatti o un policy engine. La regola principale e': ogni campo deve
+dichiarare la propria fonte di verita' e non deve essere derivato
+implicitamente da path, PID, timestamp o contenuto dei file.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle

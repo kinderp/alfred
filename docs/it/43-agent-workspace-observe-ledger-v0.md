@@ -100,6 +100,92 @@ se Alfred non ha una fonte affidabile per un campo, il campo resta assente o
 rimandato; non si riempie con supposizioni.
 ```
 
+## Campi minimi workspace/session
+
+Questa sezione decide il set minimo concettuale per i prossimi micro-step. Non
+aggiunge ancora campi a `alfred_record_t` e non cambia JSONL: definisce solo
+quali nomi e responsabilita' useremo quando arrivera' il momento di progettare
+schema e codice.
+
+La regola principale e':
+
+```text
+il campo deve dichiarare da dove arriva.
+```
+
+Per un ledger di sicurezza non basta avere un valore. Bisogna sapere se quel
+valore e' stato osservato dal sistema operativo, configurato dall'utente,
+dichiarato dall'agente, derivato da Alfred o prodotto da una policy futura.
+
+| Campo | Stato | Fonte di verita' | Significato | Regola v0 |
+| --- | --- | --- | --- | --- |
+| `workspace_root` | candidato v0 | configurazione utente o CLI futura | Root filesystem che Alfred considera workspace operativo | Non va dedotto automaticamente dal path del primo evento |
+| `workspace_id` | candidato v0 | Alfred/configurazione | Identificatore stabile del workspace, separato dal path leggibile | Deve restare opzionale finche' non esiste configurazione workspace |
+| `ledger_session_id` | candidato v0 | Alfred/runtime locale | Sessione osservazionale Alfred, anche senza agente AI | Puo' raggruppare record di una run senza promettere agent attribution |
+| `agent_session_id` | futuro vicino | adapter agente o orchestratore fidato | Sessione specifica di un runtime agente | Non va inventato da Alfred guardando solo il filesystem |
+| `agent_name` | futuro vicino | adapter agente, CLI o config | Nome del runtime agente, per esempio `codex` | E' contesto dichiarato, non prova di causalita' |
+| `human_user` | futuro | OS, config o orchestratore | Utente umano responsabile o proprietario della sessione | Richiede regole privacy prima di entrare nel JSONL pubblico |
+| `task_id` | futuro | orchestratore/adapter agente | Identificatore del task dichiarato | Non deve contenere necessariamente il prompt completo |
+| `task_summary` | futuro | utente, agente o LLM come riassunto non autorevole | Sintesi leggibile del task | Deve essere trattato come contesto dichiarato, non fonte di verita' |
+| `declared_intent` | futuro | agente/utente | Intenzione dichiarata | Utile per confronto futuro, ma non affidabile da sola |
+| `subject_pid` | futuro backend | backend process/audit/eBPF/fanotify/procfs | Processo che ha prodotto l'effetto | Non affidabile con solo inotify corrente |
+| `process_tree_root` | futuro backend/session engine | process backend + correlazione | Radice dell'albero processi attribuito alla sessione | Richiede session engine, non singolo record filesystem |
+| `decision` | futuro policy | policy engine | `observed`, `allowed`, `would_block`, `blocked`, ecc. | Per v0 il significato resta implicitamente `observed` |
+| `policy_rule_id` | futuro policy | policy engine | Regola che ha prodotto una decisione | Assente finche' non esiste policy valutata |
+
+### Set minimo candidato
+
+Il primo set da considerare, quando decideremo di aggiungere campi reali, e':
+
+```text
+workspace_root
+workspace_id
+ledger_session_id
+```
+
+Questi tre campi sono i meno rischiosi perche' possono descrivere una sessione
+osservazionale di Alfred senza fingere che esista gia' una vera agent session.
+
+- `workspace_root` dice qual e' il perimetro dichiarato dall'utente o dalla
+  configurazione.
+- `workspace_id` permette di riferirsi allo stesso workspace senza dipendere
+  sempre dal path testuale.
+- `ledger_session_id` raggruppa record prodotti durante una run o una sessione
+  Alfred, anche se non sappiamo ancora quale agente o processo li abbia causati.
+
+`agent_session_id`, `agent_name`, `task_id` e `declared_intent` sono molto
+importanti, ma devono arrivare da un adapter agente, da una CLI esplicita o da
+un orchestratore. Con il solo inotify sarebbero supposizioni.
+
+### Campi da non derivare implicitamente
+
+Alfred non deve derivare automaticamente:
+
+- `workspace_root` dal prefisso comune dei path osservati;
+- `agent_name` dal nome del processo o dal nome della directory;
+- `agent_session_id` dal PID, dal timestamp o dal file modificato;
+- `task_summary` dal contenuto dei file;
+- `decision` dalla posizione del path dentro/fuori una directory.
+
+Queste inferenze possono sembrare comode, ma creano un ledger ambiguo: il
+lettore non sa piu' se sta guardando un fatto osservato, una configurazione
+utente o una supposizione di Alfred.
+
+### Privacy e minimizzazione
+
+I campi workspace/session possono contenere dati sensibili. Un path workspace
+puo' rivelare nome utente, cliente, repository, progetto o directory privata.
+Un task summary puo' contenere informazioni aziendali o credenziali incollate
+per errore.
+
+Per questo v0 deve seguire tre regole:
+
+- non salvare prompt completi come campo minimo;
+- preferire identificatori (`workspace_id`, `ledger_session_id`, `task_id`) a
+  testo lungo quando basta un riferimento;
+- documentare sempre se un campo e' osservato, configurato, dichiarato o
+  derivato.
+
 ## Decisione v0: `observed`, non `allowed`
 
 Il ledger v0 deve usare mentalmente una decisione implicita:
