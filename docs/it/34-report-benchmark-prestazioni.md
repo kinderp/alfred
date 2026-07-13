@@ -231,6 +231,7 @@ troppo deboli.
 | --- | --- | --- | --- |
 | Ripetizioni insufficienti | Con `runs=1` non sappiamo quanto il risultato sia stabile tra run diversi. | Accettato come misura orientativa. | Non usare differenze piccole per scegliere ottimizzazioni o refactor. |
 | Percentili mancanti | Media, minimo e massimo non descrivono p95/p99 latency. | Rimandato. | Non promettere latenze di coda o writer in produzione. |
+| Confidenza statistica assente | Non registriamo ancora varianza, intervalli di confidenza o dimensione campione sufficiente. | Rimandato. | Non introdurre gate automatici o affermazioni quantitative forti. |
 | Ambiente non normalizzato | CPU governor, carico VM, kernel, filesystem e cache possono cambiare i numeri. | Da annotare meglio nei refresh futuri. | Non confrontare run fatti in ambienti molto diversi come se fossero equivalenti. |
 | Metadata macchina incompleti | Senza commit, kernel, CPU, filesystem e build flags e' difficile riprodurre un run. | Parzialmente coperto da note manuali. | Non usare vecchi run come baseline forte se manca contesto essenziale. |
 | Disco reale non controllato | JSONL su file temporaneo non equivale a carichi disco reali, fsync, device lenti o saturazione I/O. | Rimandato. | Non decidere policy di flush o durability sulla base dei benchmark attuali. |
