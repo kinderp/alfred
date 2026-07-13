@@ -271,9 +271,9 @@ campi pero' sono piu' candidati di altri a diventare contrattuali in futuro:
 
 | Tipo | Campi | Uso attuale |
 | --- | --- | --- |
-| Informativi | `startup_us`, `emit_us`, `settle_us`, `total_us`, `bytes_last`, `jsonl_bytes` | Aiutano a capire il run, ma non sono ancora soglie. |
+| Informativi | `min_us`, `max_us`, `startup_us`, `emit_us`, `settle_us`, `total_us`, `bytes_last`, `jsonl_bytes` | Aiutano a capire il run, ma non sono ancora soglie. |
 | Comparativi | `avg_us`, `records_per_sec_avg`, `files_per_sec` | Utili solo fra benchmark della stessa famiglia, stesso workload e stesso ambiente. |
-| Diagnostici | `process_status`, `artifact_dir`, `raw_lines`, `event_lines`, `jsonl_lines` | Dicono se il run e gli artifact sono credibili. |
+| Diagnostici | `process_status`, `artifact_dir`, `raw_lines`, `event_lines`, `jsonl_lines`, `counter_total_last` | Dicono se il run e gli artifact sono credibili. |
 | Runtime health | `enqueue_attempts`, `enqueue_success`, `enqueue_failures`, `drained_records`, `max_pending`, `pressure_drains` | Misurano se la pipeline bounded ha retto il workload senza perdere record. |
 
 La regola e': prima controllare i campi diagnostici, poi leggere i tempi. Un run
