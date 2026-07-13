@@ -152,6 +152,22 @@ code per sink, writer binari, allocazioni e backend non-inotify. Questi debiti
 sono ora espliciti e devono diventare benchmark mirati prima delle decisioni
 architetturali corrispondenti.
 
+## Aggiornamento Agent workspace observe ledger
+
+La milestone operativa successiva e' `Agent workspace observe ledger`, collegata
+alla GitHub Milestone #6 e alla issue madre #130. Il riferimento principale e'
+`24-roadmap-ai-agent-guardrail.md`, ma il perimetro corrente e' volutamente
+molto piu' stretto della visione completa: definire un ledger observe-mode per
+effetti filesystem di workspace senza promettere enforcement, policy engine,
+process tree, rete, fanotify/eBPF/audit o integrazione LLM.
+
+Il primo micro-step #131 e' documentale: aggiornare registro milestone,
+tracciabilita' e stato documentazione. I passi successivi dovranno separare
+con precisione cosa Alfred puo' osservare oggi tramite record/JSONL da cio' che
+richiede campi futuri di sessione agente, processo, workspace e decisione
+policy. Ogni proposta runtime dovra' rispettare Event Model v0, Writer Runtime
+v0 e i vincoli emersi nella Performance suite v0.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
