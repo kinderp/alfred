@@ -436,13 +436,14 @@ issue dedicata con:
 
 Gli scenari concreti vivono in [Alfred Lab](lab/README.md).
 
-Per ora esiste:
+Il primo MVP documentale contiene quattro scenari `stable-doc`:
 
 | Scenario | Stato | Cosa verifica |
 | --- | --- | --- |
 | [Create file](lab/scenarios/create-file.md) | `stable-doc` | Percorso minimo da `IN_CREATE` a `RAW_CREATE`, `FILE_CREATED` e sink/output. |
 | [Close-write / file-ready](lab/scenarios/file-ready.md) | `stable-doc` | Differenza fra `RAW_MODIFY`/`FILE_MODIFIED` e `RAW_CLOSE_WRITE`/`FILE_READY`. |
 | [Rename / move / relocate](lab/scenarios/rename-move-relocate.md) | `stable-doc` | Correlazione `RAW_MOVED_FROM`/`RAW_MOVED_TO`, cookie, move table e classificazione in rename/move/relocate. |
+| [Watch stale / recovery](lab/scenarios/watch-stale-recovery.md) | `stable-doc` | Diagnostica `WATCH_*`, path stale, resync e recovery lost-scope senza inventare semantica filesystem falsa. |
 
 ## Primo percorso architetturale
 
@@ -536,7 +537,8 @@ Questi temi restano importanti, ma non sono il primo MVP Lab.
 La milestone puo' chiudersi quando:
 
 - esiste un Tracepoint Model v0 documentato;
-- almeno tre scenari MVP hanno mappa scenario -> tracepoint -> funzioni -> test;
+- i quattro scenari MVP scelti hanno mappa scenario -> tracepoint -> funzioni
+  -> test;
 - la documentazione spiega il percorso con abbastanza dettaglio per studenti e
   contributori;
 - l'eventuale assenza di output trace runtime e' una scelta esplicita, non una
@@ -547,3 +549,37 @@ La milestone puo' chiudersi quando:
 
 La chiusura non richiede una UI Lab completa. Richiede un contratto piccolo,
 chiaro e verificabile su cui una UI futura possa appoggiarsi.
+
+## Stato di chiusura
+
+La milestone `Tracepoint and Lab MVP` chiude come MVP documentale
+`stable-doc`.
+
+Risultato consolidato:
+
+- `42-tracepoint-model-v0.md` definisce vocabolario, stabilita',
+  anti-pattern, metadati minimi e relazione fra tracepoint, record e log;
+- il primo set MVP resta intenzionalmente piccolo: create file,
+  close-write/file-ready, rename/move/relocate e watch stale/recovery;
+- i tracepoint necessari a questi scenari sono documentati come `stable-doc`;
+- la mappa tracepoint -> funzioni -> dati -> test vive nel Tracepoint Model v0;
+- `docs/it/lab/` contiene i quattro scenari Markdown v0 leggibili a mano;
+- il runtime trace pubblico e' stato deliberatamente rimandato perche' gli
+  scenari non hanno ancora dimostrato una mancanza concreta che richieda
+  `trace.jsonl`.
+
+Debiti rimandati deliberati:
+
+- nessun parser scenario;
+- nessuna UI o dashboard Lab;
+- nessun `trace.jsonl` o output trace runtime;
+- nessun tracepoint `public-output`;
+- nessun nuovo I/O nel percorso caldo;
+- nessun test focused nuovo, perche' questa milestone non introduce un nuovo
+  formato macchina o comportamento runtime;
+- scenari futuri come overflow, recursive mkdir, output pipeline end-to-end,
+  policy/Agent Guard e performance trace.
+
+Questi debiti non sono lacune nascoste della milestone: sono il perimetro
+scelto per mantenere il Lab MVP piccolo, verificabile e utile agli studenti
+prima di aggiungere strumenti automatici.
