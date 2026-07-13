@@ -26,6 +26,7 @@ I tracepoint citati dagli scenari sono documentati in
 | [Create file](scenarios/create-file.md) | `stable-doc` | Percorso minimo da `IN_CREATE` a `FILE_CREATED` e sink/output. |
 | [Close-write / file-ready](scenarios/file-ready.md) | `stable-doc` | Differenza tra `FILE_MODIFIED` e `FILE_READY`, cioe' file scritto e writer chiuso. |
 | [Rename / move / relocate](scenarios/rename-move-relocate.md) | `stable-doc` | Correlazione `MOVED_FROM` + `MOVED_TO`, cookie, move table e classificazione semantica. |
+| [Watch stale / recovery](scenarios/watch-stale-recovery.md) | `stable-doc` | Diagnostica `WATCH_*`, path stale, resync e recovery lost-scope senza inventare semantica falsa. |
 
 ## Regola v0
 
