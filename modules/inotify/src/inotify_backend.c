@@ -2429,15 +2429,15 @@ static int backend_add_startup_watch(inotify_backend_context_t *ctx,
         return ERR_INVALID_ARG;
     }
 
+    if (backend_configured_roots_has_exact(ctx->runtime, path))
+        return ERR_OK;
+
     if (!backend_configured_root_is_directory(path)) {
         logger_error(ctx->logger,
                      "configured root is not a directory path=%s",
                      path);
         return ERR_INVALID_ARG;
     }
-
-    if (backend_configured_roots_has_exact(ctx->runtime, path))
-        return ERR_OK;
 
     if (ctx->config->recursive) {
         if (backend_configured_roots_has_nested_overlap(ctx->runtime, path)) {

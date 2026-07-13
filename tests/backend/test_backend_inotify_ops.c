@@ -12,6 +12,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -833,10 +834,17 @@ static void test_inotify_ops_duplicate_target_does_not_repair_missing_watch(void
      * maintenance has already cleared the active watch while configured_roots
      * still records the API target, a duplicate add returns ERR_OK but does not
      * reinstall kernel coverage. Forced reinstall is remove_target() + add_target().
+     * This remains true even if the lexical path no longer resolves to a
+     * directory: an already registered target is handled by the registry
+     * idempotence rule, while a new non-directory target is rejected by the
+     * validation tests above.
      */
     watcher_remove(&runtime.runtime.watchers, wd);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
     assert(runtime.runtime.configured_roots_count == 1);
+    assert(rmdir(watch_root) == 0);
+    assert((wd = creat(watch_root, 0600)) >= 0);
+    close(wd);
 
     assert(ops->add_target((alfred_backend_t *)&runtime, &target) == ERR_OK);
     assert(watcher_count(&runtime.runtime.watchers) == 0);
@@ -854,7 +862,7 @@ static void test_inotify_ops_duplicate_target_does_not_repair_missing_watch(void
     unlink(raw_log);
     unlink(event_log);
     unlink(error_log);
-    rmdir(watch_root);
+    unlink(watch_root);
 }
 
 static void test_inotify_ops_remove_target_removes_recursive_subtree(void)
