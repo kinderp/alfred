@@ -1462,3 +1462,11 @@ target management, poll non bloccante e app lifecycle wiring sono implementati
 e coperti per il sottoinsieme corrente. La migrazione del main loop, il core
 input model basato su record e il benchmark hot-path restano debiti espliciti,
 non ambiguita' nascoste.
+
+Aggiornamento successivo: la issue #109 aggiunge il terzo scenario Lab
+concreto, `rename / move / relocate`. Lo scenario documenta la correlazione
+`MOVED_FROM` + `MOVED_TO` tramite cookie, la move table `moves[1024]`, le
+funzioni `alfred_move_insert()`, `alfred_move_take()` e `classify_move()`, e la
+regola che produce un solo evento semantico tra rename, move e relocate. Il
+lavoro resta documentation-only: nessun `trace.jsonl`, parser, UI, cambio
+record o cambio al percorso caldo.

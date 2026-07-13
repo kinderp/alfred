@@ -442,6 +442,7 @@ Per ora esiste:
 | --- | --- | --- |
 | [Create file](lab/scenarios/create-file.md) | `stable-doc` | Percorso minimo da `IN_CREATE` a `RAW_CREATE`, `FILE_CREATED` e sink/output. |
 | [Close-write / file-ready](lab/scenarios/file-ready.md) | `stable-doc` | Differenza fra `RAW_MODIFY`/`FILE_MODIFIED` e `RAW_CLOSE_WRITE`/`FILE_READY`. |
+| [Rename / move / relocate](lab/scenarios/rename-move-relocate.md) | `stable-doc` | Correlazione `RAW_MOVED_FROM`/`RAW_MOVED_TO`, cookie, move table e classificazione in rename/move/relocate. |
 
 ## Primo percorso architetturale
 
