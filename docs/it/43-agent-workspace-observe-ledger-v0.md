@@ -172,6 +172,58 @@ Un consumatore esterno puo' trattare `output.jsonl` come ledger osservazionale,
 ma il codice Alfred non deve fare parsing del proprio JSONL per decidere
 semantica, policy o routing.
 
+## Mappa record/JSONL corrente
+
+Questa mappa traduce la copertura gia' documentata nel
+[Contratto dei log](22-contratto-log.md#copertura-record-sink-e-output-jsonl)
+nel linguaggio del ledger v0.
+
+Le colonne hanno questo significato:
+
+- `Ruolo ledger v0`: come la famiglia puo' essere letta da un consumatore
+  observe-mode.
+- `Runtime JSONL oggi`: se il record entra davvero in `output.jsonl` quando
+  `output_enabled=true`.
+- `Uso corretto`: cosa puo' dire Alfred senza oltrepassare il contratto.
+- `Limite`: cosa resta fuori dal contratto v0.
+
+| Famiglia corrente | Esempi | Ruolo ledger v0 | Runtime JSONL oggi | Uso corretto | Limite |
+| --- | --- | --- | --- | --- | --- |
+| Semantica filesystem core | `FILE_CREATED`, `DIR_CREATED`, `FILE_MODIFIED`, `FILE_READY`, delete, rename, move, relocate, `OVERFLOW` | Effetti workspace osservati | si', quando l'output strutturato e' abilitato | Timeline degli effetti filesystem che Alfred ha normalizzato semanticamente | Non identifica ancora agente, processo, comando o intento |
+| Raw Alfred normalizzati | `RAW_CREATE`, `RAW_DELETE`, `RAW_MODIFY`, `RAW_ATTRIB`, `RAW_CLOSE_WRITE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW` | Evidenza tecnica a supporto della semantica | si', per le famiglie runtime-routed | Debug, audit tecnico, spiegazione di come si arriva a un evento semantico | Non sono decisioni policy e non vanno confusi con i fatti kernel `IN_*` pubblici |
+| Raw sintetici Alfred | create directory scoperte da scan ricorsivo, overflow sintetico nei test | Evidenza normalizzata prodotta da Alfred per non perdere un fatto utile | si', se attraversa il callback applicativo o il test JSONL dedicato | Spiegare che Alfred ha generato un raw coerente con il modello comune | Ogni nuovo sintetico va documentato; non deve diventare stringa libera |
+| Diagnostica watch base | `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_STALE_EVENT_DROPPED` | Affidabilita' del monitoraggio | si' | Dire quando Alfred sta osservando un path, lo ha perso o non puo' fidarsi del mapping `wd -> path` | Non sono azioni dell'agente e non sono eventi filesystem utente |
+| Diagnostica resync locale | `WATCH_RESYNC_BEGIN`, `WATCH_RESYNC_SCAN_DONE`, `WATCH_RESYNC_FAILED`, `WATCH_RESYNC_END`, reinstall/rollback | Stato di recupero locale | si' per la famiglia migrata | Spiegare se Alfred ha provato a recuperare un watch stale e con quale esito | Non prova che il workspace sia completo se il resync fallisce |
+| Diagnostica lost-scope | `WATCH_LOST_QUEUED`, `WATCH_LOST_FOUND`, `WATCH_LOST_REINSTALLED`, retry, gave-up, end | Stato di recupero fuori dal vecchio path | si' per il percorso migrato | Dire quando Alfred cerca una directory persa tramite identita' e quando la ritrova | Non equivale a process/session attribution |
+| Fatti kernel/backend osservati | `IN_CREATE`, `IN_DELETE`, `IN_MOVED_FROM`, `IN_Q_OVERFLOW` | Solo debug backend storico | no | Usarli per debug locale in `raw.log` | Non sono ledger pubblico v0 finche' non esiste `backend_observed` multi-backend |
+| Audit inotify opt-in | `IN_OPEN`, `IN_ACCESS`, `IN_CLOSE_NOWRITE` | Diagnostica raw rumorosa | no | Verificare localmente audit backend opt-in | Non sono file read ledger: mancano modello pubblico, contesto processo e golden JSONL |
+| Lifecycle/app | startup, shutdown, config, logger initialized | Contesto umano applicativo | no | Leggere nei log umani per diagnosi runtime | Non e' contratto JSONL/ledger v0 |
+| Errori runtime generici | config failure, output writer failure, backend init failure | Diagnostica applicativa futura | no, salvo errori gia' modellati dentro famiglie watch/recovery | Oggi restano in `errors.log` e nello status fail-closed | Serve schema `diagnostic/error` o `lifecycle/error` prima del ledger pubblico |
+| Trace/performance | tracepoint pipeline, benchmark, metriche | Futuro debugging/quality evidence | no | Usare nei report benchmark o Lab, non nel ledger v0 | Serve layer trace/pipeline stabile |
+| Security/policy/Agent Guard | allow, warn, would-block, block, approval | Futuro livello decisionale | no | Solo direzione progettuale | Richiede sessione agente, policy, decisioni, test e possibilmente backend enforcement |
+
+La conseguenza pratica e':
+
+```text
+observe ledger v0 pubblico = sottoinsieme JSONL opt-in dei record gia'
+runtime-routed, letto come evidenza osservazionale.
+```
+
+Non e':
+
+```text
+raw.log completo
+events.log completo
+lista completa delle azioni dell'agente
+contratto policy/would-block
+prova di attribuzione processo -> effetto
+```
+
+Questa mappa non richiede nuovi test perche' non cambia comportamento. I test
+JSONL esistenti proteggono le famiglie pubbliche gia' scelte per Event Model v0.
+Se una futura PR aggiunge una famiglia alla colonna `Runtime JSONL oggi = si'`,
+allora dovra' aggiornare anche golden JSONL, contratto log e questa mappa.
+
 ## Esempi
 
 ### Modifica coerente ma non attribuita
