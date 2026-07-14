@@ -190,6 +190,16 @@ backend adatti o un policy engine. La regola principale e': ogni campo deve
 dichiarare la propria fonte di verita' e non deve essere derivato
 implicitamente da path, PID, timestamp o contenuto dei file.
 
+Aggiornamento successivo: il documento definisce anche la strategia di test e
+golden coverage per il ledger observe-mode. La scelta e' di non duplicare tutte
+le suite core/backend: i test core proteggono la semantica filesystem, i test
+backend proteggono watch/recovery/output failure, i test formatter proteggono
+la forma JSONL e i golden JSONL proteggono solo scenari pubblici
+rappresentativi. Un nuovo golden diventa obbligatorio quando una PR aggiunge
+campi pubblici del ledger, cambia una famiglia runtime-routed, introduce
+decisioni policy visibili o modifica queue/dispatcher/writer in modo rilevante
+per `output.jsonl`.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
