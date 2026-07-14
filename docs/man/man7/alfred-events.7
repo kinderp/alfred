@@ -198,6 +198,13 @@ flags
 .EE
 JSONL, MessagePack, Protobuf, socket output, Alfred Lab and plugin backends
 should be built on that structured model, not on ad hoc log strings.
+.PP
+The controlled record namespace already admits
+.B diagnostic + lifecycle + SESSION_CONTEXT
+as the future metadata/session record name. This does not mean the runtime
+emits that record yet, and it does not add per-event workspace/session
+enrichment. The JSONL payload and emission timing are defined by the
+Metadata/session record JSONL v0 milestone.
 .SH BACKEND API V0 CONTRACT DRAFT
 Backend API v0 is an internal contract draft for future backend wiring. It is
 not a stable external plugin ABI yet, but its minimal operations descriptor is

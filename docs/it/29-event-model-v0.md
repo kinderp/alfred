@@ -139,6 +139,7 @@ Esempi:
 semantic + filesystem + FILE_CREATED
 diagnostic + watch + WATCH_STALE
 diagnostic + recovery + WATCH_LOST_RECOVERY_END
+diagnostic + lifecycle + SESSION_CONTEXT
 normalized_raw + filesystem + RAW_MOVED_FROM
 backend_observed + filesystem + IN_CREATE
 backend_observed + audit + IN_ACCESS
@@ -1144,6 +1145,7 @@ gli eventi semantici `FILE_*` e `DIR_*`.
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_END` | lost-scope recovery | recovery ampia completata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RETRY_SCHEDULED` | lost-scope retry | recovery non riuscita ma rischedulata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_GAVE_UP` | lost-scope retry budget | budget tentativi esaurito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
+| `diagnostic` | `lifecycle` | `SESSION_CONTEXT` | runtime app-owned | contesto workspace/sessione della run, non ancora emesso in runtime | [46](46-metadata-session-record-jsonl-v0.md) |
 
 La tabella non pretende di elencare ogni singola variante diagnostica minore. Il
 contratto completo delle righe `WATCH_*` resta in

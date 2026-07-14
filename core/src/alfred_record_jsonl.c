@@ -37,6 +37,7 @@ static const char *category_name(alfred_record_category_t category)
     case ALFRED_RECORD_CATEGORY_WATCH: return "watch";
     case ALFRED_RECORD_CATEGORY_RECOVERY: return "recovery";
     case ALFRED_RECORD_CATEGORY_BACKEND: return "backend";
+    case ALFRED_RECORD_CATEGORY_LIFECYCLE: return "lifecycle";
     case ALFRED_RECORD_CATEGORY_POLICY: return "policy";
     default:
         return NULL;
@@ -121,6 +122,7 @@ static const char *type_name(alfred_record_type_t type)
         return "WATCH_LOST_RETRY_SCHEDULED";
     case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP:
         return "WATCH_LOST_RECOVERY_GAVE_UP";
+    case ALFRED_RECORD_TYPE_SESSION_CONTEXT: return "SESSION_CONTEXT";
     default:
         return NULL;
     }

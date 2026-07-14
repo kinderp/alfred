@@ -87,19 +87,26 @@ category = lifecycle
 type     = SESSION_CONTEXT
 ```
 
-Attenzione: `lifecycle` e `SESSION_CONTEXT` sono il contratto candidato della
-milestone, non valori gia' presenti nel codice C corrente. L'implementazione
-dovra' quindi estendere in modo controllato:
+Il primo micro-step della milestone ammette `lifecycle` e `SESSION_CONTEXT` come
+valori controllati del modello record e della mappatura JSONL. Questo significa
+che il record puo' essere nominato in modo stabile:
 
 - `alfred_record_category_t`;
 - `alfred_record_type_t`;
-- la mappatura dei nomi nel formatter JSONL;
-- gli eventuali helper/builder necessari a costruire il record.
+- la mappatura dei nomi nel formatter JSONL.
 
 Questa espansione e' parte del contratto pubblico perche'
-`alfred_record_format_jsonl()` rifiuta layer, category o type sconosciuti. Non
-basta quindi creare un record in `app.c`: prima bisogna rendere il nuovo tipo
-un valore ammesso dal modello record e coprirlo con golden test.
+`alfred_record_format_jsonl()` rifiuta layer, category o type sconosciuti. Il
+record non deve quindi nascere come stringa libera in `app.c`: prima il nome va
+ammesso dal modello record e coperto da un test focused.
+
+Attenzione: questo non implementa ancora il payload workspace/sessione. I campi
+`workspace.root`, `workspace.id` e `ledger.session_id`, il builder e l'emissione
+runtime restano passi separati. Questa separazione evita di mescolare due scelte
+diverse:
+
+- ammettere il nome pubblico del record;
+- decidere la forma JSONL completa e quando emetterla.
 
 Motivo:
 
@@ -213,16 +220,20 @@ Prima di considerare pubblico il contratto JSONL servono golden test focused.
 Casi minimi:
 
 1. `SESSION_CONTEXT` e `lifecycle` sono valori ammessi dal modello record;
-2. il formatter JSONL produce i nomi pubblici attesi;
-3. nessun campo configurato: nessun `SESSION_CONTEXT`;
-4. tutti i campi configurati: record completo;
-5. solo `workspace_root`: oggetto `workspace` con `root`;
-6. solo `workspace_id`: oggetto `workspace` con `id`;
-7. solo `ledger_session_id`: oggetto `ledger`;
-8. caratteri da escapare in path/id: JSONL valido;
-9. nessun campo agente/policy/processo presente;
-10. record emesso una sola volta per run;
-11. eventi filesystem successivi non duplicano i campi workspace/sessione.
+2. il formatter JSONL produce i nomi pubblici attesi.
+
+Il passo successivo dovra' fissare la forma JSONL completa del payload. Da quel
+momento serviranno anche questi casi:
+
+1. nessun campo configurato: nessun `SESSION_CONTEXT`;
+2. tutti i campi configurati: record completo;
+3. solo `workspace_root`: oggetto `workspace` con `root`;
+4. solo `workspace_id`: oggetto `workspace` con `id`;
+5. solo `ledger_session_id`: oggetto `ledger`;
+6. caratteri da escapare in path/id: JSONL valido;
+7. nessun campo agente/policy/processo presente;
+8. record emesso una sola volta per run;
+9. eventi filesystem successivi non duplicano i campi workspace/sessione.
 
 Questi test devono proteggere il contratto pubblico. I test di configurazione
 gia' esistenti restano necessari, ma non bastano per questa milestone.
