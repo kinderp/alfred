@@ -85,9 +85,9 @@ test collegati.
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
 1. la milestone corrente, per esempio
-   [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1);
+   [`Workspace/session runtime schema v0`](https://github.com/kinderp/alfred/milestone/7);
 2. la issue madre della milestone, per esempio
-   [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32);
+   [`Workspace/session runtime schema v0: implementation plan`](https://github.com/kinderp/alfred/issues/145);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
