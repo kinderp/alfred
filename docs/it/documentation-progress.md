@@ -61,7 +61,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `42-tracepoint-model-v0.md` |
 | Completo | `43-agent-workspace-observe-ledger-v0.md` |
 | Parziale | `44-workspace-session-runtime-schema-v0.md` |
-| Parziale | `45-workspace-session-runtime-context-v0.md` |
+| Completo | `45-workspace-session-runtime-context-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -294,6 +294,14 @@ pubblico.
 questo micro-step: spiega chi possiede le stringhe, perche' i valori vuoti
 vengono rifiutati, quali funzioni sono coinvolte e quali debiti restano
 rimandati prima di rendere questi campi visibili in JSONL o nei record.
+
+Aggiornamento successivo: la milestone `Workspace/session runtime context v0`
+e' chiusa come primo sottoinsieme runtime. L'esito introduce
+`config_t.workspace_session`, `app_t.workspace_session`, parsing opzionale da
+configurazione, rifiuto di valori vuoti o identificatori troppo lunghi e test
+focused. Restano deliberatamente fuori `alfred_record_t`, queue, dispatcher,
+sink, writer JSONL, metadata/session record, generazione automatica id, policy
+e Agent Guard.
 
 ## Aggiornamento registro milestone
 
