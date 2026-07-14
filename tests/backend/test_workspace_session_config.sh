@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+cd "$(dirname "$0")"
+
 cc -std=c99 -Wall -Wextra -Werror \
     -I../../app/include \
     -I../../modules/inotify/include \
