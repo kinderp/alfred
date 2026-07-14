@@ -231,6 +231,18 @@ ownership, JSONL, test e benchmark gate. La milestone non implementa ancora
 Agent Guard, policy, enforcement, process tree, rete, file read affidabili,
 attribuzione agente/processo o integrazione LLM.
 
+Aggiornamento successivo: il primo micro-step di design della milestone
+definisce semantica e source of truth dei tre campi. `workspace_root` e'
+contesto dichiarato esplicitamente, `workspace_id` e' identificatore opaco del
+workspace dichiarato o generato da Alfred, `ledger_session_id` identifica la
+run osservazionale Alfred e non una sessione agente. Sono vietate in v0
+inferenze silenziose da path osservati, prefissi comuni, directory corrente,
+PID, timestamp, nome agente, prompt o contenuto dei file. Restano successivi
+runtime placement, ownership C, forma JSONL, golden test e benchmark refresh.
+Il documento chiarisce anche che `workspace_root` e `workspace_id` non sono
+equivalenti: la root descrive il perimetro filesystem dichiarato, mentre l'id e'
+solo una label opaca di correlazione e da solo non prova containment.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
