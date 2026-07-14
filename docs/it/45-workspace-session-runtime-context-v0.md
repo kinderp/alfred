@@ -252,3 +252,48 @@ Restano fuori da questo micro-step:
 
 Il benchmark refresh non e' necessario per questo step perche' il contesto viene
 letto una volta in avvio e non attraversa il percorso caldo degli eventi.
+
+## Stato di chiusura
+
+La milestone `Workspace/session runtime context v0` e' chiusa come primo
+sottoinsieme runtime.
+
+Esito consolidato:
+
+- `config_t.workspace_session` contiene i tre valori opzionali caricati da
+  configurazione;
+- `app_t.workspace_session` contiene la copia runtime app-owned, pubblicata
+  durante `app_init()`;
+- `workspace_root`, `workspace_id` e `ledger_session_id` sono assenti per
+  default;
+- valori presenti ma vuoti vengono rifiutati da `config_load()` con
+  `ERR_CONFIG`;
+- identificatori `workspace_id` e `ledger_session_id` troppo lunghi vengono
+  rifiutati invece di essere troncati;
+- le stringhe usano buffer inline e non richiedono `malloc`, `free` o cleanup
+  dedicato;
+- il backend inotify non riceve questo contesto;
+- il core filesystem non usa questo contesto per semantica create/delete/move;
+- `alfred_record_t`, queue, dispatcher, sink e writer JSONL restano invariati.
+
+PR di riferimento:
+
+- [PR #160](https://github.com/kinderp/alfred/pull/160)
+- merge commit [710bf15](https://github.com/kinderp/alfred/commit/710bf15)
+- commit principali:
+  [b764e7b](https://github.com/kinderp/alfred/commit/b764e7b),
+  [2be734e](https://github.com/kinderp/alfred/commit/2be734e)
+
+Validazioni registrate:
+
+```bash
+bash tests/backend/test_workspace_session_config.sh
+cd tests/backend && bash test_workspace_session_config.sh
+git diff --check
+make test-backend-diagnostics
+```
+
+Questa chiusura non rende ancora pubblico il contesto in JSONL. Il prossimo
+passo, se scelto, dovra' essere una milestone o issue dedicata per il record
+metadata/sessione, con golden JSONL e benchmark gate se cambia output, record o
+percorso caldo.
