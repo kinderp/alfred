@@ -243,19 +243,27 @@ Questo percorso serve per capire dove sta andando il progetto.
    definisce il contratto documentale dei tracepoint: naming, stabilita',
    metadati minimi, stati di maturita', rapporto con `alfred_record_t` e vincoli
    di percorso caldo.
-11. [Modello licenze](18-modello-licenze.md)
+11. [Agent workspace observe ledger v0](43-agent-workspace-observe-ledger-v0.md)
+   definisce il primo contratto observe-mode per usare i record correnti come
+   ledger degli effetti filesystem osservati, separando evidenza attuale,
+   campi futuri e claim vietati.
+12. [Workspace/session runtime schema v0](44-workspace-session-runtime-schema-v0.md)
+   definisce la milestone successiva: decidere significato, fonte di verita',
+   ownership, JSONL, test e benchmark gate per `workspace_root`,
+   `workspace_id` e `ledger_session_id`, senza implementare ancora Agent Guard.
+13. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
-12. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+14. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
-13. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+15. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
-14. [Visione Observation Runtime](38-visione-observation-runtime.md)
+16. [Visione Observation Runtime](38-visione-observation-runtime.md)
    descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
    come motore di eventi filesystem.
-15. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+17. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
    traduce quella visione in regole pratiche: provenance, log append-only,
    backend come sensori e percorso caldo corto.
 
