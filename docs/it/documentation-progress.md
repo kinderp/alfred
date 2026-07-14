@@ -255,6 +255,15 @@ prima di renderlo pubblico. Il contesto separato deve inoltre essere pubblicato
 come read-only verso eventuali reader asincroni futuri e distrutto solo dopo
 stop/join/drain dei componenti che possono ancora leggerlo.
 
+Aggiornamento successivo: il terzo micro-step di design decide il gate JSONL e
+test. Lo schema JSONL corrente non cambia: `workspace_root`, `workspace_id` e
+`ledger_session_id` non vengono emessi sui record evento senza una PR dedicata.
+La forma pubblica futura preferita e' un record metadata/sessione separato,
+perche' questi campi descrivono il contesto della run e non un fatto filesystem
+per-evento. I valori vuoti non sono JSONL valido per v0 salvo futura regola
+esplicita; i golden dovranno coprire assenza, escaping, ordine del metadata
+record e assenza di attribuzione agente/policy implicita.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
