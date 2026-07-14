@@ -272,6 +272,14 @@ clone owned, ripete stringhe per evento, arricchisce JSONL per-record, cambia
 writer/sink/pipeline o genera identificatori dentro il percorso caldo. Il report
 benchmark ora contiene una tabella dedicata a workspace/session schema.
 
+Aggiornamento successivo: la milestone `Workspace/session runtime schema v0` e'
+chiusa come contratto documentale. L'esito non implementa ancora struct runtime,
+opzioni CLI/config, JSONL pubblico o campi in `alfred_record_t`. Stabilizza
+pero' significato, fonte di verita', runtime placement, ownership/lifetime,
+pubblicazione read-only per reader futuri, forma JSONL preferita, test richiesti
+e benchmark gate. L'implementazione C/JSONL futura dovra' partire dai debiti
+espliciti nel documento 44.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle

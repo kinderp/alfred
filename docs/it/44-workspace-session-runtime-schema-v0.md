@@ -673,3 +673,57 @@ La milestone puo' chiudersi quando esiste una decisione documentata su:
 
 Solo dopo questo endpoint ha senso aprire una milestone o PR di implementazione
 C/JSONL.
+
+## Stato di chiusura v0
+
+Workspace/session runtime schema v0 e' chiusa come milestone documentale. Questo
+non significa che Alfred emetta gia' `workspace_root`, `workspace_id` o
+`ledger_session_id` in runtime o in JSONL. Significa che il contratto minimo per
+implementarli in modo sicuro e' stato deciso.
+
+Decisioni consolidate:
+
+- `workspace_root` e' contesto filesystem dichiarato esplicitamente, non dedotto
+  da eventi osservati;
+- `workspace_id` e' un identificatore opaco di correlazione, non una prova di
+  containment filesystem;
+- `ledger_session_id` identifica una run osservazionale Alfred, non una sessione
+  agente;
+- i tre campi non devono essere derivati da path, PID, timestamp, nome agente,
+  prompt o contenuto dei file;
+- il posizionamento v0 preferito e' un contesto runtime immutabile owned da
+  app/runtime;
+- i campi non entrano per ora in ogni `alfred_record_t`;
+- la queue non deve aumentare il clone owned per questi campi in questa
+  milestone;
+- i backend non vedono e non possiedono questi valori;
+- un futuro writer/session metadata potra' leggere il contesto solo tramite API
+  esplicita, con pubblicazione read-only e teardown sincronizzato;
+- lo schema JSONL corrente non cambia;
+- la forma pubblica futura preferita e' un record metadata/sessione separato,
+  non per-record enrichment;
+- campi presenti ma vuoti non sono JSONL valido v0 salvo futura regola
+  esplicita;
+- questa milestone documentale non richiede benchmark refresh;
+- ogni implementazione futura deve dichiarare quale benchmark gate attraversa.
+
+Debiti rimandati intenzionalmente:
+
+- nome e forma della futura struct runtime;
+- punto preciso di creazione nel lifecycle app/config;
+- punto preciso di distruzione nello shutdown;
+- API read-only per writer/session metadata;
+- opzioni CLI/config e validazione valori vuoti;
+- algoritmo e stabilita' di `workspace_id`;
+- algoritmo e stabilita' di `ledger_session_id`;
+- tipo controllato `layer/category/type` del futuro metadata/session record;
+- golden JSONL per metadata record o per-record enrichment, secondo la scelta
+  implementativa;
+- benchmark mirati quando i campi entreranno in record, queue, writer, JSONL o
+  pipeline;
+- replay e preservazione della sessione;
+- relazione futura con `agent_session_id`, process tree, policy e would-block.
+
+Questi debiti non sono difetti nascosti della milestone. Sono il confine scelto
+per non trasformare un contratto di workspace/sessione in Agent Guard completo o
+in una modifica non misurata del percorso caldo.
