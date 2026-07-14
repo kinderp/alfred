@@ -209,6 +209,14 @@ classificazione runtime, queue, drain, dispatcher, sink, writer, buffering,
 fail-closed o introduce backend/attribution non coperti dai numeri inotify
 correnti.
 
+Aggiornamento successivo: la milestone `Agent workspace observe ledger` e'
+chiusa come contratto documentale observe-mode. L'esito non implementa Agent
+Guard, policy, enforcement, process tree, rete o campi runtime agent/session.
+Stabilizza invece cosa Alfred puo' chiamare ledger oggi: una lettura
+osservazionale dei record strutturati gia' prodotti e runtime-routed, con
+claim vietati, campi futuri, strategia golden, gate benchmark e debiti
+espliciti per i prossimi micro-step.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
