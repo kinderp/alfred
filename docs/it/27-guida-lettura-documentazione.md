@@ -85,9 +85,9 @@ test collegati.
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
 1. la milestone corrente, per esempio
-   [`Writer Runtime v0`](https://github.com/kinderp/alfred/milestone/1);
+   [`Workspace/session runtime schema v0`](https://github.com/kinderp/alfred/milestone/7);
 2. la issue madre della milestone, per esempio
-   [`Writer Runtime v0: implementation plan`](https://github.com/kinderp/alfred/issues/32);
+   [`Workspace/session runtime schema v0: implementation plan`](https://github.com/kinderp/alfred/issues/145);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
@@ -236,26 +236,34 @@ Questo percorso serve per capire dove sta andando il progetto.
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
 9. [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md)
-   definisce la milestone corrente per rendere Alfred spiegabile tramite
+   definisce la milestone conclusa che ha reso Alfred piu' spiegabile tramite
    tracepoint logici, scenari Lab, mappe funzioni/test e percorsi didattici
-   senza introdurre subito una UI o un tracing pesante.
+   senza introdurre una UI o un tracing pesante.
 10. [Tracepoint Model v0](42-tracepoint-model-v0.md)
    definisce il contratto documentale dei tracepoint: naming, stabilita',
    metadati minimi, stati di maturita', rapporto con `alfred_record_t` e vincoli
    di percorso caldo.
-11. [Modello licenze](18-modello-licenze.md)
+11. [Agent workspace observe ledger v0](43-agent-workspace-observe-ledger-v0.md)
+   definisce il primo contratto observe-mode per usare i record correnti come
+   ledger degli effetti filesystem osservati, separando evidenza attuale,
+   campi futuri e claim vietati.
+12. [Workspace/session runtime schema v0](44-workspace-session-runtime-schema-v0.md)
+   definisce la milestone successiva: decidere significato, fonte di verita',
+   ownership, JSONL, test e benchmark gate per `workspace_root`,
+   `workspace_id` e `ledger_session_id`, senza implementare ancora Agent Guard.
+13. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
-12. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+14. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
-13. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+15. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
-14. [Visione Observation Runtime](38-visione-observation-runtime.md)
+16. [Visione Observation Runtime](38-visione-observation-runtime.md)
    descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
    come motore di eventi filesystem.
-15. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+17. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
    traduce quella visione in regole pratiche: provenance, log append-only,
    backend come sensori e percorso caldo corto.
 
@@ -395,12 +403,15 @@ riferimento veloce:
   per capire ordine cronologico, durata, dipendenze e priorita' delle
   milestone.
 - [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md):
-  per capire la milestone corrente su tracepoint logici, scenari Lab e mappe
+  per capire la milestone conclusa su tracepoint logici, scenari Lab e mappe
   funzione/test prima di introdurre una UI o tracing runtime.
 - [Tracepoint Model v0](42-tracepoint-model-v0.md):
   per sapere quando un tracepoint e' solo candidato, quando diventa contratto
   documentale e quali vincoli deve rispettare prima di diventare output
   pubblico.
+- [Workspace/session runtime schema v0](44-workspace-session-runtime-schema-v0.md):
+  per capire il lavoro corrente su `workspace_root`, `workspace_id` e
+  `ledger_session_id` prima di implementare campi runtime, JSONL o policy.
 - [Principi architetturali futuri](39-principi-architetturali-futuri.md):
   per controllare che una nuova astrazione non leghi Alfred al solo filesystem
   o a un singolo backend.

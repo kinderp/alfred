@@ -60,6 +60,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `41-tracepoint-lab-roadmap-mvp.md` |
 | Completo | `42-tracepoint-model-v0.md` |
 | Completo | `43-agent-workspace-observe-ledger-v0.md` |
+| Parziale | `44-workspace-session-runtime-schema-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -216,6 +217,19 @@ Stabilizza invece cosa Alfred puo' chiamare ledger oggi: una lettura
 osservazionale dei record strutturati gia' prodotti e runtime-routed, con
 claim vietati, campi futuri, strategia golden, gate benchmark e debiti
 espliciti per i prossimi micro-step.
+
+## Aggiornamento Workspace/session runtime schema
+
+La milestone operativa successiva e' `Workspace/session runtime schema v0`,
+collegata alla GitHub Milestone #7 e alla issue madre #145. Il riferimento
+principale e' `44-workspace-session-runtime-schema-v0.md`.
+
+Il perimetro e' volutamente piccolo: trasformare i candidati
+`workspace_root`, `workspace_id` e `ledger_session_id` in una decisione
+documentata su significato, fonte di verita', posizionamento runtime,
+ownership, JSONL, test e benchmark gate. La milestone non implementa ancora
+Agent Guard, policy, enforcement, process tree, rete, file read affidabili,
+attribuzione agente/processo o integrazione LLM.
 
 ## Aggiornamento registro milestone
 
