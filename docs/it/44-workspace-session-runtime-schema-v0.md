@@ -251,9 +251,50 @@ Scelte ancora future:
 - se viene scritto una volta come record sessione o ripetuto su ogni record;
 - come viene preservato in replay.
 
-## Possibili posizionamenti runtime
+## Posizionamento runtime v0
 
-Prima di modificare C bisogna scegliere dove vivono questi valori.
+La direzione v0 e' conservativa:
+
+```text
+config/CLI/orchestratore
+        |
+        v
+contesto runtime workspace/sessione immutabile
+        |
+        +--> futuro writer/session metadata
+        +--> futuro JSONL enrichment misurato
+```
+
+I campi `workspace_root`, `workspace_id` e `ledger_session_id` non devono essere
+aggiunti subito a ogni `alfred_record_t`.
+
+Il motivo e' prestazionale e architetturale:
+
+- il percorso caldo deve restare `backend -> record -> queue`;
+- la queue oggi clona record owned al confine;
+- aggiungere tre stringhe per record aumenterebbe dimensione, copie, cleanup e
+  volume JSONL prima di avere test e benchmark dedicati;
+- il contesto workspace/sessione e' contesto della run, non un fatto osservato
+  diverso per ogni evento filesystem.
+
+La decisione v0 e':
+
+| Scelta | Decisione |
+| --- | --- |
+| Owner primario | Runtime/app di Alfred, dopo parsing configurazione e prima dell'osservazione |
+| Mutabilita' | Immutabile per la durata della run osservazionale |
+| Record v0 | Non aggiungere per ora campi stringa workspace/session a `alfred_record_t` |
+| Queue v0 | Non aumentare il clone owned per record |
+| Backend | Non vede e non possiede questi campi |
+| Core filesystem | Non usa questi campi per semantica create/delete/rename/move |
+| Writer futuri | Possono leggere un contesto stabile solo dopo una decisione JSONL/test/benchmark |
+| Session metadata futuro | Preferibile per descrivere una run una volta, se basta ai consumatori |
+
+Questa scelta non vieta di aggiungere campi ai record in futuro. Dice solo che
+la prima implementazione non deve farlo senza una PR dedicata, golden JSONL e
+benchmark refresh.
+
+## Alternative considerate
 
 | Opzione | Vantaggi | Rischi |
 | --- | --- | --- |
@@ -262,7 +303,18 @@ Prima di modificare C bisogna scegliere dove vivono questi valori.
 | Enrichment nel writer JSONL | Non tocca hot path se il contesto e' stabile | JSONL contiene campi non presenti nel record interno |
 | Record diagnostico/sessione separato | Pochi byte per record, sessione descritta una volta | Consumatori devono correlare record e sessione |
 
-La scelta migliore non va fatta a sensazione. Deve dipendere da:
+La scelta corrente privilegia `Contesto runtime separato`, con possibilita'
+futura di `Record diagnostico/sessione separato`.
+
+`Enrichment nel writer JSONL` resta futuro perche' trasformerebbe il JSONL in
+un output piu' ricco del record interno. Puo' essere accettabile, ma solo dopo
+aver deciso contratto pubblico, test golden e costo per-event.
+
+`Campi dentro alfred_record_t` resta futuro perche' sarebbe la soluzione piu'
+autosufficiente per replay e writer binari, ma e' anche quella che tocca di piu'
+hot path, ownership e benchmark.
+
+La scelta definitiva di una futura implementazione deve dipendere da:
 
 - costo sul percorso caldo;
 - costo di clone owned;
@@ -273,16 +325,101 @@ La scelta migliore non va fatta a sensazione. Deve dipendere da:
 
 ## Ownership e lifetime
 
-Se i campi entrano in `alfred_record_t`, devono seguire le regole gia' usate per
-la memoria owned/borrowed dei record.
+Il contesto runtime workspace/sessione deve avere un solo owner chiaro:
+
+```text
+app/runtime Alfred
+```
+
+Regole v0:
+
+- le stringhe del contesto sono owned dal runtime;
+- il runtime crea o riceve i valori prima di iniziare a osservare eventi;
+- il contesto deve essere completamente inizializzato prima di essere pubblicato
+  a writer, sink, worker o altri reader runtime;
+- dopo la pubblicazione il contesto e' read-only: nessun campo deve essere
+  modificato in place;
+- il runtime distrugge i valori durante shutdown, dopo writer/sink/pipeline che
+  possono leggerli;
+- i backend non conservano puntatori a questi valori;
+- i record accodati non conservano puntatori borrowed a questi valori;
+- nessun writer deve salvare un puntatore borrowed oltre la chiamata corrente;
+- se un writer deve conservare un valore, deve copiarlo nella propria memoria
+  owned con contratto esplicito.
+
+Queste regole evitano un bug classico: mettere in coda un record che contiene
+un puntatore borrowed a un contesto poi distrutto o ricaricato.
+
+### Pubblicazione e reader asincroni futuri
+
+Per v0 questa sezione e' una regola di progetto, non l'introduzione di un worker
+thread. Serve a evitare che una futura implementazione asincrona renda insicuro
+il contesto separato.
+
+Se un futuro writer, sink o worker legge il contesto workspace/sessione:
+
+- il puntatore o handle al contesto deve essere pubblicato solo dopo
+  inizializzazione completa;
+- il contesto pubblicato deve essere trattato come immutabile da tutti i thread;
+- reload, shutdown o cambio sessione non devono mutare o liberare in place un
+  contesto ancora leggibile da worker o sink;
+- lo shutdown deve fermare, sincronizzare, joinare o drenare tutti i reader che
+  possono osservare il contesto prima di distruggerlo;
+- se un componente deve conservare un valore oltre la vita del contesto, deve
+  farne una copia owned con ownership documentata.
+
+Questa regola protegge un rischio diverso dalla queue: anche se i record
+accodati non contengono puntatori borrowed, un writer asincrono potrebbe comunque
+leggere un contesto laterale. Quel contesto deve quindi avere una pubblicazione
+read-only e una distruzione sincronizzata.
+
+## Reload e cambio configurazione
+
+Per v0 il contesto workspace/sessione e' immutabile. Un eventuale reload di
+configurazione non deve modificare in place stringhe lette da writer o pipeline.
+
+Scelte ammesse per una futura implementazione:
+
+1. non supportare reload per questi campi e richiedere una nuova run;
+2. chiudere la sessione corrente e aprire una nuova sessione con nuovo
+   `ledger_session_id`;
+3. usare uno swap esplicito solo dopo drain/sincronizzazione documentata, con un
+   nuovo contesto gia' inizializzato e senza mutare quello vecchio.
+
+Scelta vietata:
+
+```text
+modificare o liberare in place le stringhe del contesto mentre record o writer
+possono ancora osservarle.
+```
+
+## Impatto su record e queue
+
+Il confine queue resta invariato in questa decisione documentale.
+
+In particolare:
+
+- `alfred_record_clone_owned()` non deve iniziare a copiare
+  `workspace_root`, `workspace_id` o `ledger_session_id` in questo step;
+- `alfred_record_queue_push()` non deve ricevere record con puntatori borrowed
+  al contesto runtime workspace/sessione;
+- `alfred_record_queue_pop()` continua a trasferire ownership dei soli campi
+  owned gia' definiti dal record model corrente;
+- ogni cambiamento futuro a queste funzioni richiede test focused e benchmark
+  refresh.
+
+Se in futuro decidiamo di mettere uno di questi campi dentro
+`alfred_record_t`, la PR dovra' aggiornare header, clone/destroy/pop/push,
+formatter, JSONL golden e benchmark.
 
 Domande da chiudere prima del codice:
 
-- il valore e' borrowed dal contesto runtime?
-- viene clonato quando entra in queue?
-- chi distrugge la copia owned?
-- cosa succede se la configurazione viene ricaricata?
-- il valore puo' cambiare durante una run?
+- nome e forma della futura struct di contesto;
+- punto preciso di creazione nel lifecycle app/config;
+- punto preciso di distruzione nello shutdown;
+- API con cui writer o session metadata potranno leggere il contesto;
+- comportamento se la configurazione non fornisce valori;
+- algoritmo futuro per generare `workspace_id` e `ledger_session_id`.
 
 Regola iniziale:
 
@@ -290,9 +427,12 @@ Regola iniziale:
 nessun puntatore borrowed deve sopravvivere al contesto che lo possiede.
 ```
 
-Per questo la milestone deve decidere se il confine queue continua a fare copia
-profonda dei campi stringa oppure se il writer puo' arricchire l'output da un
-contesto stabile non per-record.
+Per v0 la conseguenza pratica e':
+
+```text
+nessun record in queue deve dipendere dalla vita del contesto
+workspace/sessione.
+```
 
 ## JSONL e test
 
