@@ -567,13 +567,46 @@ sink, writer, output JSONL o workload.
 
 ## Endpoint del micro-step
 
-Questo documento chiude solo il contratto concettuale iniziale:
+Questo documento chiude la milestone `Agent workspace observe ledger` come
+contratto documentale observe-mode. Non chiude Agent Guard e non introduce un
+nuovo runtime.
 
 ```text
 observe ledger v0 = vista documentata su record osservazionali correnti,
 con campi futuri dichiarati e claim vietati espliciti.
 ```
 
-Il passo successivo naturale della milestone e' mappare quali record e JSONL
-correnti contribuiscono gia' a questa vista e quali famiglie restano solo
-future o diagnostiche.
+Risultato consolidato:
+
+- il ledger v0 e' una vista sugli `alfred_record_t` gia' prodotti e
+  runtime-routed, soprattutto tramite JSONL opt-in;
+- non esiste un nuovo tipo C `ledger`;
+- JSONL resta output pubblico, non API interna;
+- semantica filesystem, raw Alfred normalizzati e diagnostica watch/recovery
+  possono contribuire al ledger osservazionale;
+- fatti kernel `IN_*`, audit inotify opt-in, lifecycle, errori generici,
+  trace/performance e policy restano fuori dal ledger pubblico v0;
+- `workspace_root`, `workspace_id` e `ledger_session_id` sono candidati futuri,
+  non campi runtime implementati;
+- `agent_session_id`, `agent_name`, `task_id`, `declared_intent`, process tree,
+  rete e decisioni policy restano futuri finche' non esiste una fonte di
+  verita' affidabile;
+- la strategia test usa core, backend, formatter, output pipeline e golden JSONL
+  nei rispettivi livelli, senza duplicare tutte le suite;
+- il gate benchmark stabilisce quando una modifica ledger richiede numeri nuovi.
+
+Debiti esplicitamente rimandati:
+
+- schema runtime per `workspace_root`, `workspace_id` e `ledger_session_id`;
+- configurazione o CLI per dichiarare un workspace osservazionale;
+- attribution reale verso agente, processo, comando o task;
+- process tree, rete e file read affidabili;
+- classificazione `inside_workspace` / `outside_workspace`;
+- policy engine, `would_block`, `blocked`, `allowed` e approval;
+- enforcement tramite fanotify, eBPF, audit, sandbox o altri backend;
+- benchmark mirati quando una futura PR cambiera' schema, record, hot path,
+  queue, dispatcher, writer, volume JSONL o attribution backend.
+
+La milestone successiva non deve ripartire da una promessa di sicurezza piu'
+ampia. Deve scegliere un solo debito fra quelli sopra e trasformarlo in un
+micro-step verificabile, con test e benchmark se il percorso runtime cambia.
