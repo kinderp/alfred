@@ -492,6 +492,12 @@ oggi, e prepara i campi per attribuzione, policy e guardrail futuri.
 Questo contratto non richiede modifiche immediate al codice C. Prima di
 aggiungere campi runtime bisognera' aprire micro-step separati.
 
+Il motivo e' semplice: finche' il ledger v0 resta una vista documentale sui
+record gia' runtime-routed, non cambia il percorso misurato. Non cambiano
+`alfred_record_t`, clone owned, queue, drain, dispatcher, sink, writer JSONL,
+dimensione dei record o volume di output. In questo caso i benchmark storici
+restano il riferimento di contesto e non serve produrre numeri nuovi.
+
 Un micro-step futuro deve chiedersi:
 
 1. il campo e' osservato, derivato o dichiarato?
@@ -502,6 +508,62 @@ Un micro-step futuro deve chiedersi:
 6. serve un benchmark refresh secondo
    [Report benchmark prestazioni](34-report-benchmark-prestazioni.md)?
 7. serve un golden test JSONL o un test core/backend separato?
+
+### Gate benchmark per il ledger observe-mode
+
+La regola pratica e':
+
+```text
+se una modifica ledger cambia solo documentazione, mappa concettuale o test che
+assertano comportamento gia' esistente, non serve un nuovo benchmark;
+se cambia il percorso misurato, il volume del record o il costo del writer,
+serve almeno una nota esplicita e spesso un refresh mirato.
+```
+
+| Tipo di modifica | Benchmark richiesto? | Perche' |
+| --- | --- | --- |
+| Documento che chiarisce claim, campi futuri, test strategy o use case | No | Non cambia codice, output o percorso caldo |
+| Nuovo golden JSONL che verifica uno scenario gia' runtime-routed | Di norma no | Aumenta copertura contrattuale, non costo runtime |
+| Aggiunta di `workspace_root`, `workspace_id` o `ledger_session_id` al JSONL pubblico | Si', almeno formatter/output | Aumenta byte per record, escaping, clone/ownership se entra nel record |
+| Aggiunta di campi stringa dichiarati da CLI/config/sessione | Si', se entrano in `alfred_record_t` o vengono clonati per record | Puo' aumentare allocazioni, copia profonda, dimensione record e volume JSONL |
+| Nuova classificazione runtime come `inside_workspace` / `outside_workspace` | Si', se calcolata nel percorso evento | Introduce normalizzazione o policy leggera per evento |
+| Decisione osservabile `would_block`, `blocked`, `allowed`, `requires_approval` | Si' | Cambia schema pubblico, possibile policy path, routing e volume output |
+| Nuova famiglia runtime-routed verso JSONL | Si', golden + benchmark mirato | Aumenta numero di record scritti e puo' cambiare backpressure |
+| Modifica a queue, drain, dispatcher, sink, writer, buffering, flush o fail-closed | Si' | Cambia direttamente i percorsi misurati dalla Performance suite v0 |
+| Worker thread, code per sink, socket, writer binari, hashing/signing, compressione | Si', nuovo benchmark dedicato prima della scelta | Sono decisioni architetturali non coperte dai benchmark v0 |
+| Backend process/audit/eBPF/fanotify o attribution processo | Si', ma con benchmark nuovo | I benchmark attuali non misurano quei backend o quella correlazione |
+
+### Quale benchmark usare
+
+Il benchmark deve seguire il punto in cui nasce il costo.
+
+| Costo introdotto | Misura minima consigliata |
+| --- | --- |
+| Solo forma JSONL di un campo nuovo | Formatter/sink JSONL e golden JSONL |
+| Campo nuovo dentro record e copia owned | Benchmark queue/ownership e output pipeline sintetica |
+| Nuovo routing runtime verso `output.jsonl` | Runtime output benchmark, piu' golden rappresentativo |
+| Nuova logica per-event nel percorso caldo | Benchmark dedicato del percorso interessato prima/dopo |
+| Nuovo writer o formato | Riga benchmark dedicata piu' confronto con `counter`, `text` e `jsonl` |
+| Nuova backpressure o bounded behavior | Benchmark pressione/coda e test funzionale sui contatori |
+| Nuovo backend o attribution processo | Benchmark backend-specifico; non riusare numeri inotify come prova generale |
+
+Metriche da guardare, quando il benchmark esiste:
+
+- tempo totale e tempo medio per record;
+- record/sec o eventi/sec;
+- byte prodotti per record e volume totale di output;
+- contatori di enqueue, drain, pressione, drop o failure;
+- `max_pending` e profondita' osservabile della coda;
+- allocazioni/RSS quando aumentano campi stringa o copie profonde;
+- p95/p99 solo quando avremo una suite con ripetizioni e percentili.
+
+Per questo micro-step specifico il risultato e':
+
+```text
+benchmark refresh non richiesto:
+la modifica e' documentale e non cambia schema, hot path, queue, dispatcher,
+sink, writer, output JSONL o workload.
+```
 
 ## Endpoint del micro-step
 
