@@ -210,6 +210,35 @@ static int parse_output_format(const char *value, output_format_t *format)
 }
 
 /*
+ * parse_required_string - copy a required non-empty config string
+ * @value: textual configuration value
+ * @dst: destination inline buffer
+ * @dst_size: size of @dst in bytes
+ *
+ * Workspace/session context strings deliberately reject present-empty values
+ * and values that would be truncated. Empty strings are ambiguous at the
+ * runtime context boundary, while silent truncation would create misleading
+ * identifiers or paths.
+ *
+ * Return: 0 on success, -1 on invalid input.
+ */
+static int parse_required_string(const char *value, char *dst, size_t dst_size)
+{
+    size_t len;
+
+    if (value == NULL || dst == NULL || dst_size == 0)
+        return -1;
+
+    len = strlen(value);
+
+    if (len == 0 || len >= dst_size)
+        return -1;
+
+    snprintf(dst, dst_size, "%s", value);
+    return 0;
+}
+
+/*
  * config_set_event_engine - validate the event engine option
  * @cfg: configuration object to update
  * @value: expected value, currently only "core"
@@ -252,6 +281,9 @@ error_t config_set_event_engine(config_t *cfg, const char *value)
  *   output_enabled=false
  *   output_format=jsonl
  *   output_buffer_size=65536
+ *   workspace_root=/home/user/project
+ *   workspace_id=ws-local
+ *   ledger_session_id=ls-local-run
  *   use_epoll=false
  *   event_engine=core
  *   raw_log=myraw.log
@@ -335,6 +367,45 @@ error_t config_load(config_t *cfg, const char *path)
                 fclose(fp);
                 return ERR_CONFIG;
             }
+        }
+
+        else if (strcmp(key, "workspace_root") == 0) {
+
+            if (parse_required_string(
+                    value,
+                    cfg->workspace_session.workspace_root,
+                    sizeof(cfg->workspace_session.workspace_root)) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+
+            cfg->workspace_session.has_workspace_root = 1;
+        }
+
+        else if (strcmp(key, "workspace_id") == 0) {
+
+            if (parse_required_string(
+                    value,
+                    cfg->workspace_session.workspace_id,
+                    sizeof(cfg->workspace_session.workspace_id)) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+
+            cfg->workspace_session.has_workspace_id = 1;
+        }
+
+        else if (strcmp(key, "ledger_session_id") == 0) {
+
+            if (parse_required_string(
+                    value,
+                    cfg->workspace_session.ledger_session_id,
+                    sizeof(cfg->workspace_session.ledger_session_id)) != 0) {
+                fclose(fp);
+                return ERR_CONFIG;
+            }
+
+            cfg->workspace_session.has_ledger_session_id = 1;
         }
 
         else if (strcmp(key, "watcher_capacity") == 0 ||

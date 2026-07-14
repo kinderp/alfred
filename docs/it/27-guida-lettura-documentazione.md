@@ -85,9 +85,9 @@ test collegati.
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
 1. la milestone corrente, per esempio
-   [`Workspace/session runtime schema v0`](https://github.com/kinderp/alfred/milestone/7);
+   [`Workspace/session runtime context v0`](https://github.com/kinderp/alfred/milestone/8);
 2. la issue madre della milestone, per esempio
-   [`Workspace/session runtime schema v0: implementation plan`](https://github.com/kinderp/alfred/issues/145);
+   [`Workspace/session runtime context v0: implementation plan`](https://github.com/kinderp/alfred/issues/158);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
@@ -251,19 +251,23 @@ Questo percorso serve per capire dove sta andando il progetto.
    definisce la milestone successiva: decidere significato, fonte di verita',
    ownership, JSONL, test e benchmark gate per `workspace_root`,
    `workspace_id` e `ledger_session_id`, senza implementare ancora Agent Guard.
-13. [Modello licenze](18-modello-licenze.md)
+13. [Workspace/session runtime context v0](45-workspace-session-runtime-context-v0.md)
+   descrive il primo micro-step di codice: parsing config, contesto app-owned,
+   ownership inline, rifiuto dei valori vuoti e assenza di modifiche a record,
+   queue o JSONL.
+14. [Modello licenze](18-modello-licenze.md)
    documenta le ipotesi su core open source e moduli futuri piu' restrittivi o
    commerciali.
-14. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
+15. [Use case, posizionamento e integrazioni](36-use-cases-posizionamento-integrazioni.md)
    separa posizionamento attuale, competitor, integrazioni consigliate e use
    case futuri legati agli agenti AI.
-15. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
+16. [Registro milestone del progetto](37-roadmap-milestone-progetto.md)
    collega milestone GitHub, issue madre, durata orientativa, durata reale,
    dipendenze e documenti stabili in una vista cronologica.
-16. [Visione Observation Runtime](38-visione-observation-runtime.md)
+17. [Visione Observation Runtime](38-visione-observation-runtime.md)
    descrive la direzione lunga: Alfred come runtime di osservazioni e non solo
    come motore di eventi filesystem.
-17. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
+18. [Principi architetturali futuri](39-principi-architetturali-futuri.md)
    traduce quella visione in regole pratiche: provenance, log append-only,
    backend come sensori e percorso caldo corto.
 
@@ -412,6 +416,9 @@ riferimento veloce:
 - [Workspace/session runtime schema v0](44-workspace-session-runtime-schema-v0.md):
   per capire il lavoro corrente su `workspace_root`, `workspace_id` e
   `ledger_session_id` prima di implementare campi runtime, JSONL o policy.
+- [Workspace/session runtime context v0](45-workspace-session-runtime-context-v0.md):
+  per capire il primo contesto app-owned gia' implementato, le chiavi config,
+  i test focused e perche' record e JSONL restano invariati.
 - [Principi architetturali futuri](39-principi-architetturali-futuri.md):
   per controllare che una nuova astrazione non leghi Alfred al solo filesystem
   o a un singolo backend.

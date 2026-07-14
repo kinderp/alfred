@@ -31,6 +31,13 @@
 #define OUTPUT_BUFFER_SIZE_MIN 8192u
 
 /*
+ * Workspace/session identifiers are v0 runtime context strings, not Event
+ * Model record fields. They are stored inline to keep configuration ownership
+ * simple and to avoid per-record allocation or queue clone costs.
+ */
+#define WORKSPACE_SESSION_ID_MAX 128u
+
+/*
  * output_format_t - configured format for the runtime writer path
  *
  * The enum describes the writer format requested by configuration. It does not
@@ -63,6 +70,30 @@ typedef struct {
 } output_config_t;
 
 /*
+ * workspace_session_config_t - optional workspace/session runtime context
+ * @has_workspace_root: true when workspace_root was explicitly configured
+ * @has_workspace_id: true when workspace_id was explicitly configured
+ * @has_ledger_session_id: true when ledger_session_id was explicitly configured
+ * @workspace_root: declared filesystem observation boundary for the run
+ * @workspace_id: opaque workspace correlation label
+ * @ledger_session_id: opaque Alfred ledger/run correlation label
+ *
+ * These values describe declared runtime context. They are not observed by the
+ * backend, do not prove agent/process attribution, and are not emitted in JSONL
+ * by this config contract. Present-empty values are rejected by config_load()
+ * because an empty configured string would be ambiguous with an absent field.
+ */
+typedef struct {
+    int has_workspace_root;
+    int has_workspace_id;
+    int has_ledger_session_id;
+
+    char workspace_root[PATH_MAX];
+    char workspace_id[WORKSPACE_SESSION_ID_MAX];
+    char ledger_session_id[WORKSPACE_SESSION_ID_MAX];
+} workspace_session_config_t;
+
+/*
  * config_t - runtime configuration values
  *
  * The struct intentionally stores plain values instead of owning dynamic
@@ -82,6 +113,9 @@ typedef struct {
 
     /* Optional record output runtime configuration. */
     output_config_t output;
+
+    /* Optional app-owned workspace/session runtime context configuration. */
+    workspace_session_config_t workspace_session;
 
     /* Log file paths. Stored inline to avoid configuration-owned allocation. */
     char raw_log[PATH_MAX];

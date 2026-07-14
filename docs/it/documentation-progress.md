@@ -61,6 +61,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `42-tracepoint-model-v0.md` |
 | Completo | `43-agent-workspace-observe-ledger-v0.md` |
 | Parziale | `44-workspace-session-runtime-schema-v0.md` |
+| Parziale | `45-workspace-session-runtime-context-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -279,6 +280,20 @@ pero' significato, fonte di verita', runtime placement, ownership/lifetime,
 pubblicazione read-only per reader futuri, forma JSONL preferita, test richiesti
 e benchmark gate. L'implementazione C/JSONL futura dovra' partire dai debiti
 espliciti nel documento 44.
+
+## Aggiornamento Workspace/session runtime context
+
+La milestone `Workspace/session runtime context v0` e' il primo passo di codice
+dopo il contratto documentale `44-workspace-session-runtime-schema-v0.md`.
+Introduce il parsing opzionale di `workspace_root`, `workspace_id` e
+`ledger_session_id` e una copia app-owned immutabile dentro `app_t`, senza
+modificare `alfred_record_t`, queue, dispatcher, sink, writer JSONL o schema
+pubblico.
+
+`45-workspace-session-runtime-context-v0.md` e' il riferimento didattico per
+questo micro-step: spiega chi possiede le stringhe, perche' i valori vuoti
+vengono rifiutati, quali funzioni sono coinvolte e quali debiti restano
+rimandati prima di rendere questi campi visibili in JSONL o nei record.
 
 ## Aggiornamento registro milestone
 
