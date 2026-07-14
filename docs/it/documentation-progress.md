@@ -62,6 +62,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `43-agent-workspace-observe-ledger-v0.md` |
 | Parziale | `44-workspace-session-runtime-schema-v0.md` |
 | Completo | `45-workspace-session-runtime-context-v0.md` |
+| Parziale | `46-metadata-session-record-jsonl-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -302,6 +303,19 @@ configurazione, rifiuto di valori vuoti o identificatori troppo lunghi e test
 focused. Restano deliberatamente fuori `alfred_record_t`, queue, dispatcher,
 sink, writer JSONL, metadata/session record, generazione automatica id, policy
 e Agent Guard.
+
+## Aggiornamento Metadata/session record JSONL
+
+La milestone operativa successiva e' `Metadata/session record JSONL v0`,
+collegata alla GitHub Milestone #9 e alla issue madre #163. Il riferimento
+principale e' `46-metadata-session-record-jsonl-v0.md`.
+
+Il perimetro resta stretto: pubblicare il contesto workspace/sessione gia'
+presente in `app_t` come record metadata/sessione separato quando l'output
+JSONL e' abilitato. Non e' enrichment per-evento, non e' Agent Guard e non e'
+attribuzione agente/processo. La forma preferita e'
+`diagnostic + lifecycle + SESSION_CONTEXT`, con golden JSONL dedicati e
+benchmark gate quando il lavoro passa da documento a codice.
 
 ## Aggiornamento registro milestone
 
