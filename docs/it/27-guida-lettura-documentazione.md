@@ -236,9 +236,9 @@ Questo percorso serve per capire dove sta andando il progetto.
    raccoglie idee su documentazione navigabile, grafi, animazioni, Doxygen,
    Graphviz, Kythe e altri strumenti.
 9. [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md)
-   definisce la milestone corrente per rendere Alfred spiegabile tramite
+   definisce la milestone conclusa che ha reso Alfred piu' spiegabile tramite
    tracepoint logici, scenari Lab, mappe funzioni/test e percorsi didattici
-   senza introdurre subito una UI o un tracing pesante.
+   senza introdurre una UI o un tracing pesante.
 10. [Tracepoint Model v0](42-tracepoint-model-v0.md)
    definisce il contratto documentale dei tracepoint: naming, stabilita',
    metadati minimi, stati di maturita', rapporto con `alfred_record_t` e vincoli
@@ -403,12 +403,15 @@ riferimento veloce:
   per capire ordine cronologico, durata, dipendenze e priorita' delle
   milestone.
 - [Tracepoint e Alfred Lab MVP](41-tracepoint-lab-roadmap-mvp.md):
-  per capire la milestone corrente su tracepoint logici, scenari Lab e mappe
+  per capire la milestone conclusa su tracepoint logici, scenari Lab e mappe
   funzione/test prima di introdurre una UI o tracing runtime.
 - [Tracepoint Model v0](42-tracepoint-model-v0.md):
   per sapere quando un tracepoint e' solo candidato, quando diventa contratto
   documentale e quali vincoli deve rispettare prima di diventare output
   pubblico.
+- [Workspace/session runtime schema v0](44-workspace-session-runtime-schema-v0.md):
+  per capire il lavoro corrente su `workspace_root`, `workspace_id` e
+  `ledger_session_id` prima di implementare campi runtime, JSONL o policy.
 - [Principi architetturali futuri](39-principi-architetturali-futuri.md):
   per controllare che una nuova astrazione non leghi Alfred al solo filesystem
   o a un singolo backend.
