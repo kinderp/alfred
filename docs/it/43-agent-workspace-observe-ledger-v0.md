@@ -310,6 +310,110 @@ JSONL esistenti proteggono le famiglie pubbliche gia' scelte per Event Model v0.
 Se una futura PR aggiunge una famiglia alla colonna `Runtime JSONL oggi = si'`,
 allora dovra' aggiornare anche golden JSONL, contratto log e questa mappa.
 
+## Strategia test e golden coverage
+
+Il ledger observe-mode v0 non deve duplicare tutti i test core, backend e
+JSONL. Deve invece usare quei test come strati diversi di evidenza.
+
+La regola e':
+
+```text
+testiamo ogni responsabilita' nel livello in cui nasce;
+nel ledger testiamo solo gli scenari pubblici rappresentativi.
+```
+
+Questo evita due errori:
+
+- copiare tutti gli scenari core in una seconda suite ledger quasi identica;
+- credere che basti un formatter JSONL unitario per dimostrare un ledger
+  runtime end-to-end.
+
+### Strati di copertura esistenti
+
+| Strato | Test principali | Cosa protegge per il ledger | Cosa non deve promettere |
+| --- | --- | --- | --- |
+| Core end-to-end | `tests/core/` | Semantica filesystem stabile: create, delete, modify, file-ready, rename, move, relocate, recursive mkdir | JSONL, queue, writer, watch diagnostics o agent attribution |
+| Backend diagnostics | `tests/backend/` | Salute del backend: watch aggiunti/rimossi, stale, resync, lost-scope, audit raw, output failure | Contratto pubblico completo del ledger o decisioni policy |
+| Record/formatter JSONL | `tests/backend/test_record_jsonl.*`, sink/writer JSONL | Forma esatta degli oggetti JSONL, escaping, identity completa, oggetti nested | Percorso runtime reale e ordine end-to-end |
+| Output pipeline runtime | `tests/backend/test_output_pipeline_runtime.sh`, `test_output_counter_runtime.sh`, `test_output_queue_pressure.sh` | Collegamento runtime `record -> queue -> drain -> dispatcher -> sink`, fail-closed e coda bounded | Semantica completa di ogni scenario filesystem |
+| JSONL golden end-to-end | `tests/jsonl/` | Contratto pubblico rappresentativo di `output.jsonl` su scenari reali o sintetici controllati | Copertura esaustiva di ogni combinazione core/backend |
+| Audit esplorativi | `tests/exploratory/nightly/` | Uso realistico, regressioni inattese, scenari da promuovere | Contratto stabile o sostituto della suite CI |
+
+### Golden JSONL rappresentativi
+
+Per v0 i golden JSONL devono coprire famiglie rappresentative, non ogni test
+possibile.
+
+| Famiglia ledger | Copertura esistente | Interpretazione |
+| --- | --- | --- |
+| Effetti filesystem base | `tests/jsonl/test_create_file_and_dir_jsonl.sh`, delete, modify, move, rename, relocate | Dimostra che gli effetti workspace osservati entrano nel JSONL pubblico |
+| File-ready / write lifecycle | `tests/jsonl/test_modify_file_jsonl.sh` | Protegge il caso utile per agenti e automazioni: il file e' pronto dopo scrittura |
+| Rename/move/relocate | `tests/jsonl/test_file_moved_jsonl.sh`, `test_file_relocated_jsonl.sh`, varianti directory | Protegge la semantica che distingue cambio nome, cambio directory e cambio completo |
+| Raw normalizzati | test JSONL base e formatter raw, inclusi overflow | Mostra l'evidenza tecnica Alfred, non il fatto kernel `IN_*` |
+| Diagnostica watch/recovery | `tests/backend/test_output_pipeline_runtime.sh`, `tests/jsonl/test_self_move_recovery_jsonl.sh`, `tests/jsonl/test_lost_scope_runtime_recovery_jsonl.sh` | Mostra quando la fiducia nel monitoraggio cambia o viene recuperata |
+| Overflow | `tests/jsonl/test_overflow_raw_jsonl.sh`, `tests/jsonl/test_overflow_core_jsonl.sh` | Protegge il caso globale senza path, importante per audit e affidabilita' |
+
+Questa copertura e' sufficiente per il contratto documentale corrente perche'
+il micro-step non aggiunge campi a `alfred_record_t`, non cambia lo schema
+JSONL e non cambia il routing runtime.
+
+### Quando aggiungere un nuovo golden
+
+Una PR futura deve aggiungere o aggiornare un golden JSONL quando:
+
+- aggiunge un campo pubblico del ledger, per esempio `workspace_root`,
+  `workspace_id` o `ledger_session_id`;
+- rende runtime-routed una famiglia oggi esclusa da JSONL;
+- cambia il significato di una famiglia gia' runtime-routed;
+- aggiunge un nuovo tipo `layer/category/type` serializzato in JSONL;
+- introduce una decisione osservabile come `would_block`, `blocked`,
+  `allowed` o `requires_approval`;
+- aggiunge una classificazione workspace come `inside_workspace` o
+  `outside_workspace`;
+- cambia la policy fail-closed di output incompleto;
+- modifica queue, dispatcher, sink o writer in un modo che puo' cambiare quali
+  record arrivano a `output.jsonl`.
+
+### Quando non aggiungere un nuovo golden
+
+Non serve un nuovo golden ledger quando:
+
+- la modifica e' solo documentale;
+- il comportamento e' gia' protetto dal test core e non cambia JSONL;
+- il comportamento e' diagnostica backend interna senza output pubblico v0;
+- il test sarebbe solo una copia di uno scenario core gia' coperto;
+- il formatter JSONL unitario copre gia' la forma del campo e nessun percorso
+  runtime cambia;
+- il tema riguarda process tree, rete, policy o agent session ma resta
+  esplicitamente futuro.
+
+### Casi futuri da non anticipare
+
+Questi test non devono essere scritti finche' il relativo comportamento non
+esiste:
+
+| Test futuro | Perche' non ora |
+| --- | --- |
+| `agent_session_id` in JSONL | Non esiste ancora fonte affidabile o adapter agente |
+| `workspace_root` / `workspace_id` runtime | I campi sono candidati concettuali, non schema implementato |
+| `outside_workspace` | Non esiste workspace boundary runtime |
+| `would_block` / `blocked` | Non esiste policy engine o enforcement |
+| processo che causa l'effetto | Inotify corrente non fornisce attribution affidabile |
+| file read ledger | `IN_ACCESS` resta audit raw opt-in, non record pubblico v0 |
+| network/exfiltration | Nessun backend rete implementato |
+
+### Regola pratica per una nuova feature ledger
+
+Quando una PR introduce una feature ledger reale, la checklist minima e':
+
+1. test core se cambia la semantica filesystem;
+2. test backend se cambia diagnostica, watch, recovery o routing dal backend;
+3. test formatter/sink se cambia la forma del record;
+4. golden JSONL se cambia il contratto pubblico del ledger;
+5. aggiornamento del contratto log e di questa sezione;
+6. benchmark o nota esplicita se cambia il percorso caldo, la coda, il
+   dispatcher, il writer o il volume di output.
+
 ## Esempi
 
 ### Modifica coerente ma non attribuita
