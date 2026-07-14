@@ -243,6 +243,16 @@ Il documento chiarisce anche che `workspace_root` e `workspace_id` non sono
 equivalenti: la root descrive il perimetro filesystem dichiarato, mentre l'id e'
 solo una label opaca di correlazione e da solo non prova containment.
 
+Aggiornamento successivo: il secondo micro-step di design decide il
+posizionamento runtime v0. I valori workspace/sessione devono vivere in un
+contesto runtime immutabile owned da app/runtime, creato prima
+dell'osservazione e distrutto durante shutdown dopo writer/sink interessati.
+Non vengono aggiunti subito a ogni `alfred_record_t` e non aumentano il clone
+owned della queue. I backend non possiedono questi campi, il core filesystem
+non li usa per la semantica corrente e un futuro writer/record di sessione
+dovra' leggere il contesto con API esplicita, golden JSONL e benchmark dedicati
+prima di renderlo pubblico.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
