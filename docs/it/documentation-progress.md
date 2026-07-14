@@ -264,6 +264,14 @@ per-evento. I valori vuoti non sono JSONL valido per v0 salvo futura regola
 esplicita; i golden dovranno coprire assenza, escaping, ordine del metadata
 record e assenza di attribuzione agente/policy implicita.
 
+Aggiornamento successivo: il quarto micro-step di design decide il gate
+benchmark. La milestone documentale non richiede un refresh dei numeri perche'
+non cambia runtime, record, queue, writer, JSONL o workload. Un refresh diventa
+obbligatorio quando una futura PR mette i campi in `alfred_record_t`, aumenta
+clone owned, ripete stringhe per evento, arricchisce JSONL per-record, cambia
+writer/sink/pipeline o genera identificatori dentro il percorso caldo. Il report
+benchmark ora contiene una tabella dedicata a workspace/session schema.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle

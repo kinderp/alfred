@@ -226,6 +226,48 @@ Refresh non necessario:
 - modifica solo commenti nel codice senza cambiare comportamento compilato;
 - modifica test non usati dai benchmark e non collegati al percorso misurato.
 
+### Gate per workspace/session runtime schema
+
+La milestone `Workspace/session runtime schema v0` usa questa politica di
+refresh per evitare di introdurre campi di contesto senza numeri. I campi
+coinvolti sono:
+
+```text
+workspace_root
+workspace_id
+ledger_session_id
+```
+
+Le decisioni documentali della milestone non richiedono benchmark refresh
+finche' non cambiano codice runtime, record, queue, writer, JSONL o workload.
+Il refresh diventa invece necessario quando una PR futura rende questi campi
+parte del percorso misurato.
+
+Mappa di riferimento:
+
+| Modifica futura | Benchmark da considerare | Motivo |
+| --- | --- | --- |
+| Campi aggiunti a `alfred_record_t` | queue, clone owned, dispatcher e output pipeline | Cambia la dimensione del record e il lavoro fatto al confine della queue |
+| Copia profonda dei campi per ogni evento | queue/owned clone e runtime output | Aumenta allocazioni, copie e cleanup per record |
+| JSONL enrichment per ogni evento | formatter JSONL, sink/writer JSONL e runtime output | Aumenta byte emessi, escaping, buffering e I/O |
+| Metadata/session record separato per run | smoke runtime output o benchmark mirato se passa dal runtime reale | Costo per-run, non per-evento; contano ordine, flush e compatibilita' |
+| Generazione costosa di `workspace_id` | benchmark mirato solo se avviene nel percorso caldo o per evento | Un costo una tantum non va confuso con costo per-event |
+| Nuovo sink/writer per session metadata | benchmark writer/output se cambia fan-out o I/O | Cambia il lavoro a valle del dispatcher |
+
+Regola pratica:
+
+```text
+se la PR sostiene che una scelta di schema non pesa, deve indicare quale
+percorso e' stato misurato o perche' il percorso misurato non cambia.
+```
+
+Questa regola protegge il percorso caldo. Un record metadata/sessione separato
+puo' essere molto economico se emesso una sola volta, ma questa non e' una verita'
+assoluta: se passa dalla stessa pipeline dei record osservativi, va comunque
+verificato che ordine, flush e failure mode restino chiari. Al contrario,
+per-record enrichment puo' essere comodo per consumer stateless, ma non deve
+essere scelto senza misurare volume JSONL, escaping e costo writer.
+
 Quando si rinfrescano i numeri, non bisogna cancellare i run vecchi se servono a
 spiegare la storia del progetto. Bisogna invece aggiungere una nuova sezione con:
 
