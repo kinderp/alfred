@@ -66,11 +66,50 @@ implementati.
 
 ## Campi candidati
 
-| Campo | Significato | Fonte di verita' candidata | Stato iniziale |
+| Campo | Significato | Fonte di verita' v0 | Stato dopo questo step |
 | --- | --- | --- | --- |
-| `workspace_root` | Root filesystem dichiarata come perimetro osservazionale | CLI/config futura, non inferenza automatica | Da progettare |
-| `workspace_id` | Identificatore stabile e opaco del workspace | Alfred/config o derivazione esplicita documentata | Da progettare |
-| `ledger_session_id` | Identificatore della sessione osservazionale Alfred | Runtime Alfred locale | Da progettare |
+| `workspace_root` | Root filesystem dichiarata come perimetro osservazionale | Valore esplicito da CLI/config/orchestratore fidato | Semantica e fonte definite; runtime placement futuro |
+| `workspace_id` | Identificatore opaco del workspace dichiarato o generato da Alfred | Valore esplicito o generazione Alfred documentata, mai inferenza silenziosa | Semantica e fonte definite; algoritmo futuro |
+| `ledger_session_id` | Identificatore della run/sessione osservazionale Alfred | Runtime Alfred locale all'avvio della run | Semantica e fonte definite; algoritmo futuro |
+
+## Regole generali di source of truth
+
+Questi campi descrivono contesto operativo. Non sono fatti osservati dal
+backend inotify e non sono prove di causalita' agente/processo.
+
+La fonte di verita' v0 deve rispettare queste regole:
+
+1. un valore deve essere esplicito oppure generato da Alfred con una regola
+   documentata;
+2. Alfred non deve dedurre automaticamente il workspace da path osservati, PID,
+   timestamp, nome processo o contenuto dei file;
+3. un campo assente significa "contesto non disponibile", non "fuori
+   workspace" e non "policy violata";
+4. un valore presente descrive il contesto dichiarato della run, non dimostra
+   che un agente abbia causato un record;
+5. ogni algoritmo futuro di generazione deve essere deterministicamente
+   documentato o dichiarato esplicitamente come opaco/non stabile.
+
+Questa distinzione e' importante per la sicurezza: confondere un contesto
+dichiarato con una prova osservata trasformerebbe Alfred da ledger affidabile a
+sistema che attribuisce responsabilita' senza evidenza.
+
+## Fonti vietate in v0
+
+Per v0 questi campi non possono essere derivati da:
+
+| Fonte vietata | Perche' e' vietata |
+| --- | --- |
+| Primo path osservato | Il primo evento puo' essere fuori scope o arrivare dopo altri fatti persi |
+| Prefisso comune dei path | I path osservati sono effetti, non dichiarazione di perimetro |
+| Directory corrente di Alfred | Alfred puo' essere lanciato da una directory diversa dal workspace |
+| PID, PPID o nome processo | Inotify non fornisce attribuzione processo affidabile nel modello corrente |
+| Timestamp di evento filesystem | Identifica un fatto osservato, non una sessione o un workspace |
+| Nome agente o prompt | Non esiste ancora adapter agente fidato in questa milestone |
+| Contenuto dei file | Sarebbe invasivo, costoso e fuori dallo scope observe-ledger v0 |
+
+Se in futuro una fonte vietata diventa supportabile, deve passare da una
+milestone esplicita con backend, test, privacy review e benchmark adeguati.
 
 ### `workspace_root`
 
@@ -87,18 +126,67 @@ contratto di sicurezza.
 Per questo la fonte corretta deve essere esplicita: opzione CLI, file di config
 o contesto runtime creato dall'utente o da un orchestratore fidato.
 
+Contratto v0:
+
+- rappresenta una root locale dichiarata per interpretare una run;
+- non implica che Alfred possa bloccare accessi fuori root;
+- non implica che tutti i record siano dentro quella root;
+- non deve essere normalizzato usando eventi osservati;
+- se configurato come path relativo, l'eventuale risoluzione deve essere
+  definita in una PR di implementazione, non lasciata al writer;
+- se assente, Alfred deve omettere il contesto invece di inventarlo.
+
+Esempio corretto:
+
+```text
+utente/orchestratore avvia Alfred con workspace_root=/home/user/progetto
+```
+
+Esempio non corretto:
+
+```text
+Alfred osserva /home/user/progetto/src/main.c e decide che /home/user/progetto
+e' il workspace.
+```
+
 ### `workspace_id`
 
 `workspace_id` serve a riferirsi al workspace senza esporre sempre il path
 testuale. Deve essere stabile abbastanza da collegare record della stessa
 sessione, ma non deve promettere identita' globale se non viene progettata.
 
-Domande aperte:
+Contratto v0:
 
-- e' configurato dall'utente?
-- e' generato da Alfred a inizio sessione?
-- e' derivato da `workspace_root` con hash?
-- se e' un hash, quali dati include e quali rischi privacy introduce?
+- identifica il workspace dichiarato, non il filesystem object osservato;
+- deve essere opaco per i consumatori: non devono parsarlo come path o hash
+  semantico;
+- puo' essere fornito esplicitamente oppure generato da Alfred;
+- se generato da Alfred, la PR di implementazione deve dichiarare se e' stabile
+  solo per la run, per quella macchina o per quel path normalizzato;
+- non deve essere derivato silenziosamente da `workspace_root` senza dichiarare
+  algoritmo, stabilita' e rischi privacy;
+- se assente, i record restano validi ma non correlabili per workspace id.
+
+Scelte ancora future:
+
+- formato (`ws_...`, UUID, hash, contatore locale);
+- stabilita' richiesta;
+- algoritmo di generazione;
+- eventuale configurazione utente;
+- relazione con privacy e minimizzazione del path.
+
+Esempio corretto:
+
+```text
+workspace_id=ws_7f3a... e' un identificatore opaco assegnato alla run o alla
+configurazione.
+```
+
+Esempio non corretto:
+
+```text
+un consumatore assume che workspace_id sia sempre SHA-256(workspace_root).
+```
 
 ### `ledger_session_id`
 
@@ -119,6 +207,25 @@ l'agente Codex ha causato questi record.
 
 Il secondo richiede `agent_session_id`, process context e un adapter agente o
 orchestratore. Non appartiene a questa milestone.
+
+Contratto v0:
+
+- identifica la run o finestra osservazionale di Alfred;
+- e' prodotto dal runtime Alfred, non dal backend;
+- non e' un `agent_session_id`;
+- non attribuisce causalita' a processi o agenti;
+- puo' essere usato per raggruppare record emessi dalla stessa run;
+- deve essere opaco per i consumatori;
+- se Alfred non lo emette ancora, il ledger observe-mode resta valido ma non ha
+  identificatore di sessione.
+
+Scelte ancora future:
+
+- algoritmo di generazione;
+- quando viene creato;
+- se cambia dopo reload di configurazione;
+- se viene scritto una volta come record sessione o ripetuto su ogni record;
+- come viene preservato in replay.
 
 ## Possibili posizionamenti runtime
 
