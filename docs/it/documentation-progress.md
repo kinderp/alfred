@@ -251,7 +251,9 @@ Non vengono aggiunti subito a ogni `alfred_record_t` e non aumentano il clone
 owned della queue. I backend non possiedono questi campi, il core filesystem
 non li usa per la semantica corrente e un futuro writer/record di sessione
 dovra' leggere il contesto con API esplicita, golden JSONL e benchmark dedicati
-prima di renderlo pubblico.
+prima di renderlo pubblico. Il contesto separato deve inoltre essere pubblicato
+come read-only verso eventuali reader asincroni futuri e distrutto solo dopo
+stop/join/drain dei componenti che possono ancora leggerlo.
 
 ## Aggiornamento registro milestone
 

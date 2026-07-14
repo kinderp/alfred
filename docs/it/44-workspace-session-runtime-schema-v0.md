@@ -335,6 +335,10 @@ Regole v0:
 
 - le stringhe del contesto sono owned dal runtime;
 - il runtime crea o riceve i valori prima di iniziare a osservare eventi;
+- il contesto deve essere completamente inizializzato prima di essere pubblicato
+  a writer, sink, worker o altri reader runtime;
+- dopo la pubblicazione il contesto e' read-only: nessun campo deve essere
+  modificato in place;
 - il runtime distrugge i valori durante shutdown, dopo writer/sink/pipeline che
   possono leggerli;
 - i backend non conservano puntatori a questi valori;
@@ -346,6 +350,29 @@ Regole v0:
 Queste regole evitano un bug classico: mettere in coda un record che contiene
 un puntatore borrowed a un contesto poi distrutto o ricaricato.
 
+### Pubblicazione e reader asincroni futuri
+
+Per v0 questa sezione e' una regola di progetto, non l'introduzione di un worker
+thread. Serve a evitare che una futura implementazione asincrona renda insicuro
+il contesto separato.
+
+Se un futuro writer, sink o worker legge il contesto workspace/sessione:
+
+- il puntatore o handle al contesto deve essere pubblicato solo dopo
+  inizializzazione completa;
+- il contesto pubblicato deve essere trattato come immutabile da tutti i thread;
+- reload, shutdown o cambio sessione non devono mutare o liberare in place un
+  contesto ancora leggibile da worker o sink;
+- lo shutdown deve fermare, sincronizzare, joinare o drenare tutti i reader che
+  possono osservare il contesto prima di distruggerlo;
+- se un componente deve conservare un valore oltre la vita del contesto, deve
+  farne una copia owned con ownership documentata.
+
+Questa regola protegge un rischio diverso dalla queue: anche se i record
+accodati non contengono puntatori borrowed, un writer asincrono potrebbe comunque
+leggere un contesto laterale. Quel contesto deve quindi avere una pubblicazione
+read-only e una distruzione sincronizzata.
+
 ## Reload e cambio configurazione
 
 Per v0 il contesto workspace/sessione e' immutabile. Un eventuale reload di
@@ -356,7 +383,8 @@ Scelte ammesse per una futura implementazione:
 1. non supportare reload per questi campi e richiedere una nuova run;
 2. chiudere la sessione corrente e aprire una nuova sessione con nuovo
    `ledger_session_id`;
-3. usare uno swap esplicito solo dopo drain/sincronizzazione documentata.
+3. usare uno swap esplicito solo dopo drain/sincronizzazione documentata, con un
+   nuovo contesto gia' inizializzato e senza mutare quello vecchio.
 
 Scelta vietata:
 
