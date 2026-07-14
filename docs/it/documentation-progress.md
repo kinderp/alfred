@@ -239,6 +239,9 @@ run osservazionale Alfred e non una sessione agente. Sono vietate in v0
 inferenze silenziose da path osservati, prefissi comuni, directory corrente,
 PID, timestamp, nome agente, prompt o contenuto dei file. Restano successivi
 runtime placement, ownership C, forma JSONL, golden test e benchmark refresh.
+Il documento chiarisce anche che `workspace_root` e `workspace_id` non sono
+equivalenti: la root descrive il perimetro filesystem dichiarato, mentre l'id e'
+solo una label opaca di correlazione e da solo non prova containment.
 
 ## Aggiornamento registro milestone
 

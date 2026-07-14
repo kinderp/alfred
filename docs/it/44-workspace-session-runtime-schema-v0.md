@@ -111,6 +111,30 @@ Per v0 questi campi non possono essere derivati da:
 Se in futuro una fonte vietata diventa supportabile, deve passare da una
 milestone esplicita con backend, test, privacy review e benchmark adeguati.
 
+## Relazione fra `workspace_root` e `workspace_id`
+
+`workspace_root` e `workspace_id` sono collegati, ma non sono equivalenti.
+
+Regole v0:
+
+- `workspace_root` e' il solo campo che puo' descrivere un perimetro
+  filesystem dichiarato;
+- `workspace_id` e' solo una label opaca di correlazione e non prova che un
+  path sia dentro o fuori dal workspace;
+- `workspace_root` puo' essere presente senza `workspace_id`: in quel caso
+  Alfred conosce il perimetro dichiarato ma non ha ancora una label opaca;
+- `workspace_id` puo' essere presente senza `workspace_root`: in quel caso
+  Alfred puo' raggruppare record per workspace dichiarato, ma non puo'
+  interpretare quel valore come boundary filesystem;
+- quando entrambi sono presenti, devono provenire dalla stessa configurazione o
+  dallo stesso contesto runtime dichiarato;
+- se una PR futura genera `workspace_id` da `workspace_root`, deve dichiarare
+  algoritmo, stabilita', normalizzazione, rischi privacy e casi di collisione.
+
+Queste regole evitano un errore importante: un consumatore JSONL non deve
+trattare un record con solo `workspace_id` come prova che il path osservato sia
+contenuto in un workspace specifico.
+
 ### `workspace_root`
 
 `workspace_root` e' un path dichiarato. Non deve essere dedotto dal primo evento
