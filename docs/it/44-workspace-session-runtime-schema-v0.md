@@ -583,7 +583,21 @@ La milestone eredita il gate definito in
 [Report benchmark prestazioni](34-report-benchmark-prestazioni.md) e nel ledger
 observe-mode.
 
-Serve benchmark refresh se:
+Decisione v0:
+
+```text
+questo step non richiede benchmark refresh perche' non cambia runtime,
+record, queue, writer, JSONL o workload.
+```
+
+Il benchmark diventa necessario solo quando una PR futura cambia il percorso
+misurato o rende pubblici questi campi in output. La regola e' sempre la stessa:
+non usare numeri vecchi per giustificare un percorso che non e' piu' quello
+misurato.
+
+### Casi che richiedono benchmark
+
+Serve benchmark refresh o benchmark mirato se:
 
 - i campi entrano in `alfred_record_t`;
 - aumenta la dimensione del record;
@@ -592,12 +606,57 @@ Serve benchmark refresh se:
 - cambia queue, clone owned, dispatcher, sink o writer;
 - il writer arricchisce ogni record con lavoro per-event.
 
+Mappa pratica:
+
+| Scelta futura | Benchmark richiesto | Perche' |
+| --- | --- | --- |
+| Aggiungere i campi a `alfred_record_t` | `queue-*`, `queue-dispatcher-*`, `output-pipeline-*`, runtime output se collegato | Cambia dimensione record, clone owned, destroy e memoria attraversata dalla queue |
+| Clonare `workspace_root`, `workspace_id`, `ledger_session_id` per ogni record | benchmark queue/owned clone e runtime output | Aumenta allocazioni, copie stringa e cleanup per evento |
+| Per-record JSONL enrichment | JSONL formatter/sink/writer e runtime output | Aumenta byte per record, escaping, buffering, I/O e parsing consumer |
+| Metadata/session record separato una volta per run | smoke runtime output o benchmark mirato leggero solo se il record entra nel runtime reale | Costo per-run, non per-evento; serve verificare ordine e flush piu' che throughput |
+| Nuova validazione CLI/config prima dell'avvio | di norma nessun benchmark, salvo parsing costoso o path normalization pesante | Non attraversa il percorso caldo degli eventi |
+| Algoritmo costoso per generare `workspace_id` | benchmark mirato se eseguito per evento; non necessario se eseguito una volta per run | Il costo dipende dal punto di esecuzione |
+| Nuovo writer/session metadata sink | benchmark writer/output se partecipa alla pipeline | Cambia fan-out, buffering o I/O a valle |
+
+### Casi che non richiedono benchmark
+
 Non serve benchmark refresh per:
 
 - setup documentale;
 - decisione di naming;
 - issue/roadmap;
 - test che assertano comportamento gia' esistente senza cambiare runtime.
+
+Non serve benchmark refresh nemmeno per un golden JSONL che dimostra assenza dei
+campi, se il codice runtime e il formatter non cambiano. In quel caso il test
+protegge il contratto pubblico, ma non modifica il costo misurato.
+
+### Benchmark minimi per una PR di implementazione
+
+Una PR futura che implementa davvero questi campi deve dichiarare nella sua
+descrizione quale riga della tabella sopra sta attraversando e quali benchmark
+ha eseguito o escluso.
+
+Regole minime:
+
+- se cambia solo un record metadata/sessione emesso una volta, spiegare perche'
+  il costo e' per-run e non per-evento;
+- se cambia `alfred_record_t` o il clone owned, eseguire benchmark queue e
+  output pipeline collegati;
+- se cambia JSONL per ogni evento, eseguire benchmark formatter/sink/writer e
+  almeno un runtime output;
+- se cambia la pipeline, aggiornare anche i contatori runtime o spiegare perche'
+  quelli esistenti restano sufficienti;
+- se una differenza piccola viene usata per decidere architettura, ripetere i
+  run o dichiarare che i numeri sono solo orientativi.
+
+Claim vietati senza benchmark:
+
+- "il contesto per-record e' gratis";
+- "ripetere tre stringhe in JSONL non pesa";
+- "il metadata record separato e' sempre migliore";
+- "questa scelta non cambia backpressure";
+- "la queue resta equivalente" se clone, dimensione record o drain sono cambiati.
 
 ## Endpoint della milestone
 
