@@ -278,7 +278,8 @@ Esito consolidato:
 
 PR di riferimento:
 
-- [PR #160](https://github.com/kinderp/alfred/pull/160)
+- runtime implementation: [PR #160](https://github.com/kinderp/alfred/pull/160)
+- milestone closure: [PR #162](https://github.com/kinderp/alfred/pull/162)
 - merge commit [710bf15](https://github.com/kinderp/alfred/commit/710bf15)
 - commit principali:
   [b764e7b](https://github.com/kinderp/alfred/commit/b764e7b),
