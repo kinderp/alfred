@@ -200,6 +200,15 @@ campi pubblici del ledger, cambia una famiglia runtime-routed, introduce
 decisioni policy visibili o modifica queue/dispatcher/writer in modo rilevante
 per `output.jsonl`.
 
+Aggiornamento successivo: il documento definisce anche il gate benchmark per il
+ledger observe-mode. I micro-step documentali e i golden che verificano
+comportamento gia' runtime-routed non richiedono un refresh dei benchmark. Un
+refresh o un benchmark mirato diventa invece necessario quando una modifica
+ledger cambia schema pubblico, dimensione/copia dei record, volume JSONL,
+classificazione runtime, queue, drain, dispatcher, sink, writer, buffering,
+fail-closed o introduce backend/attribution non coperti dai numeri inotify
+correnti.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
