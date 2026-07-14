@@ -66,11 +66,11 @@ implementati.
 
 ## Campi candidati
 
-| Campo | Significato | Fonte di verita' v0 | Stato dopo questo step |
+| Campo | Significato | Fonte di verita' v0 | Stato milestone corrente |
 | --- | --- | --- | --- |
-| `workspace_root` | Root filesystem dichiarata come perimetro osservazionale | Valore esplicito da CLI/config/orchestratore fidato | Semantica e fonte definite; runtime placement futuro |
-| `workspace_id` | Identificatore opaco del workspace dichiarato o generato da Alfred | Valore esplicito o generazione Alfred documentata, mai inferenza silenziosa | Semantica e fonte definite; algoritmo futuro |
-| `ledger_session_id` | Identificatore della run/sessione osservazionale Alfred | Runtime Alfred locale all'avvio della run | Semantica e fonte definite; algoritmo futuro |
+| `workspace_root` | Root filesystem dichiarata come perimetro osservazionale | Valore esplicito da CLI/config/orchestratore fidato | Semantica, fonte, runtime placement e JSONL gate definiti; codice futuro |
+| `workspace_id` | Identificatore opaco del workspace dichiarato o generato da Alfred | Valore esplicito o generazione Alfred documentata, mai inferenza silenziosa | Semantica, fonte, runtime placement e JSONL gate definiti; algoritmo futuro |
+| `ledger_session_id` | Identificatore della run/sessione osservazionale Alfred | Runtime Alfred locale all'avvio della run | Semantica, fonte, runtime placement e JSONL gate definiti; algoritmo futuro |
 
 ## Regole generali di source of truth
 
@@ -438,12 +438,133 @@ workspace/sessione.
 
 I campi diventano contratto pubblico solo quando entrano in JSONL.
 
-Quando succede, servono:
+Decisione v0:
+
+```text
+questo step non cambia lo schema JSONL corrente
+```
+
+I record JSONL correnti non devono iniziare a emettere `workspace_root`,
+`workspace_id` o `ledger_session_id` senza una PR di implementazione dedicata.
+Quella PR dovra' scegliere tipo di record, routing, golden, validazione dei
+valori e benchmark. Questo evita di rendere pubblico un campo prima che siano
+chiari significato, ordine nello stream, costo e comportamento dei consumer.
+
+### Forma pubblica preferita
+
+La prima forma pubblica preferita e' un record metadata/sessione separato,
+emesso una volta per sessione osservazionale o quando una futura sessione cambia.
+
+Il motivo e':
+
+- `workspace_root`, `workspace_id` e `ledger_session_id` descrivono la run, non
+  un fatto filesystem diverso per ogni record;
+- ripeterli su ogni riga aumenta volume JSONL, escaping e parsing;
+- una riga metadata rende esplicito che il contesto e' dichiarato, non osservato
+  dal backend;
+- i record evento restano leggeri e continuano a rappresentare il fatto
+  osservato.
+
+Esempio concettuale non ancora implementato:
+
+```json
+{
+  "schema_version": 0,
+  "layer": "diagnostic",
+  "category": "backend",
+  "type": "LEDGER_SESSION_STARTED",
+  "ledger_session": {
+    "ledger_session_id": "ls_01...",
+    "workspace_id": "ws_01...",
+    "workspace_root": "/home/user/project"
+  }
+}
+```
+
+Questo esempio non crea ancora un tipo C e non autorizza a usare esattamente
+`diagnostic/backend/LEDGER_SESSION_STARTED`. La PR di implementazione dovra'
+definire una coppia `layer/category/type` controllata nel modello eventi prima
+di scrivere golden JSONL.
+
+### Per-record enrichment
+
+L'arricchimento per-record resta rimandato.
+
+Puo' diventare corretto se un consumatore deve leggere ogni riga JSONL in modo
+completamente indipendente, senza mantenere stato di sessione. In quel caso la
+PR dovra' documentare perche' il vantaggio supera:
+
+- maggiore volume per evento;
+- costo di escaping e formattazione;
+- possibile ripetizione di path sensibili;
+- compatibilita' con writer binari e replay;
+- rischio di confondere contesto dichiarato con evidenza osservata.
+
+Finche' questa giustificazione non esiste, la scelta default resta:
+
+```text
+contesto sessione separato prima, enrichment per-record solo se misurato e
+motivato
+```
+
+### Assente, vuoto e invalido
+
+Il JSONL pubblico deve distinguere tre casi:
+
+| Caso | Significato |
+| --- | --- |
+| Campo assente | Alfred non ha quel contesto oppure la feature non e' abilitata |
+| Campo presente e non vuoto | Valore dichiarato o generato secondo il contratto documentato |
+| Campo presente ma vuoto | Non valido nel contratto v0, salvo futura regola esplicita |
+
+Per v0, `workspace_root`, `workspace_id` e `ledger_session_id` non devono essere
+emessi come stringhe vuote in JSONL valido. Se una configurazione futura fornisce
+un valore vuoto, l'implementazione deve scegliere esplicitamente fra:
+
+1. rifiutare la configurazione prima di avviare la sessione;
+2. trattare il valore come assente e, se utile, produrre una diagnostica
+   strutturata;
+3. accettare il vuoto solo con una motivazione documentata e golden dedicato.
+
+La scelta 3 non e' il default perche' una stringa vuota rende ambigua la
+differenza fra "non configurato", "configurato male" e "valore intenzionalmente
+vuoto".
+
+### Test richiesti prima dell'output pubblico
+
+Quando questi campi diventano output JSONL pubblico, servono almeno:
 
 - test formatter/sink per forma, escaping e omissione dei campi assenti;
 - golden JSONL per almeno uno scenario filesystem reale;
 - test per campo assente, per non fingere contesto non disponibile;
-- aggiornamento del contratto log e di questo documento.
+- test per rifiutare o gestire esplicitamente i valori vuoti;
+- test che dimostrino che i record evento non ricevono per-record enrichment se
+  la scelta resta session metadata separato;
+- aggiornamento del contratto log e di questo documento;
+- aggiornamento della pagina man interessata quando l'opzione/config diventa
+  utente.
+
+Se la prima implementazione usa un record metadata/sessione separato, i golden
+devono coprire:
+
+- emissione del metadata record quando i valori sono configurati/generati;
+- assenza del metadata record quando il contesto non e' disponibile o la feature
+  non e' abilitata;
+- ordine del metadata record rispetto ai record osservativi;
+- escaping di `workspace_root`;
+- omissione dei campi assenti dentro l'oggetto sessione;
+- nessuna attribuzione agente o policy implicita.
+
+Se invece una PR futura sceglie per-record enrichment, i golden devono coprire
+almeno:
+
+- record semantico filesystem con contesto presente;
+- record raw normalizzato con contesto presente;
+- record diagnostico watch/recovery con contesto presente;
+- record senza contesto, dove i campi vengono omessi;
+- valori con caratteri che richiedono escaping;
+- prova che il campo presente non significa `inside_workspace`,
+  `allowed` o `agent-caused`.
 
 Regola:
 

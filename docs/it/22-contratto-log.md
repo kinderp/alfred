@@ -457,6 +457,14 @@ scrivere golden JSONL per lifecycle bisognera' decidere schema, campi minimi,
 ordine rispetto ai record osservativi e policy di errore quando il writer non
 e' ancora pronto o sta gia' fallendo.
 
+La stessa cautela vale per i futuri metadati workspace/sessione. Campi come
+`workspace_root`, `workspace_id` e `ledger_session_id` descrivono il contesto
+della run osservazionale, non un fatto filesystem osservato dal backend. Per la
+milestone `Workspace/session runtime schema v0`, la forma preferita futura e'
+un record metadata/sessione separato, non un arricchimento automatico di ogni
+record evento. Finche' quello schema non viene implementato con tipo controllato,
+golden JSONL e benchmark, `output.jsonl` non deve emettere questi campi.
+
 #### Errori strutturati e `output.jsonl`
 
 Nel codice corrente esistono gia' errori strutturati, ma solo dentro famiglie
