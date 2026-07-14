@@ -65,6 +65,30 @@ typedef struct {
 } app_output_runtime_stats_t;
 
 /*
+ * app_workspace_session_context_t - app-owned runtime workspace/session context
+ * @has_workspace_root: true when workspace_root is available for this run
+ * @has_workspace_id: true when workspace_id is available for this run
+ * @has_ledger_session_id: true when ledger_session_id is available for this run
+ * @workspace_root: declared filesystem observation boundary
+ * @workspace_id: opaque workspace label
+ * @ledger_session_id: opaque Alfred ledger/run label
+ *
+ * The application copies these values from config during app_init() before
+ * backend, core, queue, dispatcher, or writer activity starts. The context is
+ * read-only for the rest of the run. It is not passed to the inotify backend
+ * and it is not embedded in alfred_record_t in this milestone.
+ */
+typedef struct {
+    int has_workspace_root;
+    int has_workspace_id;
+    int has_ledger_session_id;
+
+    char workspace_root[PATH_MAX];
+    char workspace_id[WORKSPACE_SESSION_ID_MAX];
+    char ledger_session_id[WORKSPACE_SESSION_ID_MAX];
+} app_workspace_session_context_t;
+
+/*
  * app_t - process-wide runtime context
  *
  * app_t is the ownership root for the running process. Initialization builds
@@ -87,6 +111,13 @@ typedef struct app {
 
     /* Application configuration loaded before subsystem initialization. */
     config_t config;
+
+    /*
+     * Optional workspace/session runtime context. app.c owns these inline
+     * strings for the whole run; downstream records and queues do not borrow
+     * pointers from this context.
+     */
+    app_workspace_session_context_t workspace_session;
 
     /*
      * Active backend wiring. For v0 this is still the static inotify adapter,

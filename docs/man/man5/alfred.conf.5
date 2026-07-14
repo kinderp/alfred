@@ -97,6 +97,24 @@ It is not opened when
 The default is
 .BR output.jsonl .
 .TP
+.B workspace_root
+Optional declared filesystem workspace boundary for the current Alfred run.
+This is runtime context, not backend evidence and not a policy decision. Alfred
+does not infer this value from observed paths. If present, the value must be a
+non-empty string. An empty value makes configuration loading fail.
+.TP
+.B workspace_id
+Optional opaque workspace correlation label for the current Alfred run. The
+value is not parsed as a path or hash by Alfred v0. If present, it must be a
+non-empty string that fits the implementation-defined identifier buffer. Empty
+or oversized values make configuration loading fail.
+.TP
+.B ledger_session_id
+Optional opaque ledger/run correlation label for the current Alfred run. This
+is not an agent session id and does not prove process or AI-agent attribution.
+If present, it must be a non-empty string that fits the implementation-defined
+identifier buffer. Empty or oversized values make configuration loading fail.
+.TP
 .B watcher_capacity
 Alias for
 .BR inotify_watcher_capacity .
@@ -248,6 +266,17 @@ Enable the runtime counter benchmark path:
 output_enabled=true
 output_format=counter
 .EE
+.TP
+Declare workspace/session runtime context:
+.EX
+workspace_root=/home/user/project
+workspace_id=ws-local-project
+ledger_session_id=ls-local-run
+.EE
+.PP
+These values are stored as application-owned runtime context. They are not
+written to JSONL by this contract and they do not enable Agent Guard, policy,
+blocking, would-block decisions, process attribution or network observation.
 .SH NOTES
 This file format is intentionally simple and does not yet have include
 directives, sections, quoting rules, variable expansion or CLI override

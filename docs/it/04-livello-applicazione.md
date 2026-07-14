@@ -56,6 +56,7 @@ typedef struct app {
     volatile sig_atomic_t running;
 
     config_t config;
+    app_workspace_session_context_t workspace_session;
     const alfred_backend_ops_t *backend_ops;
     inotify_backend_ops_runtime_t inotify_backend;
     inotify_backend_ops_config_t inotify_backend_config;
@@ -80,6 +81,10 @@ Campi importanti:
   deve continuare e viene portata a `0` dal signal handler quando Alfred riceve
   segnali come `SIGINT` o `SIGTERM`
 - `config`: configurazione runtime
+- `workspace_session`: contesto runtime app-owned per `workspace_root`,
+  `workspace_id` e `ledger_session_id`. Viene copiato dalla configurazione
+  durante `app_init()` e resta immutabile per la run; non viene passato al
+  backend inotify e non viene copiato dentro `alfred_record_t`
 - `backend_ops`: tabella statica Backend API v0 usata da `app.c` per chiamare
   lifecycle e target management del backend attivo. Per ora punta sempre a
   `inotify_backend_ops()`
@@ -458,6 +463,35 @@ Con questa configurazione una lettura read-only puo' produrre righe come
 `IN_OPEN`, `IN_ACCESS` e `IN_CLOSE_NOWRITE` nel `raw.log`. Non deve pero'
 produrre `FILE_MODIFIED` o `FILE_READY` nell'`events.log`, perche' non c'e'
 stata scrittura.
+
+### Configurazione workspace/sessione
+
+La configurazione contiene anche il primo contesto workspace/sessione:
+
+```c
+typedef struct {
+    int has_workspace_root;
+    int has_workspace_id;
+    int has_ledger_session_id;
+
+    char workspace_root[PATH_MAX];
+    char workspace_id[WORKSPACE_SESSION_ID_MAX];
+    char ledger_session_id[WORKSPACE_SESSION_ID_MAX];
+} workspace_session_config_t;
+```
+
+Questi campi vivono in `config_t.workspace_session` e vengono copiati in
+`app_t.workspace_session` da `app_init_workspace_session_context()`. Sono
+contesto dichiarato della run, non evidenza osservata dal backend. Per questo:
+
+- il backend inotify non li riceve;
+- il core filesystem non li usa per decidere create/delete/rename/move;
+- la queue non clona questi valori per ogni record;
+- il JSONL corrente non li emette ancora;
+- un valore presente ma vuoto viene rifiutato da `config_load()`.
+
+Per i dettagli leggere
+[Workspace/session runtime context v0](45-workspace-session-runtime-context-v0.md).
 
 ### Configurazione output runtime
 

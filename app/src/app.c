@@ -748,6 +748,47 @@ static int handle_backend_event(const alfred_raw_event_t *raw,
  * ========================================================================== */
 
 /*
+ * app_init_workspace_session_context - publish immutable run context
+ * @app: application context to update
+ *
+ * Copies optional workspace/session strings from configuration into app-owned
+ * runtime storage before any backend/core/output activity starts. This keeps
+ * the v0 context independent from later config mutation and avoids borrowed
+ * pointers in records, queues, or writers.
+ */
+static void app_init_workspace_session_context(app_t *app)
+{
+    if (app == NULL)
+        return;
+
+    memset(&app->workspace_session, 0, sizeof(app->workspace_session));
+
+    if (app->config.workspace_session.has_workspace_root) {
+        app->workspace_session.has_workspace_root = 1;
+        snprintf(app->workspace_session.workspace_root,
+                 sizeof(app->workspace_session.workspace_root),
+                 "%s",
+                 app->config.workspace_session.workspace_root);
+    }
+
+    if (app->config.workspace_session.has_workspace_id) {
+        app->workspace_session.has_workspace_id = 1;
+        snprintf(app->workspace_session.workspace_id,
+                 sizeof(app->workspace_session.workspace_id),
+                 "%s",
+                 app->config.workspace_session.workspace_id);
+    }
+
+    if (app->config.workspace_session.has_ledger_session_id) {
+        app->workspace_session.has_ledger_session_id = 1;
+        snprintf(app->workspace_session.ledger_session_id,
+                 sizeof(app->workspace_session.ledger_session_id),
+                 "%s",
+                 app->config.workspace_session.ledger_session_id);
+    }
+}
+
+/*
  * app_init - initialize the application runtime
  * @app: application context to initialize
  * @argc: command-line argument count
@@ -805,6 +846,13 @@ int app_init(app_t *app, int argc, char **argv)
         error = ERR_INVALID_ARG;
         goto fail;
     }
+
+    /*
+     * Workspace/session context is app-owned and immutable for the run. It is
+     * initialized before the logger, backend, core, and output pipeline so
+     * future readers can treat the context as published before event activity.
+     */
+    app_init_workspace_session_context(app);
 
     /*
      * The logger is initialized early because every following subsystem uses
