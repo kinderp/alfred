@@ -143,6 +143,15 @@ solo su questa tupla: se compare su un record filesystem, watch, recovery o raw,
 il formatter deve rifiutare il record invece di trasformarlo in arricchimento
 per-evento.
 
+Nel runtime corrente `SESSION_CONTEXT` viene emesso come record one-shot solo
+quando l'output strutturato e' abilitato e almeno uno tra `workspace_root`,
+`workspace_id` e `ledger_session_id` e' configurato. Il record passa da
+`app_emit_session_context_record()` alla output pipeline, quindi attraversa
+queue, dispatcher e sink JSONL come gli altri record strutturati. Se il contesto
+e' assente, Alfred non emette un record lifecycle vuoto; se il contesto e'
+presente, gli eventi filesystem successivi non ricevono automaticamente
+`workspace` o `ledger` come payload per-evento.
+
 ## Type
 
 `type` e' il nome specifico del record dentro una coppia `layer/category`.
@@ -1159,7 +1168,7 @@ gli eventi semantici `FILE_*` e `DIR_*`.
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_END` | lost-scope recovery | recovery ampia completata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RETRY_SCHEDULED` | lost-scope retry | recovery non riuscita ma rischedulata | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
 | `diagnostic` | `recovery` | `WATCH_LOST_RECOVERY_GAVE_UP` | lost-scope retry budget | budget tentativi esaurito | [21](21-roadmap-scanner-resync.md), [22](22-contratto-log.md#diagnostica-backend-del-resync) |
-| `diagnostic` | `lifecycle` | `SESSION_CONTEXT` | runtime app-owned | contesto workspace/sessione della run, non ancora emesso in runtime | [46](46-metadata-session-record-jsonl-v0.md) |
+| `diagnostic` | `lifecycle` | `SESSION_CONTEXT` | runtime app-owned | contesto workspace/sessione della run, emesso one-shot quando output strutturato e contesto configurato sono presenti | [46](46-metadata-session-record-jsonl-v0.md) |
 
 La tabella non pretende di elencare ogni singola variante diagnostica minore. Il
 contratto completo delle righe `WATCH_*` resta in

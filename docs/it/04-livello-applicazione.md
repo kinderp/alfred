@@ -486,12 +486,39 @@ contesto dichiarato della run, non evidenza osservata dal backend. Per questo:
 
 - il backend inotify non li riceve;
 - il core filesystem non li usa per decidere create/delete/rename/move;
-- la queue non clona questi valori per ogni record;
-- il JSONL corrente non li emette ancora;
+- la queue non clona questi valori per ogni record filesystem;
+- quando `output_enabled=true` e almeno un campo e' configurato, app.c emette
+  un solo record `diagnostic + lifecycle + SESSION_CONTEXT` tramite
+  `app_emit_session_context_record()`;
+- quel record passa dalla output pipeline (`queue -> dispatcher -> sink`) e non
+  viene scritto direttamente come JSONL da `app.c`;
 - un valore presente ma vuoto viene rifiutato da `config_load()`.
 
+Il percorso concreto e':
+
+```text
+app_init_workspace_session_context()
+-> app_init_output_pipeline()
+-> app_emit_session_context_record()
+   -> app_build_session_context_record()
+   -> app_emit_output_record()
+   -> app_enqueue_output_record()
+   -> alfred_record_output_pipeline_enqueue()
+-> app_run()
+   -> app_drain_output_pipeline()
+   -> alfred_record_dispatcher_dispatch_one()
+   -> alfred_record_jsonl_writer_emit()
+```
+
+Il record costruito da `app_build_session_context_record()` e' borrowed verso
+`app_t.workspace_session` solo fino all'enqueue. La queue crea la copia owned
+con `alfred_record_clone_owned()`, quindi nessun puntatore verso `app_t`
+sopravvive nel buffer accodato.
+
 Per i dettagli leggere
-[Workspace/session runtime context v0](45-workspace-session-runtime-context-v0.md).
+[Workspace/session runtime context v0](45-workspace-session-runtime-context-v0.md)
+e
+[Metadata/session record JSONL v0](46-metadata-session-record-jsonl-v0.md).
 
 ### Configurazione output runtime
 

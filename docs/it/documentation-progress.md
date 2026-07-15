@@ -327,9 +327,18 @@ Aggiornamento successivo: il micro-step payload JSONL stabilizza
 formatter pubblico: `workspace.root`, `workspace.id` e `ledger.session_id`.
 Le stringhe vuote sono trattate come assenti, gli oggetti vuoti non vengono
 emessi e il formatter rifiuta payload sessione su record diversi da
-`SESSION_CONTEXT` per evitare per-event enrichment accidentale. L'emissione
-runtime resta separata: builder, enqueue, ordine nello stream e golden
-end-to-end saranno coperti da un child issue successivo.
+`SESSION_CONTEXT` per evitare per-event enrichment accidentale. Questo step non
+emetteva ancora il record in runtime: builder, enqueue, ordine nello stream e
+golden end-to-end sono stati coperti dal child issue successivo.
+
+Aggiornamento successivo: il micro-step runtime emette `SESSION_CONTEXT` una
+sola volta quando `output_enabled=true` e almeno un campo workspace/sessione e'
+configurato. Il record viene costruito come borrowed view di
+`app_t.workspace_session`, poi attraversa `app_emit_output_record()`,
+`app_enqueue_output_record()` e `alfred_record_output_pipeline_enqueue()`, dove
+la queue clona owned il payload. Se il contesto e' assente, Alfred non produce
+un record lifecycle vuoto; gli eventi filesystem successivi non ricevono
+automaticamente payload `workspace` o `ledger`.
 
 ## Aggiornamento registro milestone
 

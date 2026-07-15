@@ -214,8 +214,14 @@ and
 Empty strings are treated as absent, empty objects are omitted, and the
 formatter rejects the session payload on non-
 .B SESSION_CONTEXT
-records. This does not mean the runtime emits that record yet, and it does not
-add per-event workspace/session enrichment.
+records.
+.PP
+At runtime, Alfred emits this record once per run only when structured output is
+enabled and at least one workspace/session configuration field is present. The
+record is routed through the same structured output pipeline as other records,
+not written directly by the application. If no workspace/session field is
+configured, Alfred emits no empty lifecycle metadata record. The runtime still
+does not add per-event workspace/session enrichment.
 .PP
 For this record family, the accepted tuple is intentionally narrow:
 .B SESSION_CONTEXT
