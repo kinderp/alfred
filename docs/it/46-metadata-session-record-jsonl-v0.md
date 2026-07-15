@@ -116,9 +116,10 @@ esempio:
 - `diagnostic + watch + SESSION_CONTEXT` e' invalida, perche' il contesto
   sessione non descrive lo stato di un watch.
 
-Questo step stabilizza anche il payload JSONL v0 del record. Resta invece
-rimandata l'emissione runtime: Alfred sa formattare e validare il record, ma
-non lo produce ancora automaticamente all'avvio della run.
+Questo step stabilizza anche il payload JSONL v0 del record. Il passo runtime
+successivo lo emette automaticamente quando l'output strutturato e' abilitato e
+almeno un campo workspace/sessione e' configurato. Se il contesto e' assente, il
+runtime non accoda un record `SESSION_CONTEXT` decorativo.
 
 Motivo:
 
@@ -211,8 +212,9 @@ della run una prova osservata su ogni evento filesystem.
 
 ## Quando emettere il record
 
-Il punto candidato e' dopo l'inizializzazione del contesto runtime e prima che
-gli eventi filesystem ordinari inizino ad attraversare l'output strutturato.
+Il punto runtime scelto e' dopo l'inizializzazione del contesto runtime e della
+output pipeline, ma prima che Alfred installi i target di startup e inizi a
+ricevere eventi filesystem ordinari.
 
 Percorso concettuale:
 
@@ -220,8 +222,11 @@ Percorso concettuale:
 config_load()
 -> app_init_workspace_session_context()
 -> output pipeline init
--> build SESSION_CONTEXT record
--> alfred_record_output_pipeline_enqueue()
+-> app_emit_session_context_record()
+   -> app_build_session_context_record()
+   -> app_emit_output_record()
+   -> app_enqueue_output_record()
+   -> alfred_record_output_pipeline_enqueue()
 -> queue
 -> dispatcher
 -> JSONL sink
@@ -229,6 +234,18 @@ config_load()
 
 Il record deve usare la pipeline strutturata esistente. Non deve scrivere JSONL
 direttamente da `app.c` e non deve bypassare queue, dispatcher o sink.
+
+Regole runtime:
+
+- se `output_enabled=false`, il record non viene emesso;
+- se nessuno tra `workspace_root`, `workspace_id` e `ledger_session_id` e'
+  configurato, il record non viene emesso;
+- se almeno un campo e' configurato e l'output strutturato e' abilitato, il
+  record viene accodato una sola volta per run;
+- l'accodamento avviene prima dei record osservativi ordinari, cosi' i
+  consumatori JSONL possono leggere il contesto prima degli eventi filesystem;
+- gli eventi filesystem successivi non ricevono automaticamente `workspace` o
+  `ledger` come payload per-evento.
 
 ## Ownership
 
@@ -269,15 +286,23 @@ Per il payload JSONL v0 servono test formatter focused che coprano:
 7. nessun campo agente/policy/processo presente;
 8. payload sessione rifiutato su record non `SESSION_CONTEXT`.
 
-Il futuro collegamento runtime dovra' aggiungere test end-to-end separati:
+Il collegamento runtime aggiunge test end-to-end separati:
 
 1. nessun campo configurato: nessun `SESSION_CONTEXT` runtime;
 2. record emesso una sola volta per run;
 3. ordine del record rispetto ai record osservativi;
 4. eventi filesystem successivi non duplicano i campi workspace/sessione.
 
-Questi test devono proteggere il contratto pubblico. I test di configurazione
-gia' esistenti restano necessari, ma non bastano per questa milestone.
+Il test focused corrente e':
+
+```bash
+bash tests/backend/test_session_context_runtime_output.sh
+```
+
+Questi test proteggono il contratto pubblico. I test di configurazione restano
+necessari, ma da soli non bastano per questa milestone perche' verificano solo
+che i valori entrino in `app_t.workspace_session`, non che attraversino
+`record -> queue -> dispatcher -> writer`.
 
 ## Benchmark gate
 

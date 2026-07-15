@@ -46,6 +46,7 @@ static int app_drain_output_pipeline(app_t *app);
 static void app_observe_output_pending(app_t *app, size_t pending);
 static void app_log_output_runtime_stats(app_t *app);
 static int app_emit_output_record(app_t *app, const alfred_record_t *record);
+static int app_emit_session_context_record(app_t *app);
 static int app_emit_output_record_callback(const alfred_record_t *record,
                                            void *userdata);
 static int handle_backend_event(const alfred_raw_event_t *raw,
@@ -669,6 +670,112 @@ static int app_emit_output_record(app_t *app, const alfred_record_t *record)
     return app_enqueue_output_record(app, record);
 }
 
+static int string_is_present(const char *value)
+{
+    return value != NULL && value[0] != '\0';
+}
+
+/*
+ * app_workspace_session_has_context - detect publishable run context
+ * @app: application context that owns immutable workspace/session buffers
+ *
+ * A runtime SESSION_CONTEXT record is useful only when at least one configured
+ * field is present. The formatter can serialize an empty SESSION_CONTEXT in
+ * focused contract tests, but app.c must not enqueue decorative metadata.
+ *
+ * Return: 1 when a runtime record should be emitted, 0 otherwise.
+ */
+static int app_workspace_session_has_context(const app_t *app)
+{
+    if (app == NULL) {
+        return 0;
+    }
+
+    return (app->workspace_session.has_workspace_root &&
+            string_is_present(app->workspace_session.workspace_root)) ||
+           (app->workspace_session.has_workspace_id &&
+            string_is_present(app->workspace_session.workspace_id)) ||
+           (app->workspace_session.has_ledger_session_id &&
+            string_is_present(app->workspace_session.ledger_session_id));
+}
+
+/*
+ * app_build_session_context_record - build a borrowed SESSION_CONTEXT record
+ * @app: application context that owns the source strings
+ * @record: destination record to overwrite
+ *
+ * The produced record borrows pointers from app->workspace_session. It is safe
+ * only for immediate enqueue/dispatch. When output is enabled,
+ * app_emit_output_record() pushes it through the output pipeline, whose queue
+ * clones the string payload as owned data at the queue boundary.
+ */
+static void app_build_session_context_record(const app_t *app,
+                                             alfred_record_t *record)
+{
+    memset(record, 0, sizeof(*record));
+
+    record->schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    record->layer = ALFRED_RECORD_LAYER_DIAGNOSTIC;
+    record->category = ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    record->type = ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+
+    if (app->workspace_session.has_workspace_root) {
+        record->session.workspace_root =
+            app->workspace_session.workspace_root;
+    }
+
+    if (app->workspace_session.has_workspace_id) {
+        record->session.workspace_id =
+            app->workspace_session.workspace_id;
+    }
+
+    if (app->workspace_session.has_ledger_session_id) {
+        record->session.ledger_session_id =
+            app->workspace_session.ledger_session_id;
+    }
+}
+
+/*
+ * app_emit_session_context_record - enqueue one run metadata record
+ * @app: application context with initialized output pipeline
+ *
+ * SESSION_CONTEXT is emitted once per run, only when structured output is
+ * enabled and at least one workspace/session field is configured. It deliberately
+ * uses the same producer path as raw, semantic, and diagnostic records:
+ *
+ *   app_emit_output_record()
+ *   -> app_enqueue_output_record()
+ *   -> alfred_record_output_pipeline_enqueue()
+ *
+ * This keeps app.c from writing JSONL directly and preserves the queue clone
+ * ownership boundary.
+ *
+ * Return: ERR_OK on success/no-op, ERR_IO on enqueue failure.
+ */
+static int app_emit_session_context_record(app_t *app)
+{
+    alfred_record_t record;
+
+    if (app == NULL) {
+        return ERR_INVALID_ARG;
+    }
+
+    if (!app->output_pipeline.enabled ||
+        !app_workspace_session_has_context(app)) {
+        return ERR_OK;
+    }
+
+    app_build_session_context_record(app, &record);
+
+    if (app_emit_output_record(app, &record) != 0) {
+        logger_error(&app->logger,
+                     "failed to emit session context output record");
+        return ERR_IO;
+    }
+
+    return ERR_OK;
+}
+
 /*
  * app_emit_output_record_callback - core_logger compatible output callback
  * @record: borrowed Event Model v0 record emitted by the core logger
@@ -938,6 +1045,10 @@ int app_init(app_t *app, int argc, char **argv)
         error = ERR_INVALID_ARG;
         goto fail;
     }
+
+    error = app_emit_session_context_record(app);
+    if (error != ERR_OK)
+        goto fail;
 
     for (int i = 1; i < argc; i++) {
         alfred_backend_target_t target;
