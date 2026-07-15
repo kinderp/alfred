@@ -331,8 +331,10 @@ esistente. In questo modo:
 - i log restano uguali;
 - i test correnti possono continuare a confrontare lo stesso testo;
 - il backend non sceglie piu' direttamente il dispositivo di output;
-- JSONL potra' essere aggiunto dopo come secondo writer, non come sostituto del
-  modello interno.
+- JSONL puo' usare lo stesso record come writer opt-in a valle, senza diventare
+  sostituto del modello interno;
+- worker asincroni, code per sink e backpressure pubblica restano debiti
+  separati del Writer Runtime.
 
 Nel codice corrente questo concetto e' stato introdotto in forma minima e
 indipendente dal runtime backend:
@@ -1322,7 +1324,9 @@ Non va anticipata nella prima implementazione.
    `alfred_process()`.
 8. Progettare Writer API v0, coda/ring buffer e backpressure.
    Specifica documentale in [Writer API v0](32-writer-api-v0.md).
-9. Solo dopo implementare JSONL come writer, non come API primaria.
+9. Mantenere JSONL come writer opt-in gia' implementato, non come API primaria,
+   e maturarne runtime, lifecycle, error model e backpressure insieme al Writer
+   Runtime.
 10. Solo dopo progettare backend statici ulteriori.
 11. Solo dopo valutare plugin dinamici backend o writer.
 
