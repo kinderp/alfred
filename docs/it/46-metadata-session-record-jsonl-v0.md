@@ -18,8 +18,11 @@ esporli senza pagare un costo per ogni evento filesystem.
 
 ## Obiettivo
 
-L'obiettivo e' emettere un record metadata/sessione separato, serializzato in
-JSONL quando l'output strutturato e' abilitato.
+L'obiettivo e' emettere un record metadata/sessione separato. Quando
+`output_enabled=true` usa `output_format=jsonl`, quel record viene serializzato
+in JSONL. Quando invece il formato e' `counter`, il record attraversa la stessa
+pipeline runtime ma viene solo contato dal sink di benchmark, senza scrivere un
+file JSONL.
 
 La regola principale e':
 
@@ -118,8 +121,10 @@ esempio:
 
 Questo step stabilizza anche il payload JSONL v0 del record. Il passo runtime
 successivo lo emette automaticamente quando l'output strutturato e' abilitato e
-almeno un campo workspace/sessione e' configurato. Se il contesto e' assente, il
-runtime non accoda un record `SESSION_CONTEXT` decorativo.
+almeno un campo workspace/sessione e' configurato. Con `output_format=jsonl`
+questo produce una riga JSONL; con `output_format=counter` produce solo un
+conteggio nel sink di benchmark. Se il contesto e' assente, il runtime non
+accoda un record `SESSION_CONTEXT` decorativo.
 
 Motivo:
 
@@ -242,6 +247,8 @@ Regole runtime:
   configurato, il record non viene emesso;
 - se almeno un campo e' configurato e l'output strutturato e' abilitato, il
   record viene accodato una sola volta per run;
+- solo `output_format=jsonl` pubblica il record in `output_log`; il formato
+  `counter` lo instrada nella stessa pipeline ma non scrive JSONL;
 - l'accodamento avviene prima dei record osservativi ordinari, cosi' i
   consumatori JSONL possono leggere il contesto prima degli eventi filesystem;
 - gli eventi filesystem successivi non ricevono automaticamente `workspace` o

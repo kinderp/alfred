@@ -102,16 +102,24 @@ Optional declared filesystem workspace boundary for the current Alfred run.
 This is runtime context, not backend evidence and not a policy decision. Alfred
 does not infer this value from observed paths. If present, the value must be a
 non-empty string. An empty value makes configuration loading fail. When
-structured output is enabled, Alfred publishes this value once in the
+.B output_enabled=true
+uses
+.BR output_format=jsonl ,
+Alfred publishes this value once in the
 .B SESSION_CONTEXT
 JSONL metadata record instead of copying it onto every filesystem event.
+With
+.BR output_format=counter ,
+the runtime may route the same metadata record through the benchmark counter
+sink, but no JSONL output file is written.
 .TP
 .B workspace_id
 Optional opaque workspace correlation label for the current Alfred run. The
 value is not parsed as a path or hash by Alfred v0. If present, it must be a
 non-empty string that fits the implementation-defined identifier buffer. Empty
-or oversized values make configuration loading fail. When structured output is
-enabled, Alfred publishes this value once in
+or oversized values make configuration loading fail. With
+.BR output_format=jsonl ,
+Alfred publishes this value once in
 .BR SESSION_CONTEXT .
 .TP
 .B ledger_session_id
@@ -119,7 +127,9 @@ Optional opaque ledger/run correlation label for the current Alfred run. This
 is not an agent session id and does not prove process or AI-agent attribution.
 If present, it must be a non-empty string that fits the implementation-defined
 identifier buffer. Empty or oversized values make configuration loading fail.
-When structured output is enabled, Alfred publishes this value once in
+With
+.BR output_format=jsonl ,
+Alfred publishes this value once in
 .BR SESSION_CONTEXT .
 .TP
 .B watcher_capacity
