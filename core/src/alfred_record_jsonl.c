@@ -37,6 +37,7 @@ static const char *category_name(alfred_record_category_t category)
     case ALFRED_RECORD_CATEGORY_WATCH: return "watch";
     case ALFRED_RECORD_CATEGORY_RECOVERY: return "recovery";
     case ALFRED_RECORD_CATEGORY_BACKEND: return "backend";
+    case ALFRED_RECORD_CATEGORY_LIFECYCLE: return "lifecycle";
     case ALFRED_RECORD_CATEGORY_POLICY: return "policy";
     default:
         return NULL;
@@ -121,9 +122,47 @@ static const char *type_name(alfred_record_type_t type)
         return "WATCH_LOST_RETRY_SCHEDULED";
     case ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP:
         return "WATCH_LOST_RECOVERY_GAVE_UP";
+    case ALFRED_RECORD_TYPE_SESSION_CONTEXT: return "SESSION_CONTEXT";
     default:
         return NULL;
     }
+}
+
+/*
+ * record_tuple_is_valid - validate constrained layer/category/type tuples
+ * @record: candidate record
+ *
+ * Event Model v0 documents type as controlled by the layer/category tuple. Most
+ * historical records still rely on producer discipline, but SESSION_CONTEXT is
+ * the first lifecycle metadata record and must not be serialized under a
+ * filesystem, watch, recovery, or semantic tuple by accident.
+ *
+ * Return: 1 when the tuple is accepted, 0 when it is invalid.
+ */
+static int record_tuple_is_valid(const alfred_record_t *record)
+{
+    int is_session_context;
+    int is_lifecycle;
+
+    if (record == NULL) {
+        return 0;
+    }
+
+    is_session_context =
+        record->type == ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+    is_lifecycle =
+        record->category == ALFRED_RECORD_CATEGORY_LIFECYCLE;
+
+    if (is_session_context) {
+        return record->layer == ALFRED_RECORD_LAYER_DIAGNOSTIC &&
+               record->category == ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    }
+
+    if (is_lifecycle) {
+        return 0;
+    }
+
+    return 1;
 }
 
 static int append_raw(jsonl_buffer_t *buffer, const char *text)
@@ -563,7 +602,8 @@ int alfred_record_format_jsonl(const alfred_record_t *record,
 
     if (layer_name(record->layer) == NULL ||
         category_name(record->category) == NULL ||
-        type_name(record->type) == NULL) {
+        type_name(record->type) == NULL ||
+        !record_tuple_is_valid(record)) {
         return -1;
     }
 

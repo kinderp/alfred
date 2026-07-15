@@ -144,6 +144,16 @@ typedef enum {
     ALFRED_RECORD_CATEGORY_BACKEND,
 
     /*
+     * Runtime lifecycle metadata.
+     *
+     * Used for records that describe the Alfred run or output stream itself
+     * rather than a filesystem object, backend watch, recovery attempt, or
+     * policy decision. The first planned use is SESSION_CONTEXT, a one-shot
+     * metadata/session record for workspace/session context.
+     */
+    ALFRED_RECORD_CATEGORY_LIFECYCLE,
+
+    /*
      * Policy or guardrail decision.
      *
      * Reserved for the AI agent runtime-security direction, where Alfred may
@@ -469,7 +479,17 @@ typedef enum {
     /*
      * Lost-scope recovery exhausted its retry budget and stopped trying.
      */
-    ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP
+    ALFRED_RECORD_TYPE_WATCH_LOST_RECOVERY_GAVE_UP,
+
+    /*
+     * Runtime workspace/session context for the structured output stream.
+     *
+     * Used with ALFRED_RECORD_LAYER_DIAGNOSTIC and
+     * ALFRED_RECORD_CATEGORY_LIFECYCLE. This type only admits the stable public
+     * record name into Event Model v0; workspace/session payload fields,
+     * builders, and runtime emission are separate contract steps.
+     */
+    ALFRED_RECORD_TYPE_SESSION_CONTEXT
 
 } alfred_record_type_t;
 
