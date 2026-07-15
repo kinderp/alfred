@@ -75,8 +75,10 @@ typedef struct {
  *
  * The application copies these values from config during app_init() before
  * backend, core, queue, dispatcher, or writer activity starts. The context is
- * read-only for the rest of the run. It is not passed to the inotify backend
- * and it is not embedded in alfred_record_t in this milestone.
+ * read-only for the rest of the run and is not passed to the inotify backend.
+ * When structured output is enabled, app.c may borrow these inline strings to
+ * build one SESSION_CONTEXT record; the output queue then clones the strings as
+ * owned data. The context is not copied onto each filesystem event record.
  */
 typedef struct {
     int has_workspace_root;

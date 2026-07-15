@@ -11,8 +11,12 @@ workspace_id
 ledger_session_id
 ```
 
-Questo step implementa solo il contesto runtime minimo dentro l'applicazione.
-Non cambia i record, non cambia JSONL e non introduce policy o Agent Guard.
+Questo step implementava solo il contesto runtime minimo dentro
+l'applicazione. Nel momento in cui e' stato chiuso non cambiava i record, non
+cambiava JSONL e non introduceva policy o Agent Guard. I micro-step successivi
+hanno poi usato questo contesto per costruire un record metadata/sessione
+one-shot; questo documento resta utile per capire la fonte e l'ownership dei
+valori.
 
 ## Obiettivo
 
@@ -56,9 +60,9 @@ Il motivo e' contrattuale: una stringa vuota renderebbe ambiguo il significato
 fra "non configurato", "configurato male" e "intenzionalmente vuoto". Per v0 la
 scelta e' fail-fast durante `config_load()`.
 
-## Cosa non cambia
+## Cosa non cambiava in questo micro-step
 
-Questo micro-step non modifica:
+Questo micro-step non modificava:
 
 - `alfred_record_t`;
 - `alfred_record_clone_owned()`;
@@ -77,8 +81,12 @@ Quindi il percorso caldo degli eventi resta:
 backend/core -> alfred_record_t corrente -> queue/output corrente
 ```
 
-Il contesto workspace/sessione e' laterale e app-owned. I record accodati non
-contengono puntatori borrowed verso questo contesto.
+Il contesto workspace/sessione resta laterale e app-owned. I record filesystem
+accodati non contengono puntatori borrowed verso questo contesto. Il passo
+metadata/sessione successivo costruisce invece un solo record
+`SESSION_CONTEXT` borrowed verso `app_t.workspace_session` e lo accoda subito:
+la queue clona owned le stringhe prima che il record possa sopravvivere oltre
+la chiamata di enqueue.
 
 ## Ownership e lifetime
 
@@ -231,8 +239,9 @@ Verifica:
 - rifiuto di `ledger_session_id=`;
 - rifiuto di identificatori troppo lunghi.
 
-Questo test e' volutamente solo di configurazione. I test JSONL arriveranno solo
-quando questi campi diventeranno output pubblico.
+Questo test e' volutamente solo di configurazione. I test JSONL/runtime sono
+arrivati nel passo metadata/sessione, quando questi campi sono diventati output
+pubblico one-shot tramite `SESSION_CONTEXT`.
 
 ## Debiti rimandati
 
@@ -242,16 +251,18 @@ Restano fuori da questo micro-step:
 - generazione automatica di `workspace_id`;
 - generazione automatica di `ledger_session_id`;
 - normalizzazione/canonicalizzazione di `workspace_root`;
-- record metadata/sessione JSONL;
+- generazione automatica runtime del record metadata/sessione JSONL;
 - enrichment per-record JSONL;
-- golden JSONL;
+- golden JSONL del payload sessione;
 - policy `inside_workspace` / `outside_workspace`;
 - `agent_session_id`;
 - attribuzione processo/agente;
 - benchmark refresh.
 
-Il benchmark refresh non e' necessario per questo step perche' il contesto viene
-letto una volta in avvio e non attraversa il percorso caldo degli eventi.
+Il benchmark refresh non era necessario per questo step perche' il contesto
+veniva solo letto una volta in avvio e non attraversava il percorso caldo degli
+eventi. Il passo runtime successivo, che emette il record `SESSION_CONTEXT`, ha
+invece un benchmark gate dedicato.
 
 ## Stato di chiusura
 
@@ -274,7 +285,10 @@ Esito consolidato:
   dedicato;
 - il backend inotify non riceve questo contesto;
 - il core filesystem non usa questo contesto per semantica create/delete/move;
-- `alfred_record_t`, queue, dispatcher, sink e writer JSONL restano invariati.
+- in questo micro-step `alfred_record_t`, queue, dispatcher, sink e writer JSONL
+  restavano invariati. I passi successivi hanno aggiunto il payload
+  `alfred_record_session_t` e l'emissione runtime one-shot senza cambiare la
+  regola principale: niente per-event enrichment automatico.
 
 PR di riferimento:
 
