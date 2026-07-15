@@ -486,8 +486,9 @@ typedef enum {
      *
      * Used with ALFRED_RECORD_LAYER_DIAGNOSTIC and
      * ALFRED_RECORD_CATEGORY_LIFECYCLE. This type only admits the stable public
-     * record name into Event Model v0; workspace/session payload fields,
-     * builders, and runtime emission are separate contract steps.
+     * record name into Event Model v0. The formatter-level workspace/session
+     * payload is represented by alfred_record_session_t; builders and runtime
+     * emission are separate contract steps.
      */
     ALFRED_RECORD_TYPE_SESSION_CONTEXT
 
@@ -591,6 +592,22 @@ typedef struct {
 } alfred_record_recovery_t;
 
 /*
+ * alfred_record_session_t - runtime metadata/session payload
+ * @workspace_root: borrowed declared workspace root path, or NULL
+ * @workspace_id: borrowed opaque workspace correlation label, or NULL
+ * @ledger_session_id: borrowed opaque Alfred ledger/run label, or NULL
+ *
+ * This payload is meaningful for SESSION_CONTEXT records. It describes
+ * app-owned runtime context declared for the output stream. It is not observed
+ * filesystem evidence, not process attribution, and not an AI-agent session.
+ */
+typedef struct {
+    const char *workspace_root;
+    const char *workspace_id;
+    const char *ledger_session_id;
+} alfred_record_session_t;
+
+/*
  * alfred_record_t - common structured Event Model v0 record
  * @schema_version: record schema version, initially ALFRED_RECORD_SCHEMA_VERSION
  * @seq: optional monotonic sequence number assigned by the producer/writer
@@ -610,6 +627,7 @@ typedef struct {
  * @os_error: optional operating-system error evidence
  * @watch: optional watch/recovery diagnostic payload
  * @recovery: optional resync/recovery diagnostic payload
+ * @session: optional runtime metadata/session payload
  *
  * This struct is deliberately flat and conservative. It can represent today's
  * alfred_raw_event_t and alfred_event_t streams, plus WATCH_* diagnostics,
@@ -640,6 +658,7 @@ typedef struct alfred_record {
     alfred_record_os_error_t os_error;
     alfred_record_watch_t watch;
     alfred_record_recovery_t recovery;
+    alfred_record_session_t session;
 } alfred_record_t;
 
 #ifdef __cplusplus

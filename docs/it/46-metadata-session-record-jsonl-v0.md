@@ -116,13 +116,9 @@ esempio:
 - `diagnostic + watch + SESSION_CONTEXT` e' invalida, perche' il contesto
   sessione non descrive lo stato di un watch.
 
-Attenzione: questo non implementa ancora il payload workspace/sessione. I campi
-`workspace.root`, `workspace.id` e `ledger.session_id`, il builder e l'emissione
-runtime restano passi separati. Questa separazione evita di mescolare due scelte
-diverse:
-
-- ammettere il nome pubblico del record;
-- decidere la forma JSONL completa e quando emetterla.
+Questo step stabilizza anche il payload JSONL v0 del record. Resta invece
+rimandata l'emissione runtime: Alfred sa formattare e validare il record, ma
+non lo produce ancora automaticamente all'avvio della run.
 
 Motivo:
 
@@ -144,9 +140,20 @@ Alternative da non scegliere in v0:
 | `backend/lifecycle` | Lo farebbe sembrare proprieta' del backend inotify |
 | campi su ogni evento | Aumenta costo e ambiguita' senza bisogno immediato |
 
-## Campi JSONL candidati
+## Payload JSONL v0
 
-Il record JSONL dovrebbe contenere solo campi presenti e non vuoti.
+Il record JSONL contiene solo campi presenti e non vuoti. Il mapping dal record
+C al JSONL e' questo:
+
+| Campo C | Campo JSONL | Significato |
+| --- | --- | --- |
+| `record.session.workspace_root` | `workspace.root` | root workspace dichiarata esplicitamente |
+| `record.session.workspace_id` | `workspace.id` | identificatore opaco del workspace |
+| `record.session.ledger_session_id` | `ledger.session_id` | identificatore opaco della run/ledger Alfred |
+
+Questi campi vivono in `alfred_record_session_t`, dentro `alfred_record_t`.
+Non sono campi del backend inotify, non sono dedotti dagli eventi filesystem e
+non sono attribuzione di processo o agente.
 
 Esempio completo:
 
@@ -182,14 +189,25 @@ Esempio con solo `ledger_session_id`:
 
 Regole v0:
 
-- se tutti e tre i valori sono assenti, il record non deve essere emesso;
+- se tutti e tre i valori sono assenti, il futuro builder runtime non deve
+  accodare un `SESSION_CONTEXT` solo decorativo; il formatter puo' comunque
+  serializzare un record senza payload nei test focused che fissano il nome
+  controllato `diagnostic + lifecycle + SESSION_CONTEXT`;
 - se `workspace_root` e' assente, omettere `workspace.root`;
 - se `workspace_id` e' assente, omettere `workspace.id`;
 - se entrambi i campi workspace sono assenti, omettere l'oggetto `workspace`;
 - se `ledger_session_id` e' assente, omettere l'oggetto `ledger`;
-- non emettere stringhe vuote;
+- trattare le stringhe vuote come assenti;
 - usare escaping JSONL corrente;
-- non aggiungere campi agente, processo o policy.
+- non aggiungere campi agente, processo o policy;
+- rifiutare il payload `session` su qualsiasi record diverso da
+  `diagnostic + lifecycle + SESSION_CONTEXT`.
+
+L'ultima regola e' importante: se un produttore mette per errore
+`record.session.workspace_id` su un record come `FILE_CREATED`, il formatter
+deve fallire invece di ignorare silenziosamente il campo. In questo modo Alfred
+non introduce per-record enrichment accidentale e non fa sembrare il contesto
+della run una prova osservata su ogni evento filesystem.
 
 ## Quando emettere il record
 
@@ -240,18 +258,23 @@ Casi minimi:
 3. il formatter rifiuta `SESSION_CONTEXT` con layer o category sbagliati;
 4. il formatter rifiuta altri type sotto `diagnostic + lifecycle`.
 
-Il passo successivo dovra' fissare la forma JSONL completa del payload. Da quel
-momento serviranno anche questi casi:
+Per il payload JSONL v0 servono test formatter focused che coprano:
 
-1. nessun campo configurato: nessun `SESSION_CONTEXT`;
-2. tutti i campi configurati: record completo;
-3. solo `workspace_root`: oggetto `workspace` con `root`;
-4. solo `workspace_id`: oggetto `workspace` con `id`;
-5. solo `ledger_session_id`: oggetto `ledger`;
+1. tutti i campi configurati: record completo;
+2. solo `workspace_root`: oggetto `workspace` con `root`;
+3. solo `workspace_id`: oggetto `workspace` con `id`;
+4. solo `ledger_session_id`: oggetto `ledger`;
+5. stringhe vuote trattate come assenti;
 6. caratteri da escapare in path/id: JSONL valido;
 7. nessun campo agente/policy/processo presente;
-8. record emesso una sola volta per run;
-9. eventi filesystem successivi non duplicano i campi workspace/sessione.
+8. payload sessione rifiutato su record non `SESSION_CONTEXT`.
+
+Il futuro collegamento runtime dovra' aggiungere test end-to-end separati:
+
+1. nessun campo configurato: nessun `SESSION_CONTEXT` runtime;
+2. record emesso una sola volta per run;
+3. ordine del record rispetto ai record osservativi;
+4. eventi filesystem successivi non duplicano i campi workspace/sessione.
 
 Questi test devono proteggere il contratto pubblico. I test di configurazione
 gia' esistenti restano necessari, ma non bastano per questa milestone.

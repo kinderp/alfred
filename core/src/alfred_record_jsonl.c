@@ -128,6 +128,22 @@ static const char *type_name(alfred_record_type_t type)
     }
 }
 
+static int string_is_present(const char *value)
+{
+    return value != NULL && value[0] != '\0';
+}
+
+static int record_has_session_payload(const alfred_record_t *record)
+{
+    if (record == NULL) {
+        return 0;
+    }
+
+    return string_is_present(record->session.workspace_root) ||
+           string_is_present(record->session.workspace_id) ||
+           string_is_present(record->session.ledger_session_id);
+}
+
 /*
  * record_tuple_is_valid - validate constrained layer/category/type tuples
  * @record: candidate record
@@ -156,6 +172,10 @@ static int record_tuple_is_valid(const alfred_record_t *record)
     if (is_session_context) {
         return record->layer == ALFRED_RECORD_LAYER_DIAGNOSTIC &&
                record->category == ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    }
+
+    if (record_has_session_payload(record)) {
+        return 0;
     }
 
     if (is_lifecycle) {
@@ -589,6 +609,65 @@ static int append_recovery(jsonl_buffer_t *buffer,
     return 0;
 }
 
+static int append_session(jsonl_buffer_t *buffer,
+                          int *needs_comma,
+                          const alfred_record_t *record)
+{
+    const alfred_record_session_t *session;
+    int workspace_comma = 0;
+    int ledger_comma = 0;
+    int has_workspace;
+    int has_ledger;
+
+    if (record == NULL ||
+        record->type != ALFRED_RECORD_TYPE_SESSION_CONTEXT) {
+        return 0;
+    }
+
+    session = &record->session;
+    has_workspace = string_is_present(session->workspace_root) ||
+                    string_is_present(session->workspace_id);
+    has_ledger = string_is_present(session->ledger_session_id);
+
+    if (!has_workspace && !has_ledger) {
+        return 0;
+    }
+
+    if (has_workspace) {
+        if (append_comma_if_needed(buffer, needs_comma) != 0 ||
+            append_raw(buffer, "\"workspace\":{") != 0 ||
+            append_string_field(buffer,
+                                &workspace_comma,
+                                "root",
+                                string_is_present(session->workspace_root)
+                                    ? session->workspace_root
+                                    : NULL) != 0 ||
+            append_string_field(buffer,
+                                &workspace_comma,
+                                "id",
+                                string_is_present(session->workspace_id)
+                                    ? session->workspace_id
+                                    : NULL) != 0 ||
+            append_raw(buffer, "}") != 0) {
+            return -1;
+        }
+    }
+
+    if (has_ledger) {
+        if (append_comma_if_needed(buffer, needs_comma) != 0 ||
+            append_raw(buffer, "\"ledger\":{") != 0 ||
+            append_string_field(buffer,
+                                &ledger_comma,
+                                "session_id",
+                                session->ledger_session_id) != 0 ||
+            append_raw(buffer, "}") != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int alfred_record_format_jsonl(const alfred_record_t *record,
                                char *dst,
                                size_t dst_size)
@@ -652,6 +731,7 @@ int alfred_record_format_jsonl(const alfred_record_t *record,
         append_os_error(&buffer, &needs_comma, &record->os_error) != 0 ||
         append_watch(&buffer, &needs_comma, &record->watch) != 0 ||
         append_recovery(&buffer, &needs_comma, &record->recovery) != 0 ||
+        append_session(&buffer, &needs_comma, record) != 0 ||
         append_raw(&buffer, "}") != 0) {
         return -1;
     }
