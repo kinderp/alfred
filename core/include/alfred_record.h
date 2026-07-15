@@ -486,8 +486,9 @@ typedef enum {
      *
      * Used with ALFRED_RECORD_LAYER_DIAGNOSTIC and
      * ALFRED_RECORD_CATEGORY_LIFECYCLE. This type only admits the stable public
-     * record name into Event Model v0; workspace/session payload fields,
-     * builders, and runtime emission are separate contract steps.
+     * record name into Event Model v0. The formatter-level workspace/session
+     * payload is represented by alfred_record_session_t; builders and runtime
+     * emission are separate contract steps.
      */
     ALFRED_RECORD_TYPE_SESSION_CONTEXT
 

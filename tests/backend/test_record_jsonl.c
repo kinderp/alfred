@@ -22,8 +22,8 @@
  *
  * metadata/session lifecycle record:
  * - admits diagnostic + lifecycle + SESSION_CONTEXT as stable public names
- * - does not imply that workspace/session payload fields or runtime emission
- *   are implemented yet
+ * - serializes the formatter-level workspace/session payload contract
+ * - does not imply that runtime emission is implemented yet
  * - serializes workspace and ledger payload objects only when their fields are
  *   present
  * - rejects session payload fields on non-SESSION_CONTEXT records
