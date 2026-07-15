@@ -123,6 +123,20 @@ assert_no_filesystem_enrichment() {
     fi
 }
 
+assert_session_line_without_workspace() {
+    local session_line
+
+    session_line="$(grep -E '"type":"SESSION_CONTEXT"' "$OUTPUT_LOG" || true)"
+    if [[ -z "$session_line" ]]; then
+        fail_with_all_logs "missing SESSION_CONTEXT record"
+    fi
+
+    if printf '%s\n' "$session_line" | grep -Eq '"workspace"'; then
+        fail_with_all_logs \
+            "ledger-only SESSION_CONTEXT must not emit a workspace object"
+    fi
+}
+
 trap cleanup_session_context_runtime EXIT
 
 reset_env
@@ -151,6 +165,43 @@ wait_for_event_pattern "FILE_CREATED path=.*/no-session-file.txt" \
 stop_and_expect_success
 
 assert_jsonl_session_count 0
+assert_no_filesystem_enrichment
+
+reset_env
+: > "$OUTPUT_LOG"
+
+cat > "$CONFIG_FILE" <<EOF
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+output_log=$OUTPUT_LOG
+ledger_session_id=ledger-only-runtime-test
+EOF
+
+LSAN_OPTIONS="${LSAN_OPTIONS:+$LSAN_OPTIONS:}detect_leaks=0" \
+ALFRED_CONFIG="$CONFIG_FILE" \
+ALFRED_EVENT_ENGINE=core \
+    "$ALFRED_BIN" "$TEST_ROOT" >/dev/null 2>&1 &
+ALFRED_PID=$!
+
+wait_for_event_pattern "application startup complete" \
+    "timed out waiting for Alfred startup with ledger-only context"
+
+printf "with ledger-only context\n" > "$TEST_ROOT/ledger-only-file.txt"
+wait_for_event_pattern "FILE_CREATED path=.*/ledger-only-file.txt" \
+    "timed out waiting for ledger-only FILE_CREATED"
+
+stop_and_expect_success
+
+assert_jsonl_session_count 1
+assert_session_line_without_workspace
+
+if ! grep -Eq \
+    '"type":"SESSION_CONTEXT".*"ledger":\{"session_id":"ledger-only-runtime-test"\}' \
+    "$OUTPUT_LOG"; then
+    fail_with_all_logs "missing ledger-only SESSION_CONTEXT JSONL payload"
+fi
+
 assert_no_filesystem_enrichment
 
 reset_env
