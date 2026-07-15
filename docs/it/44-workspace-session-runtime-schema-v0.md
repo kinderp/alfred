@@ -438,17 +438,18 @@ workspace/sessione.
 
 I campi diventano contratto pubblico solo quando entrano in JSONL.
 
-Decisione v0:
+Decisione documentale iniziale:
 
 ```text
-questo step non cambia lo schema JSONL corrente
+lo schema runtime non deve cambiare senza una PR di implementazione dedicata
 ```
 
-I record JSONL correnti non devono iniziare a emettere `workspace_root`,
-`workspace_id` o `ledger_session_id` senza una PR di implementazione dedicata.
-Quella PR dovra' scegliere tipo di record, routing, golden, validazione dei
-valori e benchmark. Questo evita di rendere pubblico un campo prima che siano
-chiari significato, ordine nello stream, costo e comportamento dei consumer.
+La PR dedicata della milestone metadata/sessione ha scelto il tipo controllato
+`diagnostic + lifecycle + SESSION_CONTEXT` e il payload JSONL
+`workspace.root`, `workspace.id`, `ledger.session_id`. Restano separati builder
+runtime, routing, ordine nello stream, golden end-to-end e benchmark. Questo
+evita di confondere il contratto del formatter con l'emissione automatica in
+runtime.
 
 ### Forma pubblica preferita
 
@@ -465,26 +466,29 @@ Il motivo e':
 - i record evento restano leggeri e continuano a rappresentare il fatto
   osservato.
 
-Esempio concettuale non ancora implementato:
+La forma JSONL v0 del payload e' stata poi fissata dalla milestone
+[Metadata/session record JSONL v0](46-metadata-session-record-jsonl-v0.md).
+L'esempio allineato al contratto corrente e':
 
 ```json
 {
   "schema_version": 0,
   "layer": "diagnostic",
-  "category": "backend",
-  "type": "LEDGER_SESSION_STARTED",
-  "ledger_session": {
-    "ledger_session_id": "ls_01...",
-    "workspace_id": "ws_01...",
-    "workspace_root": "/home/user/project"
+  "category": "lifecycle",
+  "type": "SESSION_CONTEXT",
+  "workspace": {
+    "root": "/home/user/project",
+    "id": "ws_01..."
+  },
+  "ledger": {
+    "session_id": "ls_01..."
   }
 }
 ```
 
-Questo esempio non crea ancora un tipo C e non autorizza a usare esattamente
-`diagnostic/backend/LEDGER_SESSION_STARTED`. La PR di implementazione dovra'
-definire una coppia `layer/category/type` controllata nel modello eventi prima
-di scrivere golden JSONL.
+Questo contratto autorizza il formatter JSONL e i test focused. Non significa
+ancora che il runtime emetta automaticamente il record: builder, routing,
+ordine nello stream e golden end-to-end restano lavoro successivo.
 
 ### Per-record enrichment
 
@@ -515,11 +519,12 @@ Il JSONL pubblico deve distinguere tre casi:
 | --- | --- |
 | Campo assente | Alfred non ha quel contesto oppure la feature non e' abilitata |
 | Campo presente e non vuoto | Valore dichiarato o generato secondo il contratto documentato |
-| Campo presente ma vuoto | Non valido nel contratto v0, salvo futura regola esplicita |
+| Campo C presente ma vuoto | Trattato come assente dal formatter JSONL v0 |
 
 Per v0, `workspace_root`, `workspace_id` e `ledger_session_id` non devono essere
-emessi come stringhe vuote in JSONL valido. Se una configurazione futura fornisce
-un valore vuoto, l'implementazione deve scegliere esplicitamente fra:
+emessi come stringhe vuote in JSONL valido. Se una configurazione futura
+fornisce un valore vuoto, il formatter lo omette come assente; il livello di
+configurazione/runtime potra' decidere separatamente se:
 
 1. rifiutare la configurazione prima di avviare la sessione;
 2. trattare il valore come assente e, se utile, produrre una diagnostica
@@ -544,16 +549,18 @@ Quando questi campi diventano output JSONL pubblico, servono almeno:
 - aggiornamento della pagina man interessata quando l'opzione/config diventa
   utente.
 
-Se la prima implementazione usa un record metadata/sessione separato, i golden
-devono coprire:
+Per il record metadata/sessione separato, i test formatter devono coprire:
 
-- emissione del metadata record quando i valori sono configurati/generati;
-- assenza del metadata record quando il contesto non e' disponibile o la feature
-  non e' abilitata;
-- ordine del metadata record rispetto ai record osservativi;
+- payload completo con `workspace.root`, `workspace.id` e `ledger.session_id`;
+- payload parziale con solo workspace o solo ledger;
 - escaping di `workspace_root`;
-- omissione dei campi assenti dentro l'oggetto sessione;
+- omissione dei campi assenti o vuoti;
+- rifiuto del payload sessione su record non `SESSION_CONTEXT`;
 - nessuna attribuzione agente o policy implicita.
+
+Quando il runtime iniziera' a emettere davvero il record, serviranno anche
+golden end-to-end per emissione una sola volta, assenza quando il contesto non
+e' configurato e ordine rispetto ai record osservativi.
 
 Se invece una PR futura sceglie per-record enrichment, i golden devono coprire
 almeno:
@@ -677,9 +684,10 @@ C/JSONL.
 ## Stato di chiusura v0
 
 Workspace/session runtime schema v0 e' chiusa come milestone documentale. Questo
-non significa che Alfred emetta gia' `workspace_root`, `workspace_id` o
-`ledger_session_id` in runtime o in JSONL. Significa che il contratto minimo per
-implementarli in modo sicuro e' stato deciso.
+non significa che Alfred emetta gia' `workspace.root`, `workspace.id` o
+`ledger.session_id` in runtime. Significa che il contratto minimo per
+implementarli in modo sicuro e' stato deciso e che il formatter JSONL puo'
+serializzare un `SESSION_CONTEXT` costruito dai test o da un futuro builder.
 
 Decisioni consolidate:
 
@@ -693,17 +701,20 @@ Decisioni consolidate:
   prompt o contenuto dei file;
 - il posizionamento v0 preferito e' un contesto runtime immutabile owned da
   app/runtime;
-- i campi non entrano per ora in ogni `alfred_record_t`;
-- la queue non deve aumentare il clone owned per questi campi in questa
-  milestone;
+- i campi entrano in `alfred_record_t` dentro il payload opzionale
+  `alfred_record_session_t`;
+- la queue aumenta il clone owned solo per record che portano davvero questi
+  puntatori; i record filesystem ordinari non devono ricevere per-record
+  enrichment accidentale;
 - i backend non vedono e non possiedono questi valori;
-- un futuro writer/session metadata potra' leggere il contesto solo tramite API
+- un futuro builder/session metadata potra' leggere il contesto solo tramite API
   esplicita, con pubblicazione read-only e teardown sincronizzato;
-- lo schema JSONL corrente non cambia;
-- la forma pubblica futura preferita e' un record metadata/sessione separato,
+- lo schema JSONL v0 ammette il payload solo su
+  `diagnostic + lifecycle + SESSION_CONTEXT`;
+- la forma pubblica scelta e' un record metadata/sessione separato,
   non per-record enrichment;
-- campi presenti ma vuoti non sono JSONL valido v0 salvo futura regola
-  esplicita;
+- campi C presenti ma vuoti sono trattati come assenti e non compaiono nel
+  JSONL valido v0;
 - questa milestone documentale non richiede benchmark refresh;
 - ogni implementazione futura deve dichiarare quale benchmark gate attraversa.
 

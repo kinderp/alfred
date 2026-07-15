@@ -135,6 +135,13 @@ Combinazioni come `semantic + filesystem + SESSION_CONTEXT`,
 `diagnostic + watch + SESSION_CONTEXT` o
 `diagnostic + lifecycle + FILE_CREATED` sono invalide, perche' mescolano il nome
 del record di sessione con layer o category che descrivono altri fatti.
+Quando il record porta payload sessione, i campi C sono
+`record.session.workspace_root`, `record.session.workspace_id` e
+`record.session.ledger_session_id`; in JSONL diventano rispettivamente
+`workspace.root`, `workspace.id` e `ledger.session_id`. Il payload e' valido
+solo su questa tupla: se compare su un record filesystem, watch, recovery o raw,
+il formatter deve rifiutare il record invece di trasformarlo in arricchimento
+per-evento.
 
 ## Type
 

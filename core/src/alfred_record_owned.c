@@ -81,6 +81,9 @@ void alfred_record_destroy_owned(alfred_record_t *record)
     free((void *)record->watch.event_mask);
     free((void *)record->watch.event_name);
     free((void *)record->recovery.detail_path);
+    free((void *)record->session.workspace_root);
+    free((void *)record->session.workspace_id);
+    free((void *)record->session.ledger_session_id);
 
     memset(record, 0, sizeof(*record));
 }
@@ -107,6 +110,9 @@ int alfred_record_clone_owned(const alfred_record_t *src,
     clone.watch.event_mask = NULL;
     clone.watch.event_name = NULL;
     clone.recovery.detail_path = NULL;
+    clone.session.workspace_root = NULL;
+    clone.session.workspace_id = NULL;
+    clone.session.ledger_session_id = NULL;
 
     if (clone_string_field(src->backend, &clone.backend) != 0 ||
         clone_string_field(src->path, &clone.path) != 0 ||
@@ -122,7 +128,13 @@ int alfred_record_clone_owned(const alfred_record_t *src,
         clone_string_field(src->watch.event_name,
                            &clone.watch.event_name) != 0 ||
         clone_string_field(src->recovery.detail_path,
-                           &clone.recovery.detail_path) != 0) {
+                           &clone.recovery.detail_path) != 0 ||
+        clone_string_field(src->session.workspace_root,
+                           &clone.session.workspace_root) != 0 ||
+        clone_string_field(src->session.workspace_id,
+                           &clone.session.workspace_id) != 0 ||
+        clone_string_field(src->session.ledger_session_id,
+                           &clone.session.ledger_session_id) != 0) {
         alfred_record_destroy_owned(&clone);
         return -1;
     }

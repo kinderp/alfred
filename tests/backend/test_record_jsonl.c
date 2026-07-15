@@ -24,6 +24,9 @@
  * - admits diagnostic + lifecycle + SESSION_CONTEXT as stable public names
  * - does not imply that workspace/session payload fields or runtime emission
  *   are implemented yet
+ * - serializes workspace and ledger payload objects only when their fields are
+ *   present
+ * - rejects session payload fields on non-SESSION_CONTEXT records
  *
  * identity:
  * - emits device_id and inode_id only as a complete pair
@@ -206,6 +209,107 @@ static void test_jsonl_rejects_invalid_session_context_tuples(void)
     assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) < 0);
 }
 
+static void test_jsonl_formats_complete_session_context_payload(void)
+{
+    alfred_record_t record;
+    char buffer[1024];
+
+    memset(&record, 0, sizeof(record));
+    record.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    record.layer = ALFRED_RECORD_LAYER_DIAGNOSTIC;
+    record.category = ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    record.type = ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+    record.session.workspace_root = "/home/antonio/alfred";
+    record.session.workspace_id = "ws-alfred-local";
+    record.session.ledger_session_id = "ls-2026-07-15-local";
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
+    assert(strcmp(buffer,
+                  "{\"schema_version\":0,"
+                  "\"layer\":\"diagnostic\","
+                  "\"category\":\"lifecycle\","
+                  "\"type\":\"SESSION_CONTEXT\","
+                  "\"workspace\":{\"root\":\"/home/antonio/alfred\","
+                  "\"id\":\"ws-alfred-local\"},"
+                  "\"ledger\":{\"session_id\":\"ls-2026-07-15-local\"}}") == 0);
+}
+
+static void test_jsonl_formats_partial_session_context_payload(void)
+{
+    alfred_record_t record;
+    char buffer[1024];
+
+    memset(&record, 0, sizeof(record));
+    record.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    record.layer = ALFRED_RECORD_LAYER_DIAGNOSTIC;
+    record.category = ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    record.type = ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+    record.session.ledger_session_id = "ls-only";
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
+    assert(strcmp(buffer,
+                  "{\"schema_version\":0,"
+                  "\"layer\":\"diagnostic\","
+                  "\"category\":\"lifecycle\","
+                  "\"type\":\"SESSION_CONTEXT\","
+                  "\"ledger\":{\"session_id\":\"ls-only\"}}") == 0);
+
+    record.session.ledger_session_id = NULL;
+    record.session.workspace_id = "ws-only";
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
+    assert(strcmp(buffer,
+                  "{\"schema_version\":0,"
+                  "\"layer\":\"diagnostic\","
+                  "\"category\":\"lifecycle\","
+                  "\"type\":\"SESSION_CONTEXT\","
+                  "\"workspace\":{\"id\":\"ws-only\"}}") == 0);
+}
+
+static void test_jsonl_session_context_escapes_and_omits_empty_fields(void)
+{
+    alfred_record_t record;
+    char buffer[1024];
+
+    memset(&record, 0, sizeof(record));
+    record.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    record.layer = ALFRED_RECORD_LAYER_DIAGNOSTIC;
+    record.category = ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    record.type = ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+    record.session.workspace_root = "/tmp/a\"b\\c\n";
+    record.session.workspace_id = "";
+    record.session.ledger_session_id = "";
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) > 0);
+    assert(strcmp(buffer,
+                  "{\"schema_version\":0,"
+                  "\"layer\":\"diagnostic\","
+                  "\"category\":\"lifecycle\","
+                  "\"type\":\"SESSION_CONTEXT\","
+                  "\"workspace\":{\"root\":\"/tmp/a\\\"b\\\\c\\n\"}}") == 0);
+    assert(strstr(buffer, "\"id\"") == NULL);
+    assert(strstr(buffer, "\"ledger\"") == NULL);
+    assert(strstr(buffer, "\"agent\"") == NULL);
+    assert(strstr(buffer, "\"policy\"") == NULL);
+    assert(strstr(buffer, "\"process\"") == NULL);
+}
+
+static void test_jsonl_rejects_session_payload_on_other_records(void)
+{
+    alfred_record_t record;
+    char buffer[512];
+
+    memset(&record, 0, sizeof(record));
+    record.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    record.layer = ALFRED_RECORD_LAYER_SEMANTIC;
+    record.category = ALFRED_RECORD_CATEGORY_FILESYSTEM;
+    record.type = ALFRED_RECORD_TYPE_FILE_CREATED;
+    record.path = "/tmp/root/a.txt";
+    record.session.workspace_id = "ws-not-allowed-here";
+
+    assert(alfred_record_format_jsonl(&record, buffer, sizeof(buffer)) < 0);
+}
+
 static void test_jsonl_formats_complete_identity_only(void)
 {
     alfred_record_t record;
@@ -282,6 +386,10 @@ int main(void)
     test_jsonl_formats_stale_event_dropped();
     test_jsonl_formats_session_context_name_contract();
     test_jsonl_rejects_invalid_session_context_tuples();
+    test_jsonl_formats_complete_session_context_payload();
+    test_jsonl_formats_partial_session_context_payload();
+    test_jsonl_session_context_escapes_and_omits_empty_fields();
+    test_jsonl_rejects_session_payload_on_other_records();
     test_jsonl_formats_complete_identity_only();
     test_jsonl_omits_partial_identity();
     test_jsonl_rejects_invalid_input_and_truncation();

@@ -23,9 +23,10 @@ extern "C" {
  *
  * The function copies the whole scalar record first, then duplicates every
  * currently defined string pointer: backend, filesystem paths, OS error strings,
- * watch state/reason/error, and recovery detail_path. On success, @dst is an
- * alfred_record_t whose string pointers are independent from @src and can live
- * after the producer stack frame or backend buffer expires.
+ * watch state/reason/error, recovery detail_path, and session metadata strings.
+ * On success, @dst is an alfred_record_t whose string pointers are independent
+ * from @src and can live after the producer stack frame or backend buffer
+ * expires.
  *
  * Ownership precondition:
  *   @dst must be zeroed or must not currently own strings. This function is a

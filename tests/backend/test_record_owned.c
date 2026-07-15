@@ -21,6 +21,9 @@
  * - backend, path, os_error fields, watch fields, and recovery detail_path are
  *   deep-copied
  *
+ * session clone:
+ * - workspace_root, workspace_id, and ledger_session_id are deep-copied
+ *
  * destroy:
  * - frees owned strings
  * - clears the record so stale owned pointers cannot be reused accidentally
@@ -162,6 +165,42 @@ static void test_clone_diagnostic_owns_nested_strings(void)
     assert(owned.recovery.detail_path == NULL);
 }
 
+static void test_clone_session_context_owns_payload_strings(void)
+{
+    alfred_record_t src;
+    alfred_record_t owned;
+
+    memset(&src, 0, sizeof(src));
+    memset(&owned, 0, sizeof(owned));
+
+    src.schema_version = ALFRED_RECORD_SCHEMA_VERSION;
+    src.layer = ALFRED_RECORD_LAYER_DIAGNOSTIC;
+    src.category = ALFRED_RECORD_CATEGORY_LIFECYCLE;
+    src.type = ALFRED_RECORD_TYPE_SESSION_CONTEXT;
+    src.session.workspace_root = "/tmp/root";
+    src.session.workspace_id = "ws-local";
+    src.session.ledger_session_id = "ls-local";
+
+    assert(alfred_record_clone_owned(&src, &owned) == 0);
+
+    assert(strcmp(owned.session.workspace_root,
+                  src.session.workspace_root) == 0);
+    assert(strcmp(owned.session.workspace_id,
+                  src.session.workspace_id) == 0);
+    assert(strcmp(owned.session.ledger_session_id,
+                  src.session.ledger_session_id) == 0);
+
+    assert(owned.session.workspace_root != src.session.workspace_root);
+    assert(owned.session.workspace_id != src.session.workspace_id);
+    assert(owned.session.ledger_session_id !=
+           src.session.ledger_session_id);
+
+    alfred_record_destroy_owned(&owned);
+    assert(owned.session.workspace_root == NULL);
+    assert(owned.session.workspace_id == NULL);
+    assert(owned.session.ledger_session_id == NULL);
+}
+
 static void test_invalid_clone_input_fails(void)
 {
     alfred_record_t src;
@@ -219,6 +258,7 @@ int main(void)
     test_clone_raw_record_owns_path();
     test_clone_semantic_move_owns_both_paths();
     test_clone_diagnostic_owns_nested_strings();
+    test_clone_session_context_owns_payload_strings();
     test_invalid_clone_input_fails();
     test_clone_destination_can_be_reused_after_destroy();
 

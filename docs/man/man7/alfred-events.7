@@ -201,10 +201,21 @@ should be built on that structured model, not on ad hoc log strings.
 .PP
 The controlled record namespace already admits
 .B diagnostic + lifecycle + SESSION_CONTEXT
-as the future metadata/session record name. This does not mean the runtime
-emits that record yet, and it does not add per-event workspace/session
-enrichment. The JSONL payload and emission timing are defined by the
-Metadata/session record JSONL v0 milestone.
+as the metadata/session record name. Its JSONL payload uses
+.B workspace.root ,
+.B workspace.id
+and
+.B ledger.session_id
+for the C fields
+.B record.session.workspace_root ,
+.B record.session.workspace_id
+and
+.B record.session.ledger_session_id .
+Empty strings are treated as absent, empty objects are omitted, and the
+formatter rejects the session payload on non-
+.B SESSION_CONTEXT
+records. This does not mean the runtime emits that record yet, and it does not
+add per-event workspace/session enrichment.
 .PP
 For this record family, the accepted tuple is intentionally narrow:
 .B SESSION_CONTEXT
