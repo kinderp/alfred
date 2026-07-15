@@ -129,6 +129,13 @@ sono controllate.
 Una coppia `layer/category` decide quali `type` sono ammessi. Questo evita di
 trasformare `type` in una stringa libera.
 
+Per la famiglia metadata/sessione v0 il contratto e' volutamente stretto: il
+formatter JSONL accetta solo `diagnostic + lifecycle + SESSION_CONTEXT`.
+Combinazioni come `semantic + filesystem + SESSION_CONTEXT`,
+`diagnostic + watch + SESSION_CONTEXT` o
+`diagnostic + lifecycle + FILE_CREATED` sono invalide, perche' mescolano il nome
+del record di sessione con layer o category che descrivono altri fatti.
+
 ## Type
 
 `type` e' il nome specifico del record dentro una coppia `layer/category`.

@@ -205,6 +205,13 @@ as the future metadata/session record name. This does not mean the runtime
 emits that record yet, and it does not add per-event workspace/session
 enrichment. The JSONL payload and emission timing are defined by the
 Metadata/session record JSONL v0 milestone.
+.PP
+For this record family, the accepted tuple is intentionally narrow:
+.B SESSION_CONTEXT
+is valid only as
+.B diagnostic + lifecycle + SESSION_CONTEXT .
+The formatter rejects the same type under filesystem/watch categories and
+rejects unrelated event types under the lifecycle category.
 .SH BACKEND API V0 CONTRACT DRAFT
 Backend API v0 is an internal contract draft for future backend wiring. It is
 not a stable external plugin ABI yet, but its minimal operations descriptor is

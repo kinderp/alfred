@@ -100,6 +100,22 @@ Questa espansione e' parte del contratto pubblico perche'
 record non deve quindi nascere come stringa libera in `app.c`: prima il nome va
 ammesso dal modello record e coperto da un test focused.
 
+La tupla ammessa in v0 e' solo:
+
+```text
+diagnostic + lifecycle + SESSION_CONTEXT
+```
+
+Le combinazioni simili ma sbagliate devono essere rifiutate dal formatter. Per
+esempio:
+
+- `semantic + filesystem + SESSION_CONTEXT` e' invalida, perche' il contesto
+  sessione non e' un evento filesystem semantico;
+- `diagnostic + lifecycle + FILE_CREATED` e' invalida, perche' `FILE_CREATED`
+  appartiene alla semantica filesystem;
+- `diagnostic + watch + SESSION_CONTEXT` e' invalida, perche' il contesto
+  sessione non descrive lo stato di un watch.
+
 Attenzione: questo non implementa ancora il payload workspace/sessione. I campi
 `workspace.root`, `workspace.id` e `ledger.session_id`, il builder e l'emissione
 runtime restano passi separati. Questa separazione evita di mescolare due scelte
@@ -220,7 +236,9 @@ Prima di considerare pubblico il contratto JSONL servono golden test focused.
 Casi minimi:
 
 1. `SESSION_CONTEXT` e `lifecycle` sono valori ammessi dal modello record;
-2. il formatter JSONL produce i nomi pubblici attesi.
+2. il formatter JSONL produce i nomi pubblici attesi;
+3. il formatter rifiuta `SESSION_CONTEXT` con layer o category sbagliati;
+4. il formatter rifiuta altri type sotto `diagnostic + lifecycle`.
 
 Il passo successivo dovra' fissare la forma JSONL completa del payload. Da quel
 momento serviranno anche questi casi:
