@@ -340,6 +340,13 @@ la queue clona owned il payload. Se il contesto e' assente, Alfred non produce
 un record lifecycle vuoto; gli eventi filesystem successivi non ricevono
 automaticamente payload `workspace` o `ledger`.
 
+Aggiornamento successivo: l'audit finale della milestone verifica che
+documentazione, man page, test focused e registro milestone descrivano lo stato
+implementato dopo la PR runtime. `SESSION_CONTEXT` e' un record one-shot di
+contesto dichiarato della run, non una prova per-evento e non attribuzione di
+agente/processo. Restano fuori dal perimetro agent session, process tree,
+policy, id generation e enrichment automatico degli eventi filesystem.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle

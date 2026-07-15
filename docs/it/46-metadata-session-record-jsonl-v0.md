@@ -12,8 +12,9 @@ workspace_id
 ledger_session_id
 ```
 
-Questi valori esistono nel runtime, ma non sono ancora pubblicati nei record o
-in JSONL. Questa milestone decide e implementa il primo modo pubblico per
+Questi valori esistono nel runtime e, a chiusura della milestone, sono
+pubblicati come record metadata/sessione separato attraverso la output pipeline
+strutturata. La milestone decide e implementa il primo modo pubblico per
 esporli senza pagare un costo per ogni evento filesystem.
 
 ## Obiettivo
@@ -145,6 +146,31 @@ Alternative da non scegliere in v0:
 | `security/policy` | Implicherebbe policy o decisioni non implementate |
 | `backend/lifecycle` | Lo farebbe sembrare proprieta' del backend inotify |
 | campi su ogni evento | Aumenta costo e ambiguita' senza bisogno immediato |
+
+## Stato implementativo finale
+
+La milestone e' stata implementata come sottoinsieme stretto e intenzionale:
+
+1. il modello record ammette `diagnostic + lifecycle + SESSION_CONTEXT`;
+2. il payload C vive in `alfred_record_session_t`, dentro `alfred_record_t`;
+3. il formatter JSONL pubblica `workspace.root`, `workspace.id` e
+   `ledger.session_id`;
+4. il formatter rifiuta payload sessione su record diversi da
+   `SESSION_CONTEXT`;
+5. il runtime costruisce il record una sola volta quando esiste almeno un campo
+   workspace/sessione configurato;
+6. il record attraversa `app_emit_output_record()`,
+   `app_enqueue_output_record()`, `alfred_record_output_pipeline_enqueue()`,
+   queue, dispatcher e sink;
+7. `output_format=jsonl` scrive una riga JSONL, mentre `output_format=counter`
+   instrada lo stesso record nel sink di benchmark senza produrre JSONL;
+8. gli eventi filesystem ordinari non ricevono automaticamente payload
+   workspace/sessione.
+
+Questo chiude il bisogno immediato del ledger observe-mode: lo stream puo'
+contenere un contesto dichiarato della run prima degli eventi osservativi, ma
+Alfred non afferma ancora che ogni evento sia attribuito a un processo, agente,
+task o policy.
 
 ## Payload JSONL v0
 
