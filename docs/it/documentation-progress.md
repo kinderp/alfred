@@ -354,6 +354,21 @@ da queue, dispatcher e sink. La chiusura non cambia i non-obiettivi: niente
 arricchimento automatico degli eventi filesystem, niente `agent_session_id`,
 niente process tree, niente policy e niente generazione automatica di id.
 
+## Aggiornamento Inotify reference backend MVP closure audit
+
+Dopo la chiusura delle milestone JSONL/sessione, il lavoro torna al debito
+storico piu' importante: la riga `Inotify reference backend` e' ancora
+`in progress` nel registro, anche se molti strati costruiti sopra inotify sono
+ormai chiusi. La nuova milestone
+`Inotify reference backend MVP closure audit` serve a verificare documentazione,
+matrice eventi, stato funzionalita', test e limiti del sottoinsieme staged di
+Backend API v0 prima di dichiarare inotify chiuso per MVP.
+
+Il perimetro resta di audit e closure: non introduce fanotify, eBPF, audit,
+policy, process attribution, network telemetry o Agent Guard. Se emergono bug
+piccoli possono diventare issue figlie; se emergono temi grandi devono essere
+registrati come debito o roadmap futura.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
