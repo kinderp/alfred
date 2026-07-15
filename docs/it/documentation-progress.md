@@ -347,6 +347,13 @@ contesto dichiarato della run, non una prova per-evento e non attribuzione di
 agente/processo. Restano fuori dal perimetro agent session, process tree,
 policy, id generation e enrichment automatico degli eventi filesystem.
 
+Aggiornamento successivo: la milestone `Metadata/session record JSONL v0` viene
+chiusa come sottoinsieme implementato. Alfred pubblica il contesto
+workspace/sessione configurato con un record `SESSION_CONTEXT` separato, passato
+da queue, dispatcher e sink. La chiusura non cambia i non-obiettivi: niente
+arricchimento automatico degli eventi filesystem, niente `agent_session_id`,
+niente process tree, niente policy e niente generazione automatica di id.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle

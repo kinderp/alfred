@@ -149,7 +149,7 @@ Alternative da non scegliere in v0:
 
 ## Stato implementativo finale
 
-La milestone e' stata implementata come sottoinsieme stretto e intenzionale:
+La milestone e' chiusa come sottoinsieme stretto e intenzionale:
 
 1. il modello record ammette `diagnostic + lifecycle + SESSION_CONTEXT`;
 2. il payload C vive in `alfred_record_session_t`, dentro `alfred_record_t`;
