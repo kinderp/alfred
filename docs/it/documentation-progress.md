@@ -249,30 +249,30 @@ Aggiornamento successivo: il secondo micro-step di design decide il
 posizionamento runtime v0. I valori workspace/sessione devono vivere in un
 contesto runtime immutabile owned da app/runtime, creato prima
 dell'osservazione e distrutto durante shutdown dopo writer/sink interessati.
-Non vengono aggiunti subito a ogni `alfred_record_t` e non aumentano il clone
-owned della queue. I backend non possiedono questi campi, il core filesystem
-non li usa per la semantica corrente e un futuro writer/record di sessione
-dovra' leggere il contesto con API esplicita, golden JSONL e benchmark dedicati
-prima di renderlo pubblico. Il contesto separato deve inoltre essere pubblicato
-come read-only verso eventuali reader asincroni futuri e distrutto solo dopo
-stop/join/drain dei componenti che possono ancora leggerlo.
+In quella fase non vengono ancora aggiunti a ogni `alfred_record_t` e non
+aumentano il clone owned della queue. I backend non possiedono questi campi, il
+core filesystem non li usa per la semantica corrente e un futuro writer/record
+di sessione dovra' leggere il contesto con API esplicita, golden JSONL e
+benchmark dedicati prima di renderlo pubblico. Il contesto separato deve inoltre
+essere pubblicato come read-only verso eventuali reader asincroni futuri e
+distrutto solo dopo stop/join/drain dei componenti che possono ancora leggerlo.
 
 Aggiornamento successivo: il terzo micro-step di design decide il gate JSONL e
-test. Lo schema JSONL corrente non cambia: `workspace_root`, `workspace_id` e
-`ledger_session_id` non vengono emessi sui record evento senza una PR dedicata.
-La forma pubblica futura preferita e' un record metadata/sessione separato,
-perche' questi campi descrivono il contesto della run e non un fatto filesystem
-per-evento. I valori vuoti non sono JSONL valido per v0 salvo futura regola
-esplicita; i golden dovranno coprire assenza, escaping, ordine del metadata
+test. Lo schema JSONL runtime corrente non cambia ancora: `workspace_root`,
+`workspace_id` e `ledger_session_id` non vengono emessi sui record evento senza
+una PR dedicata. La forma pubblica futura preferita e' un record
+metadata/sessione separato, perche' questi campi descrivono il contesto della
+run e non un fatto filesystem per-evento. I valori vuoti non devono apparire nel
+JSONL valido; i golden dovranno coprire assenza, escaping, ordine del metadata
 record e assenza di attribuzione agente/policy implicita.
 
 Aggiornamento successivo: il quarto micro-step di design decide il gate
 benchmark. La milestone documentale non richiede un refresh dei numeri perche'
 non cambia runtime, record, queue, writer, JSONL o workload. Un refresh diventa
-obbligatorio quando una futura PR mette i campi in `alfred_record_t`, aumenta
-clone owned, ripete stringhe per evento, arricchisce JSONL per-record, cambia
-writer/sink/pipeline o genera identificatori dentro il percorso caldo. Il report
-benchmark ora contiene una tabella dedicata a workspace/session schema.
+obbligatorio quando una futura PR cambia il percorso runtime, ripete stringhe
+per evento, arricchisce JSONL per-record, cambia writer/sink/pipeline o genera
+identificatori dentro il percorso caldo. Il report benchmark ora contiene una
+tabella dedicata a workspace/session schema.
 
 Aggiornamento successivo: la milestone `Workspace/session runtime schema v0` e'
 chiusa come contratto documentale. L'esito non implementa ancora struct runtime,
@@ -316,6 +316,20 @@ JSONL e' abilitato. Non e' enrichment per-evento, non e' Agent Guard e non e'
 attribuzione agente/processo. La forma preferita e'
 `diagnostic + lifecycle + SESSION_CONTEXT`, con golden JSONL dedicati e
 benchmark gate quando il lavoro passa da documento a codice.
+
+Aggiornamento successivo: il primo micro-step di codice della milestone
+metadata/sessione ha ammesso il nome controllato
+`diagnostic + lifecycle + SESSION_CONTEXT` nel modello record e nel formatter
+JSONL, senza payload runtime.
+
+Aggiornamento successivo: il micro-step payload JSONL stabilizza
+`alfred_record_session_t` dentro `alfred_record_t` e definisce il payload
+formatter pubblico: `workspace.root`, `workspace.id` e `ledger.session_id`.
+Le stringhe vuote sono trattate come assenti, gli oggetti vuoti non vengono
+emessi e il formatter rifiuta payload sessione su record diversi da
+`SESSION_CONTEXT` per evitare per-event enrichment accidentale. L'emissione
+runtime resta separata: builder, enqueue, ordine nello stream e golden
+end-to-end saranno coperti da un child issue successivo.
 
 ## Aggiornamento registro milestone
 
