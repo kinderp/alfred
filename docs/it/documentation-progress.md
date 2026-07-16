@@ -168,7 +168,9 @@ e test/contract gate. Aggiunge anche una matrice di confronto preliminare. La
 raccomandazione provvisoria e' prudente: mantenere il raw-first come baseline,
 non migrare il core a record-first senza benchmark e usare un bridge misurato
 solo se serve a confrontare costi, ownership e test prima della decisione
-finale.
+finale. La matrice include esplicitamente anche affidabilita' e prove security:
+overflow, diagnostica backend, provenance e segnali di errore non devono
+perdersi durante una eventuale conversione fra raw e record.
 
 ## Aggiornamento Tracepoint e Lab MVP
 

@@ -250,6 +250,7 @@ Alfred contano almeno questi criteri:
 | Costo sul percorso caldo | La scelta aggiunge copie, allocazioni, validazioni pesanti, dispatch indiretti o queueing prima della semantica? |
 | Ownership e lifetime | Le stringhe path restano borrowed? Serve clone owned? Chi distrugge cosa? |
 | Backend futuri | Fanotify, audit o eBPF possono usare il modello senza fingere di essere inotify? |
+| Affidabilita' e prove security | Overflow, diagnostica backend, provenance e segnali di errore restano visibili e non vengono persi nella conversione? |
 | Testabilita' | Possiamo scrivere test focused semplici per dimostrare il contratto? |
 | Compatibilita' | I log compatibili, JSONL e test esistenti restano stabili o devono essere migrati? |
 | Semplicita' | La scelta riduce complessita' reale o introduce un livello in piu' solo per simmetria? |
@@ -436,12 +437,12 @@ Quando avrebbe senso:
 La tabella seguente non e' ancora la decisione finale. Serve a rendere
 espliciti i trade-off prima di scrivere benchmark o cambiare runtime.
 
-| Opzione | Costo hot path atteso | Ownership/lifetime | Impatto backend futuri | Impatto test | Rischio principale | Valutazione preliminare |
-| --- | --- | --- | --- | --- | --- | --- |
-| A: core raw-first | Basso, perche' resta il percorso attuale. | Semplice: il raw resta borrowed e valido durante `alfred_process()`. | Medio: backend futuri devono produrre o adattarsi a un raw comune. | Basso: conserva test core esistenti. | Congelare il core attorno a una forma troppo vicina a inotify. | Buona baseline; non chiude il debito architetturale. |
-| B: core record-first | Incerto: il record e' piu' grande e piu' generale; va misurato. | Piu' delicato: bisogna decidere quali campi sono borrowed, quali owned e quando clonare. | Alto potenziale: un envelope comune aiuta backend diversi. | Alto impatto: servono test core nuovi e migrazione semantica accurata. | Rendere il core piu' generico ma piu' lento o meno chiaro. | Promettente, ma non va fatto senza benchmark e test focused. |
-| C: bridge misurato | Medio e misurabile: aggiunge conversione controllata. | Dipende dalla direzione del bridge; deve documentare borrowed/owned a ogni confine. | Buono: permette di provare record-first senza forzarlo subito. | Medio: servono test per conversione e equivalenza. | Il bridge diventa permanente e complica il codice. | Migliore passo esplorativo se vogliamo dati prima della scelta. |
-| D: dual path dichiarato | Basso nell'immediato, perche' lascia il runtime com'e'. | Semplice nel breve, ma doppio contratto da spiegare. | Debole: rimanda il problema per i backend futuri. | Basso nel breve; alto se dura troppo. | Normalizzare il debito e confondere contributori. | Accettabile solo come stato temporaneo con uscita esplicita. |
+| Opzione | Costo hot path atteso | Ownership/lifetime | Impatto backend futuri | Affidabilita' e prove | Impatto test | Rischio principale | Valutazione preliminare |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A: core raw-first | Basso, perche' resta il percorso attuale. | Semplice: il raw resta borrowed e valido durante `alfred_process()`. | Medio: backend futuri devono produrre o adattarsi a un raw comune. | Buona sul comportamento corrente, ma le prove restano divise fra raw/core/record output. | Basso: conserva test core esistenti. | Congelare il core attorno a una forma troppo vicina a inotify. | Buona baseline; non chiude il debito architetturale. |
+| B: core record-first | Incerto: il record e' piu' grande e piu' generale; va misurato. | Piu' delicato: bisogna decidere quali campi sono borrowed, quali owned e quando clonare. | Alto potenziale: un envelope comune aiuta backend diversi. | Alto potenziale se il record conserva provenance/diagnostica; alto rischio se la conversione perde dettagli raw. | Alto impatto: servono test core nuovi e migrazione semantica accurata. | Rendere il core piu' generico ma piu' lento o meno chiaro. | Promettente, ma non va fatto senza benchmark e test focused. |
+| C: bridge misurato | Medio e misurabile: aggiunge conversione controllata. | Dipende dalla direzione del bridge; deve documentare borrowed/owned a ogni confine. | Buono: permette di provare record-first senza forzarlo subito. | Buona se i test dimostrano equivalenza fra raw, record, overflow e diagnostica; pericolosa se il bridge filtra campi. | Medio: servono test per conversione e equivalenza. | Il bridge diventa permanente e complica il codice. | Migliore passo esplorativo se vogliamo dati prima della scelta. |
+| D: dual path dichiarato | Basso nell'immediato, perche' lascia il runtime com'e'. | Semplice nel breve, ma doppio contratto da spiegare. | Debole: rimanda il problema per i backend futuri. | Buona nel breve solo se entrambi i percorsi emettono gli stessi segnali osservabili; fragile se divergono. | Basso nel breve; alto se dura troppo. | Normalizzare il debito e confondere contributori. | Accettabile solo come stato temporaneo con uscita esplicita. |
 
 ## Raccomandazione preliminare
 
