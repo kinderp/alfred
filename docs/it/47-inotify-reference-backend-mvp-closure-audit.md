@@ -195,6 +195,42 @@ La milestone puo' chiudersi quando:
 - la riga storica `Inotify reference backend` nel registro cronologico puo'
   essere chiusa con una sintesi dell'esito.
 
+## Esito di chiusura
+
+L'audit chiude il backend Linux inotify come backend di riferimento per l'MVP.
+Questo non significa che Alfred sia completo o multi-backend. Significa che il
+primo backend reale ha un confine documentato e testato abbastanza stabile per
+reggere i prossimi strati.
+
+Risultato consolidato:
+
+- la documentazione non descrive piu' come futuro cio' che e' gia' stato
+  implementato: record strutturati, sink, queue, JSONL opt-in, Backend API v0
+  staged e diagnostica runtime sono allineati allo stato reale;
+- la copertura test e' mappata per contratto: `make test-core` protegge la
+  semantica filesystem, `make test-backend-diagnostics` protegge runtime e
+  diagnostica backend, `make test-jsonl` protegge il contratto strutturato
+  pubblico rappresentativo;
+- i limiti accettati sono espliciti: raw bridge del main loop, benchmark della
+  futura migrazione, worker/backpressure, edge case di test, audit/debug non
+  pubblico JSONL v0, lifecycle/error JSONL, process attribution, rete, policy
+  ed enforcement;
+- i blocker sono definiti: diventano bloccanti solo promesse non implementate,
+  supporto senza copertura ragionevole, violazioni dei contratti stabiliti,
+  dati falsi o claim di sicurezza senza backend/test adeguati;
+- la riga storica `Inotify reference backend` puo' passare a `done` nel
+  registro cronologico come chiusura per MVP.
+
+Restano futuri, fuori da questa chiusura:
+
+- migrazione del main loop a `backend_ops->poll()` o scelta di un core input
+  model diverso;
+- fanotify, audit, eBPF, Windows e macOS;
+- process context, network context, permission events e blocking;
+- policy engine, Agent Guard, enforcement e correlate decisioni di sicurezza;
+- worker thread, per-sink queues, backpressure pubblica e benchmark dedicati
+  prima di ogni modifica al percorso caldo.
+
 ## Regola guida
 
 ```text

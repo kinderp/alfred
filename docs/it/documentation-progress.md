@@ -369,6 +369,17 @@ policy, process attribution, network telemetry o Agent Guard. Se emergono bug
 piccoli possono diventare issue figlie; se emergono temi grandi devono essere
 registrati come debito o roadmap futura.
 
+Aggiornamento successivo: la milestone `Inotify reference backend MVP closure
+audit` chiude il debito storico della riga `Inotify reference backend` nel
+registro milestone. L'esito e' una chiusura per MVP, non una promessa di
+runtime multi-backend completo: inotify resta il primo backend Linux di
+riferimento, con documentazione runtime allineata, mappa test/contratti,
+registro debiti residui e criteri blocker espliciti. Restano rimandati
+main-loop migration, benchmark comparativi per il ponte raw/record, worker e
+backpressure pubblica, raw audit/self-event JSONL dedicati, lifecycle/error
+JSONL, process attribution, rete, policy, enforcement e backend futuri come
+fanotify, audit, eBPF, Windows e macOS.
+
 ## Aggiornamento registro milestone
 
 `37-roadmap-milestone-progetto.md` introduce il registro cronologico delle
