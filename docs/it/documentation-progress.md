@@ -151,6 +151,17 @@ Backend API v0 emette record normalizzati. Questa convivenza e' intenzionale,
 ma deve diventare una decisione architetturale misurata prima di aggiungere
 backend futuri.
 
+Aggiornamento successivo: `48-core-input-main-loop-migration-v0.md` contiene
+ora anche la mappa del runtime corrente. `app_init()` usa gia'
+`inotify_backend_ops()` per lifecycle, target e start; `app_run()` invece usa
+ancora `app_poll_legacy_raw_backend_once()` -> `inotify_backend_poll()` ->
+`handle_backend_event()` per consegnare `alfred_raw_event_t` al core. Il
+percorso staged `backend_ops->poll(timeout_ms = 0)` delega allo stesso poll
+inotify, ma converte il raw in `alfred_record_t` con
+`alfred_record_from_raw()` e lo emette come record borrowed. La mappa rende
+esplicito perche' il main loop non puo' essere migrato meccanicamente senza
+decidere prima il core input model.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
