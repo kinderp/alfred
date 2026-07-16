@@ -131,6 +131,43 @@ Questi punti non bloccano la chiusura MVP se restano documentati e tracciati:
 - process attribution, rete, policy, agent guard e enforcement richiedono
   backend futuri e non devono rientrare nella chiusura inotify.
 
+## Registro debiti residui
+
+Questa tabella trasforma i debiti accettabili in un registro di chiusura. La
+colonna `Perche' non blocca` e' importante: evita di confondere un limite noto
+con un bug nascosto. La colonna `Quando riaprirlo` indica invece il momento in
+cui quel debito deve tornare attivo.
+
+| Debito | Stato corrente | Perche' non blocca l'MVP | Quando riaprirlo |
+| --- | --- | --- | --- |
+| Main loop ancora su raw bridge | `app_run()` usa ancora il ponte raw isolato verso il core semantico; Backend API v0 staged e' implementata e testata, ma non e' il loop end-to-end unico. | Il ponte e' esplicito in [30 - Backend API v0](30-backend-api-v0.md) e in [31 - Milestone backend inotify](31-milestone-inotify-reference-backend.md). Cambiarlo ora toccherebbe il percorso caldo senza benchmark comparativi. | Quando si decide il core input model definitivo: `alfred_raw_event_t`, `alfred_record_t` o ponte misurato record -> raw/core. |
+| Benchmark del main-loop migration | I benchmark correnti coprono record, queue, dispatcher, output pipeline e runtime output, ma non confrontano ancora il raw bridge con un loop backend-agnostic completo. | La chiusura inotify MVP non cambia il percorso caldo. Non serve inventare un numero prima di modificare il loop. | Prima di qualunque PR che sposti il loop principale su `backend_ops->poll()` o introduca un ponte record/core nuovo. |
+| Worker thread, per-sink queues e backpressure pubblica | Writer Runtime v0 ha coda bounded, drain sincrono, dispatcher e output opt-in; worker e code per sink restano futuri. | Il backend inotify puo' essere chiuso come reference backend anche se i writer restano single-threaded e opt-in. Il percorso caldo target e' documentato. | Quando una milestone Writer Runtime successiva introduce worker reali, code per sink, drop policy pubblica o backpressure osservabile. |
+| Test dedicato `MOVED_TO` senza `MOVED_FROM` | Il fallback e' documentato come supportato e coperto indirettamente dagli scenari move/recursive. | Non cambia la semantica principale di rename/move/relocate e non e' un bug noto del runtime corrente. | Quando si rafforza la suite core con edge case di ingresso nell'albero osservato senza sorgente nota. |
+| Test audit directory con `IN_ISDIR` | Il flusso audit/debug resta diagnostico e non entra nel contratto JSONL v0. | L'audit opt-in non e' il contratto pubblico principale dell'MVP; la semantica core directory e' coperta dai test create/delete/move directory. | Quando si promuove l'audit inotify opt-in a contratto strutturato o a famiglia JSONL dedicata. |
+| Overflow e unmount reali deterministici in CI | Overflow e unmount reali dipendono da kernel, timing e ambiente. Esistono test sintetici/diagnostici e documentazione dei limiti. | Un test non deterministico peggiorerebbe affidabilita' della CI. Per MVP basta distinguere contratto supportato, simulazione e limiti operativi. | Quando si introduce un harness controllato per stress kernel, namespace/mount dedicati o test privilegiati opzionali. |
+| Raw audit e raw self-event dedicati in JSONL | I raw filesystem principali e diagnostica watch/recovery sono runtime-routed; audit opt-in e self-event raw dedicati non sono ancora famiglie JSONL pubbliche. | JSONL v0 deve restare rappresentativo e stabile, non un dump di ogni fatto backend/debug. | Quando una famiglia audit/self-event diventa requisito di consumer esterni o di un ledger piu' ampio. |
+| Process attribution, rete e policy | Inotify non fornisce processo affidabile, rete, permission events o enforcement. | Promettere questi comportamenti con solo inotify sarebbe falso. Servono backend futuri e un policy/risk model. | In milestone fanotify, audit/eBPF, process context, Agent Guard observe/enforce o policy engine. |
+| Metadata semantics | `IN_ATTRIB` e `RAW_ATTRIB` sono disponibili come raw fact; `FILE_METADATA_CHANGED`/`DIR_METADATA_CHANGED` restano rimandati. | L'MVP ha gia' raw evidence e non deve inventare una semantica metadata incompleta. | Quando si progetta una semantica metadata comune, indipendente da inotify e compatibile con backend futuri. |
+| Lifecycle/error JSONL generico | Startup, shutdown, config e molti errori applicativi restano log umani; JSONL v0 copre raw, semantica e diagnostica watch/recovery rappresentativa. | Il modello lifecycle/error pubblico richiede schema proprio e non deve essere aggiunto solo per chiudere inotify. | Quando lifecycle, config error o errori applicativi diventano record pubblici versionati. |
+
+## Cosa sarebbe un blocker
+
+Un debito diventa blocker della chiusura inotify MVP solo se una di queste
+condizioni e' vera:
+
+- la documentazione promette un comportamento che il codice non implementa;
+- un comportamento dichiarato supportato non ha test focused, golden o
+  diagnostico ragionevole;
+- il comportamento corrente viola Backend API v0, Event Model v0 o il contratto
+  log/JSONL gia' stabilito;
+- un limite noto produce dati falsi invece di dati incompleti o diagnostici;
+- un nuovo claim di sicurezza promette processo, rete, policy o enforcement
+  senza backend e test adeguati.
+
+Se nessuna di queste condizioni e' vera, il limite deve restare nel registro
+debiti e non deve allargare la chiusura MVP.
+
 ## Regola di verifica finale
 
 Prima di chiudere la milestone, una PR di closure dovrebbe almeno verificare:
