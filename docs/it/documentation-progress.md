@@ -63,6 +63,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `44-workspace-session-runtime-schema-v0.md` |
 | Completo | `45-workspace-session-runtime-context-v0.md` |
 | Parziale | `46-metadata-session-record-jsonl-v0.md` |
+| Completo | `47-inotify-reference-backend-mvp-closure-audit.md` |
+| Parziale | `48-core-input-main-loop-migration-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -128,6 +130,26 @@ upload artifact, aggiornamento maturita' e report finale.
 dimensioni usate nella matrice di maturita': correttezza funzionale,
 robustezza, affidabilita', stabilita', performance, leggerezza, sicurezza,
 coerenza, semplicita', manutenibilita', operabilita' e documentazione.
+
+## Aggiornamento Core Input Model / Main Loop Migration v0
+
+La milestone corrente e' `Core Input Model / Main Loop Migration v0`,
+collegata alla GitHub Milestone #11, alla issue madre #187 e alla issue figlia
+di setup #188. Il riferimento principale e'
+`48-core-input-main-loop-migration-v0.md`.
+
+Il documento non implementa ancora una migrazione runtime. Serve a decidere
+quale input deve consumare il core semantico dopo la chiusura MVP del backend
+inotify: `alfred_raw_event_t`, `alfred_record_t`, un bridge misurato o un dual
+path temporaneo dichiarato. La regola guida e' non cambiare il percorso caldo
+senza un contratto esplicito e numeri di benchmark.
+
+Il debito da chiudere e' il ponte raw isolato nel main loop:
+`app_poll_legacy_raw_backend_once()` continua ad alimentare
+`alfred_process()` con `alfred_raw_event_t`, mentre la poll staged della
+Backend API v0 emette record normalizzati. Questa convivenza e' intenzionale,
+ma deve diventare una decisione architetturale misurata prima di aggiungere
+backend futuri.
 
 ## Aggiornamento Tracepoint e Lab MVP
 
