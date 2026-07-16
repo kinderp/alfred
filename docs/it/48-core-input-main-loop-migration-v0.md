@@ -185,11 +185,18 @@ app_emit_output_record_callback()
 
 app_run()
 -> app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
 -> alfred_record_runtime_drain_once()
 -> alfred_record_queue_pop()
 -> alfred_record_dispatcher_dispatch_one()
 -> sink concreto
 ```
+
+`alfred_record_output_pipeline_drain_once()` e' importante perche' e' il
+wrapper della pipeline configurata: `app_drain_output_pipeline()` chiama quello,
+non direttamente il runtime drain helper. Il wrapper conserva il confine fra
+applicazione e runtime output, poi delega a `alfred_record_runtime_drain_once()`
+per consumare la coda attraverso dispatcher e sink.
 
 Questo percorso non deve guidare da solo la scelta del core input model. E'
 importante per JSONL, ledger, counter sink e writer futuri, ma il core deve
