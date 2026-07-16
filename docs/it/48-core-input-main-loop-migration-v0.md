@@ -71,6 +71,155 @@ La risposta deve includere:
 - benchmark necessario prima di cambiare runtime;
 - criterio di rollback o di accettazione.
 
+## Mappa corrente del runtime
+
+Prima di scegliere una delle opzioni bisogna distinguere tre percorsi che oggi
+sono collegati, ma non identici:
+
+1. lifecycle e target management passano gia' dalla Backend API v0;
+2. il main loop runtime usa ancora il ponte raw verso il core;
+3. l'output strutturato sta a valle e riceve record borrowed da callback.
+
+### Composition root e lifecycle
+
+Durante `app_init()` l'applicazione sceglie il backend inotify statico e usa la
+tabella ops per inizializzazione, target e start:
+
+```text
+app_init()
+-> app->backend_ops = inotify_backend_ops()
+-> alfred_backend_ops_is_minimally_valid(app->backend_ops)
+-> app->backend_ops->init(...)
+-> app->backend_ops->add_target(...)
+-> app->backend_ops->start(...)
+```
+
+Le funzioni coinvolte hanno responsabilita' diverse:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `inotify_backend_ops()` | restituisce la tabella statica `alfred_backend_ops_t` del backend inotify. |
+| `alfred_backend_ops_is_minimally_valid()` | valida descriptor, capability e callback obbligatorie; non sta nel percorso caldo. |
+| `inotify_backend_ops_init()` | costruisce il runtime inotify staged, copia `emit`/`userdata` dal chiamante e chiama `inotify_backend_init()`. |
+| `inotify_backend_ops_add_target()` | valida un target filesystem-path v0 e delega a `inotify_backend_add_startup_watch()`. |
+| `inotify_backend_ops_start()` | marca il runtime staged come avviato; non possiede nuove risorse. |
+
+Questo significa che Alfred non e' piu' completamente inotify-specific nel
+lifecycle. Pero' il ciclo eventi principale non usa ancora `backend_ops->poll()`.
+
+### Percorso runtime effettivo: raw bridge
+
+Il percorso realmente usato da `app_run()` per alimentare il core e':
+
+```text
+app_run()
+-> app_build_inotify_backend_context()
+-> app_poll_legacy_raw_backend_once()
+-> inotify_backend_poll()
+-> backend_poll()
+-> adapter inotify -> alfred_raw_event_t
+-> handle_backend_event(alfred_raw_event_t)
+-> alfred_process(app->core, raw)
+-> core_logger_on_event()
+-> alfred_record_from_event()
+-> app_emit_output_record_callback()
+-> app_emit_output_record()
+-> app_enqueue_output_record()
+```
+
+Le responsabilita' principali sono:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `app_run()` | possiede il loop, decide quando drenare l'output e quando fermarsi. |
+| `app_build_inotify_backend_context()` | costruisce un contesto inotify stretto con puntatori borrowed a runtime, config, logger e callback record. |
+| `app_poll_legacy_raw_backend_once()` | isola l'unica chiamata applicativa diretta rimasta a `inotify_backend_poll()`. |
+| `inotify_backend_poll()` | legge un batch non bloccante dal fd inotify e consegna raw event tramite callback. |
+| `backend_poll()` | implementa la lettura reale, diagnostica, conversione raw e manutenzione watch/recovery. |
+| `handle_backend_event()` | adatta alcuni raw a record per output/log compatibile, poi passa il raw originale al core. |
+| `alfred_process()` | e' il core semantico corrente: consuma `alfred_raw_event_t` e produce zero o un evento semantico. |
+
+Questo e' il percorso piu' importante per la milestone. Finche'
+`alfred_process()` consuma `alfred_raw_event_t`, sostituire meccanicamente
+`app_poll_legacy_raw_backend_once()` con `backend_ops->poll()` non e' corretto:
+la poll ops non consegna raw event al core, consegna record normalizzati alla
+callback Backend API.
+
+### Percorso staged: `backend_ops->poll(timeout_ms = 0)`
+
+Il percorso staged della Backend API v0 e':
+
+```text
+backend_ops->poll(timeout_ms = 0)
+-> inotify_backend_ops_poll()
+-> inotify_backend_poll()
+-> inotify_backend_ops_emit_raw_record()
+-> alfred_record_from_raw()
+-> runtime->context.emit_record(alfred_record_t borrowed)
+```
+
+Le responsabilita' principali sono:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `inotify_backend_ops_poll()` | valida runtime staged, `started`, `emit_record` e `timeout_ms == 0`, poi delega al poll inotify esistente. |
+| `inotify_backend_ops_emit_raw_record()` | riceve il raw event dal poll inotify, lo converte in record e lo emette alla callback Backend API. |
+| `alfred_record_from_raw()` | produce un `alfred_record_t` `NORMALIZED_RAW` borrowed, copiando solo campi scalari e prendendo in prestito le stringhe raw. |
+| `runtime->context.emit_record()` | callback applicativa generica che riceve record borrowed; il ricevente deve clonare se vuole conservarli. |
+
+Questo percorso serve a rendere reale la Backend API v0, ma non sostituisce
+ancora il core input path. E' una prova compilata e testata del confine
+backend->record, non il main loop definitivo.
+
+### Percorso output: downstream, non input del core
+
+L'output strutturato e' a valle del problema core input model.
+
+```text
+app_emit_output_record_callback()
+-> app_emit_output_record()
+-> app_enqueue_output_record()
+-> alfred_record_output_pipeline_enqueue()
+-> alfred_record_queue_push()
+-> alfred_record_clone_owned()
+
+app_run()
+-> app_drain_output_pipeline()
+-> alfred_record_output_pipeline_drain_once()
+-> alfred_record_runtime_drain_once()
+-> alfred_record_queue_pop()
+-> alfred_record_dispatcher_dispatch_one()
+-> sink concreto
+```
+
+`alfred_record_output_pipeline_drain_once()` e' importante perche' e' il
+wrapper della pipeline configurata: `app_drain_output_pipeline()` chiama quello,
+non direttamente il runtime drain helper. Il wrapper conserva il confine fra
+applicazione e runtime output, poi delega a `alfred_record_runtime_drain_once()`
+per consumare la coda attraverso dispatcher e sink.
+
+Questo percorso non deve guidare da solo la scelta del core input model. E'
+importante per JSONL, ledger, counter sink e writer futuri, ma il core deve
+prima ricevere un input semantico corretto e veloce. I writer restano fuori dal
+percorso caldo target.
+
+### Perche' i due poll convivono
+
+La convivenza attuale e' intenzionale:
+
+- `app_run()` deve ancora alimentare il core con `alfred_raw_event_t`;
+- `backend_ops->poll()` e' gia' il contratto backend staged, ma produce
+  `alfred_record_t`;
+- l'output pipeline sa gia' ricevere record, ma non decide la semantica core;
+- cambiare il main loop senza decidere il core input model rischierebbe una
+  migrazione solo apparente.
+
+La milestone deve quindi scegliere fra tre direzioni reali:
+
+1. mantenere il core raw-first e trattare i record come output/envelope;
+2. rendere il core record-first con test e benchmark adeguati;
+3. introdurre un bridge misurato con criteri di uscita espliciti.
+
 ## Non obiettivi
 
 Questa milestone non implementa:
