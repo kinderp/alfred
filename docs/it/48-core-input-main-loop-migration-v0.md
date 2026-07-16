@@ -220,6 +220,47 @@ La milestone deve quindi scegliere fra tre direzioni reali:
 2. rendere il core record-first con test e benchmark adeguati;
 3. introdurre un bridge misurato con criteri di uscita espliciti.
 
+## Glossario decisionale
+
+Questa milestone usa alcuni termini architetturali. Vanno letti in modo
+concreto, non come etichette astratte.
+
+| Termine | Significato pratico in Alfred | Esempio corrente |
+| --- | --- | --- |
+| `raw-first` | Il core semantico riceve prima un fatto grezzo normalizzato minimale, cioe' `alfred_raw_event_t`. Il record comune viene prodotto dopo o in parallelo per output e diagnostica. | `handle_backend_event()` chiama `alfred_process(app->core, raw)`. |
+| `record-first` | Il core semantico riceve direttamente `alfred_record_t`. Il record diventa l'envelope comune anche per l'input del core, non solo per output/JSONL. | Una futura versione potrebbe far consumare record `NORMALIZED_RAW` al core. |
+| `bridge misurato` | Un adattatore temporaneo e dichiarato converte fra record e raw, o fra raw e record, mentre si misura costo e correttezza. Non e' una soluzione permanente senza criteri di uscita. | `backend_ops->poll()` emette record, ma il core oggi richiede raw: un bridge potrebbe adattare uno dei due lati. |
+| `dual path` | Due percorsi convivono temporaneamente: uno per il core, uno per il record/output. E' accettabile solo se documentato e se ha una ragione precisa. | Oggi `app_run()` usa il raw bridge, mentre `backend_ops->poll()` esiste come poll staged record-emitting. |
+| percorso caldo | Parte del codice eseguita per ogni evento osservato, dove copie, allocazioni, lock, formattazione o I/O possono pesare molto. | backend poll -> raw/core input -> eventuale enqueue. |
+| benchmark gate | Condizione numerica minima prima di accettare una modifica al percorso caldo. Serve a non scegliere a sensazione. | Confrontare raw-first baseline e bridge/record-first con output counter/no-op. |
+| test/contract gate | Insieme minimo di test e documentazione che deve esistere prima di cambiare un contratto runtime. | Test focused per conversione, test core per semantica, golden JSONL solo per output pubblico. |
+
+In parole semplici: `raw-first` privilegia stabilita' e velocita' del core
+attuale; `record-first` privilegia un modello interno piu' uniforme; `bridge
+misurato` prova a comprare tempo e dati prima della scelta definitiva.
+
+## Criteri di confronto
+
+Le opzioni non vanno confrontate solo in base all'eleganza architetturale. Per
+Alfred contano almeno questi criteri:
+
+| Criterio | Domanda da fare |
+| --- | --- |
+| Correttezza semantica | Il core continua a produrre gli stessi eventi semantici per create, delete, modify, ready, rename, move, relocate e overflow? |
+| Costo sul percorso caldo | La scelta aggiunge copie, allocazioni, validazioni pesanti, dispatch indiretti o queueing prima della semantica? |
+| Ownership e lifetime | Le stringhe path restano borrowed? Serve clone owned? Chi distrugge cosa? |
+| Backend futuri | Fanotify, audit o eBPF possono usare il modello senza fingere di essere inotify? |
+| Affidabilita' e prove security | Overflow, diagnostica backend, provenance e segnali di errore restano visibili e non vengono persi nella conversione? |
+| Testabilita' | Possiamo scrivere test focused semplici per dimostrare il contratto? |
+| Compatibilita' | I log compatibili, JSONL e test esistenti restano stabili o devono essere migrati? |
+| Semplicita' | La scelta riduce complessita' reale o introduce un livello in piu' solo per simmetria? |
+| Uscita dal debito | La scelta chiude il raw bridge o lo rende almeno misurabile e con una data di uscita? |
+
+Questi criteri evitano due errori:
+
+- restare raw-first per abitudine anche quando i backend futuri ne soffrono;
+- migrare record-first per eleganza anche se il percorso caldo peggiora.
+
 ## Non obiettivi
 
 Questa milestone non implementa:
@@ -390,6 +431,53 @@ Quando avrebbe senso:
 - se nessuna opzione e' ancora sufficientemente provata;
 - se serve prima rafforzare benchmark, test o documentazione;
 - se vogliamo una milestone puramente decisionale prima della migrazione.
+
+## Matrice di confronto preliminare
+
+La tabella seguente non e' ancora la decisione finale. Serve a rendere
+espliciti i trade-off prima di scrivere benchmark o cambiare runtime.
+
+| Opzione | Costo hot path atteso | Ownership/lifetime | Impatto backend futuri | Affidabilita' e prove | Impatto test | Rischio principale | Valutazione preliminare |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A: core raw-first | Basso, perche' resta il percorso attuale. | Semplice: il raw resta borrowed e valido durante `alfred_process()`. | Medio: backend futuri devono produrre o adattarsi a un raw comune. | Buona sul comportamento corrente, ma le prove restano divise fra raw/core/record output. | Basso: conserva test core esistenti. | Congelare il core attorno a una forma troppo vicina a inotify. | Buona baseline; non chiude il debito architetturale. |
+| B: core record-first | Incerto: il record e' piu' grande e piu' generale; va misurato. | Piu' delicato: bisogna decidere quali campi sono borrowed, quali owned e quando clonare. | Alto potenziale: un envelope comune aiuta backend diversi. | Alto potenziale se il record conserva provenance/diagnostica; alto rischio se la conversione perde dettagli raw. | Alto impatto: servono test core nuovi e migrazione semantica accurata. | Rendere il core piu' generico ma piu' lento o meno chiaro. | Promettente, ma non va fatto senza benchmark e test focused. |
+| C: bridge misurato | Medio e misurabile: aggiunge conversione controllata. | Dipende dalla direzione del bridge; deve documentare borrowed/owned a ogni confine. | Buono: permette di provare record-first senza forzarlo subito. | Buona se i test dimostrano equivalenza fra raw, record, overflow e diagnostica; pericolosa se il bridge filtra campi. | Medio: servono test per conversione e equivalenza. | Il bridge diventa permanente e complica il codice. | Migliore passo esplorativo se vogliamo dati prima della scelta. |
+| D: dual path dichiarato | Basso nell'immediato, perche' lascia il runtime com'e'. | Semplice nel breve, ma doppio contratto da spiegare. | Debole: rimanda il problema per i backend futuri. | Buona nel breve solo se entrambi i percorsi emettono gli stessi segnali osservabili; fragile se divergono. | Basso nel breve; alto se dura troppo. | Normalizzare il debito e confondere contributori. | Accettabile solo come stato temporaneo con uscita esplicita. |
+
+## Raccomandazione preliminare
+
+La raccomandazione preliminare e':
+
+```text
+Non migrare subito il core a record-first.
+Usare il percorso raw-first come baseline misurata.
+Preparare un bridge misurato solo se serve a confrontare costi e contratti.
+```
+
+Il motivo e' pragmatico:
+
+- il core filesystem corrente funziona e ha test;
+- il percorso raw-first e' il comportamento runtime reale;
+- `alfred_record_t` e' gia' essenziale per output, JSONL e ledger, ma questo
+  non dimostra automaticamente che debba essere anche l'input del core;
+- un record-first non misurato potrebbe introdurre copie, campi inutili o
+  ownership ambigua proprio nel percorso caldo;
+- un bridge misurato permette di raccogliere numeri e test prima di cambiare
+  responsabilita' del core.
+
+Questa raccomandazione non chiude la scelta finale. Dice solo quale ordine e'
+piu' sicuro:
+
+1. mantenere il comportamento corrente come baseline;
+2. scrivere benchmark e test focused;
+3. provare eventuale bridge o record-first in modo reversibile;
+4. decidere solo dopo aver confrontato numeri, chiarezza e test.
+
+La frase guida e':
+
+```text
+Record-first e' una direzione possibile, non una scorciatoia.
+```
 
 ## Regole per il percorso caldo
 
