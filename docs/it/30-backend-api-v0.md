@@ -1,11 +1,17 @@
 # Backend API v0
 
-Questo documento definisce la proposta Backend API v0 di Alfred. L'obiettivo e'
+Questo documento definisce Backend API v0 di Alfred. L'obiettivo e'
 stabilire come un backend deve parlare con Alfred senza duplicare il core e
 senza trasformare stringhe di log in API.
 
-La API non viene implementata in questa fase. Il documento serve come specifica
-per il prossimo refactor architetturale, dopo [Event Model v0](29-event-model-v0.md).
+La API esiste oggi come sottoinsieme staged: il contratto C, le capabilities,
+il target filesystem-path v0, l'emit boundary, il lifecycle inotify e la poll
+comune non bloccante sono compilati, documentati e coperti da test focused. Il
+main loop runtime non e' ancora backend-agnostic end-to-end: `app_run()` usa
+ancora il raw bridge isolato verso il core semantico. Questo documento quindi
+ha due ruoli: descrive il contratto implementato oggi e conserva le decisioni
+rimandate per il prossimo refactor architetturale dopo
+[Event Model v0](29-event-model-v0.md).
 
 La decisione principale e':
 
@@ -317,16 +323,18 @@ con un confine unico:
 emit(const alfred_record_t *record)
 ```
 
-Il prossimo micro-step tecnico e' introdurre questo sink comune senza cambiare
-ancora il comportamento osservabile. Il primo sink puo' essere un writer
-testuale compatibile che chiama `alfred_record_format_text()` e poi usa il
-logger esistente. In questo modo:
+Il sink comune e il text sink compatibile sono gia' stati introdotti senza
+cambiare il comportamento osservabile. Il primo sink e' un writer testuale
+compatibile che chiama `alfred_record_format_text()` e poi usa il logger
+esistente. In questo modo:
 
 - i log restano uguali;
 - i test correnti possono continuare a confrontare lo stesso testo;
 - il backend non sceglie piu' direttamente il dispositivo di output;
-- JSONL potra' essere aggiunto dopo come secondo writer, non come sostituto del
-  modello interno.
+- JSONL puo' usare lo stesso record come writer opt-in a valle, senza diventare
+  sostituto del modello interno;
+- worker asincroni, code per sink e backpressure pubblica restano debiti
+  separati del Writer Runtime.
 
 Nel codice corrente questo concetto e' stato introdotto in forma minima e
 indipendente dal runtime backend:
@@ -362,9 +370,9 @@ altre sono ancora contratto documentale.
 ### 1. Ownership memoria
 
 Il backend puo' costruire un `alfred_record_t` leggero con stringhe borrowed
-solo se il record viene consumato subito. Appena `emit(record)` inserira' il
-record in una coda o lo consegnera' a un dispatcher thread, il runtime dovra'
-creare una copia owned.
+solo se il record viene consumato subito. Appena `emit(record)` inserisce il
+record in una coda o lo consegna a un dispatcher/runtime differito, il runtime
+deve creare una copia owned.
 
 Regola:
 
@@ -373,9 +381,22 @@ Il record accodato non puo' dipendere da stack frame, buffer temporanei o
 memoria riusabile del backend.
 ```
 
-La forma C precisa e' rimandata: potra' essere un tipo
-`alfred_owned_record_t` o una coppia di funzioni
-`alfred_record_clone_owned()` / `alfred_record_destroy_owned()`.
+La forma C v0 e' gia' esplicita:
+
+```text
+alfred_record_clone_owned()
+alfred_record_destroy_owned()
+alfred_record_queue_push()
+alfred_record_queue_pop()
+```
+
+`alfred_record_clone_owned()` duplica le stringhe del record in una destinazione
+zeroed/non-owned. `alfred_record_queue_push()` usa quel clone per salvare record
+owned in una coda bounded. `alfred_record_queue_pop()` trasferisce ownership al
+consumer, che deve poi chiamare `alfred_record_destroy_owned()`. Questa scelta
+non rende il percorso caldo definitivo: documenta e testa il confine di
+lifetime prima di introdurre worker thread, code per sink o strategie storage
+piu' performanti.
 
 ### 2. Dispatcher e coda
 
@@ -1303,7 +1324,9 @@ Non va anticipata nella prima implementazione.
    `alfred_process()`.
 8. Progettare Writer API v0, coda/ring buffer e backpressure.
    Specifica documentale in [Writer API v0](32-writer-api-v0.md).
-9. Solo dopo implementare JSONL come writer, non come API primaria.
+9. Mantenere JSONL come writer opt-in gia' implementato, non come API primaria,
+   e maturarne runtime, lifecycle, error model e backpressure insieme al Writer
+   Runtime.
 10. Solo dopo progettare backend statici ulteriori.
 11. Solo dopo valutare plugin dinamici backend o writer.
 
@@ -1461,22 +1484,22 @@ flowchart TD
     TW --> TXT[text payload<br/>senza timestamp o newline]
     TXT --> LG[logger / events.log]
 
-    RR -. prossimo .-> SINK[alfred_record_sink_t<br/>emit(record)]
-    DR -. prossimo .-> SINK
-    SR -. prossimo .-> SINK
+    RR --> SINK[alfred_record_sink_t<br/>emit(record)]
+    DR --> SINK
+    SR --> SINK
     SINK --> TS[alfred_record_text_sink_t]
     TS --> TW
 
-    RR -. futuro .-> JSON[JSONL writer]
-    DR -. futuro .-> JSON
-    SR -. futuro .-> JSON
+    RR --> JSON[JSONL writer<br/>quando output_enabled=true]
+    DR --> JSON
+    SR --> JSON
 
     RR -. futuro .-> BIN[binary/socket writer]
     DR -. futuro .-> BIN
     SR -. futuro .-> BIN
 ```
 
-Schema del prossimo confine `emit(record)`:
+Schema del confine `emit(record)` implementato nel subset staged:
 
 ```mermaid
 flowchart LR
@@ -1484,7 +1507,7 @@ flowchart LR
     C[Core semantic path<br/>semantic records] --> E
     E --> D[app dispatcher<br/>or record sink]
     D --> T[text writer<br/>compatibile]
-    D -. futuro .-> J[JSONL writer]
+    D --> J[JSONL writer<br/>opt-in v0]
     D -. futuro .-> P[policy/security<br/>pipeline]
     D -. futuro .-> X[binary/socket<br/>writer]
 
@@ -1548,9 +1571,10 @@ iniziato con `RAW_CREATE`, `RAW_DELETE`, `RAW_ATTRIB`, `RAW_MODIFY`,
 originale resta consegnato al core, mentre il log raw normalizzato passa da
 record + sink + text sink.
 
-## Test futuri
+## Test del subset implementato e test futuri
 
-Quando la API verra' implementata, servira' coprire:
+Il subset staged e' gia' coperto da test focused e runtime. In particolare sono
+gia' da proteggere:
 
 - lifecycle `init/start/stop/destroy`;
 - `add_target` e `remove_target` su root valide e invalide;
@@ -1559,8 +1583,14 @@ Quando la API verra' implementata, servira' coprire:
 - mapping `WATCH_* -> diagnostic record`;
 - writer testuale che preserva le righe log correnti;
 - text sink che chiama un writer callback senza cambiare payload;
+- queue owned bounded e ownership di push/pop;
+- output pipeline opt-in JSONL/counter;
 - nessun cambiamento nella semantica core;
 - nessuna emissione diretta di eventi `FILE_*` / `DIR_*` dal backend.
+
+I test futuri riguardano invece la migrazione del main loop, la semantica di
+timeout diversa da zero, il runtime multi-backend e le politiche di
+backpressure/drop.
 
 Il contratto ops minimo e' gia' coperto da:
 
@@ -1671,12 +1701,13 @@ nessuna astrazione entra nel percorso caldo senza numeri.
 
 ## Decisioni rimandate
 
-Restano da decidere nella fase codice:
+Restano da decidere nelle fasi successive:
 
-- forma concreta di `alfred_backend_t`;
-- se il runtime backend sara' allocato dall'app o dal backend;
-- layout concreto di `alfred_backend_config_t`;
-- layout concreto di `alfred_backend_target_t`;
+- forma definitiva e pubblica di `alfred_backend_t` oltre al typedef opaco v0;
+- se un futuro runtime backend generico sara' allocato dall'app o dal backend;
+- layout definitivo di `alfred_backend_config_t` oltre al cast staged
+  backend-specifico;
+- estensione di `alfred_backend_target_t` oltre il target filesystem-path v0;
 - semantica precisa di `timeout_ms` in `poll`;
 - elenco definitivo dei codici errore strutturati;
 - migrazione del main runtime loop da `app_poll_legacy_raw_backend_once()` a un
