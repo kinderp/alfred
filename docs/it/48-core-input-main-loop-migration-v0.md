@@ -519,26 +519,210 @@ benchmark lo misura e quale baseline usa.
 
 ## Gate benchmark
 
-Prima di migrare il main loop bisogna avere almeno un confronto esplicito tra:
+Un benchmark gate e' la condizione minima di misura prima di accettare una
+modifica nel percorso caldo. Non e' un benchmark generico e non serve a dire
+"Alfred e' veloce" in assoluto. Serve a rispondere a una domanda piu' stretta:
 
-- percorso corrente raw-first;
-- eventuale percorso record-first;
-- eventuale bridge record/raw;
-- output no-op o counter;
-- output JSONL solo se il writer resta fuori dal confronto caldo.
+```text
+Questo cambio al modello di input del core costa abbastanza poco,
+preserva la semantica e conserva le prove necessarie?
+```
 
-Metriche candidate:
+Per questa milestone il gate deve confrontare il percorso runtime corrente con
+ogni candidato che introduce record, bridge, conversioni, copie, code o
+dispatch aggiuntivi prima della semantica core.
 
-- eventi al secondo;
-- record processati;
-- conversioni per evento;
-- allocazioni o copie per evento, quando misurabili;
-- tempo totale del bench;
-- `max_pending` e statistiche queue se la coda entra nel percorso;
-- differenza percentuale rispetto alla baseline.
+### Baseline raw-first
 
-La prima baseline deve essere povera di I/O. Se JSONL e disco entrano nel
-benchmark, il risultato misura anche il writer e non solo il core input model.
+La prima misura deve rappresentare il comportamento corrente, senza aggiungere
+JSONL, writer testuali o I/O non necessario:
+
+```text
+inotify/backend oppure sorgente raw sintetica
+-> alfred_raw_event_t
+-> alfred_process()
+-> callback evento semantico
+-> output counter/no-op opzionale
+```
+
+Questa baseline misura il costo del core semantico con input raw. E' il punto
+di confronto obbligatorio per ogni proposta successiva. Se una PR propone un
+bridge o un core record-first ma non riporta questa baseline, non sta
+dimostrando il costo reale della migrazione.
+
+La baseline deve essere povera di I/O. Se JSONL, file flush, socket o log
+testuale entrano nel benchmark principale, il risultato misura anche il writer
+e non piu' solo il core input model.
+
+### Candidato bridge misurato
+
+Un bridge misurato deve rendere esplicito il costo della conversione fra record
+e raw, o fra raw e record:
+
+```text
+alfred_record_t NORMALIZED_RAW
+-> adapter record/raw oppure bridge raw/record
+-> alfred_process()
+-> callback evento semantico
+-> output counter/no-op opzionale
+```
+
+Questa misura serve a capire se il bridge e' un debito accettabile mentre si
+decide il modello finale. Deve rispondere almeno a queste domande:
+
+- quante conversioni avvengono per evento;
+- quali campi vengono copiati;
+- quali stringhe restano borrowed;
+- quali prove raw, diagnostiche, overflow o errori vengono preservati;
+- quanto overhead introduce rispetto alla baseline raw-first.
+
+Un bridge non misurato non deve diventare percorso runtime stabile.
+
+### Candidato record-first
+
+Un vero candidato record-first esiste solo quando il core puo' consumare record
+come input primario:
+
+```text
+alfred_record_t NORMALIZED_RAW
+-> futuro input record del core
+-> evento semantico / record semantico
+-> output counter/no-op opzionale
+```
+
+Questo benchmark non va confuso con l'output pipeline attuale. Oggi Alfred sa
+gia' produrre e serializzare record a valle; questo non dimostra che il core
+debba consumare record a monte. Il candidato record-first deve quindi misurare
+il nuovo input del core, non il writer JSONL.
+
+### Modalita' di output del benchmark
+
+Le modalita' di output vanno ordinate cosi':
+
+| Modalita' | Cosa misura | Quando usarla |
+| --- | --- | --- |
+| counter/no-op | costo del percorso core senza formattazione o I/O pesante | prima misura obbligatoria |
+| JSONL buffered | costo del formato pubblico e della pipeline output | seconda misura, dopo il core |
+| testo compatibile | costo del writer/log compatibile | utile per compatibilita', non come prova primaria del core |
+
+La regola pratica e':
+
+```text
+counter/no-op dimostra il costo del core input path;
+JSONL dimostra il costo dell'output pubblico;
+il testo compatibile dimostra compatibilita', non performance core.
+```
+
+### Metriche minime
+
+Il primo gate non deve essere sofisticato come una suite statistica completa,
+ma deve raccogliere abbastanza dati da evitare decisioni a sensazione.
+
+| Metrica | Significato | Interpretazione |
+| --- | --- | --- |
+| `events_per_second` | quanti eventi il percorso riesce a processare al secondo | misura throughput generale |
+| `elapsed_ns` o `elapsed_ms` | tempo totale del run | serve per confrontare run identici |
+| `events_processed` / `records_processed` | quanti input sono entrati nel percorso misurato | evita benchmark vuoti o parziali |
+| conversioni per evento | quante trasformazioni raw/record avvengono | un bridge dovrebbe renderle visibili |
+| copie o byte copiati, se disponibili | quanto dato viene duplicato | utile per stimare costo hot-path e cache pressure |
+| allocazioni per evento, se disponibili | quante allocazioni dinamiche entrano nel percorso | una crescita qui e' sospetta nel percorso caldo |
+| `max_pending`, se entra una coda | profondita' massima della queue | misura pressione e rischio backlog |
+| errori, drop, conversion failures | perdita o fallimento nel percorso | devono essere zero per scenari normali |
+| equivalenza semantica | eventi semantici uguali alla baseline | requisito di correttezza, non metrica opzionale |
+| preservation di overflow/diagnostica/prove | segnali non semantici conservati | requisito di affidabilita' e sicurezza |
+| overhead percentuale vs baseline | costo relativo del candidato | dato principale per decidere accettazione o rifiuto |
+
+Le metriche su allocazioni e byte copiati possono arrivare in una fase
+successiva se richiedono strumenti nuovi. La PR che cambia il percorso caldo
+deve pero' dichiarare esplicitamente se non le misura.
+
+### Regola di accettazione v0
+
+Per v0 non fissiamo ancora una soglia numerica permanente. Sarebbe arbitraria:
+manca un benchmark mirato ripetuto sul core input model. La prima PR che
+introduce il benchmark dovra' proporre una soglia basata sui numeri raccolti.
+
+Fino ad allora valgono queste regole minime:
+
+- baseline raw-first e candidato devono essere misurati nello stesso eseguibile
+  o con lo stesso stile di run;
+- il benchmark primario deve usare output counter/no-op;
+- JSONL non puo' essere usato da solo per dimostrare il costo del core input
+  path;
+- il candidato deve produrre gli stessi eventi semantici della baseline negli
+  scenari rappresentativi;
+- il candidato deve preservare overflow, diagnostica ed evidence oppure
+  dichiarare esplicitamente cosa non supporta;
+- gli errori e i drop devono essere zero negli scenari normali;
+- l'overhead percentuale deve essere riportato, anche se la soglia finale non e'
+  ancora decisa;
+- un singolo run puo' bastare per orientare una PR documentale o esplorativa,
+  ma non per accettare una migrazione runtime definitiva.
+
+Quando il benchmark sara' implementato, la regola di accettazione dovra'
+evolvere verso run ripetuti e confrontabili. Per una migrazione del main loop
+serviranno almeno piu' ripetizioni nello stesso ambiente o una motivazione
+esplicita del perche' non siano disponibili.
+
+### Rapporto con i benchmark esistenti
+
+I benchmark gia' introdotti per Writer Runtime e output pipeline restano utili,
+ma rispondono a domande diverse.
+
+| Benchmark esistente | Cosa puo' provare | Cosa non puo' provare |
+| --- | --- | --- |
+| `queue-dispatcher-jsonl` | costo di queue, dispatcher e JSONL su record gia' disponibili | costo di cambiare input del core |
+| `output-pipeline-jsonl` | costo della pipeline output integrata con JSONL | equivalenza fra raw-first e record-first |
+| counter/output runtime | costo minimo della pipeline output senza formattazione pesante | costo di un bridge record/raw a monte del core |
+
+Questi benchmark possono segnalare se il writer e' un collo di bottiglia, ma
+non bastano per decidere la migrazione di `app_poll_legacy_raw_backend_once()`.
+Per quella decisione serve un benchmark mirato al confine:
+
+```text
+raw input / record input / bridge
+-> core semantico
+-> output no-op o counter
+```
+
+### Limiti dichiarati del primo gate
+
+Il primo benchmark gate non copre ancora tutto:
+
+- non misura p95/p99 latency;
+- non misura I/O reale su disco o socket;
+- non misura worker thread, lock o code per sink;
+- non misura fanotify, audit, eBPF o backend futuri;
+- non misura ancora pressione memoria con strumenti dedicati;
+- non sostituisce i test di equivalenza semantica.
+
+Questi limiti sono accettabili per la decisione iniziale, purche' siano
+dichiarati nella PR che usa il benchmark.
+
+### Checklist prima di migrare il main loop
+
+Prima di sostituire il ponte:
+
+```text
+app_poll_legacy_raw_backend_once()
+```
+
+con un percorso basato su `backend_ops->poll()` o su record input, devono essere
+veri tutti questi punti:
+
+1. esiste un benchmark raw-first baseline;
+2. esiste una misura del candidato bridge o record-first;
+3. il confronto usa output counter/no-op come misura primaria;
+4. i test dimostrano equivalenza semantica sugli scenari rappresentativi;
+5. overflow, diagnostica ed evidence sono preservati o il debito e' dichiarato;
+6. ownership e lifetime delle stringhe sono documentati;
+7. la PR riporta overhead percentuale rispetto alla baseline;
+8. la documentazione spiega cosa viene cambiato nel percorso caldo;
+9. il rollback o il criterio di uscita dal bridge e' descritto;
+10. la issue madre registra la decisione e i numeri usati.
+
+Solo dopo questa checklist il main loop puo' essere migrato senza trasformare
+una scelta architetturale in un salto al buio.
 
 ## Piano test
 

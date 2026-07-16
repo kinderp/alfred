@@ -172,6 +172,20 @@ finale. La matrice include esplicitamente anche affidabilita' e prove security:
 overflow, diagnostica backend, provenance e segnali di errore non devono
 perdersi durante una eventuale conversione fra raw e record.
 
+Aggiornamento successivo: `48-core-input-main-loop-migration-v0.md` definisce
+ora il benchmark gate della milestone. Il gate separa la baseline raw-first dal
+candidato bridge misurato e dal futuro candidato record-first; chiarisce che la
+misura primaria deve usare output counter/no-op e non JSONL; elenca metriche
+minime come eventi al secondo, tempo totale, record processati, conversioni,
+copie/allocazioni quando disponibili, errori, drop, equivalenza semantica,
+preservation di overflow/diagnostica/evidence e overhead percentuale. Il
+documento dichiara anche che i benchmark `queue-dispatcher-jsonl`,
+`output-pipeline-jsonl` e counter/output runtime misurano soprattutto la
+pipeline di output: sono utili, ma non bastano per decidere la migrazione del
+core input model. Prima di sostituire `app_poll_legacy_raw_backend_once()`
+servono benchmark mirati, test di equivalenza e documentazione di ownership,
+lifetime, rollback e numeri usati nella decisione.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
