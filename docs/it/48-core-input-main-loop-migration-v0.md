@@ -826,6 +826,116 @@ Ogni PR che cambia il modello di input del core deve aggiornare:
   o nuove righe benchmark;
 - pagina man o contratto log, solo se cambia output pubblico o CLI.
 
+## Decisione provvisoria v0
+
+La decisione provvisoria della milestone e':
+
+```text
+Il runtime resta raw-first per ora.
+Non introduciamo ancora un bridge record->core.
+Non migriamo ancora il core a record-first.
+```
+
+Questo significa che il percorso caldo corrente resta:
+
+```text
+app_run()
+-> app_poll_legacy_raw_backend_once()
+-> inotify_backend_poll()
+-> handle_backend_event(alfred_raw_event_t)
+-> alfred_process(core, raw)
+```
+
+I record continuano a essere fondamentali, ma per ora restano soprattutto:
+
+- il contratto strutturato a valle;
+- il formato comune per writer, JSONL, sink e diagnostica;
+- la rappresentazione emessa dal percorso staged `backend_ops->poll()`;
+- una base misurabile per futuri bridge o record-first.
+
+### Perche' non migrare subito
+
+La scelta non e' ideologica. E' una scelta di rischio e costo sul percorso
+caldo.
+
+I dati raccolti finora dicono:
+
+- `core-input-raw-first` misura il costo corrente del core semantico raw-first;
+- `raw-to-record-adapter` mostra che `alfred_record_from_raw()` e' economico
+  come conversione isolata nel micro-benchmark;
+- `raw-to-record-plus-core` mostra che produrre un record normalizzato sidecar
+  e poi alimentare il core raw-first resta nello stesso ordine di grandezza,
+  ma con rumore sufficiente da non poter diventare una soglia o una garanzia.
+
+Questi numeri sono utili per orientare, ma non dimostrano ancora che:
+
+- un bridge completo record->raw sia corretto e conveniente;
+- un core record-first semplifichi davvero il codice;
+- ownership, lifetime, overflow, diagnostica ed evidence siano preservati in
+  tutti gli scenari;
+- il main loop possa essere migrato senza aumentare complessita' o rischio.
+
+Per questo la decisione piu' prudente e' mantenere il raw-first come baseline
+runtime e usare i record come envelope/output/documented boundary finche' non
+esiste un motivo concreto per pagare il costo del cambio.
+
+### Cosa resta autorizzato
+
+Questa decisione non blocca il lavoro sui record. Restano dentro lo scope:
+
+- migliorare adapter e record model;
+- aggiungere benchmark mirati;
+- aumentare copertura JSONL e golden pubblici;
+- documentare meglio ownership e campi record;
+- costruire prototipi isolati, non collegati al main loop, per bridge o
+  record-first;
+- mantenere `backend_ops->poll()` staged come prova del confine Backend API v0.
+
+La regola e':
+
+```text
+Si puo' misurare e prototipare.
+Non si cambia il percorso caldo runtime senza nuova decisione.
+```
+
+### Criteri per riaprire bridge o record-first
+
+La decisione va riaperta se almeno uno di questi segnali diventa vero:
+
+1. arriva un secondo backend reale e il raw-first inizia a duplicare troppa
+   logica specifica;
+2. il bridge record->raw ha test focused, preserva path/cookie/raw_mask/pid/
+   timestamp/overflow e ha overhead accettabile rispetto alla baseline;
+3. un prototipo record-first riduce complessita' del core senza perdere
+   semantica o performance;
+4. la Backend API staged diventa il percorso principale per piu' backend e il
+   raw bridge diventa il maggiore debito di integrazione;
+5. i benchmark ripetuti mostrano che il costo di conversione e' stabile e
+   trascurabile nel confine core input;
+6. i test di equivalenza coprono gli scenari rappresentativi elencati nel
+   piano test;
+7. un requisito futuro, per esempio provenance, policy o session context a
+   monte del core, richiede davvero record come input primario.
+
+Se nessuno di questi segnali e' presente, restare raw-first e' una scelta
+consapevole, non inerzia tecnica.
+
+### Implicazione per il prossimo lavoro
+
+Il prossimo lavoro runtime non deve essere "migrare tutto a record". Deve
+essere piu' stretto:
+
+```text
+mantenere raw-first nel main loop
+documentare il debito
+chiudere la milestone con criteri di riapertura
+poi tornare a lavoro MVP sul backend/output/test
+```
+
+Eventuali PR future su bridge o record-first devono nascere come child issue
+separate e devono citare questa decisione, spiegando quale criterio di
+riapertura stanno soddisfacendo.
+
 ## Criteri di chiusura
 
 La milestone puo' chiudersi quando:
@@ -834,7 +944,7 @@ La milestone puo' chiudersi quando:
 - le opzioni sono confrontate con pro, contro e rischi;
 - il benchmark gate e' scritto;
 - il piano test e' scritto;
-- la decisione scelta e' documentata nella issue madre e negli MD;
+- la decisione provvisoria e' documentata nella issue madre e negli MD;
 - eventuali PR runtime sono divise in micro-step;
 - i debiti rimandati sono espliciti.
 
