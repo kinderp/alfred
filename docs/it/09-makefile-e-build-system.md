@@ -1308,7 +1308,7 @@ make all
 ./alfred --check-config
     |
     v
-avvio runtime su /tmp/alfred_mvp_smoke/watch
+avvio runtime su /tmp/alfred_mvp_smoke.XXXXXX/watch
     |
     v
 creazione file -> rename file -> creazione directory

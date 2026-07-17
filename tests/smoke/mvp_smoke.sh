@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ALFRED_BIN="${ALFRED_BIN:-$ROOT_DIR/alfred}"
-RUN_DIR="${RUN_DIR:-/tmp/alfred_mvp_smoke}"
+RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alfred_mvp_smoke.XXXXXX")"
 WATCH_ROOT="$RUN_DIR/watch"
 CONFIG_FILE="$RUN_DIR/alfred-smoke.conf"
 ALFRED_PID=""
@@ -61,7 +61,6 @@ assert_file_contains() {
 
 trap cleanup EXIT
 
-rm -rf "$RUN_DIR"
 mkdir -p "$WATCH_ROOT"
 
 "$ALFRED_BIN" --help >/dev/null
@@ -175,6 +174,22 @@ def has_record(layer, category, record_type, path_suffix=None):
     return False
 
 
+def has_rename_record(old_path_suffix, new_path_suffix):
+    expected_old_path = f"{watch_root}/{old_path_suffix}"
+    expected_new_path = f"{watch_root}/{new_path_suffix}"
+
+    for record in records:
+        if (
+            record.get("layer") == "semantic"
+            and record.get("category") == "filesystem"
+            and record.get("type") == "FILE_RENAMED"
+            and record.get("old_path") == expected_old_path
+            and record.get("new_path") == expected_new_path
+        ):
+            return True
+    return False
+
+
 required = [
     ("normalized_raw", "filesystem", "RAW_CREATE", "smoke.txt"),
     ("semantic", "filesystem", "FILE_CREATED", "smoke.txt"),
@@ -190,6 +205,12 @@ missing = [
 
 if missing:
     raise SystemExit("missing JSONL records: " + ", ".join(missing))
+
+if not has_rename_record("smoke.txt", "smoke-renamed.txt"):
+    raise SystemExit(
+        "missing JSONL rename record: "
+        "semantic/filesystem/FILE_RENAMED/smoke.txt->smoke-renamed.txt"
+    )
 PY
 then
     fail_with_artifacts "output.jsonl structural validation failed"
