@@ -291,9 +291,17 @@ workspace_id=ws-local-project
 ledger_session_id=ls-local-run
 .EE
 .PP
-These values are stored as application-owned runtime context. They are not
-written to JSONL by this contract and they do not enable Agent Guard, policy,
-blocking, would-block decisions, process attribution or network observation.
+These values are stored as application-owned runtime context. When
+.B output_enabled=true
+and
+.BR output_format=jsonl ,
+Alfred writes them once in a
+.B SESSION_CONTEXT
+metadata record. With output disabled, or with
+.BR output_format=counter ,
+no user-facing JSONL file is written. These values do not enable Agent Guard,
+policy, blocking, would-block decisions, process attribution or network
+observation.
 .SH NOTES
 This file format is intentionally simple and does not yet have include
 directives, sections, quoting rules, variable expansion or CLI override
