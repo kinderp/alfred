@@ -121,9 +121,9 @@ Le domande da chiudere sono:
 | Implementare comportamento selezionato | Done | Issue figlie #214 e #216. `--help` e `--version` terminano prima di `app_init()`; `--check-config` valida configurazione e termina prima del runtime. |
 | Aggiungere test CLI/config | Done | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
 | Allineare README e man page | Done | Issue figlie #214, #216 e #220. README, `alfred(1)`, `alfred.conf(5)` e `alfred-events(7)` descrivono CLI minima, smoke test, JSONL opt-in, session context e roadmap/non-goal in modo coerente. |
-| Tradurre README e man page in italiano | In progress | Issue figlia #222. Dopo la stabilizzazione del testo inglese, aggiunge `README.it.md` e pagine man italiane in layout locale `docs/man/it/man1`, `docs/man/it/man5` e `docs/man/it/man7`. |
+| Tradurre README e man page in italiano | Done | Issue figlia #222 e PR #223. Dopo la stabilizzazione del testo inglese, aggiunge `README.it.md` e pagine man italiane in layout locale `docs/man/it/man1`, `docs/man/it/man5` e `docs/man/it/man7`. |
 | Definire smoke test MVP | Done | Issue figlia #218 e PR #219. Il percorso breve e' `make smoke-mvp`: build, CLI minima, runtime su tmpdir, eventi rappresentativi, log compatibili e JSONL opt-in. Merge di riferimento: 7421aed. |
-| Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
+| Chiusura readiness | Done | Issue figlia #224. Questa sezione chiude la milestone con sintesi di percorsi affidabili, validazione, debiti rimandati e prossimi passi consigliati. |
 
 ## Audit CLI/user workflow corrente
 
@@ -269,6 +269,82 @@ Per conservare gli artifact:
 ```bash
 ALFRED_KEEP_TEST_LOGS=1 make smoke-mvp
 ```
+
+## Readiness audit finale
+
+La milestone `MVP operational usability v0` e' pronta per la chiusura quando la
+PR collegata alla issue #224 viene mergiata. Il risultato non rende Alfred un
+prodotto completo, ma rende l'MVP corrente molto piu' facile da lanciare,
+validare e spiegare.
+
+### Percorsi affidabili oggi
+
+| Percorso | Stato | Come verificarlo |
+| --- | --- | --- |
+| Build base | Affidabile per MVP | `make` |
+| CLI informativa | Affidabile per MVP | `./alfred --help`, `./alfred --version`, `make test-cli` |
+| Validazione configurazione | Affidabile per MVP | `./alfred --check-config`, `ALFRED_CONFIG=... ./alfred --check-config`, `make test-cli` |
+| Runtime inotify su directory | Affidabile per MVP | `./alfred /tmp/root`, suite core/backend e `make smoke-mvp` |
+| Log compatibili | Affidabile per MVP | `raw.log`, `events.log`, `errors.log`, `make smoke-mvp` |
+| JSONL opt-in | Affidabile per il percorso cablato | `output_enabled=true`, `output_format=jsonl`, `make test-jsonl`, `make smoke-mvp` |
+| README/man page inglesi | Allineati al contratto corrente | `README.md`, `docs/man/man1`, `docs/man/man5`, `docs/man/man7` |
+| README/man page italiane | Disponibili localmente | `README.it.md`, `man -l docs/man/it/man*/...` |
+
+### Comandi consigliati prima di aprire PR
+
+Per una modifica ordinaria sull'MVP corrente:
+
+```bash
+git diff --check
+make
+make test
+make test-cli
+make smoke-mvp
+make test-jsonl
+make test-backend-diagnostics
+```
+
+Per modifiche alla documentazione man page:
+
+```bash
+man -l docs/man/man1/alfred.1 >/dev/null
+man -l docs/man/man5/alfred.conf.5 >/dev/null
+man -l docs/man/man7/alfred-events.7 >/dev/null
+man -l docs/man/it/man1/alfred.1 >/dev/null
+man -l docs/man/it/man5/alfred.conf.5 >/dev/null
+man -l docs/man/it/man7/alfred-events.7 >/dev/null
+```
+
+### Debiti intenzionalmente rimandati
+
+Questa milestone lascia esplicitamente fuori:
+
+- parser CLI completo con `-c`, `--config`, `--print-config` e `--`;
+- installazione o packaging delle pagine man, incluse quelle localizzate;
+- fanotify, eBPF, audit, Windows e macOS;
+- Agent Guard, policy engine, approval UI, would-block e process attribution;
+- migrazione del main loop a `backend_ops->poll()`;
+- core record-first o bridge record->core;
+- worker thread, per-sink queues e output runtime asincrono;
+- benchmark nuovi sul percorso caldo;
+- traduzione completa di `docs/it` in `docs/en`.
+
+Questi punti non sono buchi nascosti dell'MVP operativo. Sono lavori futuri che
+devono avere issue, PR, benchmark o decisioni dedicate.
+
+### Prossimo passo consigliato
+
+Dopo la chiusura di questa milestone, il passo successivo non dovrebbe riaprire
+subito piu' fronti insieme. Le alternative naturali sono:
+
+1. chiudere eventuali debiti documentali piccoli emersi dalla readiness review;
+2. aprire una milestone mirata sul parser CLI se vogliamo `-c`, `--config` e
+   `--`;
+3. tornare a una milestone architetturale solo se serve per il prossimo prodotto
+   concreto, mantenendo la regola dei benchmark prima di cambiare il percorso
+   caldo;
+4. pianificare la traduzione `docs/en` e l'ampliamento man page come lavoro
+   post-MVP, non come requisito del primo MVP operativo.
 
 ## Criteri di chiusura
 
