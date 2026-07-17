@@ -60,6 +60,7 @@ gcc \
     -I"$ROOT_DIR/core/src" \
     "$ROOT_DIR/tests/perf/bench_core_input.c" \
     "$ROOT_DIR/core/src/alfred_correlator.c" \
+    "$ROOT_DIR/core/src/alfred_record_adapter.c" \
     "$ROOT_DIR/core/src/alfred_tables.c" \
     "$ROOT_DIR/core/src/alfred_utils.c" \
     -o "$TEST_BIN"

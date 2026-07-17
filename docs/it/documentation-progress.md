@@ -193,10 +193,13 @@ resa eseguibile con `make perf-core-input`. Il nuovo benchmark manuale
 senza inotify reale, filesystem I/O, JSONL, writer testuali, queue, dispatcher
 o runtime app. `34-report-benchmark-prestazioni.md` documenta la nuova riga
 CSV `core-input-raw-first`, i campi `raw_events`,
-`raw_events_per_sec_avg`, `semantic_events_last`, `process_errors_last`,
+`raw_events_per_sec_avg`, `semantic_events_last`, `errors_last`,
 `conversions_per_event` e `output_mode`, e chiarisce che questa baseline dovra'
 essere confrontata solo con futuri benchmark bridge/record-first sullo stesso
-confine core input.
+confine core input. Un aggiornamento successivo dello stesso benchmark aggiunge
+la riga `raw-to-record-adapter`, che misura il costo isolato
+`alfred_raw_event_t -> alfred_record_from_raw()` senza implementare un bridge
+record/raw o un core record-first.
 
 ## Aggiornamento Tracepoint e Lab MVP
 
