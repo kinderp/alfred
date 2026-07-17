@@ -189,7 +189,7 @@ Ogni test deve controllare:
 
 | Item | Stato | Note |
 | --- | --- | --- |
-| Setup milestone, issue madre e roadmap | In progress | Issue madre #228, GitHub Milestone #13 e questo documento. |
+| Setup milestone, issue madre e roadmap | Done | Issue madre #228, GitHub Milestone #13, PR #229 e questo documento. |
 | Audit parsing corrente | Todo | Leggere codice e test prima di modificare comportamento. |
 | Decidere grammatica e precedenza | Todo | Specificare `-c`, `--config`, `--`, `--print-config` e casi ambigui. |
 | Implementare parser minimo | Todo | Piccolo, testabile, nel livello applicazione. |
