@@ -18,6 +18,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Stato | Capitolo |
 | --- | --- |
 | Completo | `README.md` |
+| Completo | `README.it.md` |
 | Completo | `00-regole-operative.md` |
 | Completo | `01-panoramica-progetto.md` |
 | Completo | `02-architettura-generale.md` |
@@ -96,6 +97,9 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `docs/man/man1/alfred.1` |
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |
+| Parziale | `docs/man/it/man1/alfred.1` |
+| Parziale | `docs/man/it/man5/alfred.conf.5` |
+| Parziale | `docs/man/it/man7/alfred-events.7` |
 | Completo | `AGENTS.md` |
 | Parziale | `tests/exploratory/nightly/README.md` |
 
@@ -1909,3 +1913,14 @@ con JSONL opt-in, genera create/rename/dir create e valida `raw.log`,
 `events.log` e `output.jsonl`. Questo test e' una prova operativa user-facing:
 non sostituisce `test-core`, `test-backend-diagnostics`, `test-jsonl` o i
 benchmark manuali.
+
+Aggiornamento successivo: la issue figlia #220 chiude l'allineamento del
+README pubblico e delle pagine man inglesi. README, `alfred(1)`,
+`alfred.conf(5)` e `alfred-events(7)` descrivono lo stesso contratto operativo:
+CLI minima, `make smoke-mvp`, JSONL opt-in, `SESSION_CONTEXT`, Event Model v0 e
+limiti roadmap.
+
+Aggiornamento successivo: la issue figlia #222 apre la localizzazione italiana
+di fine milestone. `README.it.md` traduce il README pubblico corrente e
+`docs/man/it/man1`, `docs/man/it/man5`, `docs/man/it/man7` contengono le pagine
+man italiane consultabili con `man -l`.
