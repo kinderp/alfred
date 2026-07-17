@@ -129,6 +129,12 @@ architettura.
 Le misure di questo report sono state raccolte con:
 
 ```bash
+make perf-core-input
+```
+
+con:
+
+```bash
 make perf-record-sinks
 ```
 
@@ -150,6 +156,18 @@ Il run da `1000` record e' utile come smoke benchmark: verifica che tutte le
 righe funzionino anche con una dimensione piccola. Il run da `100000` record e'
 piu' utile per confrontare i percorsi perche' riduce il peso del rumore fisso
 del processo, del timer e della compilazione appena avvenuta.
+
+`make perf-core-input` usa il default corrente dello script:
+
+```text
+events=100000
+runs=1
+```
+
+Questo benchmark e' diverso dai benchmark record/sink: misura il percorso
+`alfred_raw_event_t -> alfred_process() -> callback semantica counter/no-op`.
+Serve come baseline raw-first per la milestone Core Input Model / Main Loop
+Migration v0.
 
 ## Avvertenze metodologiche
 
@@ -342,6 +360,7 @@ importante per non confrontare righe che misurano cose diverse.
 
 | Famiglia | Righe | Cosa isola | Confronti sensati |
 | --- | --- | --- | --- |
+| Core input | `core-input-raw-first` | Input raw sintetico verso `alfred_process()` con callback counter/no-op | Baseline per futuri bridge record/raw o core record-first; non confrontare direttamente con JSONL o runtime reale |
 | Baseline sink | `counter` | Costo minimo di attraversare un sink quasi vuoto | Confrontare con formatter e dispatcher per capire l'ordine di grandezza del lavoro non-I/O |
 | Formatter diretti | `text`, `jsonl` | Costo della serializzazione senza queue e senza dispatcher | Confrontare text vs JSONL e confrontare formatter diretti con dispatcher equivalenti |
 | Queue/ownership | `queue-counter` | Clone owned, push/pop queue e destroy senza formattazione | Confrontare con `counter` per stimare il costo del confine borrowed -> owned |
@@ -353,6 +372,7 @@ importante per non confrontare righe che misurano cose diverse.
 Regole pratiche:
 
 - `counter` e' una baseline, non una prestazione attesa di Alfred reale;
+- `core-input-raw-first` e' la baseline del core, non del writer runtime;
 - `text` e `jsonl` misurano soprattutto serializzazione e byte prodotti;
 - `queue-counter` misura il costo di sicurezza/lifetime del record owned;
 - `dispatcher-*` misura routing e fan-out senza ownership queue;
@@ -363,6 +383,15 @@ Regole pratiche:
   anche filesystem, shell, scheduler, startup, settle e shutdown.
 
 I confronti piu' utili per le decisioni architetturali sono:
+
+```text
+core-input-raw-first
+-> futuro bridge record/raw
+-> futuro core record-first
+```
+
+per decidere il Core Input Model / Main Loop Migration v0 senza confondere il
+costo del core con il costo dei writer;
 
 ```text
 counter
@@ -416,10 +445,12 @@ vanno letti per famiglia.
 
 | Campo | Famiglia | Come leggerlo in v0 |
 | --- | --- | --- |
+| `benchmark` | Identificativo core-input | Nome della riga benchmark per il core input, per esempio `core-input-raw-first`. |
 | `sink` | Identificativo sintetico | Nome della riga benchmark nei micro-benchmark. Serve a capire quale percorso viene misurato, per esempio `queue-dispatcher-jsonl`. |
 | `mode` | Identificativo runtime | Nome della modalita' runtime reale, per esempio `compat-only`, `counter-output` o `jsonl-output`. |
 | `run` | Identificativo runtime | Numero del run dentro una stessa modalita'. Oggi e' utile soprattutto quando aumenteremo `runs`. |
 | `records` | Dimensione workload sintetico | Numero di record sintetici generati dal micro-benchmark. Permette confronti solo fra righe con stesso `records` e stesso ambiente. |
+| `raw_events` | Dimensione workload core-input | Numero di `alfred_raw_event_t` sintetici passati a `alfred_process()` nel benchmark core input. |
 | `files` | Dimensione workload runtime | Numero di file creati dal benchmark runtime. Non equivale al numero di record: un file puo' generare piu' raw, eventi e record. |
 | `runs` | Ripetizioni sintetiche | Numero di ripetizioni aggregate dal micro-benchmark. Con `runs=1` i valori sono orientativi, non statistici. |
 | `min_us`, `avg_us`, `max_us` | Timing sintetico | Tempo minimo, medio e massimo dei micro-benchmark. Con `runs=1` coincidono e non descrivono una distribuzione. |
@@ -428,9 +459,14 @@ vanno letti per famiglia.
 | `settle_us` | Timing runtime | Tempo atteso/osservato per lasciare smaltire gli eventi e drenare output prima dello shutdown. |
 | `total_us` | Timing runtime | Tempo complessivo del run runtime. E' utile per confrontare modalita' runtime, ma include startup, workload, settle e shutdown. |
 | `records_per_sec_avg` | Throughput sintetico | Derivato da `records / avg_us`. E' utile per confronti relativi fra micro-benchmark compatibili, non come promessa di throughput reale. |
+| `raw_events_per_sec_avg` | Throughput core-input | Derivato da `raw_events / avg_us`. E' utile per confrontare raw-first con futuri bridge/core record-first nello stesso benchmark, non con runtime reale. |
 | `files_per_sec` | Throughput runtime | Derivato dal workload di file creati. Include costo esterno di shell/filesystem e non va confrontato direttamente con `records_per_sec_avg`. |
 | `bytes_last` | Output sintetico | Byte prodotti dall'ultima ripetizione del micro-benchmark. Aiuta a capire quanto output text/JSONL viene generato. |
 | `counter_total_last` | Output sintetico | Numero di record osservati dal counter sink nell'ultima ripetizione. Deve corrispondere al workload atteso nei percorsi counter. |
+| `semantic_events_last` | Output core-input | Numero di eventi semantici visti dalla callback counter/no-op nell'ultimo run. Puo' essere inferiore a `raw_events` perche' alcuni raw, come `MOVED_FROM`, sono stati intermedi. |
+| `process_errors_last` | Diagnostico core-input | Numero di chiamate `alfred_process()` fallite nell'ultimo run. Deve essere zero per considerare valida la riga. |
+| `conversions_per_event` | Diagnostico core-input | Numero dichiarato di conversioni bridge per evento. Nella baseline raw-first e' zero; servira' per confrontare bridge futuri. |
+| `output_mode` | Diagnostico core-input | Modalita' di callback usata dal benchmark core input. Per la baseline e' `counter-noop`, quindi nessuna formattazione o I/O. |
 | `raw_lines`, `event_lines` | Output runtime | Righe osservate nei log compatibili. Servono a verificare che il runtime abbia davvero visto e processato il workload. |
 | `jsonl_lines`, `jsonl_bytes` | Output runtime | Dimensione del ledger JSONL runtime. In `counter-output` devono restare a zero; in `jsonl-output` indicano il costo dell'output strutturato. |
 | `enqueue_attempts` | Queue/runtime | Record offerti alla pipeline strutturata. In `compat-only` e' zero perche' la pipeline output e' disabilitata. |
@@ -445,8 +481,8 @@ vanno letti per famiglia.
 
 Classificazione pratica:
 
-- campi identificativi: `sink`, `mode`, `run`, `artifact_dir`;
-- campi dimensione workload: `records`, `files`, `runs`;
+- campi identificativi: `benchmark`, `sink`, `mode`, `run`, `artifact_dir`;
+- campi dimensione workload: `raw_events`, `records`, `files`, `runs`;
 - campi temporali: `min_us`, `avg_us`, `max_us`, `startup_us`, `emit_us`,
   `settle_us`, `total_us`;
 - campi throughput: `records_per_sec_avg`, `files_per_sec`;
@@ -476,6 +512,7 @@ capito perche' il run non e' affidabile.
 
 | Riga CSV | Cosa misura | Perche' ci interessa |
 | --- | --- | --- |
+| `core-input-raw-first` | `alfred_raw_event_t -> alfred_process() -> callback counter/no-op` | Baseline del core input corrente prima di misurare bridge o record-first |
 | `counter` | `record -> counter sink` | Baseline minima senza formattazione e senza byte prodotti |
 | `text` | `record -> text formatter` | Costo del formato leggibile compatibile con i log attuali |
 | `jsonl` | `record -> JSONL formatter` | Costo della serializzazione strutturata JSONL |
@@ -492,6 +529,63 @@ capito perche' il run non e' affidabile.
 | `runtime-output compat-only` | `alfred reale -> inotify -> app callback -> log compatibili` | Baseline runtime reale senza pipeline JSONL |
 | `runtime-output counter-output` | `alfred reale -> inotify -> app callback -> output pipeline -> counter sink` | Baseline runtime reale della pipeline senza serializzazione e senza file JSONL |
 | `runtime-output jsonl-output` | `alfred reale -> inotify -> app callback -> output pipeline -> JSONL file` | Misura runtime reale con `output_enabled=true` e writer JSONL |
+
+## Misura 0: baseline core input raw-first
+
+Comando:
+
+```bash
+bash tests/perf/run_core_input.sh --events 100000 --runs 5
+```
+
+Questo run misura solo:
+
+```text
+alfred_raw_event_t
+-> alfred_process()
+-> callback semantica counter/no-op
+```
+
+Non usa inotify reale, filesystem I/O, record queue, dispatcher, JSONL, text
+writer o runtime app. Per questo e' la baseline corretta del core input model:
+servira' a confrontare un futuro bridge record/raw o un futuro core
+record-first.
+
+Il workload sintetico alterna create, close-write, modify, delete,
+directory create/delete, coppia move, moved-to senza sorgente e overflow. La
+callback conta soltanto gli eventi semantici. `MOVED_FROM` non produce subito
+un evento semantico, quindi `semantic_events_last` puo' essere inferiore a
+`raw_events`.
+
+Output da aggiornare a ogni refresh:
+
+```text
+benchmark,raw_events,runs,min_us,avg_us,max_us,raw_events_per_sec_avg,semantic_events_last,process_errors_last,conversions_per_event,output_mode
+core-input-raw-first,100000,5,160264,173843.40,188253,575230.35,90000,0,0,counter-noop
+```
+
+Lettura attesa:
+
+- `process_errors_last` deve restare `0`;
+- `conversions_per_event` deve restare `0` per la baseline raw-first;
+- `output_mode` deve restare `counter-noop`;
+- il valore `raw_events_per_sec_avg` va confrontato solo con benchmark futuri
+  che misurano lo stesso confine core input.
+
+Lettura del primo run:
+
+- il benchmark ha processato `100000` raw event sintetici;
+- la callback ha visto `90000` eventi semantici perche' ogni blocco da dieci
+  raw include un `MOVED_FROM`, che e' uno stato intermedio e non emette subito
+  un evento semantico;
+- `process_errors_last=0` rende valido il run;
+- `conversions_per_event=0` conferma che questa e' la baseline raw-first, senza
+  bridge record/raw;
+- `raw_events_per_sec_avg=575230.35` e' un valore orientativo su questa VM con
+  `runs=5`, non una soglia CI e non una promessa di throughput runtime reale.
+- la distanza tra `min_us=160264` e `max_us=188253` mostra gia' rumore di
+  misura; per una soglia futura serviranno run ripetuti e ambiente piu'
+  controllato.
 
 ## Misura 1: run da 100000 record
 

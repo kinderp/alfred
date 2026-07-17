@@ -260,6 +260,13 @@ perf:
 	@printf "  output pipeline. It isolates these costs from inotify,\n"
 	@printf "  filesystem I/O, sockets, threads, and real backpressure.\n"
 	@printf "\n"
+	@printf "make perf-core-input\n"
+	@printf "  Measures the raw-first core input baseline:\n"
+	@printf "  synthetic alfred_raw_event_t -> alfred_process() ->\n"
+	@printf "  semantic counter/no-op callback. It isolates core input\n"
+	@printf "  cost from JSONL, text writers, queues, runtime I/O and\n"
+	@printf "  the real inotify backend.\n"
+	@printf "\n"
 	@printf "make perf-runtime-output\n"
 	@printf "  Measures the real Alfred runtime with filesystem activity,\n"
 	@printf "  inotify, app callbacks, compatibility logs, and optional\n"
@@ -277,6 +284,9 @@ perf-lost-scope:
 
 perf-record-sinks:
 	cd tests/perf && bash run_record_sinks.sh
+
+perf-core-input:
+	cd tests/perf && bash run_core_input.sh
 
 perf-runtime-output: all
 	cd tests/perf && bash run_runtime_output.sh
@@ -369,6 +379,7 @@ banner:
 	perf \
 	perf-lost-scope \
 	perf-record-sinks \
+	perf-core-input \
 	valgrind \
 	gdb \
 	format \

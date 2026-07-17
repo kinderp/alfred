@@ -186,6 +186,18 @@ core input model. Prima di sostituire `app_poll_legacy_raw_backend_once()`
 servono benchmark mirati, test di equivalenza e documentazione di ownership,
 lifetime, rollback e numeri usati nella decisione.
 
+Aggiornamento successivo: la baseline raw-first del gate benchmark e' stata
+resa eseguibile con `make perf-core-input`. Il nuovo benchmark manuale
+`tests/perf/bench_core_input.c` misura solo
+`alfred_raw_event_t -> alfred_process() -> callback semantica counter/no-op`,
+senza inotify reale, filesystem I/O, JSONL, writer testuali, queue, dispatcher
+o runtime app. `34-report-benchmark-prestazioni.md` documenta la nuova riga
+CSV `core-input-raw-first`, i campi `raw_events`,
+`raw_events_per_sec_avg`, `semantic_events_last`, `process_errors_last`,
+`conversions_per_event` e `output_mode`, e chiarisce che questa baseline dovra'
+essere confrontata solo con futuri benchmark bridge/record-first sullo stesso
+confine core input.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
