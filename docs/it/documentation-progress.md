@@ -67,6 +67,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `47-inotify-reference-backend-mvp-closure-audit.md` |
 | Parziale | `48-core-input-main-loop-migration-v0.md` |
 | Parziale | `49-mvp-operational-usability-v0.md` |
+| Parziale | `50-cli-parser-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -1935,3 +1936,14 @@ Aggiornamento successivo: dopo il merge della PR #225, la issue madre #209 e la
 GitHub Milestone #12 sono state chiuse. Il registro cronologico marca
 `MVP operational usability v0` come `done` e la guida di lettura parla della
 milestone come esempio recente, non piu' come milestone corrente.
+
+## Aggiornamento CLI parser v0
+
+La nuova milestone operativa e' `CLI parser v0`, collegata alla GitHub
+Milestone #13 e alla issue madre #228. Il riferimento principale e'
+`50-cli-parser-v0.md`.
+
+La milestone nasce dal debito esplicito lasciato da `MVP operational usability
+v0`: `-c`, `--config`, `--print-config` e `--` non devono restare comportamenti
+impliciti o ambigui. Il setup documentale definisce scope, non-goal, grammatica
+proposta, precedenza config e test richiesti prima di toccare il codice.
