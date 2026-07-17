@@ -248,6 +248,13 @@ static int alfred_parse_args(int argc,
         }
 
         if (strcmp(arg, "-c") == 0 || strcmp(arg, "--config") == 0) {
+            if (options->command != ALFRED_CLI_RUNTIME) {
+                return alfred_report_parse_error(
+                    err,
+                    "option cannot follow no-runtime command",
+                    arg);
+            }
+
             if (seen_config) {
                 return alfred_report_parse_error(
                     err,
@@ -259,14 +266,6 @@ static int alfred_parse_args(int argc,
                 return alfred_report_parse_error(
                     err,
                     "option requires a value",
-                    arg);
-            }
-
-            if (options->command == ALFRED_CLI_HELP ||
-                options->command == ALFRED_CLI_VERSION) {
-                return alfred_report_parse_error(
-                    err,
-                    "option cannot be combined with",
                     arg);
             }
 

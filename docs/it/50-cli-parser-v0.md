@@ -243,6 +243,7 @@ dell'utente.
 | `alfred --version PATH` | Errore su `stderr`, exit non-zero. | `--version` e' comando esclusivo. |
 | `alfred -c a.conf --version` | Errore su `stderr`, exit non-zero. | `--version` non carica configurazione e non si combina con altre opzioni. |
 | `alfred --check-config PATH` | Errore su `stderr`, exit non-zero. | `--check-config` non deve avviare runtime e non valida path. |
+| `alfred --check-config -c a.conf` | Errore su `stderr`, exit non-zero. | I comandi no-runtime non accettano opzioni successive in v0; usare `alfred -c a.conf --check-config`. |
 | `alfred --print-config PATH` | Errore su `stderr`, exit non-zero, se `--print-config` viene implementato. | `--print-config` deve essere no-runtime in v0. |
 | `alfred PATH --config conf` | Errore su `stderr`, exit non-zero. | Le opzioni devono precedere i path; dopo un path un token `-...` resta ambiguo senza `--`. |
 | `alfred -tmp/root` | Errore su `stderr`, exit non-zero. | Path che iniziano con `-` devono passare dopo `--`. |

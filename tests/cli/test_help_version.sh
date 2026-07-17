@@ -383,6 +383,11 @@ assert_parser_rejects \
     --check-config "$TEST_DIR/watch-root"
 
 assert_parser_rejects \
+    "--check-config before -c" \
+    "^alfred: option cannot follow no-runtime command '-c'$" \
+    --check-config -c "$TEST_DIR/valid.conf"
+
+assert_parser_rejects \
     "option after path" \
     "^alfred: unexpected option after path '--config'$" \
     "$TEST_DIR/watch-root" --config "$TEST_DIR/valid.conf"
