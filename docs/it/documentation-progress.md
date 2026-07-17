@@ -219,6 +219,14 @@ record->core e senza core record-first. Il documento spiega perche' i benchmark
 attuali sono sufficienti per orientare ma non per migrare il percorso caldo, e
 definisce i criteri che dovranno essere veri per riaprire bridge o record-first.
 
+Aggiornamento successivo: la milestone `Core Input Model / Main Loop Migration
+v0` e' chiusa come milestone di decisione. `48-core-input-main-loop-migration-v0.md`
+riassume l'esito: percorso corrente mappato, benchmark gate scritto, baseline
+raw-first e misure adapter/sidecar eseguibili, piano test/contratto presente e
+decisione provvisoria raw-first registrata. La milestone non implementa
+runtime migration, bridge record->core o core record-first; questi lavori
+restano rimandati finche' non soddisfano i criteri di riapertura documentati.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
