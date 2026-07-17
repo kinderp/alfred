@@ -1892,3 +1892,11 @@ presente e valida `ALFRED_EVENT_ENGINE` se presente usando gli stessi helper di
 startup, ma termina prima di logger, backend, core, output pipeline e watch.
 La suite `tests/cli` copre ora configurazione valida, config file invalido,
 event engine invalido, stdout/stderr, exit status e assenza di log runtime.
+
+Aggiornamento successivo: la issue figlia #218 introduce lo smoke test MVP
+breve. Il nuovo target `make smoke-mvp` compila Alfred, verifica `--help`,
+`--version` e `--check-config`, avvia il runtime su una directory temporanea
+con JSONL opt-in, genera create/rename/dir create e valida `raw.log`,
+`events.log` e `output.jsonl`. Questo test e' una prova operativa user-facing:
+non sostituisce `test-core`, `test-backend-diagnostics`, `test-jsonl` o i
+benchmark manuali.
