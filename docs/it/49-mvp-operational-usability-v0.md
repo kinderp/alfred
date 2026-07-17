@@ -116,11 +116,11 @@ Le domande da chiudere sono:
 | Item | Stato | Note |
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #209, issue figlia #210 e PR #211 aprono la milestone. |
-| Audit CLI/user workflow corrente | In progress | Issue figlia #212. Confronta `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario. |
+| Audit CLI/user workflow corrente | Done | Issue figlia #212 e PR #213 hanno confrontato `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario prima delle modifiche CLI. |
 | Decidere CLI minima v0 | Done | La CLI informativa minima v0 e' `--help` + `--version`; `--check-config` resta step separato. |
 | Implementare comportamento selezionato | In progress | Issue figlia #214. `--help` e `--version` terminano prima di `app_init()`. |
 | Aggiungere test CLI/config | In progress | Issue figlia #214. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi. |
-| Allineare README e man page | Todo | Devono distinguere implementato vs roadmap. |
+| Allineare README e man page | In progress | Issue figlia #214 e PR #215 allineano `--help` e `--version`; il resto del contratto CLI/MVP resta da completare in step successivi. |
 | Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
 | Definire smoke test MVP | Todo | Un percorso breve: build, run su tmpdir, evento, log, JSONL opt-in. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
