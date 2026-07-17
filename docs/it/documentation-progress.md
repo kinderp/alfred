@@ -1855,3 +1855,25 @@ funzioni `alfred_move_insert()`, `alfred_move_take()` e `classify_move()`, e la
 regola che produce un solo evento semantico tra rename, move e relocate. Il
 lavoro resta documentation-only: nessun `trace.jsonl`, parser, UI, cambio
 record o cambio al percorso caldo.
+
+## Aggiornamento MVP operational usability v0
+
+La milestone corrente e' `MVP operational usability v0`, collegata alla GitHub
+Milestone #12 e alla issue madre #209. Il riferimento principale e'
+`49-mvp-operational-usability-v0.md`.
+
+Il primo audit operativo della CLI e' collegato alla issue figlia #212. Il
+documento fotografa il comportamento reale prima di introdurre opzioni nuove:
+`./alfred PATH...` e `ALFRED_CONFIG=FILE ./alfred PATH...` sono il percorso
+supportato; `--help`, `--version`, `-c`, `--config`, `--check-config` e `--`
+non sono ancora parserizzati e oggi verrebbero trattati come path. La
+raccomandazione e' implementare prima `--help` e `--version`, perche' possono
+terminare senza avviare logger, backend, core o output pipeline.
+
+La milestone ora registra anche un deliverable di fine lavoro richiesto dal
+maintainer: tradurre in italiano il README pubblico e le pagine man quando il
+contratto CLI/man page inglese sara' stabile. La traduzione non deve essere un
+semplice MD scollegato: le pagine man italiane dovranno vivere in un layout
+locale consultabile, per esempio `docs/man/it/man1`, `docs/man/it/man5` e
+`docs/man/it/man7`, cosi' un utente possa leggere la variante italiana quando
+usa un locale/lingua italiana o un path esplicito alla pagina man localizzata.
