@@ -27,6 +27,8 @@ In pratica significa:
 - chiarire la CLI corrente e decidere quali opzioni minime implementare ora;
 - distinguere bene opzioni implementate da opzioni roadmap;
 - allineare README, documentazione italiana e pagine man;
+- preparare, a fine milestone, la traduzione italiana del README pubblico e
+  delle pagine man quando il contratto CLI/man page inglese e' stabile;
 - definire un percorso di smoke test riproducibile per utenti e contributori;
 - mantenere chiaro cosa Alfred supporta oggi e cosa resta rimandato;
 - non riaprire decisioni appena chiuse sul core input model.
@@ -113,14 +115,101 @@ Le domande da chiudere sono:
 
 | Item | Stato | Note |
 | --- | --- | --- |
-| Setup milestone, issue madre e roadmap | In progress | Questo documento e la issue madre #209 aprono la milestone. |
-| Audit CLI/user workflow corrente | Todo | Confrontare `main.c`, `app`, README, man page e test. |
+| Setup milestone, issue madre e roadmap | Done | Issue madre #209, issue figlia #210 e PR #211 aprono la milestone. |
+| Audit CLI/user workflow corrente | In progress | Issue figlia #212. Confronta `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario. |
 | Decidere CLI minima v0 | Todo | Candidati: `--help`, `--version`, forse `--check-config`. |
 | Implementare comportamento selezionato | Todo | Solo dopo contratto e test focused. |
 | Aggiungere test CLI/config | Todo | Exit status, stdout/stderr, nessun backend avviato per comandi informativi. |
 | Allineare README e man page | Todo | Devono distinguere implementato vs roadmap. |
+| Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
 | Definire smoke test MVP | Todo | Un percorso breve: build, run su tmpdir, evento, log, JSONL opt-in. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
+
+## Audit CLI/user workflow corrente
+
+Questo audit fotografa il comportamento reale del binario prima di aggiungere
+opzioni nuove. Serve a evitare che README, pagine man o issue promettano una
+CLI diversa da quella implementata.
+
+### Percorso osservato nel codice
+
+Il percorso corrente e':
+
+```text
+app/src/main.c
+    -> app_init(&app, argc, argv)
+        -> config_defaults()
+        -> getenv("ALFRED_CONFIG")
+        -> config_load(), se ALFRED_CONFIG e' presente
+        -> getenv("ALFRED_EVENT_ENGINE")
+        -> logger_init()
+        -> backend init/start/target setup
+        -> argv[1..argc-1] come path posizionali da osservare
+    -> app_run()
+    -> app_shutdown()
+```
+
+Non esiste ancora un parser di opzioni. Di conseguenza, ogni argomento dopo il
+nome del programma viene trattato come path da osservare. Questo e' semplice e
+prevedibile, ma rende scomodi i casi base di un utente nuovo: `--help` e
+`--version` non stampano informazioni, perche' oggi vengono interpretati come
+path.
+
+### Comportamento osservato
+
+| Comando | Stato corrente | Interpretazione |
+| --- | --- | --- |
+| `./alfred /tmp/root` | Supportato | Avvia il runtime su una o piu' directory root. Il processo resta in esecuzione finche' riceve `SIGINT`/`SIGTERM` o incontra un errore runtime. |
+| `ALFRED_CONFIG=./alfred.conf ./alfred /tmp/root` | Supportato | Carica la configurazione prima di inizializzare logger, backend, core e output pipeline. |
+| `./alfred` | Fallisce con exit non-zero e `startup failed` | Non ci sono path da osservare. Il messaggio e' corretto come fallimento, ma non e' ancora amichevole come usage. |
+| `./alfred --help` | Fallisce con exit non-zero e `startup failed` | `--help` viene trattato come path, non come opzione informativa. |
+| `./alfred --version` | Fallisce con exit non-zero e `startup failed` | `--version` viene trattato come path, non come opzione informativa. |
+| `ALFRED_CONFIG=/file/mancante ./alfred /tmp/root` | Fallisce con `invalid ALFRED_CONFIG=...` e `startup failed` | La failure mode e' esplicita e deve restare coperta da test/documentazione. |
+| `./alfred -c conf /tmp/root` | Non implementato | `-c` e `conf` sarebbero trattati come path separati. |
+| `./alfred --config conf /tmp/root` | Non implementato | `--config` e `conf` sarebbero trattati come path separati. |
+| `./alfred --check-config` | Non implementato | Sarebbe trattato come path. |
+| `./alfred -- /tmp/root` | Non implementato | `--` sarebbe trattato come path, non come fine opzioni. |
+
+### Raccomandazione
+
+Il prossimo micro-step dovrebbe decidere e poi implementare il sottoinsieme CLI
+minimo, senza introdurre un parser complesso:
+
+1. `--help`: stampa uso breve su `stdout`, exit `0`, nessun logger/backend/core
+   inizializzato.
+2. `--version`: stampa versione su `stdout`, exit `0`, nessun logger/backend/core
+   inizializzato.
+3. `--check-config`: da valutare come step separato, perche' richiede definire
+   quale configurazione validare, quale precedenza usare e quali subsystem non
+   devono partire.
+
+`-c`/`--config` e `--` sono utili, ma toccano la semantica di parsing e la
+precedenza con `ALFRED_CONFIG`; conviene affrontarli dopo `--help` e
+`--version`.
+
+### Localizzazione README/man page
+
+La traduzione italiana va pianificata come lavoro di fine milestone, non come
+primo passo. Il motivo e' pratico: se traduciamo ora README e pagine man, poi
+dobbiamo aggiornare due volte anche la traduzione quando cambiano `--help`,
+`--version`, eventuale `--check-config` e lo smoke test MVP.
+
+Il deliverable corretto e':
+
+```text
+README pubblico inglese stabile
+    -> traduzione italiana coerente
+
+docs/man/man1/alfred.1 stabile
+docs/man/man5/alfred.conf.5 stabile
+docs/man/man7/alfred-events.7 stabile
+    -> pagine man italiane in layout locale, per esempio docs/man/it/man1,
+       docs/man/it/man5 e docs/man/it/man7
+```
+
+L'obiettivo non e' solo avere un `.md` tradotto: l'utente deve poter consultare
+le pagine italiane quando usa una lingua/locale italiano o quando passa
+esplicitamente il path alla pagina man italiana.
 
 ## Criteri di chiusura
 
