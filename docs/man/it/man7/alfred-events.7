@@ -1,0 +1,264 @@
+.TH ALFRED-EVENTS 7 "June 2026" "Alfred" "Architettura Alfred"
+.SH NAME
+alfred-events \- layer eventi Alfred, modello corrente e semantica supportata
+.SH DESCRIPTION
+Alfred separa fatti specifici del backend da eventi semantici stabili. Questa
+pagina descrive il modello runtime corrente e va letta insieme al documento
+italiano Event Model v0 in
+.IR docs/it/29-event-model-v0.md .
+Quel documento definisce il modello record strutturato basato su layer,
+category e type. Alfred usa gia' quel modello per il percorso record/sink
+cablato e per output JSONL v0 opt-in. Questa pagina man resta un contratto v0
+perche' il record model non e' una ABI plugin esterna stabile e non tutti i
+layer, backend o writer futuri esistono gia'.
+.SH EVENT LAYERS
+.SS Backend raw log
+Il backend raw log registra fatti vicini al backend del sistema operativo. Con
+il backend Linux inotify corrente, esempi sono:
+.EX
+IN_CREATE IN_ISDIR wd=1 path=/tmp/root name=dir
+IN_MOVED_FROM wd=1 path=/tmp/root name=old cookie=123
+IN_Q_OVERFLOW wd=-1 path= name=
+.EE
+Queste righe sono utili per debug e diagnostica backend. Non sono l'API stabile
+applicativa.
+.SS Alfred raw events
+L'adapter inotify converte fatti backend selezionati in record
+.B alfred_raw_event_t
+per il core. I flag raw correnti sono:
+.EX
+ALFRED_RAW_CREATE
+ALFRED_RAW_DELETE
+ALFRED_RAW_MODIFY
+ALFRED_RAW_ATTRIB
+ALFRED_RAW_CLOSE_WRITE
+ALFRED_RAW_MOVED_FROM
+ALFRED_RAW_MOVED_TO
+ALFRED_RAW_OVERFLOW
+ALFRED_RAW_ISDIR
+.EE
+.B ALFRED_RAW_ISDIR
+e' un modificatore, non un'azione. Una raw mask con solo modificatori non basta
+per dispatchare un evento al core.
+.SS Core semantic events
+Il core correla eventi raw ed emette eventi semantici stabili come:
+.EX
+FILE_CREATED
+DIR_CREATED
+FILE_DELETED
+DIR_DELETED
+FILE_MODIFIED
+FILE_READY
+FILE_RENAMED
+DIR_RENAMED
+FILE_MOVED
+DIR_MOVED
+FILE_RELOCATED
+DIR_RELOCATED
+OVERFLOW
+.EE
+Questi eventi sono la semantica filesystem visibile all'utente corrente.
+.SS Backend diagnostics
+Alcuni eventi descrivono lo stato del backend invece della semantica del dominio
+filesystem:
+.EX
+WATCH_ADDED
+WATCH_REMOVED
+WATCH_STALE
+WATCH_RESYNC_BEGIN
+WATCH_RESYNC_FAILED
+WATCH_LOST_QUEUED
+WATCH_LOST_RECOVERY_END
+.EE
+Sono importanti per test e operativita', ma non devono essere confusi con
+eventi file o directory.
+.SH CURRENT SEMANTIC RULES
+.TP
+.B create
+.B IN_CREATE
+diventa
+.B ALFRED_RAW_CREATE
+e poi
+.B FILE_CREATED
+o
+.B DIR_CREATED
+in base a
+.BR IN_ISDIR .
+.TP
+.B delete
+.B IN_DELETE
+diventa
+.B ALFRED_RAW_DELETE
+e poi
+.B FILE_DELETED
+o
+.BR DIR_DELETED .
+.TP
+.B modify
+.B IN_MODIFY
+diventa
+.B ALFRED_RAW_MODIFY
+e poi
+.BR FILE_MODIFIED .
+Il core puo' fare debounce di eventi modify ripetuti.
+.TP
+.B close-write
+.B IN_CLOSE_WRITE
+diventa
+.B ALFRED_RAW_CLOSE_WRITE
+e poi
+.BR FILE_READY .
+Non e' un duplicato di
+.BR FILE_MODIFIED ;
+significa che il writer ha chiuso il file dopo avere scritto.
+.TP
+.B move and rename
+.B IN_MOVED_FROM
+e
+.B IN_MOVED_TO
+sono correlati tramite cookie. Stesso parent e basename diverso diventa rename.
+Parent diverso e stesso basename diventa move. Parent diverso e basename
+diverso diventa relocated.
+.TP
+.B moved-to fallback
+Se
+.B IN_MOVED_TO
+arriva senza il corrispondente
+.BR IN_MOVED_FROM ,
+il core emette un fallback create perche' un oggetto e' entrato nell'albero
+osservato.
+.TP
+.B overflow
+.B IN_Q_OVERFLOW
+diventa
+.B ALFRED_RAW_OVERFLOW
+e poi
+.BR OVERFLOW .
+La recovery completa dopo overflow non e' completa.
+.SH INOTIFY AUDIT EVENTS
+Il backend corrente puo' richiedere questi eventi solo quando
+.B inotify_audit_events
+li abilita:
+.EX
+IN_OPEN
+IN_ACCESS
+IN_CLOSE_NOWRITE
+.EE
+Sono solo raw-log-only. Non diventano
+.B ALFRED_RAW_OPEN
+o eventi raw simili, e non producono eventi semantici core. Questo mantiene
+separata la semantica di mutazione filesystem dai futuri stream
+audit/guardrail.
+.SH SELF EVENTS AND WATCH STATE
+.B IN_MOVE_SELF ,
+.B IN_DELETE_SELF ,
+.B IN_IGNORED ,
+e
+.B IN_UNMOUNT
+descrivono l'oggetto osservato o lo stato del watch. Alfred li gestisce prima
+come stato backend.
+.TP
+.B IN_MOVE_SELF
+Marca il watch stale. Alfred non emette direttamente move, rename o relocated
+perche' inotify non fornisce il path destinazione. Resync o lost-scope recovery
+possono in seguito ripristinare copertura affidabile.
+.TP
+.B IN_DELETE_SELF
+Marca il watch stale e attende cleanup. Alfred oggi non emette direttamente una
+delete semantica dal self-event.
+.TP
+.B IN_IGNORED
+Significa che il kernel ha rimosso il watch. Alfred rimuove la watcher entry ed
+emette diagnostica di cleanup.
+.TP
+.B IN_UNMOUNT
+Marca il watch stale e attende cleanup del watch ignorato. Non viene trattato
+come delete semantica.
+.SH LOST-SCOPE RECOVERY
+Quando un watch stale conserva identita' filesystem utile, Alfred puo' accodare
+una richiesta di recovery ritardata. La recovery scansiona le root configurate
+per la stessa identita', aggiorna prefissi path se l'oggetto viene trovato,
+reinstalla watch mancanti e riporta il sottoalbero del watch a stato valido solo
+quando la copertura e' completa.
+.PP
+Il runtime corrente processa la recovery sincronicamente con batch piccoli. Un
+worker thread e tuning pubblico della recovery sono lavoro futuro.
+.SH EVENT MODEL V0
+Event Model v0 formalizza i record Alfred intorno a:
+.EX
+layer
+category
+type
+.EE
+Definisce anche campi comuni come:
+.EX
+schema_version
+event_id
+seq
+ts_monotonic_ns
+ts_wall_ns
+source_backend
+severity
+flags
+.EE
+JSONL, MessagePack, Protobuf, socket output, Alfred Lab e plugin backend
+dovrebbero essere costruiti su questo modello strutturato, non su stringhe log
+ad hoc. JSONL v0 usa gia' il modello record strutturato per i percorsi runtime
+attualmente cablati; MessagePack, Protobuf, socket output e plugin backend
+esterni restano lavoro futuro.
+.PP
+Il namespace record controllato ammette gia'
+.B diagnostic + lifecycle + SESSION_CONTEXT
+come nome del record metadata/sessione. Il payload JSONL usa
+.B workspace.root ,
+.B workspace.id
+e
+.B ledger.session_id
+per i campi C
+.B record.session.workspace_root ,
+.B record.session.workspace_id
+e
+.B record.session.ledger_session_id .
+Stringhe vuote sono trattate come assenti, oggetti vuoti sono omessi e il
+formatter rifiuta il payload session su record non-
+.B SESSION_CONTEXT .
+.PP
+A runtime, Alfred emette questo record una volta per run solo quando l'output
+strutturato e' abilitato e almeno un campo workspace/sessione e' configurato.
+Il record passa dalla stessa pipeline di output strutturato degli altri record,
+non viene scritto direttamente dall'applicazione. Se nessun campo
+workspace/sessione e' configurato, Alfred non emette record lifecycle metadata
+vuoto. Il runtime non aggiunge ancora arricchimento workspace/sessione per
+evento.
+.PP
+Per questa famiglia record, la tupla accettata e' volutamente stretta:
+.B SESSION_CONTEXT
+e' valida solo come
+.B diagnostic + lifecycle + SESSION_CONTEXT .
+Il formatter rifiuta lo stesso type sotto categorie filesystem/watch e rifiuta
+event type non correlati sotto la categoria lifecycle.
+.SH BACKEND API V0 CONTRACT DRAFT
+Backend API v0 e' una bozza di contratto interno per cablaggio backend futuro.
+Non e' ancora una ABI plugin esterna stabile, ma il descriptor minimo delle
+operazioni e' gia' compile-tested nel source tree.
+.PP
+Il validatore minimo delle operazioni backend rifiuta descriptor che non possono
+essere registrati in modo prevedibile. In v0, un descriptor operations e'
+invalido quando:
+.IP \(bu 2
+il descriptor operations e' NULL;
+.IP \(bu 2
+.B name
+e' NULL o vuoto;
+.IP \(bu 2
+.B api_version
+e' diverso dalla versione supportata da Alfred;
+.IP \(bu 2
+una callback obbligatoria e' assente.
+.PP
+Questa pagina resta una panoramica operativa. I contratti dettagliati e le
+limitazioni staged sono mantenuti nei documenti di design italiani.
+.SH SEE ALSO
+.BR alfred (1),
+.BR alfred.conf (5),
+.BR inotify (7)

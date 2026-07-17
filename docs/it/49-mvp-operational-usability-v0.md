@@ -120,8 +120,8 @@ Le domande da chiudere sono:
 | Decidere CLI minima v0 | Done | La CLI minima v0 include `--help`, `--version` e `--check-config`; `-c`/`--config`, `--print-config` e `--` restano step futuri. |
 | Implementare comportamento selezionato | Done | Issue figlie #214 e #216. `--help` e `--version` terminano prima di `app_init()`; `--check-config` valida configurazione e termina prima del runtime. |
 | Aggiungere test CLI/config | Done | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
-| Allineare README e man page | In progress | Issue figlie #214 e #216 allineano `--help`, `--version` e `--check-config`; issue figlia #220 chiude il passaggio piu' ampio su README, pagine man, JSONL opt-in, session context e smoke test prima della traduzione italiana. |
-| Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
+| Allineare README e man page | Done | Issue figlie #214, #216 e #220. README, `alfred(1)`, `alfred.conf(5)` e `alfred-events(7)` descrivono CLI minima, smoke test, JSONL opt-in, session context e roadmap/non-goal in modo coerente. |
+| Tradurre README e man page in italiano | In progress | Issue figlia #222. Dopo la stabilizzazione del testo inglese, aggiunge `README.it.md` e pagine man italiane in layout locale `docs/man/it/man1`, `docs/man/it/man5` e `docs/man/it/man7`. |
 | Definire smoke test MVP | Done | Issue figlia #218 e PR #219. Il percorso breve e' `make smoke-mvp`: build, CLI minima, runtime su tmpdir, eventi rappresentativi, log compatibili e JSONL opt-in. Merge di riferimento: 7421aed. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
 
@@ -207,6 +207,23 @@ docs/man/man7/alfred-events.7 stabile
 L'obiettivo non e' solo avere un `.md` tradotto: l'utente deve poter consultare
 le pagine italiane quando usa una lingua/locale italiano o quando passa
 esplicitamente il path alla pagina man italiana.
+
+### Dopo il completamento dell'MVP
+
+Quando l'MVP di Alfred sara' chiuso e il contratto operativo sara' piu' stabile,
+bisogna fare un passaggio documentale piu' ampio:
+
+1. usare la documentazione tecnica italiana consolidata per ampliare le pagine
+   man inglesi e italiane, evitando che restino solo un riferimento minimo;
+2. mantenere le pagine man concise ma piu' complete su configurazione, eventi,
+   JSONL, smoke test, limiti e troubleshooting;
+3. tradurre progressivamente `docs/it` in una futura `docs/en`, separando il
+   contenuto didattico stabile dalle note storiche o di roadmap;
+4. aggiornare README, indici, roadmap e pagine man nello stesso passaggio quando
+   cambia un contratto utente o contributore.
+
+Questa attivita' non fa parte del primo MVP operativo: e' un promemoria per la
+chiusura o il primo ciclo post-MVP, quando avremo meno churn sui testi tecnici.
 
 ## Smoke test MVP
 

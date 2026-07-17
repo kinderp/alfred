@@ -1,0 +1,203 @@
+.TH ALFRED 1 "June 2026" "Alfred" "Comandi utente"
+.SH NAME
+alfred \- motore eventi filesystem e futuro runtime guard per agenti AI
+.SH SYNOPSIS
+.B alfred
+.IR PATH ...
+.br
+.B ALFRED_CONFIG=FILE alfred
+.IR PATH ...
+.br
+.B alfred --help
+.br
+.B alfred --version
+.br
+.B alfred --check-config
+.SH DESCRIPTION
+.B alfred
+avvia il runtime Alfred e osserva una o piu' root filesystem.
+L'implementazione corrente usa il backend Linux
+.BR inotify (7),
+converte eventi backend in eventi raw Alfred, passa questi eventi raw al core
+correlator e scrive log leggibili da esseri umani.
+.PP
+La riga di comando corrente e' intenzionalmente piccola. Gli argomenti
+posizionali sono interpretati come path da osservare. Alfred implementa
+.B --help
+e
+.B --version
+come comandi informativi che terminano prima di inizializzare configurazione,
+logging, backend, core, output pipeline o watch.
+.B --check-config
+carica e valida la configurazione, poi termina prima di inizializzare logging,
+backend, core, output pipeline o watch. Alfred non implementa ancora
+.BR -c ,
+.BR --config ,
+.BR --print-config ,
+o
+.BR -- .
+La configurazione viene caricata tramite la variabile d'ambiente
+.B ALFRED_CONFIG .
+.PP
+Il runtime e' solo core. La modalita' storica shadow e' stata rimossa. Se la
+configurazione o l'ambiente chiedono
+.BR shadow ,
+lo startup fallisce invece di usare un fallback silenzioso.
+.SH ARGUMENTS
+.TP
+.B --help
+Stampa un breve uso su standard output e termina con stato 0. Questo comando
+non avvia il runtime e non crea log runtime.
+.TP
+.B --version
+Stampa informazioni di versione su standard output e termina con stato 0.
+Questo comando non avvia il runtime e non crea log runtime.
+.TP
+.B --check-config
+Valida default incorporati,
+.B ALFRED_CONFIG
+opzionale e
+.B ALFRED_EVENT_ENGINE
+opzionale con gli stessi helper usati dallo startup normale. In caso di
+successo stampa un breve messaggio su standard output e termina con stato 0. In
+caso di errore stampa una diagnostica esplicita su standard error e termina con
+stato non-zero. Questo comando non valida i path di watch di startup perche' non
+avvia backend o watch, e non crea log runtime.
+.TP
+.I PATH
+Root filesystem da osservare. Almeno un path e' richiesto per un run normale.
+Ogni path di startup viene passato al backend inotify, che installa un watch
+scoped alla directory e scopre ricorsivamente le sottodirectory quando la
+modalita' ricorsiva e' abilitata.
+.IP
+Il backend inotify corrente accetta solo directory root. Passare file regolari,
+symlink o altri path non-directory come root di startup fa fallire lo startup
+prima che Alfred riporti avvio completato o entri nell'event loop.
+.SH ENVIRONMENT
+.TP
+.B ALFRED_CONFIG
+Path verso un file di configurazione key-value. Se impostata, Alfred carica
+questo file dopo avere applicato i default incorporati. Una configurazione non
+valida fa fallire lo startup.
+.TP
+.B ALFRED_EVENT_ENGINE
+Hook di validazione di compatibilita'. L'unico valore accettato e'
+.BR core .
+Il valore
+.B shadow
+e' rifiutato perche' il dispatcher legacy non esiste piu'.
+.TP
+.B ALFRED_KEEP_TEST_LOGS
+Variabile usata dalla suite test del progetto per conservare file di log
+temporanei dopo un test. Non e' una funzionalita' runtime generale del binario
+Alfred.
+.SH CONFIGURATION
+Alfred legge file di configurazione semplici
+.B key=value .
+Le righe vuote e quelle che iniziano con
+.B #
+sono ignorate. Le chiavi sconosciute sono ignorate per permettere evoluzione
+dei file di configurazione.
+.PP
+Le chiavi comuni sono documentate in
+.BR alfred.conf (5).
+.SH LOG FILES
+Di default Alfred scrive i seguenti file nella directory corrente:
+.TP
+.B raw.log
+Log raw backend leggibile. Per il backend inotify contiene nomi di eventi Linux
+inotify come
+.BR IN_CREATE ,
+.BR IN_MOVED_FROM ,
+o
+.BR IN_Q_OVERFLOW .
+.TP
+.B events.log
+Log eventi leggibile. Contiene eventi semantici core come
+.B FILE_CREATED
+e
+.BR DIR_RELOCATED ,
+e diagnostica backend come
+.B WATCH_ADDED
+o
+.BR WATCH_STALE .
+.TP
+.B errors.log
+Log di errori e diagnostica di fallimento.
+.SH EXIT STATUS
+.TP
+.B 0
+Il processo e' terminato normalmente.
+.TP
+.B non-zero
+Startup, configurazione, inizializzazione backend, installazione watch o
+processing runtime sono falliti.
+.SH EXAMPLES
+.TP
+Mostra uso:
+.EX
+alfred --help
+.EE
+.TP
+Mostra versione:
+.EX
+alfred --version
+.EE
+.TP
+Valida la configurazione di default senza avviare il runtime:
+.EX
+alfred --check-config
+.EE
+.TP
+Valida un file di configurazione esplicito senza avviare il runtime:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred --check-config
+.EE
+.TP
+Osserva una directory con i default:
+.EX
+alfred /tmp/project
+.EE
+.TP
+Osserva due root:
+.EX
+alfred /tmp/project /tmp/other-root
+.EE
+.TP
+Carica configurazione da file:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.TP
+Abilita output JSONL additivo:
+.EX
+cat > alfred.conf <<'EOF'
+output_enabled=true
+output_format=jsonl
+output_log=output.jsonl
+EOF
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.TP
+Abilita eventi audit inotify nel raw log:
+.EX
+cat > alfred.conf <<'EOF'
+inotify_audit_events=open,access,close-nowrite
+EOF
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.SH CURRENT LIMITATIONS
+.PP
+Alfred oggi ha output JSONL opt-in per il percorso record strutturato gia'
+cablato, ma non ha output binario stabile, ABI plugin pubblica, backend
+fanotify o eBPF, ne' policy engine di produzione. Questi sono elementi di
+roadmap.
+.PP
+Il backend inotify corrente puo' osservare effetti filesystem, ma non e' un
+meccanismo generale di enforcement preventivo. Bloccare prima di
+un'operazione richiedera' un backend o un meccanismo sandbox con capability di
+permesso/enforcement.
+.SH SEE ALSO
+.BR alfred.conf (5),
+.BR alfred-events (7),
+.BR inotify (7)

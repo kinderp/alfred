@@ -1,0 +1,312 @@
+.TH ALFRED.CONF 5 "June 2026" "Alfred" "Formati file"
+.SH NAME
+alfred.conf \- file di configurazione runtime di Alfred
+.SH DESCRIPTION
+Un file di configurazione Alfred e' un file di testo semplice contenente record
+.B key=value .
+.PP
+Le righe vuote sono ignorate. Le righe il cui primo carattere e'
+.B #
+sono ignorate. Le chiavi sconosciute sono ignorate, cosi' file di
+configurazione piu' nuovi restano in parte compatibili con binari piu' vecchi.
+I valori non sono quotati dal parser; il testo dopo il primo
+.B =
+viene usato come valore.
+.PP
+Il file viene caricato solo quando la variabile d'ambiente
+.B ALFRED_CONFIG
+punta al file:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.SH BOOLEAN VALUES
+I valori booleani true sono:
+.EX
+1
+true
+yes
+on
+.EE
+Ogni altro valore e' trattato come false.
+.SH GENERAL KEYS
+.TP
+.B recursive
+Alias di
+.BR inotify_recursive .
+Controlla l'osservazione ricorsiva delle directory per il backend inotify.
+.TP
+.B use_epoll
+Riservato per un futuro event loop basato su epoll. Il runtime corrente non usa
+un loop epoll.
+.TP
+.B flush_immediately
+Quando true, i log stream vengono flushati dopo le scritture. Il default e'
+true per migliorare visibilita' durante sviluppo e failure.
+.TP
+.B output_enabled
+Flag opt-in per il record output runtime. Il default e' false.
+Quando false, Alfred mantiene il percorso di compatibilita' corrente tramite
+.BR raw.log ,
+.BR events.log ,
+e
+.BR errors.log .
+Quando true con
+.BR output_format=jsonl ,
+Alfred scrive output JSONL additivo attraverso il percorso
+.B record -> queue -> dispatcher -> writer
+preservando i log di compatibilita'. Quando true con
+.BR output_format=counter ,
+Alfred instrada i record attraverso lo stesso confine queue/dispatcher e li
+conta senza formattare JSONL o scrivere un file di output. Questo serve ai
+benchmark, non e' un formato utente.
+.TP
+.B output_format
+Formato writer per l'output runtime. I valori supportati sono
+.B text
+.BR jsonl ,
+e
+.BR counter .
+Il default e'
+.BR jsonl .
+Valori non supportati fanno fallire il caricamento configurazione. Il runtime
+corrente puo' abilitare
+.B jsonl
+come writer utente e
+.B counter
+come writer no-op per benchmark.
+.B text
+e' riservato a configurazioni disabilitate o future.
+.TP
+.B output_buffer_size
+Dimensione in byte del buffer per writer buffered come JSONL. Il default e'
+.BR 65536 .
+Valori minori di
+.B 8192
+o non numerici fanno fallire il caricamento configurazione.
+.TP
+.B output_log
+Path dell'output JSONL append-only usato quando
+.B output_enabled=true
+e
+.BR output_format=jsonl .
+Non viene aperto quando
+.BR output_format=counter .
+Il default e'
+.BR output.jsonl .
+.TP
+.B workspace_root
+Boundary filesystem workspace dichiarato opzionale per il run Alfred corrente.
+E' contesto runtime, non evidenza backend e non decisione policy. Alfred non
+inferisce questo valore dai path osservati. Se presente, il valore deve essere
+una stringa non vuota. Un valore vuoto fa fallire il caricamento
+configurazione. Quando
+.B output_enabled=true
+usa
+.BR output_format=jsonl ,
+Alfred pubblica questo valore una sola volta nel record metadata JSONL
+.B SESSION_CONTEXT
+invece di copiarlo su ogni evento filesystem. Con
+.BR output_format=counter ,
+il runtime puo' instradare lo stesso record metadata verso il sink counter di
+benchmark, ma non viene scritto alcun file JSONL.
+.TP
+.B workspace_id
+Label opaca opzionale di correlazione workspace per il run Alfred corrente. Il
+valore non e' interpretato come path o hash da Alfred v0. Se presente, deve
+essere una stringa non vuota che entra nel buffer identificatore definito
+dall'implementazione. Valori vuoti o troppo grandi fanno fallire il caricamento
+configurazione. Con
+.BR output_format=jsonl ,
+Alfred pubblica questo valore una sola volta in
+.BR SESSION_CONTEXT .
+.TP
+.B ledger_session_id
+Label opaca opzionale di correlazione ledger/run per il run Alfred corrente.
+Non e' un agent session id e non prova attribuzione a processo o agente AI. Se
+presente, deve essere una stringa non vuota che entra nel buffer identificatore
+definito dall'implementazione. Valori vuoti o troppo grandi fanno fallire il
+caricamento configurazione. Con
+.BR output_format=jsonl ,
+Alfred pubblica questo valore una sola volta in
+.BR SESSION_CONTEXT .
+.TP
+.B watcher_capacity
+Alias di
+.BR inotify_watcher_capacity .
+Capacita' iniziale della tabella watcher.
+.TP
+.B event_engine
+Selettore del motore semantico conservato solo per validazione. L'unico valore
+supportato e'
+.BR core .
+Il valore storico
+.B shadow
+e' invalido.
+.TP
+.B raw_log
+Path del log raw backend. Default:
+.BR raw.log .
+.TP
+.B event_log
+Path del log eventi semantici/diagnostici. Default:
+.BR events.log .
+.TP
+.B error_log
+Path del log errori. Default:
+.BR errors.log .
+.SH INOTIFY KEYS
+.TP
+.B inotify_recursive
+Booleano. Abilita installazione ricorsiva dei watch per directory. Default:
+.BR true .
+.TP
+.B inotify_watcher_capacity
+Capacita' iniziale della tabella watcher inotify. Valori numerici invalidi
+mantengono il valore precedente. Default:
+.BR 128 .
+.TP
+.B inotify_watch_mask
+Espressione comma-separated della subscription mask inotify.
+.PP
+Una lista semplice parte da una mask vuota:
+.EX
+inotify_watch_mask=IN_CREATE,IN_DELETE,IN_MODIFY
+.EE
+.PP
+Il token
+.B default
+parte dalla mask di default definita dal backend Alfred:
+.EX
+inotify_watch_mask=default,-IN_ATTRIB
+.EE
+.PP
+I token prefissati con
+.B +
+sono aggiunti. I token prefissati con
+.B -
+sono rimossi.
+.PP
+I token supportati sono:
+.EX
+IN_ATTRIB
+IN_CLOSE_WRITE
+IN_CREATE
+IN_DELETE
+IN_DELETE_SELF
+IN_MODIFY
+IN_MOVE_SELF
+IN_MOVED_FROM
+IN_MOVED_TO
+IN_UNMOUNT
+IN_IGNORED
+IN_Q_OVERFLOW
+.EE
+.PP
+Token sconosciuti fanno fallire il caricamento configurazione.
+.TP
+.B inotify_audit_events
+Nomi policy audit opt-in comma-separated. Non sono intenzionalmente token raw
+.B IN_* .
+I valori supportati sono:
+.EX
+off
+open
+access
+close-nowrite
+open,access,close-nowrite
+.EE
+.PP
+Gli eventi audit sono visibili solo in
+.BR raw.log .
+Non diventano eventi
+.B ALFRED_RAW_*
+e non producono eventi semantici core.
+.SH DEFAULTS
+I default correnti sono:
+.EX
+inotify_recursive=true
+inotify_watcher_capacity=128
+inotify_audit_events=off
+event_engine=core
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+raw_log=raw.log
+event_log=events.log
+error_log=errors.log
+flush_immediately=true
+use_epoll=false
+.EE
+.PP
+La mask inotify di default e' definita dal backend inotify e include eventi
+filesystem, self-events, cleanup di watch ignorati, unmount e diagnostica
+overflow che Alfred comprende oggi.
+.SH EXAMPLES
+.TP
+Disabilita osservazione attributi:
+.EX
+inotify_watch_mask=default,-IN_ATTRIB
+.EE
+.TP
+Usa path log personalizzati:
+.EX
+raw_log=/tmp/alfred.raw.log
+event_log=/tmp/alfred.events.log
+error_log=/tmp/alfred.errors.log
+.EE
+.TP
+Abilita eventi audit solo nel raw log:
+.EX
+inotify_audit_events=open,access,close-nowrite
+.EE
+.TP
+Mantieni disabilitato l'output JSONL opzionale:
+.EX
+output_enabled=false
+output_format=jsonl
+output_buffer_size=65536
+output_log=output.jsonl
+.EE
+.TP
+Abilita output JSONL additivo:
+.EX
+output_enabled=true
+output_format=jsonl
+output_buffer_size=65536
+output_log=/tmp/alfred.output.jsonl
+.EE
+.TP
+Abilita il percorso benchmark counter runtime:
+.EX
+output_enabled=true
+output_format=counter
+.EE
+.TP
+Dichiara contesto runtime workspace/sessione:
+.EX
+workspace_root=/home/user/project
+workspace_id=ws-local-project
+ledger_session_id=ls-local-run
+.EE
+.PP
+Questi valori sono conservati come contesto runtime posseduto
+dall'applicazione. Quando
+.B output_enabled=true
+e
+.BR output_format=jsonl ,
+Alfred li scrive una volta in un record metadata
+.B SESSION_CONTEXT .
+Con output disabilitato, o con
+.BR output_format=counter ,
+non viene scritto alcun file JSONL utente. Questi valori non abilitano Agent
+Guard, policy, blocking, decisioni would-block, attribuzione processo o
+osservazione di rete.
+.SH NOTES
+Questo formato file e' intenzionalmente semplice e non ha ancora direttive
+include, sezioni, regole di quoting, espansione variabili o precedenza di
+override CLI.
+.SH SEE ALSO
+.BR alfred (1),
+.BR alfred-events (7),
+.BR inotify (7)

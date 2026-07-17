@@ -5,8 +5,9 @@ Alfred is a Linux filesystem event engine written in C.
 It watches one or more directory trees with `inotify`, records backend raw
 facts, and emits a semantic event stream through a dedicated core engine.
 
-The project is currently documented in Italian because it is also used as a
-teaching codebase. English documentation will be added later.
+The project is currently documented mostly in Italian because it is also used
+as a teaching codebase. An Italian translation of this public README is
+available in [README.it.md](README.it.md).
 
 ## Status
 
@@ -221,8 +222,15 @@ Draft manual pages are available locally:
 - [alfred.conf(5)](docs/man/man5/alfred.conf.5)
 - [alfred-events(7)](docs/man/man7/alfred-events.7)
 
+Italian manual-page translations are available locally:
+
+- [alfred(1) in Italian](docs/man/it/man1/alfred.1)
+- [alfred.conf(5) in Italian](docs/man/it/man5/alfred.conf.5)
+- [alfred-events(7) in Italian](docs/man/it/man7/alfred-events.7)
+
 They can be read with `man -l docs/man/man1/alfred.1`, `man -l
-docs/man/man5/alfred.conf.5`, and `man -l docs/man/man7/alfred-events.7`.
+docs/man/man5/alfred.conf.5`, `man -l docs/man/man7/alfred-events.7`, or the
+corresponding paths under `docs/man/it/`.
 
 Code browsing tools are documented separately:
 
