@@ -36,6 +36,9 @@ jobs:
       - name: Run CLI tests
         run: make test-cli
 
+      - name: Run MVP smoke test
+        run: make smoke-mvp
+
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
 
@@ -54,3 +57,4 @@ jobs:
             tests/backend/*.log
             tests/jsonl/*.log
             tests/jsonl/*.jsonl
+            /tmp/alfred_mvp_smoke.*/**

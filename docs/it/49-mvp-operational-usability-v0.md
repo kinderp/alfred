@@ -122,7 +122,7 @@ Le domande da chiudere sono:
 | Aggiungere test CLI/config | In progress | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
 | Allineare README e man page | In progress | Issue figlie #214 e #216 allineano `--help`, `--version` e `--check-config`; il resto del contratto CLI/MVP resta da completare in step successivi. |
 | Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
-| Definire smoke test MVP | Todo | Un percorso breve: build, run su tmpdir, evento, log, JSONL opt-in. |
+| Definire smoke test MVP | In progress | Issue figlia #218. Il percorso breve e' `make smoke-mvp`: build, CLI minima, runtime su tmpdir, eventi rappresentativi, log compatibili e JSONL opt-in. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
 
 ## Audit CLI/user workflow corrente
@@ -207,6 +207,51 @@ docs/man/man7/alfred-events.7 stabile
 L'obiettivo non e' solo avere un `.md` tradotto: l'utente deve poter consultare
 le pagine italiane quando usa una lingua/locale italiano o quando passa
 esplicitamente il path alla pagina man italiana.
+
+## Smoke test MVP
+
+Il percorso breve della milestone e':
+
+```bash
+make smoke-mvp
+```
+
+Questo comando non e' la suite completa e non e' un benchmark. Serve come prova
+operativa minima per un utente o contributore che vuole capire se l'MVP corrente
+funziona end-to-end.
+
+La ricetta fa queste cose:
+
+1. compila Alfred;
+2. verifica i comandi informativi `--help`, `--version` e `--check-config`;
+3. crea una configurazione temporanea con `output_enabled=true`,
+   `output_format=jsonl` e `output_log=output.jsonl`;
+4. avvia Alfred su una directory temporanea reale;
+5. crea un file, lo rinomina e crea una directory;
+6. ferma il runtime con `SIGINT`;
+7. controlla che esistano `raw.log`, `events.log` e `output.jsonl`;
+8. valida righe rappresentative nei log compatibili e record JSONL parseabili.
+
+Questa prova dimostra che il percorso utente minimo e' ancora sano:
+
+```text
+CLI minima
+    -> configurazione output JSONL
+    -> runtime inotify reale
+    -> raw.log compatibile
+    -> events.log compatibile
+    -> output.jsonl strutturato
+```
+
+Non dimostra invece copertura completa di rename/move/relocate, overflow,
+diagnostica backend, golden JSONL, recovery lost-scope o prestazioni. Quei
+contratti restano protetti dalle suite dedicate e dai benchmark manuali.
+
+Per conservare gli artifact:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make smoke-mvp
+```
 
 ## Criteri di chiusura
 

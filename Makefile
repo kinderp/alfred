@@ -229,6 +229,7 @@ run: all
 # test-cli checks user-facing informational commands and exit behavior.
 # test-backend-diagnostics checks backend health logs that are not semantics.
 # test-jsonl checks the structured external output contract.
+# smoke-mvp runs the short user-facing MVP smoke recipe.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
 
@@ -255,6 +256,9 @@ test-scanner:
 
 test-watcher:
 	cd tests/watcher && bash run_all.sh
+
+smoke-mvp: all
+	cd tests/smoke && bash mvp_smoke.sh
 
 perf:
 	@printf "Manual Alfred performance targets\n"
@@ -382,6 +386,7 @@ banner:
 	test-scanner \
 	test-watcher \
 	test-backend-diagnostics \
+	smoke-mvp \
 	perf \
 	perf-lost-scope \
 	perf-record-sinks \

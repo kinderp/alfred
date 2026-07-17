@@ -142,6 +142,18 @@ Run CLI tests:
 make test-cli
 ```
 
+Run the short MVP smoke test:
+
+```bash
+make smoke-mvp
+```
+
+This builds Alfred, checks `--help`, `--version` and `--check-config`, runs the
+runtime on a temporary directory with JSONL output enabled, creates a file,
+renames it, creates a directory, and validates `raw.log`, `events.log` and
+`output.jsonl`. It is a user-facing sanity check, not a replacement for the
+full core, backend or JSONL suites.
+
 Run backend diagnostics:
 
 ```bash
@@ -154,8 +166,8 @@ Run scanner component tests:
 make test-scanner
 ```
 
-The CI workflow runs build, core, CLI, backend diagnostic and JSONL tests on
-pull requests targeting `main` and on pushes to `main`.
+The CI workflow runs build, core, CLI, MVP smoke, backend diagnostic and JSONL
+tests on pull requests targeting `main` and on pushes to `main`.
 
 To preserve runtime logs while debugging tests locally:
 

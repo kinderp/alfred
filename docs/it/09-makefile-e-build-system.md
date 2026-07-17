@@ -1282,6 +1282,66 @@ in parallelo ai test testuali. Il suo scopo e' verificare che i comportamenti
 pubblici importanti siano rappresentati come record JSONL parseabili e stabili,
 mentre i log compatibili continuano a essere prodotti per debug e didattica.
 
+### smoke-mvp
+
+```bash
+make smoke-mvp
+```
+
+Il target ricostruisce il binario e lancia:
+
+```text
+tests/smoke/mvp_smoke.sh
+```
+
+Questo e' il test breve pensato per rispondere alla domanda di un nuovo utente:
+"l'MVP corrente parte davvero e produce i file principali che mi aspetto?".
+
+La ricetta esegue un percorso reale ma piccolo:
+
+```text
+make all
+    |
+    v
+./alfred --help
+./alfred --version
+./alfred --check-config
+    |
+    v
+avvio runtime su /tmp/alfred_mvp_smoke.XXXXXX/watch
+    |
+    v
+creazione file -> rename file -> creazione directory
+    |
+    v
+verifica raw.log, events.log e output.jsonl
+```
+
+I controlli principali sono:
+
+- i comandi CLI minimi terminano con successo;
+- Alfred parte su una directory temporanea reale;
+- `output_enabled=true` e `output_format=jsonl` producono `output.jsonl`;
+- `raw.log` contiene almeno il raw create rappresentativo;
+- `events.log` contiene eventi semantici come `FILE_CREATED`, `FILE_READY`,
+  `FILE_RENAMED` e `DIR_CREATED`;
+- `output.jsonl` e' parseabile come JSONL e contiene record rappresentativi
+  normalizzati e semantici.
+
+`smoke-mvp` non sostituisce `test-core`, `test-backend-diagnostics` o
+`test-jsonl`. Controlla pochi eventi rappresentativi per capire rapidamente se
+il prodotto e' usabile end-to-end. Non e' nemmeno un benchmark: non misura
+throughput, latenza, memoria o costo del percorso caldo.
+
+Per debug locale si puo' conservare la directory temporanea:
+
+```bash
+ALFRED_KEEP_TEST_LOGS=1 make smoke-mvp
+```
+
+In quel caso lo script stampa dove ha lasciato gli artifact. Nei run normali la
+directory temporanea viene rimossa automaticamente.
+
 ### test
 
 ```bash
@@ -1320,6 +1380,7 @@ Nel progetto sono phony target come:
 - `test-jsonl`
 - `test-scanner`
 - `test-watcher`
+- `smoke-mvp`
 - `format`
 - `scan`
 - `tidy`
@@ -1421,6 +1482,7 @@ Esegue `clang-tidy`, un altro strumento di analisi statica.
 | Build ottimizzata | `make release` |
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
+| Eseguire smoke test MVP breve | `make smoke-mvp` |
 | Eseguire diagnostica backend inotify | `make test-backend-diagnostics` |
 | Eseguire test scanner filesystem | `make test-scanner` |
 | Eseguire test watcher table | `make test-watcher` |
