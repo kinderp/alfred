@@ -342,9 +342,20 @@ Esempi minimi:
 ./alfred -c missing.conf --check-config
 ./alfred -c
 ./alfred --config
+./alfred -c a.conf -c b.conf /tmp/root
+./alfred -c a.conf --config b.conf /tmp/root
 ./alfred --unknown
 ./alfred -- /tmp/root
 ./alfred -c valid.conf -- /tmp/root
+./alfred --help /tmp/root
+./alfred -c valid.conf --help
+./alfred --version /tmp/root
+./alfred -c valid.conf --version
+./alfred --check-config /tmp/root
+./alfred --print-config /tmp/root   # se --print-config viene implementato
+./alfred /tmp/root --config valid.conf
+./alfred -tmp/root
+./alfred --
 ```
 
 Ogni test deve controllare:
