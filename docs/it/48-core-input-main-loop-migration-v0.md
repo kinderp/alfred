@@ -673,6 +673,7 @@ ma rispondono a domande diverse.
 | --- | --- | --- |
 | `core-input-raw-first` | costo baseline di `alfred_raw_event_t -> alfred_process() -> callback counter/no-op` | costo di JSONL, output runtime, backend reale o record-first non ancora implementato |
 | `raw-to-record-adapter` | costo isolato di `alfred_record_from_raw()` sullo stesso workload raw sintetico | costo di un bridge completo record->core o di un core record-first |
+| `raw-to-record-plus-core` | costo di produrre un record normalizzato con `alfred_record_from_raw()` e poi alimentare il core raw-first con `alfred_process()` sullo stesso raw sintetico | costo di un bridge completo record->core, output runtime o core record-first |
 | `queue-dispatcher-jsonl` | costo di queue, dispatcher e JSONL su record gia' disponibili | costo di cambiare input del core |
 | `output-pipeline-jsonl` | costo della pipeline output integrata con JSONL | equivalenza fra raw-first e record-first |
 | counter/output runtime | costo minimo della pipeline output senza formattazione pesante | costo di un bridge record/raw a monte del core |

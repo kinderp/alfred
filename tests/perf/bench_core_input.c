@@ -16,8 +16,9 @@
  *
  * Output columns:
  *
- * - benchmark: benchmark row name. For this file it is
- *   core-input-raw-first.
+ * - benchmark: benchmark row name. This file currently emits:
+ *   core-input-raw-first, raw-to-record-adapter, and
+ *   raw-to-record-plus-core.
  * - raw_events: number of raw input events passed to alfred_process() in each
  *   run.
  * - runs: number of repeated measurements.
@@ -28,12 +29,14 @@
  *   matching MOVED_TO arrives.
  * - errors_last: number of alfred_process() failures or adapter conversion
  *   failures in the last run. It must be zero for a valid benchmark row.
- * - conversions_per_event: raw-first performs no record/raw bridge conversion,
- *   so this baseline reports 0. Future bridge benchmarks can use the same
- *   column to make conversion cost visible.
- * - output_mode: always counter-noop; the callback increments counters only.
- *   The raw-to-record adapter row uses adapter-only because it has no semantic
- *   callback.
+ * - conversions_per_event: raw-first performs no record conversion, so the
+ *   baseline reports 0. Rows that call alfred_record_from_raw() report 1.
+ *   Future bridge benchmarks can use the same column to make conversion cost
+ *   visible.
+ * - output_mode: counter-noop means the semantic callback only increments
+ *   counters; adapter-only means raw->record conversion without a semantic
+ *   callback; counter-noop+adapter means raw->record conversion plus the
+ *   current raw-first semantic core path.
  *
  * The numbers are useful for local comparisons on the same machine. They are
  * not CI thresholds and do not represent real inotify runtime throughput.
@@ -233,6 +236,58 @@ static int run_raw_to_record_adapter_once(size_t raw_events,
     return 0;
 }
 
+static int run_raw_to_record_plus_core_once(size_t raw_events,
+                                            bench_run_result_t *result)
+{
+    alfred_config_t config;
+    alfred_engine_t *engine;
+    bench_callback_context_t context;
+    uint64_t start_ns;
+    uint64_t end_ns;
+    size_t errors = 0u;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    memset(&context, 0, sizeof(context));
+    alfred_config_default(&config);
+    config.modify_debounce_ms = 0u;
+
+    engine = alfred_create(&config, count_semantic_event, &context);
+    if (engine == NULL) {
+        return -1;
+    }
+
+    start_ns = now_ns();
+
+    for (size_t i = 0; i < raw_events; i++) {
+        alfred_raw_event_t raw = make_raw_event(i);
+        alfred_record_t record;
+
+        if (alfred_record_from_raw(&raw, &record) != 0) {
+            errors++;
+        }
+        if (alfred_process(engine, &raw) != 0) {
+            errors++;
+        }
+    }
+
+    if (alfred_flush(engine) != 0) {
+        errors++;
+    }
+
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->semantic_events = context.semantic_events;
+    result->errors = errors;
+
+    alfred_destroy(engine);
+
+    return 0;
+}
+
 static int parse_size_arg(const char *value, const char *name, size_t *out)
 {
     char *end = NULL;
@@ -375,6 +430,16 @@ int main(int argc, char **argv)
                       runs,
                       1u,
                       "adapter-only") != 0) {
+        fprintf(stderr, "core input benchmark failed\n");
+        return 1;
+    }
+
+    if (run_benchmark("raw-to-record-plus-core",
+                      run_raw_to_record_plus_core_once,
+                      raw_events,
+                      runs,
+                      1u,
+                      "counter-noop+adapter") != 0) {
         fprintf(stderr, "core input benchmark failed\n");
         return 1;
     }
