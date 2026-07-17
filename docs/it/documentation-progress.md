@@ -206,6 +206,13 @@ misurare il costo sidecar di produrre il record normalizzato mentre il core
 resta raw-first. Anche questa riga non implementa ancora un bridge completo,
 un core record-first o una migrazione del main loop.
 
+Aggiornamento successivo: `48-core-input-main-loop-migration-v0.md` espande il
+piano test/contratto della milestone. Il documento ora distingue test core,
+adapter, bridge, record-first, runtime app, JSONL/output e performance gate;
+elenca gli scenari semantici rappresentativi e le domande di ownership,
+lifetime, overflow, diagnostica, failure mode e rollback da risolvere prima di
+qualsiasi cambio al percorso caldo.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
