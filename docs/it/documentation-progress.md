@@ -138,9 +138,9 @@ coerenza, semplicita', manutenibilita', operabilita' e documentazione.
 
 ## Aggiornamento Core Input Model / Main Loop Migration v0
 
-La milestone corrente e' `Core Input Model / Main Loop Migration v0`,
-collegata alla GitHub Milestone #11, alla issue madre #187 e alla issue figlia
-di setup #188. Il riferimento principale e'
+La milestone corrente in quel momento era `Core Input Model / Main Loop
+Migration v0`, collegata alla GitHub Milestone #11, alla issue madre #187 e
+alla issue figlia di setup #188. Il riferimento principale era
 `48-core-input-main-loop-migration-v0.md`.
 
 Il documento non implementa ancora una migrazione runtime. Serve a decidere
@@ -234,9 +234,9 @@ restano rimandati finche' non soddisfano i criteri di riapertura documentati.
 
 ## Aggiornamento MVP operational usability v0
 
-La milestone operativa corrente e' `MVP operational usability v0`, collegata
-alla GitHub Milestone #12 e alla issue madre #209. Il riferimento principale e'
-`49-mvp-operational-usability-v0.md`.
+La milestone operativa aperta in quel momento era `MVP operational usability
+v0`, collegata alla GitHub Milestone #12 e alla issue madre #209. Il
+riferimento principale era `49-mvp-operational-usability-v0.md`.
 
 La milestone non amplia Alfred con nuovi backend o Agent Guard. Serve a rendere
 l'MVP corrente piu' facile da usare e verificare: CLI minima, distinzione fra
@@ -1871,9 +1871,9 @@ record o cambio al percorso caldo.
 
 ## Aggiornamento MVP operational usability v0
 
-La milestone corrente e' `MVP operational usability v0`, collegata alla GitHub
-Milestone #12 e alla issue madre #209. Il riferimento principale e'
-`49-mvp-operational-usability-v0.md`.
+La milestone corrente in quel momento era `MVP operational usability v0`,
+collegata alla GitHub Milestone #12 e alla issue madre #209. Il riferimento
+principale era `49-mvp-operational-usability-v0.md`.
 
 Il primo audit operativo della CLI e' collegato alla issue figlia #212. Il
 documento fotografa il comportamento reale prima di introdurre opzioni nuove:
@@ -1930,3 +1930,8 @@ milestone. `49-mvp-operational-usability-v0.md` ora riassume percorsi affidabili
 dell'MVP, comandi di validazione, debiti intenzionalmente rimandati e prossimi
 passi consigliati. Il registro milestone marca `MVP operational usability v0`
 come pronto alla chiusura dopo il merge della PR collegata.
+
+Aggiornamento successivo: dopo il merge della PR #225, la issue madre #209 e la
+GitHub Milestone #12 sono state chiuse. Il registro cronologico marca
+`MVP operational usability v0` come `done` e la guida di lettura parla della
+milestone come esempio recente, non piu' come milestone corrente.
