@@ -213,6 +213,12 @@ elenca gli scenari semantici rappresentativi e le domande di ownership,
 lifetime, overflow, diagnostica, failure mode e rollback da risolvere prima di
 qualsiasi cambio al percorso caldo.
 
+Aggiornamento successivo: `48-core-input-main-loop-migration-v0.md` registra la
+decisione provvisoria v0: il runtime resta raw-first per ora, senza bridge
+record->core e senza core record-first. Il documento spiega perche' i benchmark
+attuali sono sufficienti per orientare ma non per migrare il percorso caldo, e
+definisce i criteri che dovranno essere veri per riaprire bridge o record-first.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
