@@ -65,6 +65,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `46-metadata-session-record-jsonl-v0.md` |
 | Completo | `47-inotify-reference-backend-mvp-closure-audit.md` |
 | Parziale | `48-core-input-main-loop-migration-v0.md` |
+| Parziale | `49-mvp-operational-usability-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -226,6 +227,18 @@ raw-first e misure adapter/sidecar eseguibili, piano test/contratto presente e
 decisione provvisoria raw-first registrata. La milestone non implementa
 runtime migration, bridge record->core o core record-first; questi lavori
 restano rimandati finche' non soddisfano i criteri di riapertura documentati.
+
+## Aggiornamento MVP operational usability v0
+
+La milestone operativa corrente e' `MVP operational usability v0`, collegata
+alla GitHub Milestone #12 e alla issue madre #209. Il riferimento principale e'
+`49-mvp-operational-usability-v0.md`.
+
+La milestone non amplia Alfred con nuovi backend o Agent Guard. Serve a rendere
+l'MVP corrente piu' facile da usare e verificare: CLI minima, distinzione fra
+opzioni implementate e roadmap, README/man page allineati, smoke test
+riproducibile, log/output spiegati e criteri di readiness. La regola guida e':
+rendere affidabile e chiaro cio' che esiste oggi prima di aumentare lo scope.
 
 ## Aggiornamento Tracepoint e Lab MVP
 
