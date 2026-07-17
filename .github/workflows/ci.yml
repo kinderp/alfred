@@ -33,6 +33,9 @@ jobs:
       - name: Run official core suite
         run: make test
 
+      - name: Run CLI tests
+        run: make test-cli
+
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
 
@@ -47,6 +50,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             tests/core/*.log
+            tests/cli/*.log
             tests/backend/*.log
             tests/jsonl/*.log
             tests/jsonl/*.jsonl

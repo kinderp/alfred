@@ -117,9 +117,9 @@ Le domande da chiudere sono:
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #209, issue figlia #210 e PR #211 aprono la milestone. |
 | Audit CLI/user workflow corrente | In progress | Issue figlia #212. Confronta `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario. |
-| Decidere CLI minima v0 | Todo | Candidati: `--help`, `--version`, forse `--check-config`. |
-| Implementare comportamento selezionato | Todo | Solo dopo contratto e test focused. |
-| Aggiungere test CLI/config | Todo | Exit status, stdout/stderr, nessun backend avviato per comandi informativi. |
+| Decidere CLI minima v0 | Done | La CLI informativa minima v0 e' `--help` + `--version`; `--check-config` resta step separato. |
+| Implementare comportamento selezionato | In progress | Issue figlia #214. `--help` e `--version` terminano prima di `app_init()`. |
+| Aggiungere test CLI/config | In progress | Issue figlia #214. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi. |
 | Allineare README e man page | Todo | Devono distinguere implementato vs roadmap. |
 | Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
 | Definire smoke test MVP | Todo | Un percorso breve: build, run su tmpdir, evento, log, JSONL opt-in. |
@@ -176,9 +176,9 @@ Il prossimo micro-step dovrebbe decidere e poi implementare il sottoinsieme CLI
 minimo, senza introdurre un parser complesso:
 
 1. `--help`: stampa uso breve su `stdout`, exit `0`, nessun logger/backend/core
-   inizializzato.
+   inizializzato. Implementato come primo comando informativo v0.
 2. `--version`: stampa versione su `stdout`, exit `0`, nessun logger/backend/core
-   inizializzato.
+   inizializzato. Implementato come primo comando informativo v0.
 3. `--check-config`: da valutare come step separato, perche' richiede definire
    quale configurazione validare, quale precedenza usare e quali subsystem non
    devono partire.

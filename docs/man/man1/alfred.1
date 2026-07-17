@@ -7,6 +7,10 @@ alfred \- filesystem event engine and future AI agent runtime guard
 .br
 .B ALFRED_CONFIG=FILE alfred
 .IR PATH ...
+.br
+.B alfred --help
+.br
+.B alfred --version
 .SH DESCRIPTION
 .B alfred
 starts the Alfred runtime and watches one or more filesystem roots.
@@ -16,12 +20,17 @@ backend, converts backend events into Alfred raw events, passes those raw
 events through the core correlator, and writes human-readable log files.
 .PP
 The current command line is intentionally small. Positional arguments are
-interpreted as paths to watch. Alfred does not yet implement
-.BR --help ,
-.BR --version ,
+interpreted as paths to watch. Alfred implements
+.B --help
+and
+.B --version
+as informational commands that exit before configuration, logging, backend,
+core, output pipeline, or watch initialization. Alfred does not yet implement
 .BR -c ,
+.BR --config ,
+.BR --check-config ,
 or
-.BR --config .
+.BR -- .
 Configuration is loaded through the
 .B ALFRED_CONFIG
 environment variable.
@@ -31,6 +40,14 @@ or environment asks for
 .BR shadow ,
 startup fails instead of silently falling back.
 .SH ARGUMENTS
+.TP
+.B --help
+Print short usage information to standard output and exit with status 0. This
+command does not start the runtime and does not create runtime log files.
+.TP
+.B --version
+Print version information to standard output and exit with status 0. This
+command does not start the runtime and does not create runtime log files.
 .TP
 .I PATH
 Filesystem root to observe. At least one path is required for a normal
@@ -98,6 +115,16 @@ The process terminated normally.
 Startup, configuration, backend initialization, watch installation, or runtime
 processing failed.
 .SH EXAMPLES
+.TP
+Show usage:
+.EX
+alfred --help
+.EE
+.TP
+Show version:
+.EX
+alfred --version
+.EE
 .TP
 Watch one directory with defaults:
 .EX

@@ -1877,3 +1877,11 @@ semplice MD scollegato: le pagine man italiane dovranno vivere in un layout
 locale consultabile, per esempio `docs/man/it/man1`, `docs/man/it/man5` e
 `docs/man/it/man7`, cosi' un utente possa leggere la variante italiana quando
 usa un locale/lingua italiana o un path esplicito alla pagina man localizzata.
+
+Aggiornamento successivo: la issue figlia #214 introduce i primi comandi CLI
+informativi dell'MVP, `--help` e `--version`. Sono gestiti in
+`app/src/main.c` prima di `app_init()`, quindi non caricano configurazione, non
+inizializzano logger/backend/core/output pipeline e non creano log runtime.
+La nuova suite `tests/cli` e il target `make test-cli` coprono stdout, stderr,
+exit status e assenza di `raw.log`, `events.log`, `errors.log` e
+`output.jsonl`.

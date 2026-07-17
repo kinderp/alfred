@@ -1227,6 +1227,25 @@ Nonostante il nome, `test-core` non salta il backend: gli script creano file e
 directory reali, Alfred riceve eventi inotify reali e il core produce
 `events.log`. Questa e' la suite end-to-end ufficiale del percorso core.
 
+### test-cli
+
+```bash
+make test-cli
+```
+
+Il target ricostruisce il binario e lancia:
+
+```text
+tests/cli/
+```
+
+Questa suite controlla il contratto utente della CLI. Per ora copre i comandi
+informativi `--help` e `--version`: devono uscire con codice `0`, scrivere su
+`stdout`, non scrivere su `stderr` e non creare log runtime. Il punto
+importante e' che questi comandi terminano prima di `app_init()`, quindi non
+devono inizializzare configurazione, logger, backend, core, output pipeline o
+watch.
+
 ### test-backend-diagnostics
 
 ```bash
@@ -1295,6 +1314,7 @@ Nel progetto sono phony target come:
 - `fclean`
 - `test`
 - `test-core`
+- `test-cli`
 - `test-backend-diagnostics`
 - `test-jsonl`
 - `test-scanner`
