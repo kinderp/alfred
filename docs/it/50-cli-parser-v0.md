@@ -54,6 +54,16 @@ molto concreto:
 Questi problemi sono visibili agli utenti e ai contributori. Risolverli e'
 piu' utile, adesso, che riaprire backend futuri o percorso caldo.
 
+Prima di implementare il parser bisogna pero' collegare opzioni e funzionalita'
+reali. La tabella
+[Mappa funzionalita' e superficie CLI](26-stato-funzionalita.md#mappa-funzionalita-e-superficie-cli)
+parte dalle funzionalita' gia' supportate e distingue tre casi:
+
+- funzionalita' utente che meritano una CLI (`PATH...`, `-c`, `--config`, `--`);
+- funzionalita' che devono restare configurazione (`output_format`,
+  `inotify_watch_mask`, `inotify_audit_events`);
+- test, benchmark o roadmap futura che non devono diventare flag runtime.
+
 ## Non obiettivi
 
 Questa milestone non implementa:
@@ -190,6 +200,7 @@ Ogni test deve controllare:
 | Item | Stato | Note |
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #228, GitHub Milestone #13, PR #229 e questo documento. |
+| Mappare funzionalita' e superficie CLI | Done | Issue figlia #230. La tabella in `26-stato-funzionalita.md` collega feature, superficie attuale e decisione CLI/config. |
 | Audit parsing corrente | Todo | Leggere codice e test prima di modificare comportamento. |
 | Decidere grammatica e precedenza | Todo | Specificare `-c`, `--config`, `--`, `--print-config` e casi ambigui. |
 | Implementare parser minimo | Todo | Piccolo, testabile, nel livello applicazione. |
