@@ -360,7 +360,7 @@ importante per non confrontare righe che misurano cose diverse.
 
 | Famiglia | Righe | Cosa isola | Confronti sensati |
 | --- | --- | --- | --- |
-| Core input | `core-input-raw-first` | Input raw sintetico verso `alfred_process()` con callback counter/no-op | Baseline per futuri bridge record/raw o core record-first; non confrontare direttamente con JSONL o runtime reale |
+| Core input | `core-input-raw-first`, `raw-to-record-adapter` | Input raw sintetico verso `alfred_process()` oppure verso l'adapter `alfred_record_from_raw()` | Baseline per futuri bridge record/raw o core record-first; non confrontare direttamente con JSONL o runtime reale |
 | Baseline sink | `counter` | Costo minimo di attraversare un sink quasi vuoto | Confrontare con formatter e dispatcher per capire l'ordine di grandezza del lavoro non-I/O |
 | Formatter diretti | `text`, `jsonl` | Costo della serializzazione senza queue e senza dispatcher | Confrontare text vs JSONL e confrontare formatter diretti con dispatcher equivalenti |
 | Queue/ownership | `queue-counter` | Clone owned, push/pop queue e destroy senza formattazione | Confrontare con `counter` per stimare il costo del confine borrowed -> owned |
@@ -386,6 +386,7 @@ I confronti piu' utili per le decisioni architetturali sono:
 
 ```text
 core-input-raw-first
+-> raw-to-record-adapter
 -> futuro bridge record/raw
 -> futuro core record-first
 ```
@@ -464,9 +465,9 @@ vanno letti per famiglia.
 | `bytes_last` | Output sintetico | Byte prodotti dall'ultima ripetizione del micro-benchmark. Aiuta a capire quanto output text/JSONL viene generato. |
 | `counter_total_last` | Output sintetico | Numero di record osservati dal counter sink nell'ultima ripetizione. Deve corrispondere al workload atteso nei percorsi counter. |
 | `semantic_events_last` | Output core-input | Numero di eventi semantici visti dalla callback counter/no-op nell'ultimo run. Puo' essere inferiore a `raw_events` perche' alcuni raw, come `MOVED_FROM`, sono stati intermedi. |
-| `process_errors_last` | Diagnostico core-input | Numero di chiamate `alfred_process()` fallite nell'ultimo run. Deve essere zero per considerare valida la riga. |
-| `conversions_per_event` | Diagnostico core-input | Numero dichiarato di conversioni bridge per evento. Nella baseline raw-first e' zero; servira' per confrontare bridge futuri. |
-| `output_mode` | Diagnostico core-input | Modalita' di callback usata dal benchmark core input. Per la baseline e' `counter-noop`, quindi nessuna formattazione o I/O. |
+| `errors_last` | Diagnostico core-input | Numero di chiamate `alfred_process()` fallite o conversioni adapter fallite nell'ultimo run. Deve essere zero per considerare valida la riga. |
+| `conversions_per_event` | Diagnostico core-input | Numero dichiarato di conversioni raw/record per evento. Nella baseline raw-first e' zero; nella riga adapter e' uno. |
+| `output_mode` | Diagnostico core-input | Modalita' usata dal benchmark core input. `counter-noop` indica callback semantica senza I/O; `adapter-only` indica conversione senza callback semantica. |
 | `raw_lines`, `event_lines` | Output runtime | Righe osservate nei log compatibili. Servono a verificare che il runtime abbia davvero visto e processato il workload. |
 | `jsonl_lines`, `jsonl_bytes` | Output runtime | Dimensione del ledger JSONL runtime. In `counter-output` devono restare a zero; in `jsonl-output` indicano il costo dell'output strutturato. |
 | `enqueue_attempts` | Queue/runtime | Record offerti alla pipeline strutturata. In `compat-only` e' zero perche' la pipeline output e' disabilitata. |
@@ -513,6 +514,7 @@ capito perche' il run non e' affidabile.
 | Riga CSV | Cosa misura | Perche' ci interessa |
 | --- | --- | --- |
 | `core-input-raw-first` | `alfred_raw_event_t -> alfred_process() -> callback counter/no-op` | Baseline del core input corrente prima di misurare bridge o record-first |
+| `raw-to-record-adapter` | `alfred_raw_event_t -> alfred_record_from_raw()` | Costo isolato della conversione raw -> record gia' esistente |
 | `counter` | `record -> counter sink` | Baseline minima senza formattazione e senza byte prodotti |
 | `text` | `record -> text formatter` | Costo del formato leggibile compatibile con i log attuali |
 | `jsonl` | `record -> JSONL formatter` | Costo della serializzazione strutturata JSONL |
@@ -560,15 +562,18 @@ un evento semantico, quindi `semantic_events_last` puo' essere inferiore a
 Output da aggiornare a ogni refresh:
 
 ```text
-benchmark,raw_events,runs,min_us,avg_us,max_us,raw_events_per_sec_avg,semantic_events_last,process_errors_last,conversions_per_event,output_mode
-core-input-raw-first,100000,5,160264,173843.40,188253,575230.35,90000,0,0,counter-noop
+benchmark,raw_events,runs,min_us,avg_us,max_us,raw_events_per_sec_avg,semantic_events_last,errors_last,conversions_per_event,output_mode
+core-input-raw-first,100000,5,205902,236179.00,278901,423407.67,90000,0,0,counter-noop
+raw-to-record-adapter,100000,5,4534,5556.60,6318,17996616.64,0,0,1,adapter-only
 ```
 
 Lettura attesa:
 
-- `process_errors_last` deve restare `0`;
-- `conversions_per_event` deve restare `0` per la baseline raw-first;
-- `output_mode` deve restare `counter-noop`;
+- `errors_last` deve restare `0`;
+- `conversions_per_event` deve restare `0` per la baseline raw-first e `1`
+  per la riga adapter;
+- `output_mode` deve restare `counter-noop` per il core e `adapter-only` per
+  la conversione isolata;
 - il valore `raw_events_per_sec_avg` va confrontato solo con benchmark futuri
   che misurano lo stesso confine core input.
 
@@ -578,12 +583,20 @@ Lettura del primo run:
 - la callback ha visto `90000` eventi semantici perche' ogni blocco da dieci
   raw include un `MOVED_FROM`, che e' uno stato intermedio e non emette subito
   un evento semantico;
-- `process_errors_last=0` rende valido il run;
+- `errors_last=0` rende valide entrambe le righe;
 - `conversions_per_event=0` conferma che questa e' la baseline raw-first, senza
   bridge record/raw;
-- `raw_events_per_sec_avg=575230.35` e' un valore orientativo su questa VM con
+- `raw-to-record-adapter` misura solo `alfred_record_from_raw()` e quindi non
+  produce eventi semantici: `semantic_events_last=0`;
+- `raw_events_per_sec_avg=423407.67` per `core-input-raw-first` e'
+  orientativo su questa VM con
   `runs=5`, non una soglia CI e non una promessa di throughput runtime reale.
-- la distanza tra `min_us=160264` e `max_us=188253` mostra gia' rumore di
+- `raw_events_per_sec_avg=17996616.64` per `raw-to-record-adapter` indica che la
+  conversione raw -> record e' molto piu' economica del core semantico nel run
+  corrente, ma misura solo la conversione e non un bridge completo verso il
+  core;
+- la distanza tra `min_us=205902` e `max_us=278901` per la riga core mostra
+  gia' rumore di
   misura; per una soglia futura serviranno run ripetuti e ambiente piu'
   controllato.
 

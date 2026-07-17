@@ -26,18 +26,21 @@
  * - semantic_events_last: number of semantic callback events seen in the last
  *   run. It is lower than raw_events because MOVED_FROM is stored until the
  *   matching MOVED_TO arrives.
- * - process_errors_last: number of alfred_process() failures in the last run.
- *   It must be zero for a valid benchmark row.
+ * - errors_last: number of alfred_process() failures or adapter conversion
+ *   failures in the last run. It must be zero for a valid benchmark row.
  * - conversions_per_event: raw-first performs no record/raw bridge conversion,
  *   so this baseline reports 0. Future bridge benchmarks can use the same
  *   column to make conversion cost visible.
  * - output_mode: always counter-noop; the callback increments counters only.
+ *   The raw-to-record adapter row uses adapter-only because it has no semantic
+ *   callback.
  *
  * The numbers are useful for local comparisons on the same machine. They are
  * not CI thresholds and do not represent real inotify runtime throughput.
  */
 
 #include "alfred_correlator.h"
+#include "alfred_record_adapter.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -53,8 +56,10 @@ typedef struct {
 typedef struct {
     uint64_t elapsed_us;
     size_t semantic_events;
-    size_t process_errors;
+    size_t errors;
 } bench_run_result_t;
+
+typedef int (*bench_run_fn_t)(size_t raw_events, bench_run_result_t *result);
 
 static uint64_t now_ns(void)
 {
@@ -143,14 +148,15 @@ static alfred_raw_event_t make_raw_event(size_t index)
     return raw;
 }
 
-static int run_once(size_t raw_events, bench_run_result_t *result)
+static int run_core_raw_first_once(size_t raw_events,
+                                   bench_run_result_t *result)
 {
     alfred_config_t config;
     alfred_engine_t *engine;
     bench_callback_context_t context;
     uint64_t start_ns;
     uint64_t end_ns;
-    size_t process_errors = 0u;
+    size_t errors = 0u;
 
     if (result == NULL) {
         return -1;
@@ -177,21 +183,52 @@ static int run_once(size_t raw_events, bench_run_result_t *result)
         alfred_raw_event_t raw = make_raw_event(i);
 
         if (alfred_process(engine, &raw) != 0) {
-            process_errors++;
+            errors++;
         }
     }
 
     if (alfred_flush(engine) != 0) {
-        process_errors++;
+        errors++;
     }
 
     end_ns = now_ns();
 
     result->elapsed_us = (end_ns - start_ns) / 1000ULL;
     result->semantic_events = context.semantic_events;
-    result->process_errors = process_errors;
+    result->errors = errors;
 
     alfred_destroy(engine);
+
+    return 0;
+}
+
+static int run_raw_to_record_adapter_once(size_t raw_events,
+                                          bench_run_result_t *result)
+{
+    uint64_t start_ns;
+    uint64_t end_ns;
+    size_t conversion_errors = 0u;
+
+    if (result == NULL) {
+        return -1;
+    }
+
+    start_ns = now_ns();
+
+    for (size_t i = 0; i < raw_events; i++) {
+        alfred_raw_event_t raw = make_raw_event(i);
+        alfred_record_t record;
+
+        if (alfred_record_from_raw(&raw, &record) != 0) {
+            conversion_errors++;
+        }
+    }
+
+    end_ns = now_ns();
+
+    result->elapsed_us = (end_ns - start_ns) / 1000ULL;
+    result->semantic_events = 0u;
+    result->errors = conversion_errors;
 
     return 0;
 }
@@ -216,13 +253,22 @@ static int parse_size_arg(const char *value, const char *name, size_t *out)
     return 0;
 }
 
-static int run_benchmark(size_t raw_events, size_t runs)
+static int run_benchmark(const char *benchmark,
+                         bench_run_fn_t run_once,
+                         size_t raw_events,
+                         size_t runs,
+                         unsigned int conversions_per_event,
+                         const char *output_mode)
 {
     uint64_t min_us = UINT64_MAX;
     uint64_t max_us = 0u;
     uint64_t total_us = 0u;
     size_t semantic_events_last = 0u;
-    size_t process_errors_last = 0u;
+    size_t errors_last = 0u;
+
+    if (benchmark == NULL || run_once == NULL || output_mode == NULL) {
+        return -1;
+    }
 
     for (size_t run = 0; run < runs; run++) {
         bench_run_result_t result;
@@ -240,7 +286,7 @@ static int run_benchmark(size_t raw_events, size_t runs)
 
         total_us += result.elapsed_us;
         semantic_events_last = result.semantic_events;
-        process_errors_last = result.process_errors;
+        errors_last = result.errors;
     }
 
     {
@@ -251,7 +297,8 @@ static int run_benchmark(size_t raw_events, size_t runs)
             events_per_sec = ((double)raw_events * 1000000.0) / avg_us;
         }
 
-        printf("core-input-raw-first,%zu,%zu,%llu,%.2f,%llu,%.2f,%zu,%zu,0,counter-noop\n",
+        printf("%s,%zu,%zu,%llu,%.2f,%llu,%.2f,%zu,%zu,%u,%s\n",
+               benchmark,
                raw_events,
                runs,
                (unsigned long long)min_us,
@@ -259,7 +306,9 @@ static int run_benchmark(size_t raw_events, size_t runs)
                (unsigned long long)max_us,
                events_per_sec,
                semantic_events_last,
-               process_errors_last);
+               errors_last,
+               conversions_per_event,
+               output_mode);
     }
 
     return 0;
@@ -308,9 +357,24 @@ int main(int argc, char **argv)
 
     printf("benchmark,raw_events,runs,min_us,avg_us,max_us,"
            "raw_events_per_sec_avg,semantic_events_last,"
-           "process_errors_last,conversions_per_event,output_mode\n");
+           "errors_last,conversions_per_event,output_mode\n");
 
-    if (run_benchmark(raw_events, runs) != 0) {
+    if (run_benchmark("core-input-raw-first",
+                      run_core_raw_first_once,
+                      raw_events,
+                      runs,
+                      0u,
+                      "counter-noop") != 0) {
+        fprintf(stderr, "core input benchmark failed\n");
+        return 1;
+    }
+
+    if (run_benchmark("raw-to-record-adapter",
+                      run_raw_to_record_adapter_once,
+                      raw_events,
+                      runs,
+                      1u,
+                      "adapter-only") != 0) {
         fprintf(stderr, "core input benchmark failed\n");
         return 1;
     }
