@@ -208,6 +208,23 @@ L'obiettivo non e' solo avere un `.md` tradotto: l'utente deve poter consultare
 le pagine italiane quando usa una lingua/locale italiano o quando passa
 esplicitamente il path alla pagina man italiana.
 
+### Dopo il completamento dell'MVP
+
+Quando l'MVP di Alfred sara' chiuso e il contratto operativo sara' piu' stabile,
+bisogna fare un passaggio documentale piu' ampio:
+
+1. usare la documentazione tecnica italiana consolidata per ampliare le pagine
+   man inglesi e italiane, evitando che restino solo un riferimento minimo;
+2. mantenere le pagine man concise ma piu' complete su configurazione, eventi,
+   JSONL, smoke test, limiti e troubleshooting;
+3. tradurre progressivamente `docs/it` in una futura `docs/en`, separando il
+   contenuto didattico stabile dalle note storiche o di roadmap;
+4. aggiornare README, indici, roadmap e pagine man nello stesso passaggio quando
+   cambia un contratto utente o contributore.
+
+Questa attivita' non fa parte del primo MVP operativo: e' un promemoria per la
+chiusura o il primo ciclo post-MVP, quando avremo meno churn sui testi tecnici.
+
 ## Smoke test MVP
 
 Il percorso breve della milestone e':
