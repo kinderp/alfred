@@ -1948,3 +1948,16 @@ La milestone nasce dal debito esplicito lasciato da `MVP operational usability
 v0`: `-c`, `--config`, `--print-config` e `--` non devono restare comportamenti
 impliciti o ambigui. Il setup documentale definisce scope, non-goal, grammatica
 proposta, precedenza config e test richiesti prima di toccare il codice.
+
+Aggiornamento successivo: PR #237 ha implementato il parser minimo nel livello
+applicazione. Alfred supporta ora `-c FILE`, `--config FILE`, `-- PATH...`,
+precedenza esplicita della config CLI su `ALFRED_CONFIG`, errori di parsing
+senza log runtime e test focalizzati in `make test-cli`. `--print-config`
+resta deliberatamente rimandato finche' non esiste un output stabile della
+configurazione effettiva. La issue #238 e la PR #239 tracciano la readiness
+review finale per confermare che la milestone non abbia riaperto runtime,
+backend, hot path, Event Model, Writer Runtime o Agent Guard. La issue #240
+blocca pero' la chiusura definitiva finche' non viene auditata la compatibilita'
+con le Utility Syntax Guidelines POSIX / IEEE Std 1003.1 e con le convenzioni
+GNU, in particolare `--config=FILE`, eventuali alias brevi come `-h` o `-V` e
+l'allineamento di tutte le man page inglesi/italiane al contratto CLI scelto.
