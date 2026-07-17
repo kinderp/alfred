@@ -729,6 +729,12 @@ una scelta architetturale in un salto al buio.
 
 ## Piano test
 
+Il piano test serve a impedire che la migrazione del core input model venga
+validata solo perche' "i log finali sembrano uguali". Il punto delicato non e'
+solo l'output finale: e' il contratto fra backend, adapter, core e record
+strutturati. Per questo una PR runtime dovra' dimostrare sia equivalenza
+semantica sia preservazione delle prove non semantiche.
+
 I test devono proteggere livelli diversi:
 
 - test core: semantica filesystem da raw a eventi semantici;
@@ -740,6 +746,85 @@ I test devono proteggere livelli diversi:
 
 Un cambio al core input model non deve essere coperto solo da golden JSONL.
 JSONL e' un output pubblico; non e' il contratto interno primario del core.
+
+### Matrice minima di copertura
+
+| Livello | Cosa deve provare | Esempi di scenari | Perche' serve |
+| --- | --- | --- | --- |
+| Core raw-first baseline | Il comportamento corrente resta noto e misurabile | create, close-write, modify, delete, rename/move/relocate, overflow | Serve come riferimento per confrontare candidato bridge o record-first |
+| Adapter raw -> record | Ogni raw ammesso produce il record normalized_raw corretto | `RAW_CREATE`, `RAW_DELETE`, `RAW_MOVED_FROM`, `RAW_MOVED_TO`, `RAW_OVERFLOW`, mask invalide rifiutate | Evita che il record perda informazioni prima del core |
+| Bridge record -> raw, se introdotto | Il ponte ricostruisce esattamente il raw necessario al core oppure dichiara cosa non puo' preservare | path, raw mask, cookie, pid, timestamp, overflow | Un bridge che perde cookie o overflow puo' sembrare veloce ma rompere rename/move o diagnostica |
+| Core record-first, se introdotto | Il core produce gli stessi eventi semantici consumando record normalized_raw | stessa suite del core raw-first, eseguita sul nuovo input | Dimostra equivalenza semantica senza dipendere da JSONL |
+| Runtime app/main loop | `app_run()` usa il nuovo percorso senza cambiare comportamento utente | test core end-to-end esistenti, backend diagnostics, output compatibile | Protegge l'integrazione reale con inotify e filesystem |
+| Output strutturato | JSONL resta coerente con il record model dopo la migrazione | golden JSONL rappresentativi, non tutta la suite core | Protegge il contratto pubblico, ma non sostituisce i test interni |
+| Performance gate | Il candidato ha overhead dichiarato rispetto alla baseline | `perf-core-input` e futuri benchmark bridge/record-first | Evita decisioni basate solo su pulizia architetturale |
+
+### Scenari semantici rappresentativi
+
+I test di equivalenza non devono coprire ogni combinazione possibile prima del
+primo refactor, ma devono includere scenari che esercitano i punti dove raw e
+record possono divergere:
+
+- create file e create directory;
+- delete file e delete directory;
+- modify e close-write/file-ready;
+- rename nello stesso parent;
+- move fra directory diverse;
+- move+rename/relocated;
+- `MOVED_FROM` senza `MOVED_TO` immediato;
+- `MOVED_TO` senza sorgente nota;
+- overflow;
+- raw mask invalide o ambigue rifiutate dagli adapter;
+- diagnostica watch/recovery che non deve diventare evento semantico.
+
+Questi scenari esistono gia' in parte nelle suite core, backend e adapter. La
+PR che introduce un bridge o un core record-first dovra' indicare quali test
+esistenti riusa e quali focused test aggiunge.
+
+### Contratti da verificare prima di una migrazione
+
+Prima di cambiare `app_poll_legacy_raw_backend_once()` o l'input di
+`alfred_process()`, la PR deve rispondere esplicitamente a queste domande:
+
+1. quale tipo entra nel core: `alfred_raw_event_t`, `alfred_record_t` o un
+   ponte dichiarato?
+2. chi possiede le stringhe nel punto di ingresso?
+3. il record e' borrowed e consumato sincronicamente, oppure diventa owned e
+   puo' attraversare una coda?
+4. quali campi sono obbligatori per preservare rename/move: path, cookie,
+   raw_mask, timestamp e pid?
+5. come sono rappresentati overflow, diagnostica backend, errori e prove?
+6. cosa succede se l'adapter rifiuta un record o una raw mask?
+7. la failure mode e' fail-closed, evento diagnostico, errore di processo o
+   fallback al raw-first?
+8. come si torna indietro se il candidato e' piu' lento o meno affidabile?
+
+Se una risposta e' "non ancora", la migrazione puo' essere rimandata. Non e'
+un fallimento: e' preferibile conservare il raw-first esplicito piuttosto che
+introdurre un bridge ambiguo nel percorso caldo.
+
+### Test minimi per opzione
+
+| Opzione | Test richiesti prima di runtime change |
+| --- | --- |
+| Restare raw-first | Nessun nuovo test runtime obbligatorio; mantenere baseline benchmark e documentare perche' il debito resta accettabile |
+| Bridge misurato | Test focused record->raw o raw->record->raw; test core equivalenti alla baseline; test overflow/cookie; benchmark overhead; documentazione rollback |
+| Core record-first | Test unitari del nuovo input core; suite semantica rappresentativa; test adapter; test runtime app; benchmark raw-first vs record-first |
+| Dual path temporaneo | Test che dimostrano che i due percorsi producono lo stesso output; diagnostica in caso di divergenza; criterio di rimozione del dual path |
+
+### Regola di documentazione
+
+Ogni PR che cambia il modello di input del core deve aggiornare:
+
+- questo documento, se cambia la checklist o il piano test;
+- [Event Model v0](29-event-model-v0.md), se cambia il significato di un
+  record o campo;
+- [Backend API v0](30-backend-api-v0.md), se cambia il contratto di
+  `backend_ops->poll()` o dell'emit boundary;
+- [Flusso eventi](07-flusso-eventi.md), se cambia il percorso runtime reale;
+- [Report benchmark](34-report-benchmark-prestazioni.md), se aggiunge numeri
+  o nuove righe benchmark;
+- pagina man o contratto log, solo se cambia output pubblico o CLI.
 
 ## Criteri di chiusura
 
