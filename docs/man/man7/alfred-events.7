@@ -6,9 +6,11 @@ Alfred separates backend-specific facts from stable semantic events.
 This page describes the current runtime model and should be read together with
 the Italian Event Model v0 design document in
 .IR docs/it/29-event-model-v0.md .
-That document defines the future structured record based on layer, category,
-and type. This manual page remains a draft until that model is implemented in
-code and exposed through stable machine-readable output.
+That document defines the structured record model based on layer, category,
+and type. Alfred already uses that model for the wired record/sink path and
+opt-in JSONL v0 output. This manual page remains a v0 contract because the
+record model is not a stable external plugin ABI and not every future layer,
+backend or writer exists yet.
 .SH EVENT LAYERS
 .SS Backend raw log
 The backend raw log records facts close to the operating system backend. With
@@ -197,7 +199,10 @@ severity
 flags
 .EE
 JSONL, MessagePack, Protobuf, socket output, Alfred Lab and plugin backends
-should be built on that structured model, not on ad hoc log strings.
+should be built on that structured model, not on ad hoc log strings. JSONL v0
+already uses the structured record model for the runtime paths currently wired;
+MessagePack, Protobuf, socket output and external plugin backends remain future
+work.
 .PP
 The controlled record namespace already admits
 .B diagnostic + lifecycle + SESSION_CONTEXT

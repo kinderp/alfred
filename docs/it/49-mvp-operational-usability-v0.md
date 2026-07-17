@@ -118,11 +118,11 @@ Le domande da chiudere sono:
 | Setup milestone, issue madre e roadmap | Done | Issue madre #209, issue figlia #210 e PR #211 aprono la milestone. |
 | Audit CLI/user workflow corrente | Done | Issue figlia #212 e PR #213 hanno confrontato `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario prima delle modifiche CLI. |
 | Decidere CLI minima v0 | Done | La CLI minima v0 include `--help`, `--version` e `--check-config`; `-c`/`--config`, `--print-config` e `--` restano step futuri. |
-| Implementare comportamento selezionato | In progress | Issue figlie #214 e #216. `--help` e `--version` terminano prima di `app_init()`; `--check-config` valida configurazione e termina prima del runtime. |
-| Aggiungere test CLI/config | In progress | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
-| Allineare README e man page | In progress | Issue figlie #214 e #216 allineano `--help`, `--version` e `--check-config`; il resto del contratto CLI/MVP resta da completare in step successivi. |
+| Implementare comportamento selezionato | Done | Issue figlie #214 e #216. `--help` e `--version` terminano prima di `app_init()`; `--check-config` valida configurazione e termina prima del runtime. |
+| Aggiungere test CLI/config | Done | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
+| Allineare README e man page | In progress | Issue figlie #214 e #216 allineano `--help`, `--version` e `--check-config`; issue figlia #220 chiude il passaggio piu' ampio su README, pagine man, JSONL opt-in, session context e smoke test prima della traduzione italiana. |
 | Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
-| Definire smoke test MVP | In progress | Issue figlia #218. Il percorso breve e' `make smoke-mvp`: build, CLI minima, runtime su tmpdir, eventi rappresentativi, log compatibili e JSONL opt-in. |
+| Definire smoke test MVP | Done | Issue figlia #218 e PR #219. Il percorso breve e' `make smoke-mvp`: build, CLI minima, runtime su tmpdir, eventi rappresentativi, log compatibili e JSONL opt-in. Merge di riferimento: 7421aed. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
 
 ## Audit CLI/user workflow corrente

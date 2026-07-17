@@ -167,6 +167,16 @@ Load configuration from a file:
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 .EE
 .TP
+Enable additive JSONL output:
+.EX
+cat > alfred.conf <<'EOF'
+output_enabled=true
+output_format=jsonl
+output_log=output.jsonl
+EOF
+ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+.EE
+.TP
 Enable inotify audit raw-log events:
 .EX
 cat > alfred.conf <<'EOF'
@@ -176,8 +186,9 @@ ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 .EE
 .SH CURRENT LIMITATIONS
 .PP
-Alfred currently has no stable JSONL output, no public plugin ABI, no fanotify
-or eBPF backend, and no production policy engine. Those are roadmap items.
+Alfred currently has opt-in JSONL output for the wired structured-record path,
+but no stable binary output, no public plugin ABI, no fanotify or eBPF backend,
+and no production policy engine. Those are roadmap items.
 .PP
 The current inotify backend can observe filesystem effects, but it is not a
 general preventive enforcement mechanism. Blocking before an operation will

@@ -250,6 +250,9 @@ Before opening a pull request, run:
 git diff --check
 make
 make test
+make test-cli
+make smoke-mvp
+make test-jsonl
 make test-backend-diagnostics
 ```
 

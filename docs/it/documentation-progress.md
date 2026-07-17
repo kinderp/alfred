@@ -240,6 +240,15 @@ opzioni implementate e roadmap, README/man page allineati, smoke test
 riproducibile, log/output spiegati e criteri di readiness. La regola guida e':
 rendere affidabile e chiaro cio' che esiste oggi prima di aumentare lo scope.
 
+Aggiornamento successivo: la CLI minima e lo smoke test MVP sono ora parte del
+contratto operativo documentato. `README.md` include `make test-cli`,
+`make smoke-mvp` e `make test-jsonl` nella checklist pre-PR; `alfred(1)`
+descrive JSONL come output opt-in e non piu' come assente; `alfred.conf(5)`
+chiarisce quando i campi workspace/sessione producono un record JSONL
+`SESSION_CONTEXT`; `alfred-events(7)` descrive Event Model v0 come modello
+strutturato gia' usato dal percorso record/sink/JSONL corrente, pur restando
+un contratto v0 non ancora ABI esterna stabile.
+
 ## Aggiornamento Tracepoint e Lab MVP
 
 La cartella `docs/it/lab/` contiene gli scenari Lab Markdown v0. Gli scenari
