@@ -199,7 +199,12 @@ essere confrontata solo con futuri benchmark bridge/record-first sullo stesso
 confine core input. Un aggiornamento successivo dello stesso benchmark aggiunge
 la riga `raw-to-record-adapter`, che misura il costo isolato
 `alfred_raw_event_t -> alfred_record_from_raw()` senza implementare un bridge
-record/raw o un core record-first.
+record/raw o un core record-first. Un ulteriore aggiornamento aggiunge
+`raw-to-record-plus-core`, cioe'
+`alfred_raw_event_t -> alfred_record_from_raw() -> alfred_process()`, per
+misurare il costo sidecar di produrre il record normalizzato mentre il core
+resta raw-first. Anche questa riga non implementa ancora un bridge completo,
+un core record-first o una migrazione del main loop.
 
 ## Aggiornamento Tracepoint e Lab MVP
 
