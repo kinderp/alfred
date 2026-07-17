@@ -237,6 +237,19 @@ alfred.conf(5)
 alfred-events(7)
 ```
 
+Le traduzioni italiane locali sono ora disponibili nello stesso albero, in un
+layout compatibile con una futura installazione per lingua/locale:
+
+```text
+docs/man/it/man1/alfred.1
+docs/man/it/man5/alfred.conf.5
+docs/man/it/man7/alfred-events.7
+```
+
+Questi file non introducono ancora packaging o installazione automatica delle
+pagine man localizzate. Per ora sono documentazione di repository consultabile
+esplicitamente con `man -l`, come le pagine inglesi.
+
 `alfred(1)` documenta l'uso utente corrente: path posizionali, variabile
 `ALFRED_CONFIG`, log prodotti, ambiente e limiti attuali.
 
