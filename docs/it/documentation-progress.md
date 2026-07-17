@@ -1878,11 +1878,12 @@ principale era `49-mvp-operational-usability-v0.md`.
 
 Il primo audit operativo della CLI e' collegato alla issue figlia #212. Il
 documento fotografa il comportamento reale prima di introdurre opzioni nuove:
-`./alfred PATH...` e `ALFRED_CONFIG=FILE ./alfred PATH...` sono il percorso
-supportato; `--help`, `--version`, `-c`, `--config`, `--check-config` e `--`
-non sono ancora parserizzati e oggi verrebbero trattati come path. La
-raccomandazione e' implementare prima `--help` e `--version`, perche' possono
-terminare senza avviare logger, backend, core o output pipeline.
+in quel momento `./alfred PATH...` e `ALFRED_CONFIG=FILE ./alfred PATH...`
+erano il percorso supportato; `--help`, `--version`, `-c`, `--config`,
+`--check-config` e `--` non erano ancora parserizzati e sarebbero stati trattati
+come path. La raccomandazione iniziale era implementare prima `--help` e
+`--version`, perche' potevano terminare senza avviare logger, backend, core o
+output pipeline.
 
 La milestone ora registra anche un deliverable di fine lavoro richiesto dal
 maintainer: tradurre in italiano il README pubblico e le pagine man quando il
