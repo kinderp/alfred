@@ -36,6 +36,11 @@ static int alfred_set_exclusive_command(alfred_cli_options_t *options,
                                         const char *name,
                                         int seen_config,
                                         FILE *err);
+static int alfred_set_config_path(alfred_cli_options_t *options,
+                                  const char *option_name,
+                                  const char *config_path,
+                                  int *seen_config,
+                                  FILE *err);
 static int alfred_report_parse_error(FILE *err,
                                      const char *message,
                                      const char *arg);
@@ -56,12 +61,12 @@ static void alfred_print_usage(FILE *out)
     fprintf(out, "Linux inotify backend.\n");
     fprintf(out, "\n");
     fprintf(out, "Options:\n");
-    fprintf(out, "  -c FILE        Load configuration from FILE.\n");
-    fprintf(out, "  --config FILE  Load configuration from FILE.\n");
-    fprintf(out, "  --help          Show this help and exit.\n");
-    fprintf(out, "  --version       Show version information and exit.\n");
-    fprintf(out, "  --check-config  Validate configuration and exit.\n");
-    fprintf(out, "  --              Treat following arguments as paths.\n");
+    fprintf(out, "  -c, --config FILE  Load configuration from FILE.\n");
+    fprintf(out, "      --config=FILE  Load configuration from FILE.\n");
+    fprintf(out, "  -h, --help         Show this help and exit.\n");
+    fprintf(out, "  -V, --version      Show version information and exit.\n");
+    fprintf(out, "      --check-config Validate configuration and exit.\n");
+    fprintf(out, "  --                 Treat following arguments as paths.\n");
     fprintf(out, "\n");
     fprintf(out, "Configuration:\n");
     fprintf(out, "  ALFRED_CONFIG=FILE  Load a key=value configuration file.\n");
@@ -196,6 +201,53 @@ static int alfred_set_exclusive_command(alfred_cli_options_t *options,
 }
 
 /*
+ * alfred_set_config_path - record the explicit CLI configuration file
+ * @options: parser result to update
+ * @option_name: option spelling used for diagnostics
+ * @config_path: parsed option argument
+ * @seen_config: duplicate guard shared by -c/--config forms
+ * @err: destination stream for parser errors
+ *
+ * All supported config spellings share one ownership-free contract: the parser
+ * stores a borrowed argv pointer and app_init_from_paths() consumes it before
+ * runtime startup. Empty values and duplicate config options are rejected before
+ * logger/backend/core/output initialization.
+ *
+ * Return: 0 on success, -1 on parser error.
+ */
+static int alfred_set_config_path(alfred_cli_options_t *options,
+                                  const char *option_name,
+                                  const char *config_path,
+                                  int *seen_config,
+                                  FILE *err)
+{
+    if (options->command != ALFRED_CLI_RUNTIME) {
+        return alfred_report_parse_error(
+            err,
+            "option cannot follow no-runtime command",
+            option_name);
+    }
+
+    if (*seen_config) {
+        return alfred_report_parse_error(
+            err,
+            "duplicate configuration option",
+            option_name);
+    }
+
+    if (config_path == NULL || config_path[0] == '\0') {
+        return alfred_report_parse_error(
+            err,
+            "option requires a value",
+            option_name);
+    }
+
+    options->config_path = config_path;
+    *seen_config = 1;
+    return 0;
+}
+
+/*
  * alfred_parse_args - parse the CLI v0 grammar
  * @argc: command-line argument count
  * @argv: command-line argument vector
@@ -248,20 +300,6 @@ static int alfred_parse_args(int argc,
         }
 
         if (strcmp(arg, "-c") == 0 || strcmp(arg, "--config") == 0) {
-            if (options->command != ALFRED_CLI_RUNTIME) {
-                return alfred_report_parse_error(
-                    err,
-                    "option cannot follow no-runtime command",
-                    arg);
-            }
-
-            if (seen_config) {
-                return alfred_report_parse_error(
-                    err,
-                    "duplicate configuration option",
-                    arg);
-            }
-
             if (i + 1 >= argc || argv[i + 1][0] == '-') {
                 return alfred_report_parse_error(
                     err,
@@ -269,13 +307,29 @@ static int alfred_parse_args(int argc,
                     arg);
             }
 
-            options->config_path = argv[i + 1];
-            seen_config = 1;
+            if (alfred_set_config_path(options,
+                                       arg,
+                                       argv[i + 1],
+                                       &seen_config,
+                                       err) != 0) {
+                return -1;
+            }
             i++;
             continue;
         }
 
-        if (strcmp(arg, "--help") == 0) {
+        if (strncmp(arg, "--config=", strlen("--config=")) == 0) {
+            if (alfred_set_config_path(options,
+                                       "--config",
+                                       arg + strlen("--config="),
+                                       &seen_config,
+                                       err) != 0) {
+                return -1;
+            }
+            continue;
+        }
+
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
             if (alfred_set_exclusive_command(options,
                                              ALFRED_CLI_HELP,
                                              arg,
@@ -286,7 +340,7 @@ static int alfred_parse_args(int argc,
             continue;
         }
 
-        if (strcmp(arg, "--version") == 0) {
+        if (strcmp(arg, "-V") == 0 || strcmp(arg, "--version") == 0) {
             if (alfred_set_exclusive_command(options,
                                              ALFRED_CLI_VERSION,
                                              arg,

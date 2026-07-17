@@ -137,12 +137,12 @@ if ! grep -Eq '^Usage: alfred \[OPTIONS\] PATH\.\.\.$' "$TEST_DIR/help.out"; the
     fail_with_output "--help output missing usage line"
 fi
 
-if ! grep -Eq '^  --version[[:space:]]+Show version information and exit\.$' \
+if ! grep -Eq '^  -V, --version[[:space:]]+Show version information and exit\.$' \
     "$TEST_DIR/help.out"; then
     fail_with_output "--help output missing --version option"
 fi
 
-if ! grep -Eq '^  --check-config[[:space:]]+Validate configuration and exit\.$' \
+if ! grep -Eq '^      --check-config[[:space:]]+Validate configuration and exit\.$' \
     "$TEST_DIR/help.out"; then
     fail_with_output "--help output missing --check-config option"
 fi
@@ -165,6 +165,40 @@ if ! grep -Eq '^alfred [0-9]+\.[0-9]+\.[0-9]+$' "$TEST_DIR/version.out"; then
 fi
 
 assert_no_runtime_logs "--version"
+
+reset_outputs
+
+(
+    cd "$TEST_DIR"
+    "$ALFRED_BIN" -h > help.out 2> help.err
+)
+
+if [ -s "$TEST_DIR/help.err" ]; then
+    fail_with_output "-h must not write stderr"
+fi
+
+if ! grep -Eq '^Usage: alfred \[OPTIONS\] PATH\.\.\.$' "$TEST_DIR/help.out"; then
+    fail_with_output "-h output missing usage line"
+fi
+
+assert_no_runtime_logs "-h"
+
+reset_outputs
+
+(
+    cd "$TEST_DIR"
+    "$ALFRED_BIN" -V > version.out 2> version.err
+)
+
+if [ -s "$TEST_DIR/version.err" ]; then
+    fail_with_output "-V must not write stderr"
+fi
+
+if ! grep -Eq '^alfred [0-9]+\.[0-9]+\.[0-9]+$' "$TEST_DIR/version.out"; then
+    fail_with_output "-V output must be 'alfred MAJOR.MINOR.PATCH'"
+fi
+
+assert_no_runtime_logs "-V"
 
 reset_outputs
 
@@ -248,6 +282,24 @@ assert_no_runtime_logs "--config valid.conf --check-config"
 
 reset_outputs
 
+(
+    cd "$TEST_DIR"
+    "$ALFRED_BIN" --config="$TEST_DIR/valid.conf" --check-config \
+        > check_config.out 2> check_config.err
+)
+
+if [ -s "$TEST_DIR/check_config.err" ]; then
+    fail_with_output "--config=valid.conf --check-config must not write stderr"
+fi
+
+if ! grep -Eq '^configuration OK$' "$TEST_DIR/check_config.out"; then
+    fail_with_output "--config=valid.conf --check-config must report success"
+fi
+
+assert_no_runtime_logs "--config=valid.conf --check-config"
+
+reset_outputs
+
 cat > "$TEST_DIR/invalid.conf" <<'EOF'
 output_format=protobuf
 EOF
@@ -313,6 +365,25 @@ assert_no_runtime_logs "explicit -c wins over ALFRED_CONFIG"
 
 reset_outputs
 
+(
+    cd "$TEST_DIR"
+    ALFRED_CONFIG="$TEST_DIR/invalid.conf" \
+        "$ALFRED_BIN" --config="$TEST_DIR/valid.conf" --check-config \
+        > check_config.out 2> check_config.err
+)
+
+if [ -s "$TEST_DIR/check_config.err" ]; then
+    fail_with_output "explicit --config= must win over invalid ALFRED_CONFIG"
+fi
+
+if ! grep -Eq '^configuration OK$' "$TEST_DIR/check_config.out"; then
+    fail_with_output "explicit --config= with invalid ALFRED_CONFIG must report success"
+fi
+
+assert_no_runtime_logs "explicit --config= wins over ALFRED_CONFIG"
+
+reset_outputs
+
 if (
     cd "$TEST_DIR"
     ALFRED_EVENT_ENGINE=shadow \
@@ -348,6 +419,11 @@ assert_parser_rejects \
     --config
 
 assert_parser_rejects \
+    "empty --config= value" \
+    "^alfred: option requires a value '--config'$" \
+    --config=
+
+assert_parser_rejects \
     "duplicate -c" \
     "^alfred: duplicate configuration option '-c'$" \
     -c "$TEST_DIR/valid.conf" -c "$TEST_DIR/valid.conf" "$TEST_DIR/watch-root"
@@ -356,6 +432,11 @@ assert_parser_rejects \
     "duplicate --config" \
     "^alfred: duplicate configuration option '--config'$" \
     -c "$TEST_DIR/valid.conf" --config "$TEST_DIR/valid.conf" "$TEST_DIR/watch-root"
+
+assert_parser_rejects \
+    "duplicate --config=" \
+    "^alfred: duplicate configuration option '--config'$" \
+    -c "$TEST_DIR/valid.conf" --config="$TEST_DIR/valid.conf" "$TEST_DIR/watch-root"
 
 assert_parser_rejects \
     "--help with path" \
@@ -368,6 +449,11 @@ assert_parser_rejects \
     -c "$TEST_DIR/valid.conf" --help
 
 assert_parser_rejects \
+    "-c with -h" \
+    "^alfred: option cannot be combined with '-h'$" \
+    -c "$TEST_DIR/valid.conf" -h
+
+assert_parser_rejects \
     "--version with path" \
     "^alfred: paths are not allowed for '.*/watch-root'$" \
     --version "$TEST_DIR/watch-root"
@@ -376,6 +462,11 @@ assert_parser_rejects \
     "-c with --version" \
     "^alfred: option cannot be combined with '--version'$" \
     -c "$TEST_DIR/valid.conf" --version
+
+assert_parser_rejects \
+    "-c with -V" \
+    "^alfred: option cannot be combined with '-V'$" \
+    -c "$TEST_DIR/valid.conf" -V
 
 assert_parser_rejects \
     "--check-config with path" \
@@ -408,5 +499,8 @@ assert_parser_rejects \
     --print-config
 
 assert_runtime_starts "-- path terminator runtime" -- "$TEST_DIR/watch-root"
+
+assert_runtime_starts "--config= runtime" \
+    --config="$TEST_DIR/valid.conf" "$TEST_DIR/watch-root"
 
 echo "PASS cli help version check-config"

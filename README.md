@@ -69,7 +69,9 @@ Show short usage and version information without starting the runtime:
 
 ```bash
 ./alfred --help
+./alfred -h
 ./alfred --version
+./alfred -V
 ```
 
 Validate the current configuration without starting the runtime:
@@ -79,6 +81,7 @@ Validate the current configuration without starting the runtime:
 ALFRED_CONFIG=./alfred.conf ./alfred --check-config
 ./alfred -c ./alfred.conf --check-config
 ./alfred --config ./alfred.conf --check-config
+./alfred --config=./alfred.conf --check-config
 ```
 
 Run Alfred with a configuration file:
@@ -87,6 +90,7 @@ Run Alfred with a configuration file:
 ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch
 ./alfred -c ./alfred.conf /path/to/watch
 ./alfred --config ./alfred.conf /path/to/watch
+./alfred --config=./alfred.conf /path/to/watch
 ./alfred -- /path/to/watch
 ```
 

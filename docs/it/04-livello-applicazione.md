@@ -149,13 +149,16 @@ supportate:
 - `--check-config`;
 - `-c FILE`;
 - `--config FILE`;
+- `--config=FILE`;
+- alias brevi `-h` e `-V`;
 - `--` come fine delle opzioni.
 
 Il parser non inizializza logger, backend, core, output pipeline o watch. Se
 trova un errore di sintassi, per esempio `--unknown`, `-c` senza valore,
-config duplicata, `--check-config PATH` o un path che inizia con `-` senza
-`--`, scrive su `stderr` e termina prima del runtime. Per questo gli errori di
-parsing non creano `raw.log`, `events.log`, `errors.log` o `output.jsonl`.
+`--config=` senza valore, config duplicata, `--check-config PATH` o un path che
+inizia con `-` senza `--`, scrive su `stderr` e termina prima del runtime. Per
+questo gli errori di parsing non creano `raw.log`, `events.log`, `errors.log` o
+`output.jsonl`.
 
 Il flusso e':
 
