@@ -1924,3 +1924,9 @@ Aggiornamento successivo: la issue figlia #222 apre la localizzazione italiana
 di fine milestone. `README.it.md` traduce il README pubblico corrente e
 `docs/man/it/man1`, `docs/man/it/man5`, `docs/man/it/man7` contengono le pagine
 man italiane consultabili con `man -l`.
+
+Aggiornamento successivo: la issue figlia #224 chiude il readiness audit della
+milestone. `49-mvp-operational-usability-v0.md` ora riassume percorsi affidabili
+dell'MVP, comandi di validazione, debiti intenzionalmente rimandati e prossimi
+passi consigliati. Il registro milestone marca `MVP operational usability v0`
+come pronto alla chiusura dopo il merge della PR collegata.
