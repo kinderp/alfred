@@ -272,10 +272,9 @@ ALFRED_KEEP_TEST_LOGS=1 make smoke-mvp
 
 ## Readiness audit finale
 
-La milestone `MVP operational usability v0` e' pronta per la chiusura quando la
-PR collegata alla issue #224 viene mergiata. Il risultato non rende Alfred un
-prodotto completo, ma rende l'MVP corrente molto piu' facile da lanciare,
-validare e spiegare.
+La milestone `MVP operational usability v0` e' chiusa dopo il merge della PR
+collegata alla issue #224. Il risultato non rende Alfred un prodotto completo,
+ma rende l'MVP corrente molto piu' facile da lanciare, validare e spiegare.
 
 ### Percorsi affidabili oggi
 

@@ -84,7 +84,7 @@ test collegati.
 
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
-1. la milestone corrente, per esempio
+1. la milestone corrente o una milestone recente di riferimento, per esempio
    [`MVP operational usability v0`](https://github.com/kinderp/alfred/milestone/12);
 2. la issue madre della milestone, per esempio
    [`MVP operational usability v0: implementation plan`](https://github.com/kinderp/alfred/issues/209);

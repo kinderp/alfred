@@ -1930,3 +1930,8 @@ milestone. `49-mvp-operational-usability-v0.md` ora riassume percorsi affidabili
 dell'MVP, comandi di validazione, debiti intenzionalmente rimandati e prossimi
 passi consigliati. Il registro milestone marca `MVP operational usability v0`
 come pronto alla chiusura dopo il merge della PR collegata.
+
+Aggiornamento successivo: dopo il merge della PR #225, la issue madre #209 e la
+GitHub Milestone #12 sono state chiuse. Il registro cronologico marca
+`MVP operational usability v0` come `done` e la guida di lettura parla della
+milestone come esempio recente, non piu' come milestone corrente.
