@@ -21,6 +21,7 @@ Commands run locally:
 - [ ] `git diff --check`
 - [ ] `make`
 - [ ] `make test`
+- [ ] `make test-cli`
 - [ ] `make test-backend-diagnostics`
 - [ ] Not applicable, documentation-only change
 

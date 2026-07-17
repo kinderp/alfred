@@ -37,6 +37,8 @@ Oggi l'uso reale e':
 
 ```bash
 ./alfred /path/da/osservare
+./alfred --help
+./alfred --version
 ```
 
 Con file di configurazione:
@@ -55,6 +57,11 @@ config_defaults()
 
 `ALFRED_EVENT_ENGINE` esiste solo come validazione di compatibilita': `core` e'
 il runtime ufficiale; `shadow` fallisce.
+
+`--help` e `--version` sono comandi informativi: stampano su `stdout`, escono
+con codice `0` e terminano prima di inizializzare configurazione, logger,
+backend, core, output pipeline o watch. Questo garantisce che non creino
+`raw.log`, `events.log`, `errors.log` o `output.jsonl`.
 
 ## Comportamento desiderato futuro
 
@@ -87,8 +94,8 @@ avviare il backend.
 | `--config FILE` | forma lunga di `-c` | da implementare |
 | `--print-config` | stampa la configurazione effettiva e continua o termina, da decidere | da discutere |
 | `--check-config` | valida la configurazione e termina senza avviare inotify | da discutere |
-| `--help` | stampa uso breve e opzioni | da implementare |
-| `--version` | stampa versione del programma | da implementare |
+| `--help` | stampa uso breve e opzioni | implementato |
+| `--version` | stampa versione del programma | implementato |
 | `--` | fine opzioni, tutto cio' che segue e' path | da implementare |
 
 ## Stampa della configurazione effettiva

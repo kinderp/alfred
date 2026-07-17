@@ -64,6 +64,13 @@ Run Alfred on one or more paths:
 ./alfred /path/to/watch
 ```
 
+Show short usage and version information without starting the runtime:
+
+```bash
+./alfred --help
+./alfred --version
+```
+
 Run Alfred with a configuration file:
 
 ```bash
@@ -122,6 +129,12 @@ Run the official core end-to-end suite:
 make test
 ```
 
+Run CLI tests:
+
+```bash
+make test-cli
+```
+
 Run backend diagnostics:
 
 ```bash
@@ -134,8 +147,8 @@ Run scanner component tests:
 make test-scanner
 ```
 
-The CI workflow runs the same commands on pull requests targeting `main` and on
-pushes to `main`.
+The CI workflow runs build, core, CLI, backend diagnostic and JSONL tests on
+pull requests targeting `main` and on pushes to `main`.
 
 To preserve runtime logs while debugging tests locally:
 

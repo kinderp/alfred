@@ -226,6 +226,7 @@ run: all
 # -----------------------------------------------------------------------------
 # TEST
 # test-core is the official core end-to-end suite.
+# test-cli checks user-facing informational commands and exit behavior.
 # test-backend-diagnostics checks backend health logs that are not semantics.
 # test-jsonl checks the structured external output contract.
 # test is the official core alias.
@@ -236,6 +237,10 @@ test: test-core
 test-core:
 	$(MAKE) all
 	cd tests/core && bash run_all.sh
+
+test-cli:
+	$(MAKE) all
+	cd tests/cli && bash run_all.sh
 
 test-backend-diagnostics:
 	$(MAKE) all
@@ -372,6 +377,7 @@ banner:
 	run \
 	test \
 	test-core \
+	test-cli \
 	test-jsonl \
 	test-scanner \
 	test-watcher \
