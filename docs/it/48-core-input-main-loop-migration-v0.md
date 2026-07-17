@@ -952,6 +952,40 @@ Se la milestone decide di non migrare subito, deve comunque spiegare quale
 segnale fara' riaprire la migrazione: nuovo backend, benchmark, test mancanti o
 semplificazione architetturale.
 
+## Stato di chiusura
+
+La milestone `Core Input Model / Main Loop Migration v0` e' chiusa come
+milestone di decisione, non come migrazione runtime.
+
+Risultato consolidato:
+
+- il percorso runtime corrente e' mappato;
+- la convivenza fra raw bridge e `backend_ops->poll()` staged e' dichiarata;
+- le opzioni `raw-first`, `bridge misurato`, `record-first` e `dual path` sono
+  confrontate;
+- il benchmark gate e' documentato;
+- `perf-core-input` misura la baseline raw-first;
+- `raw-to-record-adapter` misura il costo isolato di
+  `alfred_record_from_raw()`;
+- `raw-to-record-plus-core` misura il costo sidecar
+  `alfred_record_from_raw() -> alfred_process()`;
+- il piano test/contratto prima della migrazione e' documentato;
+- la decisione provvisoria e' esplicita: Alfred resta raw-first nel runtime per
+  ora.
+
+Non e' stato implementato:
+
+- un bridge record->core;
+- un core record-first;
+- una migrazione di `app_run()` o `app_poll_legacy_raw_backend_once()`;
+- una soglia permanente di performance;
+- un nuovo backend o una registry multi-backend.
+
+La chiusura non cancella il debito del raw bridge. Lo rende deliberato e
+riapribile solo con criteri espliciti. Le PR future che toccheranno il core
+input model dovranno citare questa milestone e spiegare quale criterio di
+riapertura soddisfano.
+
 ## Collegamenti
 
 - GitHub Milestone: [Core Input Model / Main Loop Migration v0](https://github.com/kinderp/alfred/milestone/11)
