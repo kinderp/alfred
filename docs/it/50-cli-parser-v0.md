@@ -174,7 +174,7 @@ Non coprono ancora:
 
 Questi casi sono esattamente il perimetro dei prossimi micro-step.
 
-## Grammatica proposta
+## Grammatica e precedenza decise per v0
 
 La forma principale resta:
 
@@ -182,32 +182,79 @@ La forma principale resta:
 alfred [OPTIONS] PATH...
 ```
 
-Opzioni candidate:
+La grammatica v0 deve essere intenzionalmente piccola. Non introduce
+subcommand, opzioni combinate, forme `--option=value`, file di configurazione
+multipli o override puntuali delle chiavi di configurazione. Il parser deve
+rispondere a una domanda sola:
 
-| Opzione | Significato | Stato da decidere |
+```text
+quali opzioni di processo sono state richieste e dove iniziano i path?
+```
+
+### Forme accettate
+
+Le opzioni devono comparire prima dei path. Il token `--` termina il parsing
+delle opzioni: tutto cio' che segue e' path. Senza `--`, un argomento che
+inizia con `-` viene interpretato come opzione o come errore di parsing, non
+come path.
+
+| Forma | Comportamento v0 |
+| --- | --- |
+| `alfred PATH...` | Avvia il runtime osservando uno o piu' path. |
+| `alfred -- PATH...` | Avvia il runtime; tutti gli argomenti dopo `--` sono path anche se iniziano con `-`. |
+| `alfred -c FILE PATH...` | Carica `FILE` come configurazione e avvia il runtime sui path. |
+| `alfred --config FILE PATH...` | Forma lunga equivalente a `-c FILE`. |
+| `alfred -c FILE -- PATH...` | Carica `FILE`; gli argomenti dopo `--` sono path. |
+| `alfred --config FILE -- PATH...` | Forma lunga equivalente alla precedente. |
+| `alfred --check-config` | Valida la configurazione effettiva e termina senza runtime. |
+| `alfred -c FILE --check-config` | Valida default + `ALFRED_CONFIG` eventuale + `FILE` + env override e termina senza runtime. |
+| `alfred --config FILE --check-config` | Forma lunga equivalente alla precedente. |
+| `alfred --help` | Stampa usage e termina senza runtime. |
+| `alfred --version` | Stampa versione e termina senza runtime. |
+| `alfred --print-config` | Se implementato in v0, stampa configurazione effettiva e termina senza runtime. |
+| `alfred -c FILE --print-config` | Se `--print-config` viene implementato, stampa la configurazione dopo aver caricato `FILE`. |
+
+### Opzioni v0
+
+| Opzione | Significato | Stato v0 |
 | --- | --- | --- |
-| `-c FILE` | Usa `FILE` come configurazione. | Candidata principale. |
-| `--config FILE` | Forma lunga di `-c`. | Candidata principale. |
+| `-c FILE` | Usa `FILE` come configurazione. | Da implementare. |
+| `--config FILE` | Forma lunga di `-c`. | Da implementare. |
 | `--check-config` | Valida configurazione e termina senza runtime. | Gia' implementata, da integrare nel parser. |
-| `--print-config` | Stampa configurazione effettiva e termina. | Da decidere dopo audit output. |
+| `--print-config` | Stampa configurazione effettiva e termina. | Da decidere prima del codice; se instabile, rimandare esplicitamente. |
 | `--help` | Stampa usage e termina. | Gia' implementata, da integrare nel parser. |
 | `--version` | Stampa versione e termina. | Gia' implementata, da integrare nel parser. |
-| `--` | Fine opzioni; tutto cio' che segue e' path. | Candidata principale. |
+| `--` | Fine opzioni; tutto cio' che segue e' path. | Da implementare. |
 
-Regole iniziali consigliate:
+### Forme rifiutate
 
-- `PATH...` resta obbligatorio per avviare il runtime;
-- `--help` e `--version` ignorano i path e terminano subito;
-- `--check-config` termina senza runtime e non richiede path;
-- `--print-config`, se implementato, termina senza runtime e non richiede path;
-- opzione sconosciuta: errore su `stderr`, exit non-zero;
-- opzione che richiede valore ma non lo riceve: errore su `stderr`, exit
-  non-zero;
-- path che iniziano con `-` richiedono `--`.
+Per v0 e' meglio rifiutare i casi ambigui invece di indovinare l'intenzione
+dell'utente.
 
-## Precedenza config proposta
+| Forma | Esito v0 | Motivo |
+| --- | --- | --- |
+| `alfred --unknown` | Errore su `stderr`, exit non-zero. | Evita di trattare errori di battitura come path. |
+| `alfred -c` | Errore su `stderr`, exit non-zero. | `-c` richiede un valore. |
+| `alfred --config` | Errore su `stderr`, exit non-zero. | `--config` richiede un valore. |
+| `alfred -c a.conf --config b.conf PATH` | Errore su `stderr`, exit non-zero. | Un solo file config esplicito evita precedenza ambigua. |
+| `alfred -c a.conf -c b.conf PATH` | Errore su `stderr`, exit non-zero. | I duplicati di config sono rifiutati in v0. |
+| `alfred --help PATH` | Errore su `stderr`, exit non-zero. | `--help` e' comando esclusivo, non opzione combinabile. |
+| `alfred -c a.conf --help` | Errore su `stderr`, exit non-zero. | `--help` non carica configurazione e non si combina con altre opzioni. |
+| `alfred --version PATH` | Errore su `stderr`, exit non-zero. | `--version` e' comando esclusivo. |
+| `alfred -c a.conf --version` | Errore su `stderr`, exit non-zero. | `--version` non carica configurazione e non si combina con altre opzioni. |
+| `alfred --check-config PATH` | Errore su `stderr`, exit non-zero. | `--check-config` non deve avviare runtime e non valida path. |
+| `alfred --print-config PATH` | Errore su `stderr`, exit non-zero, se `--print-config` viene implementato. | `--print-config` deve essere no-runtime in v0. |
+| `alfred PATH --config conf` | Errore su `stderr`, exit non-zero. | Le opzioni devono precedere i path; dopo un path un token `-...` resta ambiguo senza `--`. |
+| `alfred -tmp/root` | Errore su `stderr`, exit non-zero. | Path che iniziano con `-` devono passare dopo `--`. |
+| `alfred --` | Errore su `stderr`, exit non-zero. | Dopo `--` serve almeno un path se si avvia runtime. |
 
-La precedenza consigliata e':
+Questa scelta e' piu' rigida di alcuni strumenti Unix, ma rende piu' chiaro il
+contratto iniziale. In futuro si potranno allentare alcune regole senza rompere
+gli utenti; fare il contrario sarebbe piu' difficile.
+
+### Precedenza config v0
+
+La precedenza decisa per v0 e':
 
 ```text
 1. config_defaults()
@@ -226,9 +273,28 @@ ALFRED_CONFIG=base.conf ./alfred --config debug.conf /tmp/root
 deve usare `debug.conf`. La CLI e' una scelta esplicita dell'utente al momento
 del comando e deve vincere sul file indicato dall'ambiente.
 
-La milestone deve anche decidere se passare piu' volte `-c`/`--config` e'
-errore o se vince l'ultima occorrenza. La scelta piu' semplice per v0 e'
-renderlo errore, per evitare configurazioni ambigue.
+`ALFRED_EVENT_ENGINE` resta dopo il file esplicito per compatibilita' con il
+contratto corrente: e' un override/env guard storico che oggi accetta solo
+`core` e rifiuta `shadow`. Non diventa una nuova opzione CLI v0.
+
+I duplicati di `-c`/`--config` sono errore. Questa e' una scelta deliberata:
+evita una regola "last wins" implicita, semplifica i test e rende evidente
+quando uno script sta componendo opzioni in modo sbagliato.
+
+### Output ed exit status
+
+Regole v0:
+
+- successi informativi (`--help`, `--version`, `--check-config` valido,
+  `--print-config` se implementato) scrivono su `stdout` ed escono con codice
+  `0`;
+- errori di parsing scrivono su `stderr`, non inizializzano runtime e escono
+  non-zero;
+- errori di configurazione scrivono su `stderr`, non inizializzano runtime e
+  escono non-zero;
+- comandi no-runtime non devono creare `raw.log`, `events.log`, `errors.log` o
+  `output.jsonl`;
+- il runtime normale mantiene la compatibilita' con `alfred PATH...`.
 
 ## Struttura codice proposta
 
@@ -296,7 +362,7 @@ Ogni test deve controllare:
 | Setup milestone, issue madre e roadmap | Done | Issue madre #228, GitHub Milestone #13, PR #229 e questo documento. |
 | Mappare funzionalita' e superficie CLI | Done | Issue figlia #230. La tabella in `26-stato-funzionalita.md` collega feature, superficie attuale e decisione CLI/config. |
 | Audit parsing corrente | Done | Issue figlia #232. Documenta `main()`, `alfred_check_config()`, `app_init()`, `ALFRED_CONFIG`, `ALFRED_EVENT_ENGINE` e copertura `make test-cli`. |
-| Decidere grammatica e precedenza | Todo | Specificare `-c`, `--config`, `--`, `--print-config` e casi ambigui. |
+| Decidere grammatica e precedenza | Done | Issue figlia #234. Specifica forme accettate/rifiutate, duplicati `-c`/`--config`, `--`, no-runtime commands, precedenza config e output/exit status. |
 | Implementare parser minimo | Todo | Piccolo, testabile, nel livello applicazione. |
 | Aggiungere test CLI | Todo | Successi, errori, no-runtime commands e path dopo `--`. |
 | Aggiornare README/man/doc | Todo | Inglese e italiano devono restare allineati al comportamento reale. |
