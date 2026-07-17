@@ -88,8 +88,8 @@ Esempi:
 alfred /tmp/progetto
 alfred -c alfred.conf /tmp/progetto
 alfred --config alfred.conf /tmp/progetto
-alfred --print-config /tmp/progetto
-alfred --config alfred.conf --print-config /tmp/progetto
+alfred --print-config
+alfred --config alfred.conf --print-config
 alfred -- /tmp/path-che-inizia-con-trattino
 ```
 
@@ -103,7 +103,7 @@ avviare il backend.
 | --- | --- | --- |
 | `-c FILE` | carica configurazione da `FILE` | da implementare |
 | `--config FILE` | forma lunga di `-c` | da implementare |
-| `--print-config` | stampa la configurazione effettiva e continua o termina, da decidere | da discutere |
+| `--print-config` | stampa la configurazione effettiva e termina senza runtime nel contratto v0, se implementato | da discutere output/implementazione |
 | `--check-config` | valida default, `ALFRED_CONFIG` e `ALFRED_EVENT_ENGINE`, poi termina senza avviare logger/backend/core/output/watch | implementato |
 | `--help` | stampa uso breve e opzioni | implementato |
 | `--version` | stampa versione del programma | implementato |
@@ -137,12 +137,12 @@ error_log=errors.log
 event_engine=core
 ```
 
-Domanda ancora aperta: `--print-config` deve solo stampare e terminare, oppure
-stampare e poi avviare Alfred?
-
-Scelta provvisoria consigliata: farla terminare senza avviare il backend. Se in
-futuro serve stampare e continuare, possiamo aggiungere una opzione diversa,
-per esempio `--verbose-config`.
+La milestone
+[CLI parser v0](50-cli-parser-v0.md#grammatica-e-precedenza-decise-per-v0)
+decide che `--print-config`, se implementato in v0, deve stampare e terminare
+senza avviare il backend. Se in futuro serve stampare e continuare, va aggiunta
+una opzione diversa, per esempio `--verbose-config`, per non cambiare il
+contratto no-runtime.
 
 ## Precedenza futura consigliata
 
@@ -309,7 +309,7 @@ Per ora non promettiamo `/etc/alfred.conf`.
 
 - scegliere se usare `getopt_long()` direttamente o una piccola astrazione
   locale
-- decidere se `--print-config` termina o continua
+- decidere se implementare `--print-config` in v0 o rimandarlo
 - decidere se introdurre un path standard come `/etc/alfred.conf`
 - decidere se supportare file config multipli
 - decidere se aggiungere output macchina leggibile, per esempio
