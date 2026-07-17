@@ -71,6 +71,13 @@ Show short usage and version information without starting the runtime:
 ./alfred --version
 ```
 
+Validate the current configuration without starting the runtime:
+
+```bash
+./alfred --check-config
+ALFRED_CONFIG=./alfred.conf ./alfred --check-config
+```
+
 Run Alfred with a configuration file:
 
 ```bash

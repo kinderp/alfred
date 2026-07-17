@@ -1239,12 +1239,13 @@ Il target ricostruisce il binario e lancia:
 tests/cli/
 ```
 
-Questa suite controlla il contratto utente della CLI. Per ora copre i comandi
-informativi `--help` e `--version`: devono uscire con codice `0`, scrivere su
-`stdout`, non scrivere su `stderr` e non creare log runtime. Il punto
-importante e' che questi comandi terminano prima di `app_init()`, quindi non
-devono inizializzare configurazione, logger, backend, core, output pipeline o
-watch.
+Questa suite controlla il contratto utente della CLI. Copre i comandi
+informativi `--help` e `--version`, piu' `--check-config`. I primi due devono
+uscire con codice `0`, scrivere su `stdout`, non scrivere su `stderr` e non
+creare log runtime. `--check-config` deve validare default, `ALFRED_CONFIG` e
+`ALFRED_EVENT_ENGINE`, poi terminare senza inizializzare logger, backend, core,
+output pipeline o watch. La suite copre sia configurazioni valide sia errori di
+configurazione.
 
 ### test-backend-diagnostics
 

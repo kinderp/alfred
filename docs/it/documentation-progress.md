@@ -1885,3 +1885,10 @@ inizializzano logger/backend/core/output pipeline e non creano log runtime.
 La nuova suite `tests/cli` e il target `make test-cli` coprono stdout, stderr,
 exit status e assenza di `raw.log`, `events.log`, `errors.log` e
 `output.jsonl`.
+
+Aggiornamento successivo: la issue figlia #216 estende la CLI MVP con
+`--check-config`. Il comando inizializza i default, carica `ALFRED_CONFIG` se
+presente e valida `ALFRED_EVENT_ENGINE` se presente usando gli stessi helper di
+startup, ma termina prima di logger, backend, core, output pipeline e watch.
+La suite `tests/cli` copre ora configurazione valida, config file invalido,
+event engine invalido, stdout/stderr, exit status e assenza di log runtime.
