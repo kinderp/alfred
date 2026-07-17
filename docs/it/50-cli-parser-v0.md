@@ -80,6 +80,100 @@ Questa milestone non implementa:
 Il parser deve orchestrare configurazione e path, non conoscere la semantica
 inotify interna.
 
+## Audit parsing corrente
+
+Oggi Alfred non ha ancora un parser CLI generale. Il percorso reale e'
+volutamente piu' semplice:
+
+```text
+main(argc, argv)
+    -> se argc == 2 e argv[1] == "--help"
+       -> alfred_print_usage(stdout)
+       -> exit 0
+
+    -> se argc == 2 e argv[1] == "--version"
+       -> alfred_print_version(stdout)
+       -> exit 0
+
+    -> se argc == 2 e argv[1] == "--check-config"
+       -> alfred_check_config(stdout, stderr)
+       -> exit 0/1
+
+    -> altrimenti
+       -> app_init(&app, argc, argv)
+       -> app_run(&app)
+       -> app_shutdown(&app)
+```
+
+Questa scelta ha una conseguenza importante: i comandi informativi esistenti
+sono riconosciuti solo nella forma esatta con un unico argomento. Per esempio:
+
+```bash
+./alfred --help
+./alfred --version
+./alfred --check-config
+```
+
+sono comandi speciali e terminano prima del runtime.
+
+Invece forme come:
+
+```bash
+./alfred --help /tmp/root
+./alfred --check-config /tmp/root
+./alfred -c conf /tmp/root
+./alfred --config conf /tmp/root
+./alfred -- /tmp/root
+```
+
+non sono ancora interpretate da un parser. Entrano nel percorso normale di
+`app_init()` e gli argomenti vengono considerati path da osservare.
+
+Il percorso di configurazione corrente e':
+
+```text
+app_init()
+    -> config_defaults(&app->config)
+    -> getenv("ALFRED_CONFIG")
+    -> config_load(&app->config, ALFRED_CONFIG), se presente
+    -> getenv("ALFRED_EVENT_ENGINE")
+    -> config_set_event_engine(&app->config, ALFRED_EVENT_ENGINE), se presente
+    -> logger_init(...)
+    -> backend/core/output init
+    -> if argc < 2: errore "no startup paths provided"
+    -> for i = 1; i < argc; i++:
+           backend_ops->add_target(argv[i])
+```
+
+Quindi, finche' il parser v0 non esiste, non c'e' un punto in cui `-c`,
+`--config`, `--print-config` o `--` possono essere riconosciuti in modo
+coerente. Questo audit conferma perche' il parser deve stare prima della
+chiamata ad `app_init()` o deve passare ad `app_init()` una struttura gia'
+interpretata, non semplicemente inoltrare `argc/argv` grezzi.
+
+I test CLI correnti sono concentrati in `tests/cli/test_help_version.sh` e
+vengono eseguiti da `make test-cli`. Coprono:
+
+- `--help`: stdout atteso, stderr vuoto, nessun log runtime;
+- `--version`: formato `alfred MAJOR.MINOR.PATCH`, stderr vuoto, nessun log
+  runtime;
+- `--check-config` con default validi: `configuration OK`, nessun log runtime;
+- `--check-config` con `ALFRED_CONFIG` valido;
+- `--check-config` con `ALFRED_CONFIG` invalido;
+- `--check-config` con `ALFRED_EVENT_ENGINE=shadow`, che deve fallire.
+
+Non coprono ancora:
+
+- `-c FILE`;
+- `--config FILE`;
+- `--print-config`;
+- `--`;
+- opzioni sconosciute;
+- opzioni con argomento mancante;
+- path che iniziano con `-`.
+
+Questi casi sono esattamente il perimetro dei prossimi micro-step.
+
 ## Grammatica proposta
 
 La forma principale resta:
@@ -201,7 +295,7 @@ Ogni test deve controllare:
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #228, GitHub Milestone #13, PR #229 e questo documento. |
 | Mappare funzionalita' e superficie CLI | Done | Issue figlia #230. La tabella in `26-stato-funzionalita.md` collega feature, superficie attuale e decisione CLI/config. |
-| Audit parsing corrente | Todo | Leggere codice e test prima di modificare comportamento. |
+| Audit parsing corrente | Done | Issue figlia #232. Documenta `main()`, `alfred_check_config()`, `app_init()`, `ALFRED_CONFIG`, `ALFRED_EVENT_ENGINE` e copertura `make test-cli`. |
 | Decidere grammatica e precedenza | Todo | Specificare `-c`, `--config`, `--`, `--print-config` e casi ambigui. |
 | Implementare parser minimo | Todo | Piccolo, testabile, nel livello applicazione. |
 | Aggiungere test CLI | Todo | Successi, errori, no-runtime commands e path dopo `--`. |
