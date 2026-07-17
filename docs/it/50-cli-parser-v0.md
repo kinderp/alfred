@@ -259,8 +259,8 @@ La precedenza decisa per v0 e':
 
 ```text
 1. config_defaults()
-2. `-c FILE` / `--config FILE`, se presente
-3. altrimenti `ALFRED_CONFIG`, se presente
+2. -c FILE / --config FILE, se presente
+3. altrimenti ALFRED_CONFIG, se presente
 4. ALFRED_EVENT_ENGINE, se presente
 5. futuri override CLI specifici, se verranno aggiunti
 ```
