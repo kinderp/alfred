@@ -117,10 +117,10 @@ Le domande da chiudere sono:
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #209, issue figlia #210 e PR #211 aprono la milestone. |
 | Audit CLI/user workflow corrente | Done | Issue figlia #212 e PR #213 hanno confrontato `app/src/main.c`, `app/src/app.c`, README, man page e comportamento reale del binario prima delle modifiche CLI. |
-| Decidere CLI minima v0 | Done | La CLI informativa minima v0 e' `--help` + `--version`; `--check-config` resta step separato. |
-| Implementare comportamento selezionato | In progress | Issue figlia #214. `--help` e `--version` terminano prima di `app_init()`. |
-| Aggiungere test CLI/config | In progress | Issue figlia #214. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi. |
-| Allineare README e man page | In progress | Issue figlia #214 e PR #215 allineano `--help` e `--version`; il resto del contratto CLI/MVP resta da completare in step successivi. |
+| Decidere CLI minima v0 | Done | La CLI minima v0 include `--help`, `--version` e `--check-config`; `-c`/`--config`, `--print-config` e `--` restano step futuri. |
+| Implementare comportamento selezionato | In progress | Issue figlie #214 e #216. `--help` e `--version` terminano prima di `app_init()`; `--check-config` valida configurazione e termina prima del runtime. |
+| Aggiungere test CLI/config | In progress | Issue figlie #214 e #216. `make test-cli` copre exit status, stdout/stderr e assenza di log runtime per comandi informativi e validazione config. |
+| Allineare README e man page | In progress | Issue figlie #214 e #216 allineano `--help`, `--version` e `--check-config`; il resto del contratto CLI/MVP resta da completare in step successivi. |
 | Tradurre README e man page in italiano | Todo | Da fare alla fine della milestone, quando README e man page inglesi descrivono il contratto stabile. Le pagine man italiane dovranno essere installabili/consultabili tramite lingua/locale, non solo copiate in un MD. |
 | Definire smoke test MVP | Todo | Un percorso breve: build, run su tmpdir, evento, log, JSONL opt-in. |
 | Chiusura readiness | Todo | Sintesi di cosa e' affidabile, cosa resta rimandato e cosa si puo' aprire dopo. |
@@ -149,11 +149,10 @@ app/src/main.c
     -> app_shutdown()
 ```
 
-Non esiste ancora un parser di opzioni. Di conseguenza, ogni argomento dopo il
-nome del programma viene trattato come path da osservare. Questo e' semplice e
-prevedibile, ma rende scomodi i casi base di un utente nuovo: `--help` e
-`--version` non stampano informazioni, perche' oggi vengono interpretati come
-path.
+Non esiste ancora un parser di opzioni generale. Esistono pero' tre comandi
+speciali riconosciuti da `main()` prima del runtime: `--help`, `--version` e
+`--check-config`. Tutti gli altri argomenti restano nel percorso storico e
+vengono trattati come path da osservare.
 
 ### Comportamento osservato
 
@@ -162,37 +161,35 @@ path.
 | `./alfred /tmp/root` | Supportato | Avvia il runtime su una o piu' directory root. Il processo resta in esecuzione finche' riceve `SIGINT`/`SIGTERM` o incontra un errore runtime. |
 | `ALFRED_CONFIG=./alfred.conf ./alfred /tmp/root` | Supportato | Carica la configurazione prima di inizializzare logger, backend, core e output pipeline. |
 | `./alfred` | Fallisce con exit non-zero e `startup failed` | Non ci sono path da osservare. Il messaggio e' corretto come fallimento, ma non e' ancora amichevole come usage. |
-| `./alfred --help` | Fallisce con exit non-zero e `startup failed` | `--help` viene trattato come path, non come opzione informativa. |
-| `./alfred --version` | Fallisce con exit non-zero e `startup failed` | `--version` viene trattato come path, non come opzione informativa. |
+| `./alfred --help` | Supportato | Stampa usage su `stdout`, exit `0`, nessun runtime/log. |
+| `./alfred --version` | Supportato | Stampa versione su `stdout`, exit `0`, nessun runtime/log. |
 | `ALFRED_CONFIG=/file/mancante ./alfred /tmp/root` | Fallisce con `invalid ALFRED_CONFIG=...` e `startup failed` | La failure mode e' esplicita e deve restare coperta da test/documentazione. |
 | `./alfred -c conf /tmp/root` | Non implementato | `-c` e `conf` sarebbero trattati come path separati. |
 | `./alfred --config conf /tmp/root` | Non implementato | `--config` e `conf` sarebbero trattati come path separati. |
-| `./alfred --check-config` | Non implementato | Sarebbe trattato come path. |
+| `./alfred --check-config` | Supportato | Valida default, `ALFRED_CONFIG` e `ALFRED_EVENT_ENGINE`, poi termina senza logger/backend/core/output/watch. |
 | `./alfred -- /tmp/root` | Non implementato | `--` sarebbe trattato come path, non come fine opzioni. |
 
 ### Raccomandazione
 
-Il prossimo micro-step dovrebbe decidere e poi implementare il sottoinsieme CLI
-minimo, senza introdurre un parser complesso:
+Il sottoinsieme CLI minimo viene introdotto senza un parser complesso:
 
 1. `--help`: stampa uso breve su `stdout`, exit `0`, nessun logger/backend/core
    inizializzato. Implementato come primo comando informativo v0.
 2. `--version`: stampa versione su `stdout`, exit `0`, nessun logger/backend/core
    inizializzato. Implementato come primo comando informativo v0.
-3. `--check-config`: da valutare come step separato, perche' richiede definire
-   quale configurazione validare, quale precedenza usare e quali subsystem non
-   devono partire.
+3. `--check-config`: implementato nello step successivo come validazione di
+   default, `ALFRED_CONFIG` e `ALFRED_EVENT_ENGINE`; termina senza logger,
+   backend, core, output pipeline o watch.
 
 `-c`/`--config` e `--` sono utili, ma toccano la semantica di parsing e la
-precedenza con `ALFRED_CONFIG`; conviene affrontarli dopo `--help` e
-`--version`.
+precedenza con `ALFRED_CONFIG`; conviene affrontarli in step futuri separati.
 
 ### Localizzazione README/man page
 
 La traduzione italiana va pianificata come lavoro di fine milestone, non come
 primo passo. Il motivo e' pratico: se traduciamo ora README e pagine man, poi
 dobbiamo aggiornare due volte anche la traduzione quando cambiano `--help`,
-`--version`, eventuale `--check-config` e lo smoke test MVP.
+`--version`, `--check-config` e lo smoke test MVP.
 
 Il deliverable corretto e':
 

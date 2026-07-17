@@ -11,6 +11,8 @@ alfred \- filesystem event engine and future AI agent runtime guard
 .B alfred --help
 .br
 .B alfred --version
+.br
+.B alfred --check-config
 .SH DESCRIPTION
 .B alfred
 starts the Alfred runtime and watches one or more filesystem roots.
@@ -25,10 +27,13 @@ interpreted as paths to watch. Alfred implements
 and
 .B --version
 as informational commands that exit before configuration, logging, backend,
-core, output pipeline, or watch initialization. Alfred does not yet implement
+core, output pipeline, or watch initialization.
+.B --check-config
+loads and validates configuration, then exits before logging, backend, core,
+output pipeline, or watch initialization. Alfred does not yet implement
 .BR -c ,
 .BR --config ,
-.BR --check-config ,
+.BR --print-config ,
 or
 .BR -- .
 Configuration is loaded through the
@@ -48,6 +53,17 @@ command does not start the runtime and does not create runtime log files.
 .B --version
 Print version information to standard output and exit with status 0. This
 command does not start the runtime and does not create runtime log files.
+.TP
+.B --check-config
+Validate built-in defaults, optional
+.B ALFRED_CONFIG
+and optional
+.B ALFRED_EVENT_ENGINE
+with the same configuration helpers used by normal startup. On success, print
+a short success message to standard output and exit with status 0. On failure,
+print an explicit diagnostic to standard error and exit non-zero. This command
+does not validate startup watch paths because it does not start backend or watch
+initialization, and it does not create runtime log files.
 .TP
 .I PATH
 Filesystem root to observe. At least one path is required for a normal
@@ -124,6 +140,16 @@ alfred --help
 Show version:
 .EX
 alfred --version
+.EE
+.TP
+Validate default configuration without starting the runtime:
+.EX
+alfred --check-config
+.EE
+.TP
+Validate an explicit configuration file without starting the runtime:
+.EX
+ALFRED_CONFIG=./alfred.conf alfred --check-config
 .EE
 .TP
 Watch one directory with defaults:

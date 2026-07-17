@@ -24,6 +24,8 @@ Punti pratici che useremo:
 
 - supportare `--help`
 - supportare `--version`
+- supportare `--check-config` per validare la configurazione senza avviare il
+  runtime
 - usare opzioni brevi per comandi frequenti, per esempio `-c`
 - usare opzioni lunghe descrittive, per esempio `--config`
 - usare `--` come fine delle opzioni quando serve distinguere path che iniziano
@@ -39,12 +41,14 @@ Oggi l'uso reale e':
 ./alfred /path/da/osservare
 ./alfred --help
 ./alfred --version
+./alfred --check-config
 ```
 
 Con file di configurazione:
 
 ```bash
 ALFRED_CONFIG=./alfred.conf ./alfred /path/da/osservare
+ALFRED_CONFIG=./alfred.conf ./alfred --check-config
 ```
 
 La precedenza attuale e':
@@ -62,6 +66,13 @@ il runtime ufficiale; `shadow` fallisce.
 con codice `0` e terminano prima di inizializzare configurazione, logger,
 backend, core, output pipeline o watch. Questo garantisce che non creino
 `raw.log`, `events.log`, `errors.log` o `output.jsonl`.
+
+`--check-config` e' un comando di validazione: inizializza i default in memoria,
+carica `ALFRED_CONFIG` se presente e applica `ALFRED_EVENT_ENGINE` se presente,
+usando gli stessi helper di `app_init()`. Poi termina prima di inizializzare
+logger, backend, core, output pipeline o watch. Per questo non crea log runtime
+e non valida i path da osservare: i path richiedono il backend e restano nel
+percorso di startup normale.
 
 ## Comportamento desiderato futuro
 
@@ -93,7 +104,7 @@ avviare il backend.
 | `-c FILE` | carica configurazione da `FILE` | da implementare |
 | `--config FILE` | forma lunga di `-c` | da implementare |
 | `--print-config` | stampa la configurazione effettiva e continua o termina, da decidere | da discutere |
-| `--check-config` | valida la configurazione e termina senza avviare inotify | da discutere |
+| `--check-config` | valida default, `ALFRED_CONFIG` e `ALFRED_EVENT_ENGINE`, poi termina senza avviare logger/backend/core/output/watch | implementato |
 | `--help` | stampa uso breve e opzioni | implementato |
 | `--version` | stampa versione del programma | implementato |
 | `--` | fine opzioni, tutto cio' che segue e' path | da implementare |
