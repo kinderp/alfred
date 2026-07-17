@@ -191,6 +191,35 @@ rispondere a una domanda sola:
 quali opzioni di processo sono state richieste e dove iniziano i path?
 ```
 
+### Compatibilita' POSIX e convenzioni GNU
+
+La CLI di Alfred deve restare prevedibile per utenti Unix e per script shell.
+Per questo la grammatica v0 va letta rispetto a due livelli:
+
+- le Utility Syntax Guidelines POSIX / IEEE Std 1003.1, che definiscono le
+  aspettative di base per opzioni corte, option-arguments, operandi e
+  terminatore `--`;
+- le convenzioni storiche GNU, che rendono normali opzioni lunghe come
+  `--help`, `--version` e, per opzioni lunghe con argomento, forme come
+  `--config FILE` e spesso `--config=FILE`.
+
+Lo stato dopo PR #237 e':
+
+| Aspetto | Stato | Nota |
+| --- | --- | --- |
+| Opzione corta `-c FILE` | Allineata al sottoinsieme POSIX che ci serve | L'argomento della config e' separato dal nome opzione. |
+| Terminatore `--` | Allineato | Tutto cio' che segue diventa path/operando. |
+| Opzioni prima degli operandi | Allineato e intenzionalmente rigido | `alfred PATH --config conf` e' rifiutato per evitare ambiguita'. |
+| `--help` e `--version` | Allineati alle convenzioni GNU | Terminano senza runtime e scrivono su `stdout`. |
+| `--config FILE` | Estensione GNU-style supportata | Forma lunga equivalente a `-c FILE`. |
+| `--config=FILE` | Da auditare | Probabile gap GNU-style: la milestone non deve chiudersi senza decidere se implementarlo in v0 o rimandarlo esplicitamente. |
+| Alias `-h` / `-V` | Da auditare | Non sono richiesti dal sottoinsieme POSIX usato oggi, ma sono convenzioni storiche diffuse; vanno accettati, rimandati o rifiutati con motivazione. |
+
+La issue #240 traccia questo audit. Finche' #240 non e' chiusa, la readiness
+review non deve chiudere la milestone: non vogliamo dichiarare la CLI
+compatibile POSIX/GNU senza una verifica esplicita delle forme accettate,
+rifiutate e testate.
+
 ### Forme accettate
 
 Le opzioni devono comparire prima dei path. Il token `--` termina il parsing
@@ -378,10 +407,11 @@ Ogni test deve controllare:
 | Mappare funzionalita' e superficie CLI | Done | Issue figlia #230. La tabella in `26-stato-funzionalita.md` collega feature, superficie attuale e decisione CLI/config. |
 | Audit parsing corrente | Done | Issue figlia #232. Documenta `main()`, `alfred_check_config()`, `app_init()`, `ALFRED_CONFIG`, `ALFRED_EVENT_ENGINE` e copertura `make test-cli`. |
 | Decidere grammatica e precedenza | Done | Issue figlia #234. Specifica forme accettate/rifiutate, duplicati `-c`/`--config`, `--`, no-runtime commands, precedenza config e output/exit status. |
-| Implementare parser minimo | Todo | Piccolo, testabile, nel livello applicazione. |
-| Aggiungere test CLI | Todo | Successi, errori, no-runtime commands e path dopo `--`. |
-| Aggiornare README/man/doc | Todo | Inglese e italiano devono restare allineati al comportamento reale. |
-| Readiness review | Todo | Verificare che la milestone non abbia riaperto runtime o hot path. |
+| Implementare parser minimo | Done | Issue figlia #236, PR #237. Il parser resta nel livello applicazione e supporta `-c`, `--config`, `--`, comandi no-runtime e errori side-effect-free. |
+| Aggiungere test CLI | Done | PR #237 estende `make test-cli` con successi, errori, assenza di log runtime, precedenza config CLI e path dopo `--`. |
+| Aggiornare README/man/doc | Done | PR #237 aggiorna README, pagine man inglesi/italiane, livello applicazione, roadmap CLI e matrice funzionalita'. |
+| Audit POSIX/GNU CLI e man page | Todo | Issue figlia #240. Verificare parser, `--config=FILE`, alias brevi, deviazioni accettate e tutte le man page inglesi/italiane prima della chiusura milestone. |
+| Readiness review | In review | Issue figlia #238, PR #239. Verifica che la milestone non abbia riaperto runtime, backend, hot path, Event Model, Writer Runtime o Agent Guard; resta bloccata finche' #240 non e' risolta. |
 
 ## Criteri di chiusura
 
@@ -398,10 +428,23 @@ La milestone puo' chiudersi quando:
 - il runtime normale `./alfred PATH...` resta compatibile;
 - la milestone non introduce dipendenze esterne o framework CLI pesanti.
 
+Stato dopo PR #237: i criteri funzionali sono soddisfatti per `-c`,
+`--config`, `--`, `--help`, `--version`, `--check-config`, test CLI e
+documentazione utente. `--print-config` resta esplicitamente rimandato perche'
+non esiste ancora un output stabile della configurazione effettiva. La
+readiness review #238 / PR #239 chiude la tracciabilita' della PR #237 e
+conferma che il parser non ha allargato il runtime oltre il perimetro v0, ma
+non deve chiudere la milestone finche' l'audit POSIX/GNU #240 non ha deciso le
+forme `--config=FILE`, eventuali alias brevi, le deviazioni deliberate e
+l'allineamento di tutte le man page inglesi/italiane al contratto scelto.
+
 ## Collegamenti
 
 - GitHub Milestone: [CLI parser v0](https://github.com/kinderp/alfred/milestone/13)
 - Issue madre: [#228](https://github.com/kinderp/alfred/issues/228)
+- Readiness review: [#238](https://github.com/kinderp/alfred/issues/238)
+- Readiness PR: [#239](https://github.com/kinderp/alfred/pull/239)
+- Audit POSIX/GNU: [#240](https://github.com/kinderp/alfred/issues/240)
 - Roadmap CLI storica: [19-roadmap-cli-e-man-page.md](19-roadmap-cli-e-man-page.md)
 - MVP usability precedente: [49-mvp-operational-usability-v0.md](49-mvp-operational-usability-v0.md)
 - Livello applicazione: [04-livello-applicazione.md](04-livello-applicazione.md)
