@@ -46,6 +46,41 @@ rafforza un caso d'uso gia' documentato.
 | Core semantico | `FILE_CREATED`, `DIR_CREATED`, `FILE_DELETED`, `DIR_DELETED`, `FILE_MODIFIED`, `FILE_READY`, move/rename/relocated file e directory, `OVERFLOW`; adapter `alfred_event_t -> alfred_record_t`; output `core_logger` via record formatter | metadata changed, file read/open audit, close-nowrite, delete/move self semantici, risk/session/policy |
 | Backend state | watch ricorsivi, `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, resync locale, lost-scope queue, recovery delayed sincrona, retry/backoff, benchmark manuale lost-scope; builder iniziale verso record diagnostici `WATCH_*`; `WATCH_ADDED`, `WATCH_REMOVED`, `WATCH_STALE`, `WATCH_RESYNC_*` e `WATCH_LOST_*` runtime via record + sink + text sink | worker thread, configurazione pubblica recovery, performance suite stabile, backpressure reale |
 
+## Mappa funzionalita' e superficie CLI
+
+Questa tabella collega le funzionalita' gia' implementate o pianificate alla
+superficie con cui un utente puo' attivarle o verificarle. Serve soprattutto
+alla milestone [CLI parser v0](50-cli-parser-v0.md): prima di aggiungere
+opzioni bisogna capire quali funzionalita' meritano una vera CLI, quali restano
+configurazione e quali devono restare solo test o roadmap.
+
+| Funzionalita' | Superficie attuale | Superficie CLI/config desiderata | Stato decisione |
+| --- | --- | --- | --- |
+| Osservare una o piu' directory | Argomenti posizionali `./alfred PATH...` | Mantenere `PATH...`; aggiungere `--` per path che iniziano con `-` | Da implementare in CLI parser v0 |
+| Caricare configurazione da file | `ALFRED_CONFIG=FILE` | Aggiungere `-c FILE` e `--config FILE`; CLI deve vincere su `ALFRED_CONFIG` | Da implementare in CLI parser v0 |
+| Mostrare usage | `./alfred --help` | Restare comando informativo side-effect-free | Supportato |
+| Mostrare versione | `./alfred --version` | Restare comando informativo side-effect-free | Supportato |
+| Validare configurazione senza runtime | `./alfred --check-config`, con eventuale `ALFRED_CONFIG=FILE` | Integrare con `-c FILE`/`--config FILE`; non richiedere `PATH...` | Parziale: parser config CLI mancante |
+| Stampare configurazione effettiva | Nessuna superficie | Candidato `--print-config`; deve terminare senza runtime se implementato | Da decidere in CLI parser v0 |
+| Abilitare JSONL output | Config file: `output_enabled=true`, `output_format=jsonl`, `output_log=...` | Restare config per v0; niente flag CLI dedicata finche' il parser non e' stabile | Rimandato oltre CLI parser v0 |
+| Usare counter output no-op | Config file: `output_format=counter` con output enabled | Restare config/test/benchmark; non e' una feature utente primaria | Non esporre come flag v0 |
+| Configurare watch mask inotify | Config file: `inotify_watch_mask=...` | Restare config; CLI non deve conoscere token inotify nel parser v0 | Non esporre come flag v0 |
+| Abilitare audit inotify opt-in | Config file: `inotify_audit_events=...` | Restare config perche' rumoroso e diagnostico | Non esporre come flag v0 |
+| Scegliere event engine | Config/env: `event_engine`, `ALFRED_EVENT_ENGINE` | Nessuna nuova CLI v0; `shadow` resta rifiutato | Non esporre come flag v0 |
+| Smoke test MVP | `make smoke-mvp` | Restare target Make/test, non opzione runtime | Fuori dalla CLI runtime |
+| Test e benchmark performance | `make perf`, `make perf-*` | Restare target Make/manuali; non opzioni runtime | Fuori dalla CLI runtime |
+| Pagine man | `man -l docs/man/...` | Packaging/installazione futuro; nessuna opzione Alfred | Rimandato |
+| Agent Guard/policy/enforcement | Nessuna superficie runtime | Non introdurre flag finche' modello e backend non sono pronti | Fuori scope |
+
+Regola pratica per questa milestone:
+
+```text
+se una funzionalita' e' gia' un comportamento utente fondamentale,
+puo' ricevere una CLI;
+se e' tuning, diagnostica o output avanzato, deve restare config;
+se e' test, benchmark o roadmap futura, non deve diventare flag runtime.
+```
+
 ## Funzionalita' end-to-end core
 
 Queste righe descrivono il percorso completo:
