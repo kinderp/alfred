@@ -896,10 +896,11 @@ static void app_init_workspace_session_context(app_t *app)
 }
 
 /*
- * app_init - initialize the application runtime
+ * app_init_from_paths - initialize the runtime from parsed CLI inputs
  * @app: application context to initialize
- * @argc: command-line argument count
- * @argv: command-line argument vector
+ * @path_count: number of startup watch paths
+ * @paths: parsed startup watch path vector
+ * @config_path: optional explicit CLI configuration file, or NULL
  *
  * Initializes all runtime subsystems in dependency order: configuration,
  * logging, core state, inotify backend, signal handling, and startup watches.
@@ -907,7 +908,10 @@ static void app_init_workspace_session_context(app_t *app)
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */
-int app_init(app_t *app, int argc, char **argv)
+int app_init_from_paths(app_t *app,
+                        int path_count,
+                        char **paths,
+                        const char *config_path)
 {
     error_t error = ERR_UNKNOWN;
 
@@ -928,15 +932,26 @@ int app_init(app_t *app, int argc, char **argv)
      */
     config_defaults(&app->config);
 
-    const char *config_path = getenv("ALFRED_CONFIG");
-    if (config_path != NULL &&
-        config_load(&app->config, config_path) != ERR_OK) {
+    if (config_path != NULL) {
+        if (config_load(&app->config, config_path) != ERR_OK) {
+            fprintf(stderr,
+                    "invalid --config=%s\n",
+                    config_path);
+            error = ERR_CONFIG;
+            goto fail;
+        }
+    }
+    else {
+        const char *env_config_path = getenv("ALFRED_CONFIG");
+        if (env_config_path != NULL &&
+            config_load(&app->config, env_config_path) != ERR_OK) {
 
-        fprintf(stderr,
-                "invalid ALFRED_CONFIG=%s\n",
-                config_path);
-        error = ERR_CONFIG;
-        goto fail;
+            fprintf(stderr,
+                    "invalid ALFRED_CONFIG=%s\n",
+                    env_config_path);
+            error = ERR_CONFIG;
+            goto fail;
+        }
     }
 
     /*
@@ -1039,7 +1054,7 @@ int app_init(app_t *app, int argc, char **argv)
      * At least one startup path is required. Paths are watched recursively or
      * non-recursively according to the active configuration.
      */
-    if (argc < 2) {
+    if (path_count <= 0 || paths == NULL) {
         logger_error(&app->logger,
                      "no startup paths provided");
         error = ERR_INVALID_ARG;
@@ -1050,11 +1065,11 @@ int app_init(app_t *app, int argc, char **argv)
     if (error != ERR_OK)
         goto fail;
 
-    for (int i = 1; i < argc; i++) {
+    for (int i = 0; i < path_count; i++) {
         alfred_backend_target_t target;
 
         memset(&target, 0, sizeof(target));
-        target.path = argv[i];
+        target.path = paths[i];
         target.target_type = ALFRED_BACKEND_TARGET_TYPE_FILESYSTEM_PATH;
         target.flags = ALFRED_BACKEND_TARGET_FLAG_NONE;
 
@@ -1080,6 +1095,27 @@ int app_init(app_t *app, int argc, char **argv)
 fail:
     app_shutdown(app);
     return error;
+}
+
+/*
+ * app_init - initialize the application runtime
+ * @app: application context to initialize
+ * @argc: command-line argument count
+ * @argv: command-line argument vector
+ *
+ * Compatibility wrapper for callers that still pass raw argv where argv[1..]
+ * are all startup paths. The CLI-aware executable parses options before this
+ * boundary and calls app_init_from_paths().
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+int app_init(app_t *app, int argc, char **argv)
+{
+    if (argc <= 1 || argv == NULL) {
+        return app_init_from_paths(app, 0, NULL, NULL);
+    }
+
+    return app_init_from_paths(app, argc - 1, &argv[1], NULL);
 }
 
 /*

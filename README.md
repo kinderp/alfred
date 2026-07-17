@@ -77,12 +77,17 @@ Validate the current configuration without starting the runtime:
 ```bash
 ./alfred --check-config
 ALFRED_CONFIG=./alfred.conf ./alfred --check-config
+./alfred -c ./alfred.conf --check-config
+./alfred --config ./alfred.conf --check-config
 ```
 
 Run Alfred with a configuration file:
 
 ```bash
 ALFRED_CONFIG=./alfred.conf ./alfred /path/to/watch
+./alfred -c ./alfred.conf /path/to/watch
+./alfred --config ./alfred.conf /path/to/watch
+./alfred -- /path/to/watch
 ```
 
 Minimal optional JSONL output configuration:

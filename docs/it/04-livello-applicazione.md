@@ -140,14 +140,38 @@ esplicito.
 
 ## app/src/main.c
 
-`main.c` e' il punto di ingresso del programma.
+`main.c` e' il punto di ingresso del programma. Prima di avviare il runtime
+chiama il parser CLI v0, che riconosce solo le opzioni di processo gia'
+supportate:
+
+- `--help`;
+- `--version`;
+- `--check-config`;
+- `-c FILE`;
+- `--config FILE`;
+- `--` come fine delle opzioni.
+
+Il parser non inizializza logger, backend, core, output pipeline o watch. Se
+trova un errore di sintassi, per esempio `--unknown`, `-c` senza valore,
+config duplicata, `--check-config PATH` o un path che inizia con `-` senza
+`--`, scrive su `stderr` e termina prima del runtime. Per questo gli errori di
+parsing non creano `raw.log`, `events.log`, `errors.log` o `output.jsonl`.
 
 Il flusso e':
 
 ```c
 app_t app;
 
-rc = app_init(&app, argc, argv);
+rc = alfred_parse_args(argc, argv, &options, stderr);
+if (options.command == ALFRED_CLI_HELP)    alfred_print_usage(stdout);
+if (options.command == ALFRED_CLI_VERSION) alfred_print_version(stdout);
+if (options.command == ALFRED_CLI_CHECK_CONFIG)
+    alfred_check_config(stdout, stderr, options.config_path);
+
+rc = app_init_from_paths(&app,
+                         options.path_count,
+                         options.paths,
+                         options.config_path);
 rc = app_run(&app);
 app_shutdown(&app);
 ```
@@ -155,6 +179,8 @@ app_shutdown(&app);
 Questo stile e' utile perche':
 
 - `main()` resta leggibile
+- gli errori CLI terminano prima del runtime
+- `app.c` riceve path gia' interpretati invece di `argc/argv` grezzi
 - la gestione delle risorse e' centralizzata
 - gli errori di startup passano dallo stesso percorso di cleanup
 
@@ -162,9 +188,9 @@ Questo stile e' utile perche':
 
 `app.c` gestisce il ciclo di vita.
 
-### app_init()
+### app_init_from_paths()
 
-`app_init()` inizializza i sottosistemi in ordine:
+`app_init_from_paths()` inizializza i sottosistemi in ordine:
 
 1. reset della struct `app_t`
 2. configurazione di default
@@ -172,13 +198,30 @@ Questo stile e' utile perche':
 4. core come unico engine semantico supportato
 5. backend inotify
 6. signal handler
-7. watch sui percorsi passati da riga di comando
+7. watch sui percorsi gia' interpretati dal parser CLI
 
 L'ordine e' importante. Per esempio, il logger viene inizializzato presto
 perche' gli altri sottosistemi possono usarlo per scrivere errori.
 
 Il core viene inizializzato dopo il logger perche' la callback del core scrive
 gli eventi semantici attraverso `logger_event()`.
+
+Il caricamento configurazione segue la precedenza CLI v0:
+
+```text
+config_defaults()
+    -> -c FILE / --config FILE, se presente
+    -> altrimenti ALFRED_CONFIG, se presente
+    -> ALFRED_EVENT_ENGINE, se presente
+```
+
+Quindi un file passato esplicitamente con `-c` o `--config` vince su
+`ALFRED_CONFIG`. In questa fase Alfred non fa overlay fra i due file: se la CLI
+ha scelto un file, la variabile d'ambiente non viene caricata.
+
+`app_init()` esiste ancora come wrapper di compatibilita' per codice che passa
+`argc/argv` nel vecchio formato, dove tutti gli argomenti dopo `argv[0]` sono
+path. Il binario usa invece `app_init_from_paths()`.
 
 ### app_run()
 

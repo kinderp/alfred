@@ -207,7 +207,7 @@ come path.
 | `alfred -c FILE -- PATH...` | Carica `FILE`; gli argomenti dopo `--` sono path. |
 | `alfred --config FILE -- PATH...` | Forma lunga equivalente alla precedente. |
 | `alfred --check-config` | Valida la configurazione effettiva e termina senza runtime. |
-| `alfred -c FILE --check-config` | Valida default + `ALFRED_CONFIG` eventuale + `FILE` + env override e termina senza runtime. |
+| `alfred -c FILE --check-config` | Valida default + `FILE` esplicito + env override e termina senza runtime. `ALFRED_CONFIG` non viene caricato perche' la CLI esplicita vince sull'ambiente. |
 | `alfred --config FILE --check-config` | Forma lunga equivalente alla precedente. |
 | `alfred --help` | Stampa usage e termina senza runtime. |
 | `alfred --version` | Stampa versione e termina senza runtime. |
@@ -243,6 +243,7 @@ dell'utente.
 | `alfred --version PATH` | Errore su `stderr`, exit non-zero. | `--version` e' comando esclusivo. |
 | `alfred -c a.conf --version` | Errore su `stderr`, exit non-zero. | `--version` non carica configurazione e non si combina con altre opzioni. |
 | `alfred --check-config PATH` | Errore su `stderr`, exit non-zero. | `--check-config` non deve avviare runtime e non valida path. |
+| `alfred --check-config -c a.conf` | Errore su `stderr`, exit non-zero. | I comandi no-runtime non accettano opzioni successive in v0; usare `alfred -c a.conf --check-config`. |
 | `alfred --print-config PATH` | Errore su `stderr`, exit non-zero, se `--print-config` viene implementato. | `--print-config` deve essere no-runtime in v0. |
 | `alfred PATH --config conf` | Errore su `stderr`, exit non-zero. | Le opzioni devono precedere i path; dopo un path un token `-...` resta ambiguo senza `--`. |
 | `alfred -tmp/root` | Errore su `stderr`, exit non-zero. | Path che iniziano con `-` devono passare dopo `--`. |
@@ -258,8 +259,8 @@ La precedenza decisa per v0 e':
 
 ```text
 1. config_defaults()
-2. ALFRED_CONFIG, se presente
-3. -c FILE / --config FILE, se presente
+2. -c FILE / --config FILE, se presente
+3. altrimenti ALFRED_CONFIG, se presente
 4. ALFRED_EVENT_ENGINE, se presente
 5. futuri override CLI specifici, se verranno aggiunti
 ```
@@ -271,7 +272,10 @@ ALFRED_CONFIG=base.conf ./alfred --config debug.conf /tmp/root
 ```
 
 deve usare `debug.conf`. La CLI e' una scelta esplicita dell'utente al momento
-del comando e deve vincere sul file indicato dall'ambiente.
+del comando e deve vincere sul file indicato dall'ambiente. In v0 questo
+significa anche che, quando `-c`/`--config` e' presente, `ALFRED_CONFIG` non
+viene caricato: un ambiente shell sporco non deve impedire a un comando
+esplicito di validare o usare il file scelto dall'utente.
 
 `ALFRED_EVENT_ENGINE` resta dopo il file esplicito per compatibilita' con il
 contratto corrente: e' un override/env guard storico che oggi accetta solo

@@ -55,7 +55,8 @@ La precedenza attuale e':
 
 ```text
 config_defaults()
-    -> ALFRED_CONFIG, se presente
+    -> -c FILE / --config FILE, se presente
+    -> altrimenti ALFRED_CONFIG, se presente
     -> ALFRED_EVENT_ENGINE, se presente
 ```
 
@@ -144,14 +145,14 @@ senza avviare il backend. Se in futuro serve stampare e continuare, va aggiunta
 una opzione diversa, per esempio `--verbose-config`, per non cambiare il
 contratto no-runtime.
 
-## Precedenza futura consigliata
+## Precedenza CLI v0
 
-Quando esisteranno sia ambiente sia CLI, la precedenza dovrebbe essere:
+Quando esistono sia ambiente sia CLI, la precedenza e':
 
 ```text
 1. config_defaults()
-2. ALFRED_CONFIG, se presente
-3. -c FILE / --config FILE, se presente
+2. -c FILE / --config FILE, se presente
+3. altrimenti ALFRED_CONFIG, se presente
 4. variabili d'ambiente di override specifiche
 5. opzioni CLI specifiche
 ```
@@ -163,6 +164,9 @@ ALFRED_CONFIG=base.conf alfred --config debug.conf /tmp/progetto
 ```
 
 In questo caso `debug.conf` dovrebbe essere il file usato.
+In v0 `ALFRED_CONFIG` non viene caricato quando `-c` o `--config` e' presente:
+la scelta esplicita sul comando deve essere riproducibile anche se l'ambiente
+della shell contiene una configurazione vecchia o invalida.
 
 ## Errori e messaggi
 

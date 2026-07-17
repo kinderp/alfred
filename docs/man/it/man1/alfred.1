@@ -8,6 +8,17 @@ alfred \- motore eventi filesystem e futuro runtime guard per agenti AI
 .B ALFRED_CONFIG=FILE alfred
 .IR PATH ...
 .br
+.B alfred -c
+.I FILE
+.IR PATH ...
+.br
+.B alfred --config
+.I FILE
+.IR PATH ...
+.br
+.B alfred --
+.IR PATH ...
+.br
 .B alfred --help
 .br
 .B alfred --version
@@ -22,7 +33,10 @@ converte eventi backend in eventi raw Alfred, passa questi eventi raw al core
 correlator e scrive log leggibili da esseri umani.
 .PP
 La riga di comando corrente e' intenzionalmente piccola. Gli argomenti
-posizionali sono interpretati come path da osservare. Alfred implementa
+posizionali sono interpretati come path da osservare. Il token
+.B --
+termina il parsing delle opzioni: tutto cio' che segue viene trattato come
+path, anche se inizia con un trattino. Alfred implementa
 .B --help
 e
 .B --version
@@ -30,14 +44,20 @@ come comandi informativi che terminano prima di inizializzare configurazione,
 logging, backend, core, output pipeline o watch.
 .B --check-config
 carica e valida la configurazione, poi termina prima di inizializzare logging,
-backend, core, output pipeline o watch. Alfred non implementa ancora
+backend, core, output pipeline o watch. La configurazione puo' essere caricata
+con
 .BR -c ,
-.BR --config ,
-.BR --print-config ,
-o
-.BR -- .
-La configurazione viene caricata tramite la variabile d'ambiente
+.BR --config
+o tramite la variabile d'ambiente
 .B ALFRED_CONFIG .
+Un file esplicito passato con
+.B -c
+o
+.B --config
+vince su
+.BR ALFRED_CONFIG .
+Alfred non implementa ancora
+.BR --print-config .
 .PP
 Il runtime e' solo core. La modalita' storica shadow e' stata rimossa. Se la
 configurazione o l'ambiente chiedono
@@ -55,6 +75,10 @@ Questo comando non avvia il runtime e non crea log runtime.
 .TP
 .B --check-config
 Valida default incorporati,
+.B -c
+o
+.B --config
+opzionale, altrimenti
 .B ALFRED_CONFIG
 opzionale e
 .B ALFRED_EVENT_ENGINE
@@ -63,6 +87,30 @@ successo stampa un breve messaggio su standard output e termina con stato 0. In
 caso di errore stampa una diagnostica esplicita su standard error e termina con
 stato non-zero. Questo comando non valida i path di watch di startup perche' non
 avvia backend o watch, e non crea log runtime.
+.TP
+.BI -c " FILE"
+Carica configurazione da
+.IR FILE .
+Equivale a
+.BR --config .
+Se anche
+.B ALFRED_CONFIG
+e' impostata, viene usato il file esplicito della CLI e il file indicato
+dall'ambiente non viene caricato.
+.TP
+.BI --config " FILE"
+Carica configurazione da
+.IR FILE .
+Duplicati di
+.B -c
+o
+.B --config
+sono rifiutati nella CLI v0.
+.TP
+.B --
+Termina il parsing delle opzioni. Tutti gli argomenti successivi sono path di
+startup. Usarlo quando un path inizia con
+.BR - .
 .TP
 .I PATH
 Root filesystem da osservare. Almeno un path e' richiesto per un run normale.
@@ -78,7 +126,11 @@ prima che Alfred riporti avvio completato o entri nell'event loop.
 .B ALFRED_CONFIG
 Path verso un file di configurazione key-value. Se impostata, Alfred carica
 questo file dopo avere applicato i default incorporati. Una configurazione non
-valida fa fallire lo startup.
+valida fa fallire lo startup, salvo quando la riga di comando passa un file
+esplicito con
+.B -c
+o
+.BR --config .
 .TP
 .B ALFRED_EVENT_ENGINE
 Hook di validazione di compatibilita'. L'unico valore accettato e'
@@ -152,6 +204,8 @@ alfred --check-config
 Valida un file di configurazione esplicito senza avviare il runtime:
 .EX
 ALFRED_CONFIG=./alfred.conf alfred --check-config
+alfred -c ./alfred.conf --check-config
+alfred --config ./alfred.conf --check-config
 .EE
 .TP
 Osserva una directory con i default:
@@ -167,6 +221,13 @@ alfred /tmp/project /tmp/other-root
 Carica configurazione da file:
 .EX
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
+alfred -c ./alfred.conf /tmp/project
+alfred --config ./alfred.conf /tmp/project
+.EE
+.TP
+Osserva un path dopo il terminatore delle opzioni:
+.EX
+alfred -- /tmp/project
 .EE
 .TP
 Abilita output JSONL additivo:

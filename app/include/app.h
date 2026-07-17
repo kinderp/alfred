@@ -174,13 +174,35 @@ typedef struct app {
 } app_t;
 
 /*
+ * app_init_from_paths - initialize the runtime from parsed CLI inputs
+ * @app: application context to initialize
+ * @path_count: number of startup watch paths
+ * @paths: parsed startup watch path vector
+ * @config_path: optional explicit CLI configuration file, or NULL
+ *
+ * This is the application lifecycle entry point used after CLI parsing. The
+ * parser owns syntax decisions such as -c/--config, --, and no-runtime
+ * commands; app.c owns configuration loading, runtime initialization, and watch
+ * installation. When @config_path is NULL, ALFRED_CONFIG is honored. When
+ * @config_path is present, it is the explicit configuration source selected by
+ * the user and ALFRED_CONFIG is not loaded.
+ *
+ * Return: ERR_OK on success, a negative error_t value on failure.
+ */
+int app_init_from_paths(app_t *app,
+                        int path_count,
+                        char **paths,
+                        const char *config_path);
+
+/*
  * app_init - initialize the application runtime
  * @app: application context to initialize
  * @argc: command-line argument count
  * @argv: command-line argument vector
  *
- * Initializes configuration, logging, core state, the inotify backend, and
- * signal handling. Startup watch paths are read from @argv.
+ * Compatibility wrapper for callers that still pass raw argv where argv[1..]
+ * are all startup paths. The CLI-aware executable should prefer
+ * app_init_from_paths().
  *
  * Return: ERR_OK on success, a negative error_t value on failure.
  */

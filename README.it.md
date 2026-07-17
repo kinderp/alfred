@@ -77,12 +77,17 @@ Valida la configurazione corrente senza avviare il runtime:
 ```bash
 ./alfred --check-config
 ALFRED_CONFIG=./alfred.conf ./alfred --check-config
+./alfred -c ./alfred.conf --check-config
+./alfred --config ./alfred.conf --check-config
 ```
 
 Avvia Alfred con un file di configurazione:
 
 ```bash
 ALFRED_CONFIG=./alfred.conf ./alfred /path/da/osservare
+./alfred -c ./alfred.conf /path/da/osservare
+./alfred --config ./alfred.conf /path/da/osservare
+./alfred -- /path/da/osservare
 ```
 
 Configurazione minima dell'output JSONL opzionale:
