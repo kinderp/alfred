@@ -166,8 +166,8 @@ Run scanner component tests:
 make test-scanner
 ```
 
-The CI workflow runs build, core, CLI, backend diagnostic and JSONL tests on
-pull requests targeting `main` and on pushes to `main`.
+The CI workflow runs build, core, CLI, MVP smoke, backend diagnostic and JSONL
+tests on pull requests targeting `main` and on pushes to `main`.
 
 To preserve runtime logs while debugging tests locally:
 

@@ -22,6 +22,7 @@ Commands run locally:
 - [ ] `make`
 - [ ] `make test`
 - [ ] `make test-cli`
+- [ ] `make smoke-mvp`
 - [ ] `make test-backend-diagnostics`
 - [ ] Not applicable, documentation-only change
 
