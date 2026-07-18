@@ -138,6 +138,20 @@ dimensioni usate nella matrice di maturita': correttezza funzionale,
 robustezza, affidabilita', stabilita', performance, leggerezza, sicurezza,
 coerenza, semplicita', manutenibilita', operabilita' e documentazione.
 
+## Aggiornamento Post-MVP documentation and man pages v0
+
+La milestone `Post-MVP documentation and man pages v0`, collegata alla GitHub
+Milestone #14 e alla issue madre #244, ha chiuso l'audit delle man page
+italiane con la PR #252 e il merge
+[`e74d306`](https://github.com/kinderp/alfred/commit/e74d306434f4efece149c9ccbc15d8c681691408).
+
+Il passaggio successivo e' la issue figlia #253: promuovere nelle man page solo
+i dettagli tecnici gia' stabili e utili come riferimento operativo. I contenuti
+da portare sono volutamente limitati: il ruolo di `make smoke-mvp`, i casi di
+fallimento della configurazione che fanno parte del contratto utente corrente e
+la copertura/limiti di JSONL v0 come output di golden test e audit, non come
+Backend API o telemetria lifecycle completa.
+
 ## Aggiornamento Core Input Model / Main Loop Migration v0
 
 La milestone corrente in quel momento era `Core Input Model / Main Loop

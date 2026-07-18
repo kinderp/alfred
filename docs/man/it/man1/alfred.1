@@ -290,6 +290,25 @@ inotify_audit_events=open,access,close-nowrite
 EOF
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 .EE
+.SH TEST DI SMOKE DEL PROGETTO
+Quando Alfred viene eseguito dal source tree, il test di smoke di progetto e':
+.EX
+make smoke-mvp
+.EE
+.PP
+Questo target compila Alfred, controlla
+.BR --help ,
+.BR --version
+e
+.BR --check-config ,
+avvia un watch inotify temporaneo con JSONL abilitato, crea attivita'
+filesystem rappresentativa e valida che
+.BR raw.log ,
+.BR events.log
+e
+.B output.jsonl
+contengano i record base attesi. E' un controllo operativo veloce, non
+sostituisce le suite complete CLI, backend, JSONL, recovery o performance.
 .SH CURRENT LIMITATIONS
 .PP
 Alfred oggi ha output JSONL opt-in per il percorso record strutturato gia'

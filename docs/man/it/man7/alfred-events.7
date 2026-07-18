@@ -237,6 +237,24 @@ e' valida solo come
 .B diagnostic + lifecycle + SESSION_CONTEXT .
 Il formatter rifiuta lo stesso type sotto categorie filesystem/watch e rifiuta
 event type non correlati sotto la categoria lifecycle.
+.SH COPERTURA E LIMITI JSONL V0
+JSONL v0 copre i record strutturati attualmente instradati attraverso il
+percorso record runtime: record filesystem raw normalizzati, eventi filesystem
+semantici core, diagnostica rappresentativa watch/resync/lost-scope e metadata
+.B SESSION_CONTEXT
+quando configurazione workspace o ledger session e' presente.
+.PP
+JSONL v0 e' un output per golden test e audit dei record Alfred. Non e' la
+Backend API, non e' uno stream completo di telemetria lifecycle e non e' una
+ABI plugin esterna stabile.
+.PP
+Startup applicativo, shutdown, messaggi del logger di compatibilita' e alcuni
+fallimenti writer/output restano in
+.BR events.log ,
+.BR errors.log
+o nell'exit status del processo. Futuri record lifecycle o error devono essere
+aggiunti esplicitamente al namespace record controllato e ai test prima di
+diventare parte del contratto JSONL.
 .SH BACKEND API V0 CONTRACT DRAFT
 Backend API v0 e' una bozza di contratto interno per cablaggio backend futuro.
 Non e' ancora una ABI plugin esterna stabile, ma il descriptor minimo delle
