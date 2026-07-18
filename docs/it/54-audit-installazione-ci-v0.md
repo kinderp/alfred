@@ -232,6 +232,13 @@ Non bisogna ereditare i modi del checkout o della directory condivisa della VM.
 Lo stage in `/tmp` permette anche di verificare i modi su un filesystem locale
 quando il checkout e' montato con semantica dei permessi semplificata.
 
+Le destinazioni canoniche devono essere costruite da
+`$(DESTDIR)$(BINDIR)` per il binario e da `$(DESTDIR)$(MANDIR)` per le pagine
+man. `BINDIR` e `MANDIR` sono path logici senza `DESTDIR`, derivano per default
+da `PREFIX` e possono essere sovrascritti separatamente. Install e uninstall
+devono usare la stessa lista dei sette path risultanti, senza ricostruirli in
+modo indipendente da `PREFIX`.
+
 ### File che non appartengono a install v0
 
 | File o famiglia | Motivo dell'esclusione |
@@ -343,8 +350,9 @@ Il test install v0 deve quindi essere dedicato e piccolo. Deve verificare:
 4. `--check-config` con una configurazione temporanea valida;
 5. rendering con `man -l` di ciascuna delle sei man page;
 6. fallimento preflight senza modifiche per binario non leggibile e mancante;
-7. uninstall dei soli sette file;
-8. conservazione di un file sentinella estraneo nelle directory condivise.
+7. override non standard di `BINDIR` e `MANDIR` per install e uninstall;
+8. uninstall dei soli sette file;
+9. conservazione di un file sentinella estraneo nelle directory condivise.
 
 La lane stage-install di riferimento deve rendere disponibile `man` e deve
 fallire se il comando manca o se anche una sola delle sei pagine non viene
@@ -454,7 +462,7 @@ v0 sono contratti distinti e non devono essere dedotte l'una dall'altra.
 ### Necessari per il prossimo micro-step
 
 1. variabili `PREFIX`, `DESTDIR`, `BINDIR` e `MANDIR`;
-2. lista unica dei sette file installati;
+2. lista unica dei sette file installati costruita da `BINDIR` e `MANDIR`;
 3. ricetta `install` copy-only con preflight di tutte le sorgenti e modi
    espliciti;
 4. ricetta `uninstall` senza dipendenze di build;

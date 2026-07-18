@@ -432,20 +432,26 @@ Il contratto v0 deve seguire il modello comune dei Makefile Unix:
 | --- | --- | --- |
 | `PREFIX` | `/usr/local` | prefisso logico dell'installazione |
 | `DESTDIR` | vuoto | root temporanea per staging/package build |
-| `BINDIR` | `$(PREFIX)/bin` | directory del binario |
-| `MANDIR` | `$(PREFIX)/share/man` | root delle pagine man |
+| `BINDIR` | `$(PREFIX)/bin` | path logico del binario, senza `DESTDIR` |
+| `MANDIR` | `$(PREFIX)/share/man` | root logica delle pagine man, senza `DESTDIR` |
 
 Layout candidato:
 
 ```text
-$(DESTDIR)$(PREFIX)/bin/alfred
-$(DESTDIR)$(PREFIX)/share/man/man1/alfred.1
-$(DESTDIR)$(PREFIX)/share/man/man5/alfred.conf.5
-$(DESTDIR)$(PREFIX)/share/man/man7/alfred-events.7
-$(DESTDIR)$(PREFIX)/share/man/it/man1/alfred.1
-$(DESTDIR)$(PREFIX)/share/man/it/man5/alfred.conf.5
-$(DESTDIR)$(PREFIX)/share/man/it/man7/alfred-events.7
+$(DESTDIR)$(BINDIR)/alfred
+$(DESTDIR)$(MANDIR)/man1/alfred.1
+$(DESTDIR)$(MANDIR)/man5/alfred.conf.5
+$(DESTDIR)$(MANDIR)/man7/alfred-events.7
+$(DESTDIR)$(MANDIR)/it/man1/alfred.1
+$(DESTDIR)$(MANDIR)/it/man5/alfred.conf.5
+$(DESTDIR)$(MANDIR)/it/man7/alfred-events.7
 ```
+
+`BINDIR` e `MANDIR` derivano in modo ricorsivo da `PREFIX`, cosi' un override
+di `PREFIX` aggiorna entrambi i default. Un override esplicito di `BINDIR` o
+`MANDIR` sostituisce invece soltanto quel path logico. `DESTDIR` viene aggiunto
+una sola volta dalla ricetta e non deve comparire nel valore di queste due
+variabili.
 
 Esempio di staging senza root:
 
@@ -485,7 +491,8 @@ Il test deve poi usare i path dentro `stage_dir`, senza modificare `/usr` o
 - rimuovere solo i file elencati dal contratto Alfred;
 - non usare glob ampi;
 - non rimuovere directory di sistema condivise;
-- rispettare `DESTDIR` e `PREFIX`;
+- rispettare `DESTDIR`, `PREFIX`, `BINDIR` e `MANDIR`;
+- usare la stessa lista canonica di destinazioni usata da `install`;
 - essere verificabile prima su una staging root temporanea.
 
 La milestone non deve introdurre un uninstall ricorsivo o basato su path non
@@ -503,7 +510,8 @@ Il futuro test staging deve verificare almeno:
 6. `alfred --check-config` dal path staged;
 7. rendering con `man -l` di ciascuna delle sei pagine man staged;
 8. fallimento preflight senza modifiche a `DESTDIR` per ogni classe di sorgente;
-9. uninstall staged senza lasciare file posseduti da Alfred.
+9. override di `BINDIR` e `MANDIR` rispettato da install e uninstall;
+10. uninstall staged senza lasciare file posseduti da Alfred.
 
 Il test non deve richiedere root e non deve scrivere fuori dalla directory
 temporanea.
