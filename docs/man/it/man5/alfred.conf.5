@@ -165,6 +165,48 @@ Path del log eventi semantici/diagnostici. Default:
 .B error_log
 Path del log errori. Default:
 .BR errors.log .
+.SH ERRORI DI CONFIGURAZIONE
+La validazione della configurazione fallisce presto per valori che renderebbero
+ambiguo il comportamento runtime.
+.PP
+Valori
+.B output_format
+non supportati fanno fallire il caricamento configurazione. Con
+.B output_enabled=true ,
+il runtime corrente accetta
+.B jsonl
+come writer strutturato utente e
+.B counter
+come writer benchmark/no-op.
+.B text
+e' accettato come valore di configurazione solo per uso disabilitato o futuro;
+abilitare l'output runtime con
+.B output_format=text
+e' rifiutato.
+.PP
+.B output_buffer_size
+deve essere numerico e almeno
+.BR 8192 .
+.B event_engine
+deve essere
+.BR core ;
+il valore storico rimosso
+.B shadow
+e' rifiutato.
+.PP
+Se presenti,
+.BR workspace_root ,
+.B workspace_id
+e
+.B ledger_session_id
+devono essere non vuoti ed entrare nei buffer definiti dall'implementazione.
+Valori vuoti o troppo grandi fanno fallire il caricamento configurazione.
+.PP
+Token
+.B inotify_watch_mask
+sconosciuti e nomi policy
+.B inotify_audit_events
+non supportati fanno fallire il caricamento configurazione.
 .SH INOTIFY KEYS
 .TP
 .B inotify_recursive

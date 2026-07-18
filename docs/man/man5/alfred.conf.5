@@ -166,6 +166,48 @@ Path of the semantic/diagnostic event log. Default:
 .B error_log
 Path of the error log. Default:
 .BR errors.log .
+.SH CONFIGURATION FAILURES
+Configuration validation is intentionally fail-early for values that would make
+runtime behaviour ambiguous.
+.PP
+Unsupported
+.B output_format
+values make configuration loading fail. With
+.B output_enabled=true ,
+the current runtime accepts
+.B jsonl
+as the user-facing structured writer and
+.B counter
+as the benchmark/no-op writer.
+.B text
+is accepted as a configuration value only for disabled or future use; enabling
+the output runtime with
+.B output_format=text
+is rejected.
+.PP
+.B output_buffer_size
+must be numeric and at least
+.BR 8192 .
+.B event_engine
+must be
+.BR core ;
+the removed historical value
+.B shadow
+is rejected.
+.PP
+If present,
+.BR workspace_root ,
+.B workspace_id
+and
+.B ledger_session_id
+must be non-empty and fit their implementation-defined buffers. Empty or
+oversized values make configuration loading fail.
+.PP
+Unknown
+.B inotify_watch_mask
+tokens and unsupported
+.B inotify_audit_events
+policy names also make configuration loading fail.
 .SH INOTIFY KEYS
 .TP
 .B inotify_recursive
