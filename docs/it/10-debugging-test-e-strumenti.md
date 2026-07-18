@@ -388,7 +388,8 @@ profilo che quelle suite credono di provare.
 | `assert_empty_stage()` | prova che un preflight fallito non abbia modificato lo stage |
 | `assert_exact_files()` | confronta tutti i file staged con la lista attesa, inclusi i sentinel |
 | `assert_cli_and_manuals()` | esegue `--version`, `--help`, `--check-config` e sei `man -l` |
-| `test_default_layout()` | prova `PREFIX=/usr`, modi, CLI, man page e uninstall ripetibile |
+| `test_default_layout()` | prova il vero default `/usr/local`, modi, CLI, man page e uninstall ripetibile |
+| `test_prefix_override_layout()` | prova che `PREFIX=/usr` sposti insieme binario e root delle man page |
 | `test_custom_layout()` | prova override indipendenti di `BINDIR` e `MANDIR` |
 | `test_unreadable_binary_preflight()` | inietta da `/tmp` un binario regolare ma non leggibile |
 | `test_missing_manual_preflight()` | inietta un path man inesistente |

@@ -113,14 +113,14 @@ EOF
 
 test_default_layout() {
     local stage="$RUN_DIR/default-stage"
-    local binary="$stage/usr/bin/alfred"
-    local man_root="$stage/usr/share/man"
+    local binary="$stage/usr/local/bin/alfred"
+    local man_root="$stage/usr/local/share/man"
 
-    mkdir -p "$stage/usr/bin" "$man_root/man1"
-    printf 'keep\n' > "$stage/usr/bin/not-alfred"
+    mkdir -p "$stage/usr/local/bin" "$man_root/man1"
+    printf 'keep\n' > "$stage/usr/local/bin/not-alfred"
     printf 'keep\n' > "$man_root/man1/not-alfred.1"
 
-    run_make DESTDIR="$stage" PREFIX=/usr install
+    run_make DESTDIR="$stage" install
 
     assert_file "$binary"
     assert_mode 755 "$binary"
@@ -136,30 +136,46 @@ test_default_layout() {
     done
 
     assert_exact_files "$stage" \
-        usr/bin/alfred \
-        usr/bin/not-alfred \
-        usr/share/man/man1/alfred.1 \
-        usr/share/man/man1/not-alfred.1 \
-        usr/share/man/man5/alfred.conf.5 \
-        usr/share/man/man7/alfred-events.7 \
-        usr/share/man/it/man1/alfred.1 \
-        usr/share/man/it/man5/alfred.conf.5 \
-        usr/share/man/it/man7/alfred-events.7
+        usr/local/bin/alfred \
+        usr/local/bin/not-alfred \
+        usr/local/share/man/man1/alfred.1 \
+        usr/local/share/man/man1/not-alfred.1 \
+        usr/local/share/man/man5/alfred.conf.5 \
+        usr/local/share/man/man7/alfred-events.7 \
+        usr/local/share/man/it/man1/alfred.1 \
+        usr/local/share/man/it/man5/alfred.conf.5 \
+        usr/local/share/man/it/man7/alfred-events.7
 
     assert_cli_and_manuals "$binary" "$man_root"
 
-    run_make DESTDIR="$stage" PREFIX=/usr uninstall
+    run_make DESTDIR="$stage" uninstall
     assert_absent "$binary"
-    assert_file "$stage/usr/bin/not-alfred"
+    assert_file "$stage/usr/local/bin/not-alfred"
     assert_file "$man_root/man1/not-alfred.1"
     assert_exact_files "$stage" \
-        usr/bin/not-alfred \
-        usr/share/man/man1/not-alfred.1
+        usr/local/bin/not-alfred \
+        usr/local/share/man/man1/not-alfred.1
+
+    run_make DESTDIR="$stage" uninstall
+    assert_exact_files "$stage" \
+        usr/local/bin/not-alfred \
+        usr/local/share/man/man1/not-alfred.1
+}
+
+test_prefix_override_layout() {
+    local stage="$RUN_DIR/prefix-override-stage"
+
+    mkdir -p "$stage"
+
+    run_make DESTDIR="$stage" PREFIX=/usr install
+
+    assert_file "$stage/usr/bin/alfred"
+    assert_file "$stage/usr/share/man/man1/alfred.1"
+    assert_file "$stage/usr/share/man/it/man7/alfred-events.7"
+    assert_absent "$stage/usr/local/bin/alfred"
 
     run_make DESTDIR="$stage" PREFIX=/usr uninstall
-    assert_exact_files "$stage" \
-        usr/bin/not-alfred \
-        usr/share/man/man1/not-alfred.1
+    assert_exact_files "$stage"
 }
 
 test_custom_layout() {
@@ -267,6 +283,8 @@ printf '%s\n' '=============================='
 
 test_default_layout
 printf '%s\n' 'PASS default staged layout, CLI, manuals, and uninstall ownership'
+test_prefix_override_layout
+printf '%s\n' 'PASS PREFIX=/usr staged layout override'
 test_custom_layout
 printf '%s\n' 'PASS custom BINDIR and MANDIR layout'
 test_unreadable_binary_preflight

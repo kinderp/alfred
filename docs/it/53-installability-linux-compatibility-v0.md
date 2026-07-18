@@ -526,8 +526,9 @@ validati.
 7. rendering con `man -l` di ciascuna delle sei pagine man staged;
 8. fallimento preflight senza modifiche a `DESTDIR` per ogni classe di sorgente;
 9. override di `BINDIR` e `MANDIR` rispettato da install e uninstall;
-10. rifiuto di layout relativi o contenenti `..`;
-11. uninstall staged idempotente senza lasciare file posseduti da Alfred.
+10. default `/usr/local` distinto dall'override packaging `PREFIX=/usr`;
+11. rifiuto di layout relativi o contenenti `..`;
+12. uninstall staged idempotente senza lasciare file posseduti da Alfred.
 
 Il test non richiede root e non scrive fuori dalla directory temporanea creata
 con `mktemp`. In caso di fallimento, la CI pubblica gli artifact sotto
