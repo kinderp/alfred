@@ -1989,3 +1989,10 @@ stabilizzazione della CLI, README e pagine man devono essere riallineati al
 comportamento reale di Alfred. Il setup documentale separa README, man page,
 documentazione didattica e roadmap: i README introducono, le man page normano,
 `docs/it` spiega e le roadmap conservano il futuro non implementato.
+
+Aggiornamento successivo: la issue figlia #247 apre l'audit dei README
+pubblici. Il primo drift trovato e' importante: `README.it.md` dichiarava una
+licenza Apache 2.0, mentre il repository non contiene un file `LICENSE` e il
+README inglese dichiarava correttamente che nessuna licenza e' ancora stata
+scelta. Il fix deve allineare il README italiano allo stato reale e aggiungere
+nei due README i rimandi ai documenti MVP/CLI/post-MVP correnti.

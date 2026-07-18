@@ -222,6 +222,9 @@ La documentazione dettagliata e' mantenuta in italiano:
 - [Event Model v0](docs/it/29-event-model-v0.md)
 - [Backend API v0](docs/it/30-backend-api-v0.md)
 - [Milestone backend inotify di riferimento](docs/it/31-milestone-inotify-reference-backend.md)
+- [MVP operational usability v0](docs/it/49-mvp-operational-usability-v0.md)
+- [CLI parser v0](docs/it/50-cli-parser-v0.md)
+- [Post-MVP documentation and man pages v0](docs/it/51-post-mvp-documentation-man-pages-v0.md)
 - [Glossario](docs/it/glossario.md)
 - [Stato documentazione](docs/it/documentation-progress.md)
 
@@ -292,4 +295,14 @@ Il lavoro a breve termine include:
 
 ## Licenza
 
-Questo progetto e' rilasciato sotto licenza Apache 2.0. Vedi [LICENSE](LICENSE).
+Nessuna licenza e' stata ancora selezionata.
+
+Finche' non viene aggiunto un file `LICENSE`, questo repository non deve essere
+considerato un pacchetto open source con permessi di riuso chiaramente concessi.
+La scelta della licenza verra' discussa prima di presentare il progetto come
+riutilizzabile da terzi.
+
+La direzione prevista e' un core open source con la possibilita' di licenze
+separate commerciali o source-available per moduli avanzati futuri. Vedi le
+note italiane sul modello licenze in
+[docs/it/18-modello-licenze.md](docs/it/18-modello-licenze.md).
