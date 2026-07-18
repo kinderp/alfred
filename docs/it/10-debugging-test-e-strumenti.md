@@ -363,10 +363,12 @@ directory temporanee e non richiede root. Il percorso e':
 make test-install
 -> make release
 -> tests/install/run_all.sh
--> make DESTDIR=<tmp> PREFIX=/usr install
--> CLI e man page staged
--> make DESTDIR=<tmp> PREFIX=/usr uninstall
--> casi negativi del preflight
+   |-> default: DESTDIR=<tmp>, quindi /usr/local
+   |   -> modi, CLI, sei man page e uninstall idempotente
+   |-> override packaging: PREFIX=/usr
+   |-> override separati: BINDIR e MANDIR
+   |-> ownership: entry inattese e symlink dangling
+   `-> casi negativi: layout, binario e ultima man page
 ```
 
 La suite viene eseguita per ultima in CI. `make release` pulisce e ricompila gli
@@ -404,9 +406,10 @@ dalla semplice assenza di Alfred: dimostrano che la ricetta non cancella per
 errore file appartenenti ad altri programmi.
 
 Le variabili Make `ALFRED_INSTALL_BINARY_SOURCE` e
-`ALFRED_MAN1_EN_SOURCE` usate nei casi negativi sono test seam, cioe' punti di
-iniezione controllati. Servono per produrre precondizioni difficili senza
-rinominare o cambiare i permessi dei file tracciati nel checkout.
+`ALFRED_MAN7_IT_SOURCE` usate nei casi negativi sono test seam, cioe' punti di
+iniezione controllati. La seconda seleziona intenzionalmente l'ultima sorgente
+del preflight. Servono per produrre precondizioni difficili senza rinominare o
+cambiare i permessi dei file tracciati nel checkout.
 
 ## Come sono strutturati i test shell
 
