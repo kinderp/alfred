@@ -1,0 +1,19 @@
+# Sanitized Codex profile for Alfred development.
+# This file is intended to be copied to ~/.codex/config.toml by
+# tools/codex/install-sol-ultra.sh.
+#
+# Do not add auth tokens, OAuth state, project trust paths, plugin caches, or
+# machine-specific paths here.
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "ultra"
+
+[features]
+multi_agent = true
+fast_mode = true
+
+[agents]
+max_threads = 8
+max_depth = 1
+job_max_runtime_seconds = 1800
+interrupt_message = true

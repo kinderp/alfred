@@ -55,7 +55,11 @@ entrare subito nei dettagli interni.
 5. [Post-MVP documentation and man pages v0](51-post-mvp-documentation-man-pages-v0.md)
    spiega come README, pagine man e documentazione didattica devono restare
    coerenti dopo la stabilizzazione del parser CLI.
-6. Pagine man:
+6. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
+   spiega come installare su una macchina nuova un profilo Codex sanificato
+   con `gpt-5.6-sol`, reasoning `ultra`, multi-agent e sub-agenti locali.
+   Serve solo per configurare l'ambiente di sviluppo, non il runtime Alfred.
+7. Pagine man:
    [alfred(1)](../man/man1/alfred.1),
    [alfred.conf(5)](../man/man5/alfred.conf.5),
    [alfred-events(7)](../man/man7/alfred-events.7).
@@ -80,6 +84,10 @@ Questo percorso serve a chi vuole aprire una pull request.
    spiega dove mettere i test e quale suite aggiornare.
 5. [Stile dei commenti nel codice](11-come-contribuire.md#stile-dei-commenti-nel-codice)
    rimanda alle regole per commentare header, sorgenti e test.
+6. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
+   e [tools/codex](../../tools/codex/README.md)
+   spiegano come replicare il profilo Codex usato per review, sub-agenti e
+   lavoro assistito su Alfred.
 
 La regola pratica e': prima si capisce il contratto che si sta toccando, poi si
 modifica il codice, poi si aggiorna la documentazione e infine si eseguono i
