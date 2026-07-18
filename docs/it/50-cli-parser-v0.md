@@ -430,7 +430,7 @@ Ogni test deve controllare:
 | Implementare parser minimo | Done | Issue figlia #236, PR #237. Il parser resta nel livello applicazione e supporta `-c`, `--config`, `--`, comandi no-runtime e errori side-effect-free. |
 | Aggiungere test CLI | Done | PR #237 estende `make test-cli` con successi, errori, assenza di log runtime, precedenza config CLI e path dopo `--`. |
 | Aggiornare README/man/doc | Done | PR #237 aggiorna README, pagine man inglesi/italiane, livello applicazione, roadmap CLI e matrice funzionalita'. |
-| Audit POSIX/GNU CLI e man page | In progress | Issue figlia #240. Implementa `--config=FILE`, `-h`, `-V`, test focused e allineamento delle man page inglesi/italiane; da chiudere dopo PR/review. |
+| Audit POSIX/GNU CLI e man page | Done | Issue figlia #240 e PR #241. Implementa `--config=FILE`, `-h`, `-V`, test focused e allineamento delle man page inglesi/italiane; merge [`44d307f`](https://github.com/kinderp/alfred/commit/44d307f373078588a0ccc80e2e5d1ed012b0cda3). |
 | Readiness review | Done | Issue figlia #238, PR #239. Ha verificato che la milestone non abbia riaperto runtime, backend, hot path, Event Model, Writer Runtime o Agent Guard. |
 
 ## Criteri di chiusura
@@ -456,8 +456,28 @@ per v0: `-c FILE`, `--config FILE`, `--config=FILE`, `--`, `-h`/`--help`,
 abbreviamenti lunghi, opzioni combinate, opzioni dopo i path, duplicati di
 config e `--config=` vuoto. `--print-config` resta esplicitamente rimandato
 perche' non esiste ancora un output stabile della configurazione effettiva.
-Prima della chiusura finale della milestone servono merge e review della PR
-collegata a #240.
+Dopo il merge della PR #241, questi criteri sono soddisfatti per il perimetro
+v0. La milestone puo' quindi chiudersi come parser piccolo, esplicito e
+documentato; `--print-config` resta un debito futuro, non una non-conformita'
+nascosta della milestone.
+
+## Progress update: PR #241 merged
+
+PR #241 ha chiuso la issue #240 e il gap POSIX/GNU rimasto dopo il parser
+minimo. Il contratto CLI v0 consolidato e':
+
+- opzioni corte supportate: `-c FILE`, `-h`, `-V`;
+- opzioni lunghe supportate: `--config FILE`, `--config=FILE`, `--help`,
+  `--version`, `--check-config`;
+- terminatore degli operandi: `-- PATH...`;
+- config esplicita da CLI con precedenza su `ALFRED_CONFIG`;
+- no-runtime commands side-effect-free;
+- casi ambigui rifiutati con errore, senza avvio runtime;
+- `--print-config` rimandato per mancanza di output stabile della
+  configurazione effettiva.
+
+La issue #242 traccia solo il bookkeeping finale: riallineare questo documento,
+il registro milestone e la issue madre #228 dopo il merge.
 
 ## Collegamenti
 
@@ -466,6 +486,8 @@ collegata a #240.
 - Readiness review: [#238](https://github.com/kinderp/alfred/issues/238)
 - Readiness PR: [#239](https://github.com/kinderp/alfred/pull/239)
 - Audit POSIX/GNU: [#240](https://github.com/kinderp/alfred/issues/240)
+- Audit POSIX/GNU PR: [#241](https://github.com/kinderp/alfred/pull/241)
+- Chiusura bookkeeping: [#242](https://github.com/kinderp/alfred/issues/242)
 - Roadmap CLI storica: [19-roadmap-cli-e-man-page.md](19-roadmap-cli-e-man-page.md)
 - MVP usability precedente: [49-mvp-operational-usability-v0.md](49-mvp-operational-usability-v0.md)
 - Livello applicazione: [04-livello-applicazione.md](04-livello-applicazione.md)

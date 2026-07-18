@@ -1969,3 +1969,10 @@ dopo i path e comandi informativi combinati con configurazione o path. README,
 pagine man inglesi/italiane, roadmap CLI e guida applicativa devono restare
 allineati a questo contratto; `--print-config` resta l'unico debito CLI v0
 esplicitamente rimandato.
+
+Aggiornamento successivo: dopo il merge della PR #241, la milestone
+`CLI parser v0` e' pronta alla chiusura per il perimetro deciso. La issue #240
+e' chiusa, il registro milestone marca `CLI parser v0` come `done` e
+`50-cli-parser-v0.md` conserva il contratto finale: parser piccolo, subset
+POSIX/GNU esplicito, no-runtime commands side-effect-free, casi ambigui
+rifiutati e `--print-config` rimandato come debito futuro dichiarato.
