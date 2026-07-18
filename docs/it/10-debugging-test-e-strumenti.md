@@ -383,14 +383,16 @@ profilo che quelle suite credono di provare.
 | `fail()` | stampa il motivo e l'albero degli artifact prima di terminare |
 | `run_make()` | richiama GNU Make dalla root senza dipendere dalla directory corrente |
 | `assert_layout_rejected()` | verifica che ogni combinazione di path non valida sia rifiutata dal target read-only |
-| `assert_file()` / `assert_absent()` | controllano presenza e assenza dei path |
+| `assert_file()` / `assert_absent()` | controllano presenza e assenza, considerando presente anche un symlink dangling |
 | `assert_mode()` | verifica `0755` per il binario e `0644` per le man page |
 | `assert_empty_stage()` | prova che un preflight fallito non abbia modificato lo stage |
-| `assert_exact_files()` | confronta tutti i file staged con la lista attesa, inclusi i sentinel |
+| `stage_entry_list()` | enumera in ordine ogni entry staged che non sia una directory, inclusi symlink, FIFO e socket |
+| `assert_exact_entries()` | confronta tutte le entry staged con la lista attesa, inclusi i sentinel |
 | `assert_cli_and_manuals()` | esegue `--version`, `--help`, `--check-config` e sei `man -l` |
 | `test_default_layout()` | prova il vero default `/usr/local`, modi, CLI, man page e uninstall ripetibile |
 | `test_prefix_override_layout()` | prova che `PREFIX=/usr` sposti insieme binario e root delle man page |
 | `test_custom_layout()` | prova override indipendenti di `BINDIR` e `MANDIR` |
+| `test_ownership_helpers_reject_symlink()` | dimostra che inventario e assenza non ignorino un symlink dangling inatteso |
 | `test_unreadable_binary_preflight()` | inietta da `/tmp` un binario regolare ma non leggibile |
 | `test_missing_manual_preflight()` | rende mancante l'ultima sorgente man italiana per provare che tutto il preflight preceda ogni scrittura |
 | `test_invalid_layout_preflight()` | rifiuta path relativi o con `..` in `BINDIR`, `MANDIR` e `DESTDIR` prima di scrivere |

@@ -42,7 +42,7 @@ assert_file() {
 }
 
 assert_absent() {
-    [[ ! -e "$1" ]] || fail "unexpected staged path: $1"
+    [[ ! -e "$1" && ! -L "$1" ]] || fail "unexpected staged path: $1"
 }
 
 assert_mode() {
@@ -63,17 +63,23 @@ assert_empty_stage() {
     fi
 }
 
-assert_exact_files() {
+stage_entry_list() {
+    local stage="$1"
+
+    {
+        while IFS= read -r path; do
+            printf '%s\n' "${path#"$stage"/}"
+        done < <(find "$stage" -mindepth 1 ! -type d -print)
+    } | LC_ALL=C sort
+}
+
+assert_exact_entries() {
     local stage="$1"
     shift
     local actual
     local expected
 
-    actual="$({
-        while IFS= read -r path; do
-            printf '%s\n' "${path#"$stage"/}"
-        done < <(find "$stage" -type f -print)
-    } | LC_ALL=C sort)"
+    actual="$(stage_entry_list "$stage")"
     expected="$(printf '%s\n' "$@" | LC_ALL=C sort)"
 
     [[ "$actual" == "$expected" ]] || {
@@ -135,7 +141,7 @@ test_default_layout() {
         assert_mode 644 "$page"
     done
 
-    assert_exact_files "$stage" \
+    assert_exact_entries "$stage" \
         usr/local/bin/alfred \
         usr/local/bin/not-alfred \
         usr/local/share/man/man1/alfred.1 \
@@ -152,12 +158,12 @@ test_default_layout() {
     assert_absent "$binary"
     assert_file "$stage/usr/local/bin/not-alfred"
     assert_file "$man_root/man1/not-alfred.1"
-    assert_exact_files "$stage" \
+    assert_exact_entries "$stage" \
         usr/local/bin/not-alfred \
         usr/local/share/man/man1/not-alfred.1
 
     run_make DESTDIR="$stage" uninstall
-    assert_exact_files "$stage" \
+    assert_exact_entries "$stage" \
         usr/local/bin/not-alfred \
         usr/local/share/man/man1/not-alfred.1
 }
@@ -175,7 +181,7 @@ test_prefix_override_layout() {
     assert_absent "$stage/usr/local/bin/alfred"
 
     run_make DESTDIR="$stage" PREFIX=/usr uninstall
-    assert_exact_files "$stage"
+    assert_exact_entries "$stage"
 }
 
 test_custom_layout() {
@@ -209,9 +215,31 @@ test_custom_layout() {
     assert_absent "$stage$mandir/man1/alfred.1"
     assert_file "$stage$bindir/not-alfred"
     assert_file "$stage$mandir/man1/not-alfred.1"
-    assert_exact_files "$stage" \
+    assert_exact_entries "$stage" \
         opt/alfred/bin/not-alfred \
         opt/alfred/manual/man1/not-alfred.1
+}
+
+test_ownership_helpers_reject_symlink() {
+    local stage="$RUN_DIR/ownership-helper-stage"
+    local unexpected="$stage/unexpected-link"
+    local actual
+
+    mkdir -p "$stage"
+    ln -s missing-target "$unexpected"
+
+    [[ -L "$unexpected" ]] || fail "could not create ownership helper symlink"
+    if [[ ! -e "$unexpected" && ! -L "$unexpected" ]]; then
+        fail "absence predicate ignored a dangling symlink"
+    fi
+
+    actual="$(stage_entry_list "$stage")"
+    [[ "$actual" == "unexpected-link" ]] ||
+        fail "stage entry inventory ignored a dangling symlink"
+
+    unlink "$unexpected"
+    assert_absent "$unexpected"
+    assert_exact_entries "$stage"
 }
 
 test_unreadable_binary_preflight() {
@@ -287,6 +315,8 @@ test_prefix_override_layout
 printf '%s\n' 'PASS PREFIX=/usr staged layout override'
 test_custom_layout
 printf '%s\n' 'PASS custom BINDIR and MANDIR layout'
+test_ownership_helpers_reject_symlink
+printf '%s\n' 'PASS ownership helpers reject dangling symlinks'
 test_unreadable_binary_preflight
 printf '%s\n' 'PASS unreadable binary preflight'
 test_missing_manual_preflight

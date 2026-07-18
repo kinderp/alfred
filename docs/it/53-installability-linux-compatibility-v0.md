@@ -519,7 +519,7 @@ validati.
 
 1. presenza e permessi del binario;
 2. presenza delle sei pagine man;
-3. assenza di file non dichiarati;
+3. assenza di entry non dichiarate, compresi symlink e altri nodi non regolari;
 4. `alfred --version` dal path staged;
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
