@@ -222,6 +222,9 @@ Detailed documentation is currently maintained in Italian:
 - [Event Model v0](docs/it/29-event-model-v0.md)
 - [Backend API v0](docs/it/30-backend-api-v0.md)
 - [Inotify reference backend milestone](docs/it/31-milestone-inotify-reference-backend.md)
+- [MVP operational usability v0](docs/it/49-mvp-operational-usability-v0.md)
+- [CLI parser v0](docs/it/50-cli-parser-v0.md)
+- [Post-MVP documentation and man pages v0](docs/it/51-post-mvp-documentation-man-pages-v0.md)
 - [Glossary](docs/it/glossario.md)
 - [Documentation progress](docs/it/documentation-progress.md)
 
