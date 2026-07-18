@@ -348,6 +348,62 @@ I browser del codice aiutano nella fase di comprensione, non nella validazione
 finale. Dopo ogni modifica restano necessari build e test descritti nella
 sezione successiva.
 
+## Test del contratto di installazione staged
+
+Il comando:
+
+```bash
+make test-install
+```
+
+verifica l'artefatto release come lo vedrebbe un package builder, ma usa solo
+directory temporanee e non richiede root. Il percorso e':
+
+```text
+make test-install
+-> make release
+-> tests/install/run_all.sh
+-> make DESTDIR=<tmp> PREFIX=/usr install
+-> CLI e man page staged
+-> make DESTDIR=<tmp> PREFIX=/usr uninstall
+-> casi negativi del preflight
+```
+
+La suite viene eseguita per ultima in CI. `make release` pulisce e ricompila gli
+oggetti senza ASan/UBSan; eseguirla prima delle suite debug altererebbe il
+profilo che quelle suite credono di provare.
+
+### Funzioni del runner install
+
+`tests/install/run_all.sh` separa preparazione, assert e scenari:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `cleanup()` | elimina la directory temporanea o la conserva quando `ALFRED_KEEP_TEST_LOGS=1` |
+| `fail()` | stampa il motivo e l'albero degli artifact prima di terminare |
+| `run_make()` | richiama GNU Make dalla root senza dipendere dalla directory corrente |
+| `assert_layout_rejected()` | verifica che ogni combinazione di path non valida sia rifiutata dal target read-only |
+| `assert_file()` / `assert_absent()` | controllano presenza e assenza dei path |
+| `assert_mode()` | verifica `0755` per il binario e `0644` per le man page |
+| `assert_empty_stage()` | prova che un preflight fallito non abbia modificato lo stage |
+| `assert_exact_files()` | confronta tutti i file staged con la lista attesa, inclusi i sentinel |
+| `assert_cli_and_manuals()` | esegue `--version`, `--help`, `--check-config` e sei `man -l` |
+| `test_default_layout()` | prova `PREFIX=/usr`, modi, CLI, man page e uninstall ripetibile |
+| `test_custom_layout()` | prova override indipendenti di `BINDIR` e `MANDIR` |
+| `test_unreadable_binary_preflight()` | inietta da `/tmp` un binario regolare ma non leggibile |
+| `test_missing_manual_preflight()` | inietta un path man inesistente |
+| `test_invalid_layout_preflight()` | rifiuta path relativi o con `..` in `BINDIR`, `MANDIR` e `DESTDIR` prima di scrivere |
+
+I sentinel sono file estranei creati nelle directory condivise prima di
+install. Dopo uninstall devono esistere ancora. Provano una proprieta' diversa
+dalla semplice assenza di Alfred: dimostrano che la ricetta non cancella per
+errore file appartenenti ad altri programmi.
+
+Le variabili Make `ALFRED_INSTALL_BINARY_SOURCE` e
+`ALFRED_MAN1_EN_SOURCE` usate nei casi negativi sono test seam, cioe' punti di
+iniezione controllati. Servono per produrre precondizioni difficili senza
+rinominare o cambiare i permessi dei file tracciati nel checkout.
+
 ## Come sono strutturati i test shell
 
 I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,

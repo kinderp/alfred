@@ -49,6 +49,12 @@ sudo apt-get update
 sudo apt-get install -y build-essential
 ```
 
+Per eseguire anche il test di installazione staged serve `man`:
+
+```bash
+sudo apt-get install -y man-db
+```
+
 ## Avvio rapido
 
 Clona e compila:
@@ -58,6 +64,29 @@ git clone https://github.com/kinderp/alfred.git
 cd alfred
 make
 ```
+
+Compila il profilo release e installa il binario con le sei pagine man inglesi
+e italiane:
+
+```bash
+make release
+sudo make install
+```
+
+`make install` esegue soltanto copie: non compila mai come root e fallisce se
+non trova un eseguibile gia' costruito, leggibile ed eseguibile. Il prefisso
+predefinito e' `/usr/local`. Package builder e test locali possono usare uno
+stage senza root:
+
+```bash
+stage_dir=$(mktemp -d)
+make release
+make DESTDIR="$stage_dir" PREFIX=/usr install
+make DESTDIR="$stage_dir" PREFIX=/usr uninstall
+```
+
+`uninstall` rimuove soltanto il binario Alfred e le sei pagine man. Non rimuove
+directory condivise, configurazioni utente o log runtime.
 
 Avvia Alfred su uno o piu' path:
 
@@ -176,8 +205,20 @@ Esegui i test del componente scanner:
 make test-scanner
 ```
 
-Il workflow CI esegue build, core, CLI, smoke MVP, diagnostica backend e test
-JSONL sulle pull request verso `main` e sui push a `main`.
+Esegui la suite del contratto di installazione staged senza root:
+
+```bash
+make test-install
+```
+
+Il test ricostruisce il profilo release, controlla layout predefinito e
+override, esegue la CLI informativa staged, renderizza tutte le sei pagine man
+e verifica preflight e ownership di uninstall. In CI e' intenzionalmente
+l'ultima suite perche' lascia il checkout nel profilo release.
+
+Il workflow CI esegue build, core, CLI, smoke MVP, diagnostica backend, test
+JSONL e installazione staged sulle pull request verso `main` e sui push a
+`main`.
 
 Per conservare i log runtime durante il debug locale dei test:
 

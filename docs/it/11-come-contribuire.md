@@ -528,7 +528,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get install -y build-essential man-db
 
       - name: Build
         run: make
@@ -536,11 +536,20 @@ jobs:
       - name: Run official core suite
         run: make test
 
+      - name: Run CLI tests
+        run: make test-cli
+
+      - name: Run MVP smoke test
+        run: make smoke-mvp
+
       - name: Run backend diagnostics
         run: make test-backend-diagnostics
 
       - name: Run JSONL golden tests
         run: make test-jsonl
+
+      - name: Run staged installation tests
+        run: make test-install
 
       - name: Upload test logs on failure
         if: failure()
@@ -550,7 +559,12 @@ jobs:
           if-no-files-found: ignore
           path: |
             tests/core/*.log
+            tests/cli/*.log
             tests/backend/*.log
+            tests/jsonl/*.log
+            tests/jsonl/*.jsonl
+            /tmp/alfred_mvp_smoke.*/**
+            /tmp/alfred_install_test.*/**
 ```
 
 `name` e' il nome visibile del workflow nell'interfaccia GitHub Actions. Qui e'
@@ -669,7 +683,9 @@ run: |
 
 usa `|` per scrivere piu' righe di shell nello stesso campo YAML. In questo caso
 aggiorna l'indice dei pacchetti e installa gli strumenti base di compilazione C,
-come compilatore, linker e make.
+come compilatore, linker e make. `man-db` fornisce il comando `man` richiesto
+dalla suite staged: la lane di riferimento deve fallire, non saltare il
+rendering delle sei pagine.
 
 `with` passa parametri a un'action usata con `uses`. Nel nostro workflow:
 
@@ -679,19 +695,25 @@ with:
   if-no-files-found: ignore
   path: |
     tests/core/*.log
+    tests/cli/*.log
     tests/backend/*.log
+    tests/jsonl/*.log
+    tests/jsonl/*.jsonl
+    /tmp/alfred_mvp_smoke.*/**
+    /tmp/alfred_install_test.*/**
 ```
 
 Questi campi configurano `actions/upload-artifact@v4`:
 
 - `name`: nome dell'artifact scaricabile dalla pagina della run
 - `if-no-files-found`: non fallire se non trova log da caricare
-- `path`: lista dei file da includere nell'artifact
+- `path`: lista dei file da includere nell'artifact, compresi gli stage
+  temporanei conservati quando fallisce il test install
 
 `*.log` e' un pattern: significa "tutti i file che finiscono con `.log`".
 
-Gli ultimi tre passi rispecchiano il controllo che deve fare anche un
-contributore in locale:
+I passi di verifica rispecchiano comandi disponibili anche a un contributore in
+locale:
 
 ```yaml
 - name: Build
@@ -700,8 +722,20 @@ contributore in locale:
 - name: Run official core suite
   run: make test
 
+- name: Run CLI tests
+  run: make test-cli
+
+- name: Run MVP smoke test
+  run: make smoke-mvp
+
 - name: Run backend diagnostics
   run: make test-backend-diagnostics
+
+- name: Run JSONL golden tests
+  run: make test-jsonl
+
+- name: Run staged installation tests
+  run: make test-install
 
 - name: Upload test logs on failure
   if: failure()
@@ -710,7 +744,8 @@ contributore in locale:
 
 Questa scelta e' intenzionale: la CI non deve avere una procedura misteriosa
 diversa da quella umana. Deve automatizzare gli stessi comandi documentati per i
-contributori.
+contributori. `make test-install` resta ultimo perche' ricostruisce il profilo
+release dopo che le suite ASan/UBSan hanno gia' verificato la build debug.
 
 Se in futuro aggiungiamo un nuovo controllo obbligatorio, per esempio un
 formatter o una suite di test aggiuntiva, bisogna aggiornare due posti:
@@ -737,7 +772,11 @@ Gli step principali sono:
 
 - `Build`
 - `Run official core suite`
+- `Run CLI tests`
+- `Run MVP smoke test`
 - `Run backend diagnostics`
+- `Run JSONL golden tests`
+- `Run staged installation tests`
 
 Ogni step mostra l'output standard e l'output di errore del comando eseguito.
 Questo significa che nello step `Run official core suite` vedrai l'output di:
