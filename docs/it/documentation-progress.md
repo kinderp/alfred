@@ -99,6 +99,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `docs/kythe-browser/README.md` |
 | Completo | `tools/codex/README.md` |
 | Completo | `tools/codex/install-sol-ultra.sh` |
+| Completo | `tools/codex/install-sol-ultra.ps1` |
 | Parziale | `docs/man/man1/alfred.1` |
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |

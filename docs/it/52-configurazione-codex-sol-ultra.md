@@ -18,7 +18,8 @@ Il repository contiene quindi:
 
 - un template `config.toml` sanificato;
 - tre agenti locali di esempio;
-- uno script di installazione che copia i file nella cartella Codex corretta;
+- uno script POSIX shell per Linux/macOS;
+- uno script PowerShell per Windows;
 - questa spiegazione per capire cosa viene installato e cosa non viene
   installato.
 
@@ -30,10 +31,13 @@ Il repository contiene quindi:
 | `tools/codex/sol-ultra/agents/deep-reviewer.toml` | `~/.codex/agents/deep-reviewer.toml` | Agente per review architetturali e contratti. |
 | `tools/codex/sol-ultra/agents/code-explorer.toml` | `~/.codex/agents/code-explorer.toml` | Agente read-only per mappare codice e documentazione. |
 | `tools/codex/sol-ultra/agents/test-runner.toml` | `~/.codex/agents/test-runner.toml` | Agente per proporre ed eseguire validazioni mirate. |
-| `tools/codex/install-sol-ultra.sh` | Non viene copiato | Script che installa il profilo nella home Codex dell'utente. |
+| `tools/codex/install-sol-ultra.sh` | Non viene copiato | Script Linux/macOS che installa il profilo nella home Codex dell'utente. |
+| `tools/codex/install-sol-ultra.ps1` | Non viene copiato | Script Windows PowerShell che installa lo stesso profilo nella home Codex dell'utente. |
 
 La cartella Codex globale dell'utente e' `~/.codex` se `CODEX_HOME` non e'
 impostata. Se `CODEX_HOME` e' impostata, lo script usa quella directory.
+Su Windows il default equivalente e' `%USERPROFILE%\.codex` se `CODEX_HOME` non
+e' impostata.
 
 ## Cosa non viene copiato
 
@@ -52,7 +56,7 @@ Questo e' intenzionale: il file nel repository deve poter essere scaricato e
 copiato su macchine diverse senza esportare lo stato privato della macchina di
 sviluppo.
 
-## Installazione rapida
+## Installazione rapida su Linux/macOS
 
 Dalla root del repository:
 
@@ -76,6 +80,47 @@ Quando usa `--force`, lo script salva prima una copia del vecchio file in:
 
 Questo permette di ripristinare la configurazione precedente se la macchina
 aveva gia' impostazioni personali, plugin o progetti fidati.
+
+## Installazione rapida su Windows
+
+Aprire PowerShell dalla root del repository e lanciare:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\codex\install-sol-ultra.ps1
+```
+
+Oppure, se si usa PowerShell Core:
+
+```powershell
+pwsh -File tools\codex\install-sol-ultra.ps1
+```
+
+Se `%USERPROFILE%\.codex\config.toml` esiste gia', lo script si ferma. Per
+fare backup e installare comunque:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\codex\install-sol-ultra.ps1 -Force
+```
+
+Il backup viene salvato in:
+
+```text
+%USERPROFILE%\.codex\backups\config.toml.before-sol-ultra-YYYYMMDDTHHMMSSZ
+```
+
+Anche su Windows `CODEX_HOME` puo' essere usata per scegliere una cartella
+diversa:
+
+```powershell
+$env:CODEX_HOME = "C:\Users\Antonio\.codex-scuola"
+powershell -ExecutionPolicy Bypass -File tools\codex\install-sol-ultra.ps1
+```
+
+Nota sui permessi: lo script POSIX installa `config.toml` con mode `600`.
+Windows usa ACL e non mode Unix; lo script PowerShell copia i file nella home
+dell'utente senza provare a simulare permessi POSIX. Se la macchina e' condivisa
+con altri utenti, controllare i permessi della cartella `%USERPROFILE%\.codex`
+secondo le policy della scuola.
 
 ## Verifica dopo installazione
 
