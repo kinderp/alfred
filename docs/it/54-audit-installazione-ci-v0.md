@@ -25,6 +25,19 @@ implementato il contratto raccomandato senza modificare il runtime C:
 - il job CI di riferimento installa `man-db`, esegue la suite staged per ultima
   e conserva lo stage temporaneo come artifact in caso di fallimento.
 
+La issue [#268](https://github.com/kinderp/alfred/issues/268) aggiunge il livello
+userspace successivo senza cambiare questa fotografia storica:
+
+- `.github/workflows/linux-userspace.yml` esegue lane container separate per
+  `ubuntu:24.04`, `debian:13-slim` e `fedora:44`;
+- ogni lane installa dipendenze esplicite, registra il contesto, esegue
+  `make test-install` e poi lo smoke script sullo stesso binario release come
+  UID/GID non privilegiato con `no_new_privs` attivo;
+- il job completo `ubuntu-latest` resta separato e continua a fornire la
+  copertura debug ASan/UBSan;
+- i container condividono il kernel del runner e non costituiscono evidenza
+  multi-kernel.
+
 Le sezioni che seguono restano al passato come evidenza storica del problema e
 delle motivazioni. Il contratto vigente e' descritto nella
 [roadmap della milestone](53-installability-linux-compatibility-v0.md), nella

@@ -468,23 +468,41 @@ Esempio compilato:
 
 ## GitHub Actions sulla PR
 
-Il repository esegue una GitHub Action su ogni pull request verso `main` e su
-ogni push su `main`.
+Il repository esegue due workflow GitHub Actions su ogni pull request verso
+`main` e su ogni push su `main`.
 
-Il workflow si trova in:
+I workflow si trovano in:
 
 ```text
 .github/workflows/ci.yml
+.github/workflows/linux-userspace.yml
 ```
 
-La CI esegue:
+Il workflow `CI` e' il gate completo di riferimento ed esegue:
 
 ```bash
 make
 make test
+make test-cli
+make smoke-mvp
 make test-backend-diagnostics
 make test-jsonl
+make test-install
 ```
+
+Il workflow `Linux userspace compatibility` non ripete tutta la suite. Esegue
+tre lane container release/install su Ubuntu 24.04, Debian 13 e Fedora 44:
+
+```text
+dipendenze esplicite
+-> contesto userspace
+-> make test-install
+-> smoke script con ALFRED_BIN puntato al binario release
+```
+
+Queste lane verificano distribuzione, libc, compilatore, pacchetti e utility
+userspace differenti. Condividono il kernel del runner GitHub e quindi non
+dimostrano compatibilita' con tre kernel diversi.
 
 Se la CI fallisce, la PR non va mergiata finche' il problema non e' stato
 capito. Un test rosso non significa sempre che la tua modifica sia sbagliata,
@@ -748,10 +766,70 @@ contributori. `make test-install` resta ultimo perche' ricostruisce il profilo
 release dopo che le suite ASan/UBSan hanno gia' verificato la build debug.
 
 Se in futuro aggiungiamo un nuovo controllo obbligatorio, per esempio un
-formatter o una suite di test aggiuntiva, bisogna aggiornare due posti:
+formatter o una suite di test aggiuntiva, bisogna aggiornare il workflow
+interessato e questa guida. Per il gate completo il file e':
 
 - `.github/workflows/ci.yml`
-- questa guida contributori
+
+Per la compatibilita' userspace il file e':
+
+- `.github/workflows/linux-userspace.yml`
+
+### Come funziona la matrice userspace
+
+Una `matrix` GitHub Actions crea piu' job dallo stesso template. Alfred usa
+`matrix.include` per associare a ogni lane tre informazioni:
+
+| Campo | Esempio | Significato |
+| --- | --- | --- |
+| `lane` | `debian-13` | nome stabile mostrato nella UI |
+| `image` | `debian:13-slim` | userspace container eseguito |
+| `package_manager` | `apt` | ramo che installa le dipendenze della lane |
+
+Il job gira comunque su `runs-on: ubuntu-latest`; la chiave `container.image`
+sposta i comandi dentro l'immagine selezionata. Questo cambia lo userspace, ma
+non avvia un kernel guest. Il workflow stampa quindi sia l'immagine sia
+`uname -a` e marca esplicitamente il kernel come condiviso con il runner.
+
+La strategia usa:
+
+```yaml
+fail-fast: false
+```
+
+Se Fedora fallisce, Ubuntu e Debian continuano. Questo costa qualche minuto in
+piu', ma fornisce una diagnosi migliore: possiamo distinguere un errore comune
+da un problema legato a una sola distribuzione.
+
+Le dipendenze sono dichiarate per famiglia e non date per scontate. Le lane
+Debian-like usano `apt`, Fedora usa `dnf`; tutte installano compilatore, Make,
+Bash, utility GNU/Linux, Python e `man`. La matrice deve fallire se una pagina
+man non viene renderizzata o se lo smoke runtime non osserva gli effetti
+attesi.
+
+Dopo `make test-install` la lane non usa il target `make smoke-mvp`, perche'
+quel target dipende dal normale `all` debug. Richiama invece
+`tests/smoke/mvp_smoke.sh` con `ALFRED_BIN` puntato a `./alfred`: cosi' lo smoke
+prova lo stesso artefatto release gia' usato dal test staged e Fedora non deve
+installare ASan/UBSan solo per un rilink debug estraneo allo scopo della lane.
+
+L'installazione dei pacchetti richiede `root`, ma i test no. Prima di eseguire
+Alfred, il workflow assegna il checkout a UID/GID 1001 e usa `setpriv` per
+ridurre i privilegi. In questo modo il controllo sulla sorgente illeggibile del
+test staged resta reale: `root` potrebbe leggere il file anche con i bit di
+lettura rimossi e produrre un risultato ingannevole.
+
+Le due invocazioni usano anche `--no-new-privs`. Oltre a cambiare UID, GID e
+gruppi supplementari, questo chiede al kernel di impedire ai processi di
+ottenere nuovi privilegi attraverso una successiva `execve()`, per esempio
+eseguendo un programma setuid o setgid. E' un rafforzamento del confine usato
+dalla CI, non una sandbox completa: il codice continua a essere eseguito nel
+container del job e resta soggetto alle risorse e agli accessi concessi da
+GitHub Actions.
+
+La matrice non e' un benchmark: durata di download e installazione pacchetti
+domina il tempo del job. Non va usata per confrontare le prestazioni di Alfred
+fra distribuzioni.
 
 ## Leggere output ed errori su GitHub Actions
 
