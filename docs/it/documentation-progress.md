@@ -1996,3 +1996,11 @@ licenza Apache 2.0, mentre il repository non contiene un file `LICENSE` e il
 README inglese dichiarava correttamente che nessuna licenza e' ancora stata
 scelta. Il fix deve allineare il README italiano allo stato reale e aggiungere
 nei due README i rimandi ai documenti MVP/CLI/post-MVP correnti.
+
+Aggiornamento successivo: dopo il merge della PR #248, l'audit README e'
+chiuso e la issue figlia #249 apre l'audit delle pagine man inglesi. Il primo
+drift corretto riguarda `alfred.conf(5)`: il testo diceva ancora che un file di
+configurazione viene caricato solo tramite `ALFRED_CONFIG`, mentre CLI parser v0
+supporta anche `-c FILE`, `--config FILE` e `--config=FILE` con precedenza
+sull'ambiente. L'audit chiarisce inoltre in `alfred(1)` che `output.jsonl` e'
+un output strutturato additivo, non Backend API ne' ABI plugin esterna.
