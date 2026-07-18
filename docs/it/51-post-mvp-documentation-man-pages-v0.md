@@ -120,9 +120,9 @@ Contenuti da lasciare negli MD:
 | Audit README inglese/italiano | Done | Issue figlia #247, PR #248 e merge [`99c8269`](https://github.com/kinderp/alfred/commit/99c82696c314f5eb77376e5e39e32a710ca94273). |
 | Audit man page inglesi | Done | Issue figlia #249, PR #250 e merge [`790de79`](https://github.com/kinderp/alfred/commit/790de79607aee439dbcb03a66950d854fe0d2b78). |
 | Audit man page italiane | Done | Issue figlia #251, PR #252 e merge [`e74d306`](https://github.com/kinderp/alfred/commit/e74d306434f4efece149c9ccbc15d8c681691408). |
-| Promuovere dettagli tecnici stabili | In progress | Issue figlia #253. Portare nelle man page solo cio' che serve come riferimento operativo: smoke test, failure di configurazione e copertura/limiti JSONL v0. |
-| Validare rendering man page | Todo | Eseguire `man -l` su tutte le pagine EN/IT toccate. |
-| Readiness closure | Todo | Confermare coerenza, debiti futuri e assenza di scope runtime. |
+| Promuovere dettagli tecnici stabili | Done | Issue figlia #253, PR #254 e merge [`17bea1c`](https://github.com/kinderp/alfred/commit/17bea1c1998f464241f59b612bfb6a17f7d4352d). |
+| Validare rendering man page | Done | Issue figlia #255. `man -l` passa su tutte le pagine EN/IT della milestone. |
+| Readiness closure | Done | Issue figlia #255. README, pagine man, roadmap e debiti futuri sono allineati senza riaprire scope runtime. |
 
 ## Test e validazione
 
@@ -184,6 +184,7 @@ La milestone puo' chiudersi quando:
 - Audit man page inglesi: [#249](https://github.com/kinderp/alfred/issues/249)
 - Audit man page italiane: [#251](https://github.com/kinderp/alfred/issues/251)
 - Dettagli tecnici stabili nelle man page: [#253](https://github.com/kinderp/alfred/issues/253)
+- Readiness closure man page: [#255](https://github.com/kinderp/alfred/issues/255)
 - MVP usability precedente: [49-mvp-operational-usability-v0.md](49-mvp-operational-usability-v0.md)
 - CLI parser v0: [50-cli-parser-v0.md](50-cli-parser-v0.md)
 - Roadmap CLI e pagina man: [19-roadmap-cli-e-man-page.md](19-roadmap-cli-e-man-page.md)
