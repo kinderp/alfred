@@ -344,7 +344,7 @@ queste domande:
 | Audit esplorativi notturni | [audit/README.md](audit/README.md), [audit/nightly-playbook.md](audit/nightly-playbook.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [tests/exploratory/nightly](../../tests/exploratory/nightly/README.md) |
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
-| Build e Makefile | [09](09-makefile-e-build-system.md), [53](53-installability-linux-compatibility-v0.md) |
+| Build e Makefile | [09](09-makefile-e-build-system.md), [53](53-installability-linux-compatibility-v0.md), [54](54-audit-installazione-ci-v0.md) |
 | Callback, puntatori a funzione e `void *userdata` | [08](08-guida-c-usato-nel-progetto.md), [16](16-mappa-codice-e-strutture.md), [32](32-writer-api-v0.md) |
 | CLI e configurazione | [19](19-roadmap-cli-e-man-page.md), [alfred(1)](../man/man1/alfred.1), [alfred.conf(5)](../man/man5/alfred.conf.5) |
 | Commenti nel codice | [11](11-come-contribuire.md#stile-dei-commenti-nel-codice), `docs/commenting-style.md`, `docs/commenting-progress.md` |
@@ -357,8 +357,8 @@ queste domande:
 | Eventi semantici | [13](13-semantica-eventi.md), [06](06-core-engine.md), [22](22-contratto-log.md) |
 | File ready / close-write | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [14](14-scenari-test.md) |
 | Fork e pull request | [11](11-come-contribuire.md) |
-| GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr), [53](53-installability-linux-compatibility-v0.md) |
-| Installazione, packaging e compatibilita' Linux | [53](53-installability-linux-compatibility-v0.md), [09](09-makefile-e-build-system.md), [10](10-debugging-test-e-strumenti.md), [37](37-roadmap-milestone-progetto.md) |
+| GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr), [53](53-installability-linux-compatibility-v0.md), [54](54-audit-installazione-ci-v0.md) |
+| Installazione, packaging e compatibilita' Linux | [53](53-installability-linux-compatibility-v0.md), [54](54-audit-installazione-ci-v0.md), [09](09-makefile-e-build-system.md), [10](10-debugging-test-e-strumenti.md), [37](37-roadmap-milestone-progetto.md) |
 | Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [40](40-audit-inotify-backend-api-v0.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
 | Log e copertura JSONL | [22](22-contratto-log.md#copertura-record-sink-e-output-jsonl), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |

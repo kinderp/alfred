@@ -1471,6 +1471,35 @@ make tidy
 
 Esegue `clang-tidy`, un altro strumento di analisi statica.
 
+## Stato dell'installazione
+
+Alfred non dispone ancora di target `install` o `uninstall`. Anche
+`make release` produce soltanto il binario ottimizzato nella root del
+repository:
+
+```text
+./alfred
+```
+
+Non esistono ancora variabili Make pubbliche `PREFIX`, `DESTDIR`, `BINDIR` o
+`MANDIR`. Le pagine man restano sorgenti locali sotto `docs/man` e vengono
+lette con `man -l`; non vengono copiate nel sistema.
+
+Questa distinzione evita un equivoco comune:
+
+```text
+build release != installazione
+```
+
+La build release decide come compilare il binario. L'installazione decide quali
+file appartengono al prodotto, dove copiarli, con quali permessi e come
+rimuoverli senza toccare file estranei.
+
+L'inventario verificato e le dipendenze implicite delle suite sono descritti in
+[Audit installazione e assunzioni CI v0](54-audit-installazione-ci-v0.md).
+Il contratto proposto verra' implementato in un micro-step successivo con
+staging non-root e test di ownership.
+
 ## Comandi piu' usati
 
 | Obiettivo | Comando |

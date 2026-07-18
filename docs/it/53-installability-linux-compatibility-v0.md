@@ -432,20 +432,26 @@ Il contratto v0 deve seguire il modello comune dei Makefile Unix:
 | --- | --- | --- |
 | `PREFIX` | `/usr/local` | prefisso logico dell'installazione |
 | `DESTDIR` | vuoto | root temporanea per staging/package build |
-| `BINDIR` | `$(PREFIX)/bin` | directory del binario |
-| `MANDIR` | `$(PREFIX)/share/man` | root delle pagine man |
+| `BINDIR` | `$(PREFIX)/bin` | path logico del binario, senza `DESTDIR` |
+| `MANDIR` | `$(PREFIX)/share/man` | root logica delle pagine man, senza `DESTDIR` |
 
 Layout candidato:
 
 ```text
-$(DESTDIR)$(PREFIX)/bin/alfred
-$(DESTDIR)$(PREFIX)/share/man/man1/alfred.1
-$(DESTDIR)$(PREFIX)/share/man/man5/alfred.conf.5
-$(DESTDIR)$(PREFIX)/share/man/man7/alfred-events.7
-$(DESTDIR)$(PREFIX)/share/man/it/man1/alfred.1
-$(DESTDIR)$(PREFIX)/share/man/it/man5/alfred.conf.5
-$(DESTDIR)$(PREFIX)/share/man/it/man7/alfred-events.7
+$(DESTDIR)$(BINDIR)/alfred
+$(DESTDIR)$(MANDIR)/man1/alfred.1
+$(DESTDIR)$(MANDIR)/man5/alfred.conf.5
+$(DESTDIR)$(MANDIR)/man7/alfred-events.7
+$(DESTDIR)$(MANDIR)/it/man1/alfred.1
+$(DESTDIR)$(MANDIR)/it/man5/alfred.conf.5
+$(DESTDIR)$(MANDIR)/it/man7/alfred-events.7
 ```
+
+`BINDIR` e `MANDIR` derivano in modo ricorsivo da `PREFIX`, cosi' un override
+di `PREFIX` aggiorna entrambi i default. Un override esplicito di `BINDIR` o
+`MANDIR` sostituisce invece soltanto quel path logico. `DESTDIR` viene aggiunto
+una sola volta dalla ricetta e non deve comparire nel valore di queste due
+variabili.
 
 Esempio di staging senza root:
 
@@ -454,6 +460,26 @@ stage_dir=$(mktemp -d)
 make release
 make DESTDIR="$stage_dir" PREFIX=/usr install
 ```
+
+Il confine build/install v0 e' esplicito:
+
+- `install` copia soltanto artefatti gia' costruiti;
+- `install` non dipende da `all` o `release` e non invoca il compilatore;
+- prima di creare directory o copiare file, `install` esegue un preflight
+  read-only di tutti i sette artefatti sorgente;
+- `$(TARGET)` deve essere un file regolare, leggibile ed eseguibile e ciascuna
+  delle sei pagine man deve essere un file regolare leggibile;
+- se una precondizione fallisce, `install` termina senza creare o modificare
+  nulla sotto `DESTDIR`;
+- il test staged esegue `make release` come passo separato prima di `install`;
+- un eventuale comando privilegiato deve riguardare soltanto la copia, non la
+  compilazione dentro il checkout.
+
+Questa separazione evita sia di installare automaticamente la build debug
+ASan/UBSan sia di creare oggetti posseduti da root con `sudo make install`.
+Il primo contratto non puo' riconoscere dai soli byte di `./alfred` con quali
+flag sia stato compilato: la build release resta responsabilita' del chiamante
+e del test staged finche' i profili non avranno artefatti o metadati separati.
 
 Il test deve poi usare i path dentro `stage_dir`, senza modificare `/usr` o
 `/usr/local` reali.
@@ -465,7 +491,8 @@ Il test deve poi usare i path dentro `stage_dir`, senza modificare `/usr` o
 - rimuovere solo i file elencati dal contratto Alfred;
 - non usare glob ampi;
 - non rimuovere directory di sistema condivise;
-- rispettare `DESTDIR` e `PREFIX`;
+- rispettare `DESTDIR`, `PREFIX`, `BINDIR` e `MANDIR`;
+- usare la stessa lista canonica di destinazioni usata da `install`;
 - essere verificabile prima su una staging root temporanea.
 
 La milestone non deve introdurre un uninstall ricorsivo o basato su path non
@@ -481,11 +508,27 @@ Il futuro test staging deve verificare almeno:
 4. `alfred --version` dal path staged;
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
-7. rendering delle pagine man staged quando `man` e' disponibile;
-8. uninstall staged senza lasciare file posseduti da Alfred.
+7. rendering con `man -l` di ciascuna delle sei pagine man staged;
+8. fallimento preflight senza modifiche a `DESTDIR` per ogni classe di sorgente;
+9. override di `BINDIR` e `MANDIR` rispettato da install e uninstall;
+10. uninstall staged senza lasciare file posseduti da Alfred.
 
 Il test non deve richiedere root e non deve scrivere fuori dalla directory
 temporanea.
+
+La lane stage-install di riferimento deve installare o rendere esplicitamente
+disponibile `man` e deve fallire se il renderer manca o se una delle sei pagine
+non viene renderizzata. L'assenza di `man` non e' un successo e non puo' essere
+uno skip silenzioso. Una lane ridotta della matrice puo' omettere il rendering
+solo dichiarandolo nella propria evidenza, mentre la lane di riferimento
+obbligatoria continua a verificare tutte le pagine.
+
+Il test negativo del preflight deve coprire separatamente le due classi di
+artefatto: un binario regolare non leggibile e una sorgente man temporaneamente
+indisponibile. In entrambi i casi deve verificare sia lo status non-zero sia
+l'assenza di qualsiasi nuova directory o file nello stage. Il test deve
+ripristinare permessi e sorgenti anche quando una verifica fallisce; essendo
+non-root, il controllo di leggibilita' resta significativo.
 
 ## Evidenza ambiente
 
@@ -561,8 +604,8 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 
 | Item | Stato | Note |
 | --- | --- | --- |
-| Setup milestone, issue madre e roadmap | In progress | Issue madre #261 e issue figlia #262; PR setup da aprire |
-| Audit Makefile, artefatti e CI corrente | Todo | Mappare profilo debug/release, path e dipendenze |
+| Setup milestone, issue madre e roadmap | Done | Issue madre #261, issue figlia #262 e PR #263 |
+| Audit Makefile, artefatti e CI corrente | Done | Issue #264 e [audit dedicato](54-audit-installazione-ci-v0.md) |
 | Contratto `PREFIX` / `DESTDIR` / install / uninstall | Todo | Nessuna scrittura root nei test |
 | Test stage-install | Todo | Verificare binario, man page, CLI e cleanup |
 | Prima matrice distribuzioni/userspace | Todo | Container non equivalgono a kernel diversi |
