@@ -302,15 +302,28 @@ CI usano almeno:
 | text tools | `grep`, `sed`, `cut` | verifica log e campi |
 | process control | `kill`, `wait` | shutdown e status del processo Alfred |
 | Python | `python3` | parsing strutturale JSONL nello smoke e nei golden |
-| man-page renderer | `man` (in genere dal pacchetto `man-db`) | rendering obbligatorio delle sei pagine nella lane stage-install di riferimento |
 
 La CI installa esplicitamente soltanto `build-essential`. Bash, Python 3,
-coreutils, grep, sed, findutils e il renderer delle pagine man possono essere
-disponibili nell'immagine GitHub corrente, ma sono dipendenze implicite finche'
-la lane che li usa non li installa o verifica esplicitamente.
+coreutils, grep, sed e findutils sono disponibili nell'immagine GitHub corrente,
+ma sono dipendenze implicite.
 
 Una container matrix non deve affidarsi alla stessa fortuna. Ogni immagine
 deve installare esplicitamente il set minimo necessario alla lane che esegue.
+
+### Dipendenza futura della lane stage-install
+
+Il test staged non esiste ancora e quindi `man` non e' una dipendenza delle
+suite CI correnti. Diventera' pero' una dipendenza obbligatoria della futura
+lane stage-install di riferimento:
+
+| Dipendenza futura | Nome comune del pacchetto | Perche' servira' |
+| --- | --- | --- |
+| renderer pagine man | `man-db` su Debian/Ubuntu; il nome varia per distribuzione | eseguire `man -l` su tutte le sei pagine installate |
+
+La lane dovra' installare il pacchetto corretto per la propria distribuzione o
+verificare esplicitamente che `man` esista prima del test. Questa dipendenza
+futura non deve essere retrodatata come evidenza della CI corrente e non puo'
+essere omessa silenziosamente quando la lane verra' implementata.
 
 ## Suite e artefatto installato
 
@@ -492,6 +505,7 @@ deve richiedere privilegi.
 | Man page inventariate | Done | tre EN e tre IT |
 | Config installabile verificata | Done | nessun esempio canonico tracciato |
 | Dipendenze suite inventariate | Done | Bash, toolchain, utility, Python 3 |
+| Dipendenza futura stage-install | Done | `man`; pacchetto comune `man-db` su Debian/Ubuntu |
 | Assunzioni CI inventariate | Done | un job `ubuntu-latest`, `build-essential` |
 | Gap install ordinati | Done | contratto staged prima della matrice |
 | Codice runtime modificato | No | audit documentale |
