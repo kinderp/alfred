@@ -2004,3 +2004,11 @@ configurazione viene caricato solo tramite `ALFRED_CONFIG`, mentre CLI parser v0
 supporta anche `-c FILE`, `--config FILE` e `--config=FILE` con precedenza
 sull'ambiente. L'audit chiarisce inoltre in `alfred(1)` che `output.jsonl` e'
 un output strutturato additivo, non Backend API ne' ABI plugin esterna.
+
+Aggiornamento successivo: dopo il merge della PR #250, la issue figlia #251
+apre l'audit delle pagine man italiane. Il lavoro allinea le pagine localizzate
+alle pagine inglesi appena corrette: `alfred.conf(5)` italiano non deve piu'
+dire che la configurazione passa solo da `ALFRED_CONFIG`, `alfred(1)` italiano
+deve spiegare l'output strutturato opzionale, e `alfred-events(7)` italiano
+deve conservare anche i casi rifiutati dal validatore Backend API v0 e le regole
+di ownership dell'envelope emit.
