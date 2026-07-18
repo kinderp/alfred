@@ -497,11 +497,18 @@ Il futuro test staging deve verificare almeno:
 4. `alfred --version` dal path staged;
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
-7. rendering delle pagine man staged quando `man` e' disponibile;
+7. rendering con `man -l` di ciascuna delle sei pagine man staged;
 8. uninstall staged senza lasciare file posseduti da Alfred.
 
 Il test non deve richiedere root e non deve scrivere fuori dalla directory
 temporanea.
+
+La lane stage-install di riferimento deve installare o rendere esplicitamente
+disponibile `man` e deve fallire se il renderer manca o se una delle sei pagine
+non viene renderizzata. L'assenza di `man` non e' un successo e non puo' essere
+uno skip silenzioso. Una lane ridotta della matrice puo' omettere il rendering
+solo dichiarandolo nella propria evidenza, mentre la lane di riferimento
+obbligatoria continua a verificare tutte le pagine.
 
 ## Evidenza ambiente
 

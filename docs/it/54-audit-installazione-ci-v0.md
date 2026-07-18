@@ -298,10 +298,12 @@ CI usano almeno:
 | text tools | `grep`, `sed`, `cut` | verifica log e campi |
 | process control | `kill`, `wait` | shutdown e status del processo Alfred |
 | Python | `python3` | parsing strutturale JSONL nello smoke e nei golden |
+| man-page renderer | `man` (in genere dal pacchetto `man-db`) | rendering obbligatorio delle sei pagine nella lane stage-install di riferimento |
 
 La CI installa esplicitamente soltanto `build-essential`. Bash, Python 3,
-coreutils, grep, sed e findutils sono disponibili nell'immagine GitHub corrente,
-ma sono dipendenze implicite.
+coreutils, grep, sed, findutils e il renderer delle pagine man possono essere
+disponibili nell'immagine GitHub corrente, ma sono dipendenze implicite finche'
+la lane che li usa non li installa o verifica esplicitamente.
 
 Una container matrix non deve affidarsi alla stessa fortuna. Ogni immagine
 deve installare esplicitamente il set minimo necessario alla lane che esegue.
@@ -322,9 +324,16 @@ Il test install v0 deve quindi essere dedicato e piccolo. Deve verificare:
 2. modo `0755` del binario e `0644` delle man page;
 3. `--version` e `--help` tramite il path staged;
 4. `--check-config` con una configurazione temporanea valida;
-5. rendering delle sei man page, quando `man` e' disponibile nella lane;
+5. rendering con `man -l` di ciascuna delle sei man page;
 6. uninstall dei soli sette file;
 7. conservazione di un file sentinella estraneo nelle directory condivise.
+
+La lane stage-install di riferimento deve rendere disponibile `man` e deve
+fallire se il comando manca o se anche una sola delle sei pagine non viene
+renderizzata. Non e' ammesso trasformare l'assenza del renderer in uno skip
+silenzioso. Una lane ridotta di una distribuzione puo' omettere questo controllo
+soltanto se dichiara esplicitamente la riduzione nell'evidenza della lane e se
+la lane di riferimento obbligatoria continua a possedere il controllo completo.
 
 Lo smoke MVP puo' essere aggiunto come prova successiva passando
 `ALFRED_BIN=<stage>/usr/bin/alfred`. Non deve sostituire il test di ownership
