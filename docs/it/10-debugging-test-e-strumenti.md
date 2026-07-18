@@ -392,7 +392,7 @@ profilo che quelle suite credono di provare.
 | `test_prefix_override_layout()` | prova che `PREFIX=/usr` sposti insieme binario e root delle man page |
 | `test_custom_layout()` | prova override indipendenti di `BINDIR` e `MANDIR` |
 | `test_unreadable_binary_preflight()` | inietta da `/tmp` un binario regolare ma non leggibile |
-| `test_missing_manual_preflight()` | inietta un path man inesistente |
+| `test_missing_manual_preflight()` | rende mancante l'ultima sorgente man italiana per provare che tutto il preflight preceda ogni scrittura |
 | `test_invalid_layout_preflight()` | rifiuta path relativi o con `..` in `BINDIR`, `MANDIR` e `DESTDIR` prima di scrivere |
 
 I sentinel sono file estranei creati nelle directory condivise prima di

@@ -549,6 +549,12 @@ l'assenza di qualsiasi nuova directory o file nello stage. Il test deve
 ripristinare permessi e sorgenti anche quando una verifica fallisce; essendo
 non-root, il controllo di leggibilita' resta significativo.
 
+Il caso mancante usa deliberatamente l'ultima sorgente della sequenza,
+`ALFRED_MAN7_IT_SOURCE`. In questo modo il test non dimostra soltanto che un
+errore iniziale e' innocuo: dimostra che tutte le sorgenti precedenti possono
+superare il controllo senza che install inizi a modificare lo stage prima di
+avere completato il preflight.
+
 ## Evidenza ambiente
 
 Ogni lane di compatibilita' dovrebbe registrare almeno:

@@ -236,14 +236,14 @@ test_unreadable_binary_preflight() {
 
 test_missing_manual_preflight() {
     local stage="$RUN_DIR/missing-manual-stage"
-    local missing="$SOURCE_DIR/missing-alfred.1"
+    local missing="$SOURCE_DIR/missing-alfred-events-it.7"
 
     mkdir -p "$stage" "$SOURCE_DIR"
 
     if run_make \
         DESTDIR="$stage" \
         PREFIX=/usr \
-        ALFRED_MAN1_EN_SOURCE="$missing" \
+        ALFRED_MAN7_IT_SOURCE="$missing" \
         install >"$RUN_DIR/missing-manual.out" 2>&1; then
         fail "install accepted a missing manual source"
     fi
