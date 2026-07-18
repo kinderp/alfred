@@ -52,7 +52,10 @@ entrare subito nei dettagli interni.
    strumenti di navigazione del codice.
 4. [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)
    descrive lo stato attuale della CLI e le opzioni future.
-5. Pagine man:
+5. [Post-MVP documentation and man pages v0](51-post-mvp-documentation-man-pages-v0.md)
+   spiega come README, pagine man e documentazione didattica devono restare
+   coerenti dopo la stabilizzazione del parser CLI.
+6. Pagine man:
    [alfred(1)](../man/man1/alfred.1),
    [alfred.conf(5)](../man/man5/alfred.conf.5),
    [alfred-events(7)](../man/man7/alfred-events.7).
@@ -85,9 +88,9 @@ test collegati.
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
 1. la milestone corrente o una milestone recente di riferimento, per esempio
-   [`CLI parser v0`](https://github.com/kinderp/alfred/milestone/13);
+   [`Post-MVP documentation and man pages v0`](https://github.com/kinderp/alfred/milestone/14);
 2. la issue madre della milestone, per esempio
-   [`CLI parser v0: implementation plan`](https://github.com/kinderp/alfred/issues/228);
+   [`Post-MVP documentation and man pages v0: implementation plan`](https://github.com/kinderp/alfred/issues/244);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
