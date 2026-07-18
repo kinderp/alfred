@@ -14,12 +14,23 @@ text after the first
 .B =
 is used as the value.
 .PP
-The file is loaded only when the
+The file can be selected explicitly with
+.BR alfred (1)
+.B -c
+or
+.BR --config ,
+or through the
 .B ALFRED_CONFIG
-environment variable points to it:
+environment variable:
 .EX
+alfred -c ./alfred.conf /tmp/project
+alfred --config ./alfred.conf /tmp/project
+alfred --config=./alfred.conf /tmp/project
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 .EE
+.PP
+An explicit command-line configuration file wins over
+.BR ALFRED_CONFIG .
 .SH BOOLEAN VALUES
 Boolean true values are:
 .EX

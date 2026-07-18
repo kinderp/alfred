@@ -189,6 +189,29 @@ or
 .TP
 .B errors.log
 Error and diagnostic failure log.
+.SH OPTIONAL STRUCTURED OUTPUT
+Alfred can also write additive JSONL output when configuration enables the
+record output runtime:
+.EX
+output_enabled=true
+output_format=jsonl
+output_log=output.jsonl
+.EE
+.PP
+This output is additional: the compatibility logs
+.BR raw.log ,
+.BR events.log ,
+and
+.B errors.log
+are still written. JSONL is produced from the structured record path for the
+runtime records currently wired in v0. It is not the Backend API and it is not a
+stable external plugin ABI.
+.PP
+The
+.B counter
+output format routes records through the same queue and dispatcher boundary but
+does not create a user-facing output file. It is intended for tests and
+benchmarks.
 .SH EXIT STATUS
 .TP
 .B 0
