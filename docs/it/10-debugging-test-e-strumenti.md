@@ -383,7 +383,8 @@ profilo che quelle suite credono di provare.
 | `fail()` | stampa il motivo e l'albero degli artifact prima di terminare |
 | `run_make()` | richiama GNU Make dalla root senza dipendere dalla directory corrente |
 | `assert_layout_rejected()` | verifica che ogni combinazione di path non valida sia rifiutata dal target read-only |
-| `assert_file()` / `assert_absent()` | controllano presenza e assenza, considerando presente anche un symlink dangling |
+| `path_is_absent()` | definisce in un solo punto l'assenza: ne' entry risolvibile ne' symlink dangling |
+| `assert_file()` / `assert_absent()` | applicano gli assert di presenza e la semantica condivisa di `path_is_absent()` |
 | `assert_mode()` | verifica `0755` per il binario e `0644` per le man page |
 | `assert_empty_stage()` | prova che un preflight fallito non abbia modificato lo stage |
 | `stage_entry_list()` | enumera in ordine ogni entry staged che non sia una directory, inclusi symlink, FIFO e socket |

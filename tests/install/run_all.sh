@@ -41,8 +41,12 @@ assert_file() {
     [[ -f "$1" ]] || fail "missing staged file: $1"
 }
 
+path_is_absent() {
+    [[ ! -e "$1" && ! -L "$1" ]]
+}
+
 assert_absent() {
-    [[ ! -e "$1" && ! -L "$1" ]] || fail "unexpected staged path: $1"
+    path_is_absent "$1" || fail "unexpected staged path: $1"
 }
 
 assert_mode() {
@@ -83,9 +87,9 @@ assert_exact_entries() {
     expected="$(printf '%s\n' "$@" | LC_ALL=C sort)"
 
     [[ "$actual" == "$expected" ]] || {
-        printf '%s\n' "expected files:" "$expected" >&2
-        printf '%s\n' "actual files:" "$actual" >&2
-        fail "stage contains an unexpected file set"
+        printf '%s\n' "expected entries:" "$expected" >&2
+        printf '%s\n' "actual entries:" "$actual" >&2
+        fail "stage contains an unexpected entry set"
     }
 }
 
@@ -229,7 +233,7 @@ test_ownership_helpers_reject_symlink() {
     ln -s missing-target "$unexpected"
 
     [[ -L "$unexpected" ]] || fail "could not create ownership helper symlink"
-    if [[ ! -e "$unexpected" && ! -L "$unexpected" ]]; then
+    if path_is_absent "$unexpected"; then
         fail "absence predicate ignored a dangling symlink"
     fi
 
