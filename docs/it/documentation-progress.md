@@ -152,6 +152,14 @@ fallimento della configurazione che fanno parte del contratto utente corrente e
 la copertura/limiti di JSONL v0 come output di golden test e audit, non come
 Backend API o telemetria lifecycle completa.
 
+Aggiornamento successivo: la issue figlia #253 e la PR #254 sono state chiuse
+con il merge
+[`17bea1c`](https://github.com/kinderp/alfred/commit/17bea1c1998f464241f59b612bfb6a17f7d4352d).
+La closure #255 valida il rendering di tutte le pagine man inglesi e italiane,
+marca la milestone come pronta e conferma che il lavoro e' rimasto
+documentation-only: nessuna opzione CLI, parser, backend, writer, JSONL,
+packaging o feature runtime e' stata cambiata in questa milestone.
+
 ## Aggiornamento Core Input Model / Main Loop Migration v0
 
 La milestone corrente in quel momento era `Core Input Model / Main Loop
