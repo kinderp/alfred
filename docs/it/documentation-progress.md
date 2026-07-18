@@ -68,6 +68,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `48-core-input-main-loop-migration-v0.md` |
 | Parziale | `49-mvp-operational-usability-v0.md` |
 | Parziale | `50-cli-parser-v0.md` |
+| Parziale | `51-post-mvp-documentation-man-pages-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -1976,3 +1977,15 @@ e' chiusa, il registro milestone marca `CLI parser v0` come `done` e
 `50-cli-parser-v0.md` conserva il contratto finale: parser piccolo, subset
 POSIX/GNU esplicito, no-runtime commands side-effect-free, casi ambigui
 rifiutati e `--print-config` rimandato come debito futuro dichiarato.
+
+## Aggiornamento Post-MVP documentation and man pages v0
+
+La nuova milestone operativa e' `Post-MVP documentation and man pages v0`,
+collegata alla GitHub Milestone #14 e alla issue madre #244. Il riferimento
+principale e' `51-post-mvp-documentation-man-pages-v0.md`.
+
+La milestone nasce dal debito dichiarato alla chiusura dell'MVP: dopo la
+stabilizzazione della CLI, README e pagine man devono essere riallineati al
+comportamento reale di Alfred. Il setup documentale separa README, man page,
+documentazione didattica e roadmap: i README introducono, le man page normano,
+`docs/it` spiega e le roadmap conservano il futuro non implementato.

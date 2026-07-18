@@ -61,8 +61,8 @@ configurazione e quali devono restare solo test o roadmap.
 | Mostrare usage | `./alfred --help`; `./alfred -h` | Restare comando informativo side-effect-free | Supportato |
 | Mostrare versione | `./alfred --version`; `./alfred -V` | Restare comando informativo side-effect-free | Supportato |
 | Validare configurazione senza runtime | `./alfred --check-config`, `./alfred -c FILE --check-config`, `./alfred --config FILE --check-config`, `./alfred --config=FILE --check-config`, con eventuale fallback `ALFRED_CONFIG=FILE` | Non richiedere `PATH...`; rifiutare path o comandi combinati; non creare log runtime | Supportato in CLI parser v0 |
-| Stampare configurazione effettiva | Nessuna superficie | Candidato `--print-config`; deve terminare senza runtime se implementato | Da decidere in CLI parser v0 |
-| Abilitare JSONL output | Config file: `output_enabled=true`, `output_format=jsonl`, `output_log=...` | Restare config per v0; niente flag CLI dedicata finche' il parser non e' stabile | Rimandato oltre CLI parser v0 |
+| Stampare configurazione effettiva | Nessuna superficie | Candidato futuro `--print-config`; deve terminare senza runtime se implementato | Rimandato oltre CLI parser v0: manca un output stabile della configurazione effettiva |
+| Abilitare JSONL output | Config file: `output_enabled=true`, `output_format=jsonl`, `output_log=...` | Restare config per v0; niente flag CLI dedicata finche' esiste una scelta prodotto dedicata | Rimandato oltre CLI parser v0 |
 | Usare counter output no-op | Config file: `output_format=counter` con output enabled | Restare config/test/benchmark; non e' una feature utente primaria | Non esporre come flag v0 |
 | Configurare watch mask inotify | Config file: `inotify_watch_mask=...` | Restare config; CLI non deve conoscere token inotify nel parser v0 | Non esporre come flag v0 |
 | Abilitare audit inotify opt-in | Config file: `inotify_audit_events=...` | Restare config perche' rumoroso e diagnostico | Non esporre come flag v0 |
