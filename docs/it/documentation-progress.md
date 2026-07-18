@@ -70,6 +70,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `50-cli-parser-v0.md` |
 | Parziale | `51-post-mvp-documentation-man-pages-v0.md` |
 | Completo | `52-configurazione-codex-sol-ultra.md` |
+| Parziale | `53-installability-linux-compatibility-v0.md` |
+| Completo | `54-audit-installazione-ci-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -2097,3 +2099,13 @@ man page in una root temporanea, verifica modi, CLI, rendering, override di
 layout, preflight negativi e conservazione dei file estranei. Il job CI di
 riferimento installa `man-db` ed esegue questa suite per ultima; la matrice
 userspace e l'evidenza ambiente restano i prossimi micro-step distinti.
+
+Aggiornamento successivo: la issue figlia #268 introduce la prima matrice
+container userspace in `.github/workflows/linux-userspace.yml`. Le tre lane
+usano tag espliciti Ubuntu 24.04, Debian 13 e Fedora 44, installano dipendenze
+per famiglia, eseguono il profilo release tramite `make test-install` e poi lo
+smoke MVP direttamente sullo stesso binario release. Il workflow stampa
+distribuzione, libc, compilatore, architettura,
+filesystem e kernel osservato, ma marca esplicitamente il kernel come condiviso
+con il runner GitHub. La matrice aggiunge evidenza userspace; non introduce VM,
+kernel guest, musl, packaging o nuovi claim di supporto.

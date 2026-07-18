@@ -1,0 +1,129 @@
+name: Linux userspace compatibility
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  staged-install:
+    name: Userspace ${{ matrix.lane }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: ubuntu-24.04
+            image: ubuntu:24.04
+            package_manager: apt
+          - lane: debian-13
+            image: debian:13-slim
+            package_manager: apt
+          - lane: fedora-44
+            image: fedora:44
+            package_manager: dnf
+    env:
+      ALFRED_KEEP_TEST_LOGS: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install lane dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package_manager }}" in
+            apt)
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                bash \
+                coreutils \
+                file \
+                findutils \
+                grep \
+                man-db \
+                procps \
+                python3 \
+                sed \
+                util-linux
+              ;;
+            dnf)
+              dnf install -y \
+                bash \
+                coreutils \
+                file \
+                findutils \
+                gcc \
+                glibc-devel \
+                grep \
+                make \
+                man-db \
+                procps-ng \
+                python3 \
+                sed \
+                util-linux
+              ;;
+            *)
+              printf 'Unsupported package manager: %s\n' \
+                "${{ matrix.package_manager }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Record userspace lane context
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'lane=%s\n' "${{ matrix.lane }}"
+          printf 'container_image=%s\n' "${{ matrix.image }}"
+          printf 'container_mode=github-actions-job-container\n'
+          printf 'build_profile=release\n'
+          printf 'sanitizers_enabled=false\n'
+          printf 'kernel_scope=shared-github-runner-kernel\n'
+          printf '%s\n' '--- /etc/os-release ---'
+          cat /etc/os-release
+          printf '%s\n' '--- uname ---'
+          uname -a
+          printf 'architecture=%s\n' "$(uname -m)"
+          printf '%s\n' '--- libc ---'
+          getconf GNU_LIBC_VERSION || printf 'unknown\n'
+          printf '%s\n' '--- compiler ---'
+          cc --version
+          printf '%s\n' '--- filesystem ---'
+          stat -f -c '%T' .
+
+      - name: Build release and test staged installation
+        shell: bash
+        run: |
+          chown -R 1001:1001 "$GITHUB_WORKSPACE"
+          setpriv --reuid=1001 --regid=1001 --clear-groups \
+            make test-install
+
+      - name: Run representative MVP smoke test
+        shell: bash
+        run: |
+          setpriv --reuid=1001 --regid=1001 --clear-groups \
+            env ALFRED_BIN="$GITHUB_WORKSPACE/alfred" \
+            bash tests/smoke/mvp_smoke.sh
+
+      - name: Upload compatibility artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-userspace-${{ matrix.lane }}-failure
+          if-no-files-found: ignore
+          path: |
+            /tmp/alfred_install_test.*/**
+            /tmp/alfred_mvp_smoke.*/**

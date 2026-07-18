@@ -204,36 +204,71 @@ prodotto release.
 La prima estensione CI concreta dovrebbe essere una matrice piccola, non una
 lista di ogni distribuzione esistente.
 
-Una candidata ragionevole per v0 e':
+La matrice v0 implementata dalla issue
+[#268](https://github.com/kinderp/alfred/issues/268) usa tre tag di release
+espliciti:
 
-| Famiglia | Valore della prova | Scope iniziale |
-| --- | --- | --- |
-| Ubuntu LTS | ambiente di riferimento vicino al job corrente | build release, stage install, CLI/smoke |
-| Debian stable | userspace conservativo e packaging Debian-like | build release, stage install, test selezionati |
-| Fedora stable | toolchain e packaging differenti dalla famiglia Debian | build release, stage install, test selezionati |
+| Lane | Immagine container | Valore della prova | Scope iniziale |
+| --- | --- | --- | --- |
+| Ubuntu LTS | `ubuntu:24.04` | ambiente di riferimento vicino al job corrente | build release, stage install, CLI/smoke |
+| Debian stable | `debian:13-slim` | userspace conservativo e packaging Debian-like | build release, stage install, CLI/smoke |
+| Fedora stable | `fedora:44` | toolchain e packaging differenti dalla famiglia Debian | build release, stage install, CLI/smoke |
 
-La selezione finale delle immagini deve essere fatta nell'audit CI. I tag
-devono essere intenzionali: un tag mobile come `latest` aumenta la copertura
-nel tempo ma riduce la riproducibilita'; un tag fissato rende il risultato piu'
-riproducibile ma richiede aggiornamenti pianificati.
+I tag fissano la release della distribuzione invece di seguire `latest`. Questo
+rende la prova piu' interpretabile, ma non rende immutabili i byte
+dell'immagine: gli aggiornamenti della stessa release possono cambiare i
+pacchetti disponibili. Aggiornare una lane richiede quindi una PR dedicata che
+registri il motivo, i nuovi dati ambiente e l'esito delle prove.
 
 Alpine/musl e' interessante, ma non deve entrare automaticamente in v0. Alfred
 usa `gnu99`, Bash nei test e oggi viene sviluppato soprattutto su glibc. Una
 lane musl sarebbe una vera estensione di portabilita', con possibili modifiche
 al build/test contract; deve avere una issue e criteri propri.
 
-### Cosa eseguire nella matrice v0
+### Cosa esegue la matrice v0
 
-La matrice non deve duplicare tutta la CI completa su ogni immagine senza un
-motivo. Il percorso minimo candidato e':
+La matrice non duplica tutta la CI completa su ogni immagine. Il percorso e':
 
 ```text
 installare dipendenze build
 -> registrare ambiente
--> make release
 -> make test-install
--> eseguire un sottoinsieme runtime rappresentativo
+   -> make release
+   -> verifica installazione staged, CLI e man page
+-> ALFRED_BIN=./alfred bash tests/smoke/mvp_smoke.sh
+   -> scenario runtime inotify sullo stesso artefatto release
 ```
+
+Il workflow e' `.github/workflows/linux-userspace.yml`. Ogni lane installa
+esplicitamente toolchain, Bash, utility di test, Python e renderer `man`; non
+eredita implicitamente i pacchetti del runner Ubuntu. `fail-fast: false`
+permette alle altre distribuzioni di completare anche se una lane fallisce,
+cosi' il report distingue un problema generale da uno specifico userspace.
+
+Il bootstrap dei pacchetti avviene come `root`, come normalmente accade nei
+job container. Prima dei test il workflow assegna il checkout a UID/GID 1001 e
+usa `setpriv` per eseguire `make test-install` e lo smoke script senza
+privilegi. Questo e' parte del contratto: eseguire la suite staged come `root`
+renderebbe non significativa la prova della sorgente intenzionalmente non
+leggibile e non rappresenterebbe il percorso non-root raccomandato.
+
+Il job completo `.github/workflows/ci.yml` resta l'autorita' per tutte le suite
+debug con ASan/UBSan. Le lane container usano invece il profilo release e il
+percorso install/smoke: non sono benchmark e non sostituiscono la CI completa.
+La lane richiama direttamente lo script smoke con `ALFRED_BIN` per non passare
+dal target `make smoke-mvp`, che dipende da `all` e appartiene al normale
+percorso debug. In questo modo install e smoke provano lo stesso binario release
+e non richiedono runtime sanitizer nelle immagini container.
+
+GitHub esegue i container sullo stesso kernel del runner `ubuntu-latest`.
+Per questo ogni lane stampa `kernel_scope=shared-github-runner-kernel`; tre job
+verdi dimostrano tre userspace provati, non tre kernel provati.
+
+Questi dati nel log sono la diagnostica minima necessaria alla matrice, non
+ancora un formato versionato di evidence. La voce successiva della checklist,
+`Evidenza ambiente e wording di supporto`, resta separata: dovra' decidere se e
+come salvare un artifact stabile, come rappresentare valori `unknown` e quale
+tabella pubblica distingue ambienti `tested`, `supported` e `untested`.
 
 Se un test dipende da timing o privilegi non disponibili nel container, deve
 essere classificato e non semplicemente disabilitato senza spiegazione.
@@ -643,7 +678,7 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 | Audit Makefile, artefatti e CI corrente | Done | Issue #264 e [audit dedicato](54-audit-installazione-ci-v0.md) |
 | Contratto `PREFIX` / `DESTDIR` / install / uninstall | Done | Issue #266; copia di sette file e rimozione esatta senza root nei test |
 | Test stage-install | Done | Issue #266; binario, sei man page, CLI, layout, preflight e ownership |
-| Prima matrice distribuzioni/userspace | Todo | Container non equivalgono a kernel diversi |
+| Prima matrice distribuzioni/userspace | Done | Issue #268; Ubuntu 24.04, Debian 13 e Fedora 44, tutte sul kernel condiviso del runner |
 | Evidenza ambiente e wording di supporto | Todo | Distinguere supported/tested/untested |
 | Readiness closure | Todo | Documenti, CI e issue GitHub allineati |
 
