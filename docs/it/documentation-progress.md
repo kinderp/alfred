@@ -69,6 +69,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `49-mvp-operational-usability-v0.md` |
 | Parziale | `50-cli-parser-v0.md` |
 | Parziale | `51-post-mvp-documentation-man-pages-v0.md` |
+| Completo | `52-configurazione-codex-sol-ultra.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -96,6 +97,9 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `docs/code-browser/README.md` |
 | Completo | `docs/sourcebot-browser/README.md` |
 | Parziale | `docs/kythe-browser/README.md` |
+| Completo | `tools/codex/README.md` |
+| Completo | `tools/codex/install-sol-ultra.sh` |
+| Completo | `tools/codex/install-sol-ultra.ps1` |
 | Parziale | `docs/man/man1/alfred.1` |
 | Parziale | `docs/man/man5/alfred.conf.5` |
 | Parziale | `docs/man/man7/alfred-events.7` |
