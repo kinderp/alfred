@@ -461,8 +461,8 @@ Il confine build/install v0 e' esplicito:
 - `install` non dipende da `all` o `release` e non invoca il compilatore;
 - prima di creare directory o copiare file, `install` esegue un preflight
   read-only di tutti i sette artefatti sorgente;
-- `$(TARGET)` deve essere un file regolare ed eseguibile e ciascuna delle sei
-  pagine man deve essere un file regolare leggibile;
+- `$(TARGET)` deve essere un file regolare, leggibile ed eseguibile e ciascuna
+  delle sei pagine man deve essere un file regolare leggibile;
 - se una precondizione fallisce, `install` termina senza creare o modificare
   nulla sotto `DESTDIR`;
 - il test staged esegue `make release` come passo separato prima di `install`;
@@ -502,7 +502,7 @@ Il futuro test staging deve verificare almeno:
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
 7. rendering con `man -l` di ciascuna delle sei pagine man staged;
-8. fallimento preflight senza modifiche a `DESTDIR` quando manca una sorgente;
+8. fallimento preflight senza modifiche a `DESTDIR` per ogni classe di sorgente;
 9. uninstall staged senza lasciare file posseduti da Alfred.
 
 Il test non deve richiedere root e non deve scrivere fuori dalla directory
@@ -515,10 +515,12 @@ uno skip silenzioso. Una lane ridotta della matrice puo' omettere il rendering
 solo dichiarandolo nella propria evidenza, mentre la lane di riferimento
 obbligatoria continua a verificare tutte le pagine.
 
-Il caso negativo del preflight deve rendere temporaneamente indisponibile una
-delle sorgenti man, invocare `install` e verificare sia lo status non-zero sia
-l'assenza di qualsiasi nuova directory o file nello stage. Il test deve poi
-ripristinare la sorgente anche quando una verifica fallisce.
+Il test negativo del preflight deve coprire separatamente le due classi di
+artefatto: un binario regolare non leggibile e una sorgente man temporaneamente
+indisponibile. In entrambi i casi deve verificare sia lo status non-zero sia
+l'assenza di qualsiasi nuova directory o file nello stage. Il test deve
+ripristinare permessi e sorgenti anche quando una verifica fallisce; essendo
+non-root, il controllo di leggibilita' resta significativo.
 
 ## Evidenza ambiente
 

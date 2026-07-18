@@ -59,9 +59,9 @@ make release
 In questo percorso `install` e' deliberatamente copy-only: non dipende da
 `all` o `release` e non compila. Prima di modificare lo stage esegue un
 preflight read-only di tutti i sette artefatti sorgente: `./alfred` deve essere
-un file regolare eseguibile e ciascuna pagina man deve essere un file regolare
-leggibile. E' il test staged a eseguire `make release` come operazione
-precedente e non privilegiata.
+un file regolare leggibile ed eseguibile e ciascuna pagina man deve essere un
+file regolare leggibile. E' il test staged a eseguire `make release` come
+operazione precedente e non privilegiata.
 
 La separazione evita che un comune `sudo make install` ricompili dentro il
 checkout creando file posseduti da root. V0 non puo' pero' dimostrare da solo
@@ -342,7 +342,7 @@ Il test install v0 deve quindi essere dedicato e piccolo. Deve verificare:
 3. `--version` e `--help` tramite il path staged;
 4. `--check-config` con una configurazione temporanea valida;
 5. rendering con `man -l` di ciascuna delle sei man page;
-6. fallimento preflight senza modifiche allo stage quando manca una sorgente;
+6. fallimento preflight senza modifiche per binario non leggibile e mancante;
 7. uninstall dei soli sette file;
 8. conservazione di un file sentinella estraneo nelle directory condivise.
 
@@ -353,10 +353,12 @@ silenzioso. Una lane ridotta di una distribuzione puo' omettere questo controllo
 soltanto se dichiara esplicitamente la riduzione nell'evidenza della lane e se
 la lane di riferimento obbligatoria continua a possedere il controllo completo.
 
-Il caso negativo del preflight deve rendere temporaneamente indisponibile una
-delle sei sorgenti man, aspettarsi uno status non-zero e verificare che sotto
-`DESTDIR` non sia stata creata o modificata alcuna destinazione. Il cleanup del
-test deve ripristinare la sorgente anche in caso di errore.
+I casi negativi del preflight devono coprire separatamente un binario regolare
+non leggibile e una delle sei sorgenti man temporaneamente indisponibile. Ogni
+caso deve aspettarsi uno status non-zero e verificare che sotto `DESTDIR` non
+sia stata creata o modificata alcuna destinazione. Il test e' non-root, percio'
+il controllo di leggibilita' e' significativo; il cleanup deve ripristinare
+permessi e sorgenti anche in caso di errore.
 
 Lo smoke MVP puo' essere aggiunto come prova successiva passando
 `ALFRED_BIN=<stage>/usr/bin/alfred`. Non deve sostituire il test di ownership
