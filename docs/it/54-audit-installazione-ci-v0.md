@@ -32,7 +32,7 @@ userspace successivo senza cambiare questa fotografia storica:
   `ubuntu:24.04`, `debian:13-slim` e `fedora:44`;
 - ogni lane installa dipendenze esplicite, registra il contesto, esegue
   `make test-install` e poi lo smoke script sullo stesso binario release come
-  UID/GID non privilegiato;
+  UID/GID non privilegiato con `no_new_privs` attivo;
 - il job completo `ubuntu-latest` resta separato e continua a fornire la
   copertura debug ASan/UBSan;
 - i container condividono il kernel del runner e non costituiscono evidenza

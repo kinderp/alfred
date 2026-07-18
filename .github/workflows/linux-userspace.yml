@@ -109,12 +109,14 @@ jobs:
         run: |
           chown -R 1001:1001 "$GITHUB_WORKSPACE"
           setpriv --reuid=1001 --regid=1001 --clear-groups \
+            --no-new-privs \
             make test-install
 
       - name: Run representative MVP smoke test
         shell: bash
         run: |
           setpriv --reuid=1001 --regid=1001 --clear-groups \
+            --no-new-privs \
             env ALFRED_BIN="$GITHUB_WORKSPACE/alfred" \
             bash tests/smoke/mvp_smoke.sh
 

@@ -252,6 +252,13 @@ privilegi. Questo e' parte del contratto: eseguire la suite staged come `root`
 renderebbe non significativa la prova della sorgente intenzionalmente non
 leggibile e non rappresenterebbe il percorso non-root raccomandato.
 
+Il comando imposta anche `no_new_privs`: dopo la riduzione di identita', una
+successiva `execve()` non puo' riacquistare privilegi tramite bit setuid/setgid
+o meccanismi equivalenti. Questa proprieta' rende piu' rigoroso il confine fra
+il bootstrap `root` dei pacchetti e il codice del repository eseguito dai test.
+Non trasforma pero' il job in una sandbox completa e non sostituisce
+l'isolamento del container o i permessi minimi del token GitHub.
+
 Il job completo `.github/workflows/ci.yml` resta l'autorita' per tutte le suite
 debug con ASan/UBSan. Le lane container usano invece il profilo release e il
 percorso install/smoke: non sono benchmark e non sostituiscono la CI completa.

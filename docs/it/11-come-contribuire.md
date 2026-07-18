@@ -819,6 +819,14 @@ ridurre i privilegi. In questo modo il controllo sulla sorgente illeggibile del
 test staged resta reale: `root` potrebbe leggere il file anche con i bit di
 lettura rimossi e produrre un risultato ingannevole.
 
+Le due invocazioni usano anche `--no-new-privs`. Oltre a cambiare UID, GID e
+gruppi supplementari, questo chiede al kernel di impedire ai processi di
+ottenere nuovi privilegi attraverso una successiva `execve()`, per esempio
+eseguendo un programma setuid o setgid. E' un rafforzamento del confine usato
+dalla CI, non una sandbox completa: il codice continua a essere eseguito nel
+container del job e resta soggetto alle risorse e agli accessi concessi da
+GitHub Actions.
+
 La matrice non e' un benchmark: durata di download e installazione pacchetti
 domina il tempo del job. Non va usata per confrontare le prestazioni di Alfred
 fra distribuzioni.
