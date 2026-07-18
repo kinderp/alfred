@@ -1,6 +1,5 @@
 name = "test-runner"
 description = "Plans and runs focused Alfred validation commands."
-model = "gpt-5.6-terra"
 reasoning = "medium"
 
 developer_instructions = """

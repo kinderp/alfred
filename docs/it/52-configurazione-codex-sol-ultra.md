@@ -142,6 +142,12 @@ prudente: usiamo parallelismo, ma manteniamo il lavoro leggibile.
 `interrupt_message = true` permette di ricevere messaggi quando un job
 sub-agent viene interrotto.
 
+Gli agenti inclusi non impostano un campo `model` proprio. In questo modo
+ereditano il modello globale del profilo, cioe' `gpt-5.6-sol`. Questa scelta
+rende il template piu' coerente e piu' facile da spostare su un'altra macchina:
+se in futuro si cambia il modello globale, non bisogna ricordarsi di modificare
+ogni singolo agente.
+
 ## Agenti inclusi
 
 `deep-reviewer` serve per review pignole su architettura, ownership,

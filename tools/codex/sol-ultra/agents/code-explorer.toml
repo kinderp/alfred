@@ -1,6 +1,5 @@
 name = "code-explorer"
 description = "Maps Alfred code paths and documentation without making changes."
-model = "gpt-5.6-terra"
 reasoning = "medium"
 sandbox = "read-only"
 
