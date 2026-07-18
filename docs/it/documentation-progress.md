@@ -2088,3 +2088,12 @@ runner corrente. Il prossimo micro-step raccomandato e' un contratto staged
 non-root che installi soltanto binario release e sei man page, imponga modi
 espliciti e verifichi con un file sentinella che uninstall non cancelli file
 estranei.
+
+Aggiornamento successivo: la issue figlia #266 implementa il contratto staged
+raccomandato dall'audit. Il Makefile espone `PREFIX`, `DESTDIR`, `BINDIR`,
+`MANDIR`, `install` copy-only e `uninstall` limitato ai sette path canonici.
+`make test-install` costruisce esplicitamente release, installa binario e sei
+man page in una root temporanea, verifica modi, CLI, rendering, override di
+layout, preflight negativi e conservazione dei file estranei. Il job CI di
+riferimento installa `man-db` ed esegue questa suite per ultima; la matrice
+userspace e l'evidenza ambiente restano i prossimi micro-step distinti.

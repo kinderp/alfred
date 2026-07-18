@@ -51,11 +51,11 @@ Le milestone precedenti hanno stabilizzato:
 - smoke test MVP;
 - README e pagine man inglesi/italiane.
 
-Un utente puo' quindi compilare e provare Alfred dal repository, ma manca ancora
-un confine di installazione. Il Makefile non espone oggi `install`, `uninstall`,
-`PREFIX` o `DESTDIR`; la CI esegue la suite sul runner `ubuntu-latest`, ma non
-separa ancora build debug sanitizzata, build release, distribuzione userspace e
-kernel effettivamente usato.
+Un utente poteva quindi compilare e provare Alfred dal repository, ma mancava
+un confine di installazione. Il micro-step [#266](https://github.com/kinderp/alfred/issues/266)
+chiude questo primo gap con `install`, `uninstall`, `PREFIX`, `DESTDIR` e una
+suite staged obbligatoria nel job `ubuntu-latest`. Restano da separare e
+misurare distribuzioni userspace e kernel effettivamente usati.
 
 Questa e' la fase corretta per chiudere il gap senza riaprire il percorso caldo
 o aggiungere nuovi backend.
@@ -159,6 +159,7 @@ Questo livello esiste gia'. Comprende:
 - `make smoke-mvp`;
 - `make test-backend-diagnostics`;
 - `make test-jsonl`;
+- `make test-install`;
 - test scanner e watcher;
 - benchmark manuali separati.
 
@@ -178,12 +179,15 @@ Limiti:
 ## Livello 1 - GitHub Actions reference job
 
 La CI corrente usa `ubuntu-latest`, compila con `make` ed esegue le suite
-ufficiali. Questo resta il job di riferimento completo.
+ufficiali. Questo resta il job di riferimento completo. Come ultimo controllo,
+`make test-install` ricostruisce il profilo release e prova l'artefatto staged;
+la posizione finale evita che quel rebuild nasconda copertura debug
+ASan/UBSan alle suite precedenti.
 
 Il Makefile corrente include ASan e UBSan nella build debug predefinita, quindi
 la suite CI principale e' gia' instrumentata. `make release` rimuove invece i
-sanitizer, ma la CI corrente non costruisce ancora esplicitamente il profilo
-release.
+sanitizer ed e' invocato esplicitamente da `make test-install` prima della copia
+nello stage.
 
 Il debito da chiudere durante questa milestone e' separare chiaramente:
 
@@ -227,7 +231,7 @@ motivo. Il percorso minimo candidato e':
 installare dipendenze build
 -> registrare ambiente
 -> make release
--> make stage-install-test
+-> make test-install
 -> eseguire un sottoinsieme runtime rappresentativo
 ```
 
@@ -424,18 +428,18 @@ La frequenza potra' cambiare dopo avere misurato durata, flakiness e valore dei
 finding. Un job lento che non trova problemi non deve diventare permanente per
 inerzia.
 
-## Contratto di installazione proposto
+## Contratto di installazione implementato
 
-Il contratto v0 deve seguire il modello comune dei Makefile Unix:
+Il contratto v0 segue il modello comune dei Makefile Unix/GNU:
 
-| Variabile | Default candidato | Ruolo |
+| Variabile | Default corrente | Ruolo |
 | --- | --- | --- |
 | `PREFIX` | `/usr/local` | prefisso logico dell'installazione |
 | `DESTDIR` | vuoto | root temporanea per staging/package build |
 | `BINDIR` | `$(PREFIX)/bin` | path logico del binario, senza `DESTDIR` |
 | `MANDIR` | `$(PREFIX)/share/man` | root logica delle pagine man, senza `DESTDIR` |
 
-Layout candidato:
+Layout canonico:
 
 ```text
 $(DESTDIR)$(BINDIR)/alfred
@@ -452,6 +456,21 @@ di `PREFIX` aggiorna entrambi i default. Un override esplicito di `BINDIR` o
 `MANDIR` sostituisce invece soltanto quel path logico. `DESTDIR` viene aggiunto
 una sola volta dalla ricetta e non deve comparire nel valore di queste due
 variabili.
+
+`BINDIR` e `MANDIR` devono essere path assoluti e non possono contenere un
+segmento `..`. `DESTDIR` puo' essere vuoto oppure assoluto e rispetta lo stesso
+divieto. `validate-install-layout` applica queste precondizioni prima che
+`install` o `uninstall` tocchino la destinazione: un errore di configurazione
+non deve trasformare una ricetta di copia o rimozione in un'operazione su un
+path ambiguo.
+
+Questo controllo e' lessicale e non promette isolamento da una gerarchia
+ostile. Le utility di installazione e rimozione possono seguire componenti
+symlink intermedi; inoltre un controllo shell separato sarebbe soggetto a race
+prima della copia. Il contratto v0 richiede quindi che l'amministratore o il
+package builder controlli l'intero albero di destinazione. Lo staging non-root
+e' il percorso di test raccomandato; un `DESTDIR` controllato da terzi non deve
+essere usato con privilegi elevati.
 
 Esempio di staging senza root:
 
@@ -481,8 +500,11 @@ Il primo contratto non puo' riconoscere dai soli byte di `./alfred` con quali
 flag sia stato compilato: la build release resta responsabilita' del chiamante
 e del test staged finche' i profili non avranno artefatti o metadati separati.
 
-Il test deve poi usare i path dentro `stage_dir`, senza modificare `/usr` o
-`/usr/local` reali.
+Il test usa i path dentro `stage_dir`, senza modificare `/usr` o `/usr/local`
+reali. Le variabili interne `ALFRED_INSTALL_BINARY_SOURCE` e
+`ALFRED_MAN*_SOURCE` sono punti di iniezione riservati alla suite: permettono di
+simulare una sorgente illeggibile o mancante senza alterare file tracciati nel
+checkout. Non fanno parte del layout pubblico destinato all'utente.
 
 ### Regole di sicurezza per uninstall
 
@@ -500,21 +522,28 @@ validati.
 
 ## Test dell'artefatto installato
 
-Il futuro test staging deve verificare almeno:
+`make test-install` esegue `make release` e poi
+`tests/install/run_all.sh`. La suite verifica:
 
 1. presenza e permessi del binario;
 2. presenza delle sei pagine man;
-3. assenza di file non dichiarati;
+3. assenza di entry non dichiarate, compresi symlink e altri nodi non regolari;
 4. `alfred --version` dal path staged;
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
 7. rendering con `man -l` di ciascuna delle sei pagine man staged;
 8. fallimento preflight senza modifiche a `DESTDIR` per ogni classe di sorgente;
 9. override di `BINDIR` e `MANDIR` rispettato da install e uninstall;
-10. uninstall staged senza lasciare file posseduti da Alfred.
+10. default `/usr/local` distinto dall'override packaging `PREFIX=/usr`;
+11. rifiuto di layout relativi o contenenti `..`;
+12. uninstall staged idempotente senza lasciare file posseduti da Alfred.
 
-Il test non deve richiedere root e non deve scrivere fuori dalla directory
-temporanea.
+Il test non richiede root e non scrive nel prefisso installato dell'host.
+`make release` aggiorna normalmente `build/` e `./alfred` nel checkout; le
+operazioni install/uninstall, i sentinel e gli artifact dei casi negativi
+restano invece nella directory creata con `mktemp`. In caso di fallimento, la
+CI pubblica questi artifact sotto `/tmp/alfred_install_test.*`; localmente
+`ALFRED_KEEP_TEST_LOGS=1` conserva lo stage per l'ispezione.
 
 La lane stage-install di riferimento deve installare o rendere esplicitamente
 disponibile `man` e deve fallire se il renderer manca o se una delle sei pagine
@@ -529,6 +558,12 @@ indisponibile. In entrambi i casi deve verificare sia lo status non-zero sia
 l'assenza di qualsiasi nuova directory o file nello stage. Il test deve
 ripristinare permessi e sorgenti anche quando una verifica fallisce; essendo
 non-root, il controllo di leggibilita' resta significativo.
+
+Il caso mancante usa deliberatamente l'ultima sorgente della sequenza,
+`ALFRED_MAN7_IT_SOURCE`. In questo modo il test non dimostra soltanto che un
+errore iniziale e' innocuo: dimostra che tutte le sorgenti precedenti possono
+superare il controllo senza che install inizi a modificare lo stage prima di
+avere completato il preflight.
 
 ## Evidenza ambiente
 
@@ -606,8 +641,8 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #261, issue figlia #262 e PR #263 |
 | Audit Makefile, artefatti e CI corrente | Done | Issue #264 e [audit dedicato](54-audit-installazione-ci-v0.md) |
-| Contratto `PREFIX` / `DESTDIR` / install / uninstall | Todo | Nessuna scrittura root nei test |
-| Test stage-install | Todo | Verificare binario, man page, CLI e cleanup |
+| Contratto `PREFIX` / `DESTDIR` / install / uninstall | Done | Issue #266; copia di sette file e rimozione esatta senza root nei test |
+| Test stage-install | Done | Issue #266; binario, sei man page, CLI, layout, preflight e ownership |
 | Prima matrice distribuzioni/userspace | Todo | Container non equivalgono a kernel diversi |
 | Evidenza ambiente e wording di supporto | Todo | Distinguere supported/tested/untested |
 | Readiness closure | Todo | Documenti, CI e issue GitHub allineati |
@@ -620,7 +655,7 @@ Per il setup solo documentale:
 git diff --check
 ```
 
-Quando verra' modificato il Makefile:
+Per verificare il contratto Makefile corrente:
 
 ```bash
 make fclean

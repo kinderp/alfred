@@ -1471,19 +1471,39 @@ make tidy
 
 Esegue `clang-tidy`, un altro strumento di analisi statica.
 
-## Stato dell'installazione
+## Installazione staged
 
-Alfred non dispone ancora di target `install` o `uninstall`. Anche
-`make release` produce soltanto il binario ottimizzato nella root del
-repository:
+Alfred espone quattro variabili Make pubbliche:
+
+| Variabile | Default | Significato |
+| --- | --- | --- |
+| `PREFIX` | `/usr/local` | prefisso logico |
+| `DESTDIR` | vuoto | root di staging aggiunta ai path finali |
+| `BINDIR` | `$(PREFIX)/bin` | path logico del binario |
+| `MANDIR` | `$(PREFIX)/share/man` | path logico delle pagine man |
+
+`BINDIR` e `MANDIR` non contengono `DESTDIR`. I path finali sono costruiti una
+sola volta:
 
 ```text
-./alfred
+$(DESTDIR)$(BINDIR)/alfred
+$(DESTDIR)$(MANDIR)/man1/alfred.1
+...
+$(DESTDIR)$(MANDIR)/it/man7/alfred-events.7
 ```
 
-Non esistono ancora variabili Make pubbliche `PREFIX`, `DESTDIR`, `BINDIR` o
-`MANDIR`. Le pagine man restano sorgenti locali sotto `docs/man` e vengono
-lette con `man -l`; non vengono copiate nel sistema.
+I path logici devono essere assoluti e non possono contenere segmenti `..`.
+Anche un `DESTDIR` non vuoto deve essere assoluto e non contenere `..`. Questi
+controlli impediscono a un errore di layout di fare uscire install o uninstall
+dalla root attesa.
+
+La validazione e' lessicale, non una sandbox del filesystem. Le normali
+operazioni `install` e `rm` possono attraversare componenti symlink gia'
+presenti nella gerarchia di destinazione. Per questo `DESTDIR` e i path logici
+devono appartenere all'amministratore o al package builder che esegue il
+comando. Non bisogna eseguire `sudo make DESTDIR=<stage-non-fidato> install`:
+un controllo shell preventivo dei symlink sarebbe comunque soggetto a race e
+non trasformerebbe la ricetta in un confine di sicurezza transazionale.
 
 Questa distinzione evita un equivoco comune:
 
@@ -1495,10 +1515,51 @@ La build release decide come compilare il binario. L'installazione decide quali
 file appartengono al prodotto, dove copiarli, con quali permessi e come
 rimuoverli senza toccare file estranei.
 
-L'inventario verificato e le dipendenze implicite delle suite sono descritti in
+Il percorso corretto e':
+
+```bash
+make release
+sudo make install
+```
+
+`install` non dipende da `all` o `release` e non invoca il compilatore. Prima
+di creare directory esegue un preflight su tutti i sette file sorgente:
+
+- il binario deve essere regolare, leggibile ed eseguibile;
+- le sei pagine man devono essere file regolari leggibili.
+
+Se il preflight fallisce, la destinazione non viene modificata. Dopo il
+controllo, `install` copia il binario con modo `0755` e le pagine man con modo
+`0644`.
+
+Per provare il layout senza root:
+
+```bash
+stage_dir=$(mktemp -d)
+make release
+make DESTDIR="$stage_dir" PREFIX=/usr install
+make DESTDIR="$stage_dir" PREFIX=/usr uninstall
+```
+
+`uninstall` usa gli stessi sette path canonici di `install`, non usa glob e non
+rimuove directory condivise. Un override esplicito e coerente e' supportato:
+
+```bash
+make DESTDIR="$stage_dir" \
+    BINDIR=/opt/alfred/bin \
+    MANDIR=/opt/alfred/manual \
+    install
+```
+
+Le variabili `ALFRED_*_SOURCE` presenti nel Makefile sono punti di iniezione
+interni della suite negativa. Non fanno parte del layout pubblico: permettono
+di simulare un binario non leggibile o una man page mancante senza modificare i
+file tracciati nel checkout.
+
+L'audit precedente e le dipendenze implicite delle suite sono descritti in
 [Audit installazione e assunzioni CI v0](54-audit-installazione-ci-v0.md).
-Il contratto proposto verra' implementato in un micro-step successivo con
-staging non-root e test di ownership.
+Il contratto corrente e i livelli futuri di compatibilita' sono descritti in
+[Installability and Linux compatibility v0](53-installability-linux-compatibility-v0.md).
 
 ## Comandi piu' usati
 
@@ -1509,6 +1570,9 @@ staging non-root e test di ownership.
 | Pulire tutto | `make fclean` |
 | Ricompilare da zero | `make re` |
 | Build ottimizzata | `make release` |
+| Installare artefatti gia' costruiti | `make install` |
+| Rimuovere soltanto gli artefatti Alfred | `make uninstall` |
+| Provare install/uninstall senza root | `make test-install` |
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire smoke test MVP breve | `make smoke-mvp` |

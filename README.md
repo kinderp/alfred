@@ -49,6 +49,12 @@ sudo apt-get update
 sudo apt-get install -y build-essential
 ```
 
+Running the staged-install test also requires `man`:
+
+```bash
+sudo apt-get install -y man-db
+```
+
 ## Quick Start
 
 Clone and build:
@@ -58,6 +64,34 @@ git clone https://github.com/kinderp/alfred.git
 cd alfred
 make
 ```
+
+Build the release profile and install the binary plus the six English/Italian
+manual pages:
+
+```bash
+make release
+sudo make install
+```
+
+`make install` is deliberately copy-only: it never compiles as root and fails
+unless an already built readable executable is available. The default prefix
+is `/usr/local`. Package builders and local checks can stage without root:
+
+```bash
+stage_dir=$(mktemp -d)
+make release
+make DESTDIR="$stage_dir" PREFIX=/usr install
+make DESTDIR="$stage_dir" PREFIX=/usr uninstall
+```
+
+`uninstall` removes only the Alfred binary and six manual pages. It does not
+remove shared directories or user configuration and runtime logs.
+
+The destination hierarchy must be controlled by the administrator or package
+builder running the command. V0 uses normal filesystem pathname operations,
+which may follow pre-existing symlink components; do not run a privileged
+install with an attacker-controlled `DESTDIR`. Non-root staging, as shown
+above, keeps this trust boundary explicit and limits its impact.
 
 Run Alfred on one or more paths:
 
@@ -176,8 +210,20 @@ Run scanner component tests:
 make test-scanner
 ```
 
-The CI workflow runs build, core, CLI, MVP smoke, backend diagnostic and JSONL
-tests on pull requests targeting `main` and on pushes to `main`.
+Run the non-root staged-install contract suite:
+
+```bash
+make test-install
+```
+
+This test rebuilds the release profile, checks default and overridden install
+layouts, runs the staged informational CLI, renders all six manual pages, and
+verifies preflight and uninstall ownership. It is intentionally the final CI
+suite because it leaves the checkout in the release build profile.
+
+The CI workflow runs build, core, CLI, MVP smoke, backend diagnostic, JSONL,
+and staged-install tests on pull requests targeting `main` and on pushes to
+`main`.
 
 To preserve runtime logs while debugging tests locally:
 

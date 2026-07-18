@@ -25,7 +25,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get install -y build-essential man-db
 
       - name: Build
         run: make
@@ -45,6 +45,10 @@ jobs:
       - name: Run JSONL golden tests
         run: make test-jsonl
 
+      # Keep this last: test-install deliberately rebuilds the release profile.
+      - name: Run staged installation tests
+        run: make test-install
+
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -58,3 +62,4 @@ jobs:
             tests/jsonl/*.log
             tests/jsonl/*.jsonl
             /tmp/alfred_mvp_smoke.*/**
+            /tmp/alfred_install_test.*/**

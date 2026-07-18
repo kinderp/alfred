@@ -10,6 +10,14 @@
 TARGET      := alfred
 MODULES     ?= inotify
 
+# Public installation layout. BINDIR and MANDIR are logical paths; DESTDIR is
+# prepended only when constructing the final destination.
+PREFIX      ?= /usr/local
+DESTDIR     ?=
+BINDIR      ?= $(PREFIX)/bin
+MANDIR      ?= $(PREFIX)/share/man
+INSTALL     ?= install
+
 # -----------------------------------------------------------------------------
 # DIRECTORIES
 # -----------------------------------------------------------------------------
@@ -143,6 +151,24 @@ OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 OBJ_DIRS := $(sort $(dir $(OBJS)))
 
+# Install sources are overridable so the focused suite can exercise failed
+# preconditions without mutating tracked files in the checkout.
+ALFRED_INSTALL_BINARY_SOURCE ?= $(TARGET)
+ALFRED_MAN1_EN_SOURCE ?= docs/man/man1/alfred.1
+ALFRED_MAN5_EN_SOURCE ?= docs/man/man5/alfred.conf.5
+ALFRED_MAN7_EN_SOURCE ?= docs/man/man7/alfred-events.7
+ALFRED_MAN1_IT_SOURCE ?= docs/man/it/man1/alfred.1
+ALFRED_MAN5_IT_SOURCE ?= docs/man/it/man5/alfred.conf.5
+ALFRED_MAN7_IT_SOURCE ?= docs/man/it/man7/alfred-events.7
+
+ALFRED_INSTALL_BINARY_DEST = $(DESTDIR)$(BINDIR)/$(TARGET)
+ALFRED_MAN1_EN_DEST = $(DESTDIR)$(MANDIR)/man1/alfred.1
+ALFRED_MAN5_EN_DEST = $(DESTDIR)$(MANDIR)/man5/alfred.conf.5
+ALFRED_MAN7_EN_DEST = $(DESTDIR)$(MANDIR)/man7/alfred-events.7
+ALFRED_MAN1_IT_DEST = $(DESTDIR)$(MANDIR)/it/man1/alfred.1
+ALFRED_MAN5_IT_DEST = $(DESTDIR)$(MANDIR)/it/man5/alfred.conf.5
+ALFRED_MAN7_IT_DEST = $(DESTDIR)$(MANDIR)/it/man7/alfred-events.7
+
 # -----------------------------------------------------------------------------
 # COLORS
 # -----------------------------------------------------------------------------
@@ -216,6 +242,82 @@ release: LDFLAGS :=
 release: re
 
 # -----------------------------------------------------------------------------
+# INSTALLATION
+# install is deliberately copy-only: callers build the desired profile first.
+# -----------------------------------------------------------------------------
+
+validate-install-layout:
+	@set -eu; \
+	for path in "$(BINDIR)" "$(MANDIR)"; do \
+		case "$$path" in \
+			/*) ;; \
+			*) printf "install layout path must be absolute: %s\n" "$$path" >&2; exit 2 ;; \
+		esac; \
+		case "/$$path/" in \
+			*/../*) printf "install layout path must not contain '..': %s\n" "$$path" >&2; exit 2 ;; \
+		esac; \
+	done; \
+	if [ -n "$(DESTDIR)" ]; then \
+		case "$(DESTDIR)" in \
+			/*) ;; \
+			*) printf "DESTDIR must be empty or absolute: %s\n" "$(DESTDIR)" >&2; exit 2 ;; \
+		esac; \
+		case "/$(DESTDIR)/" in \
+			*/../*) printf "DESTDIR must not contain '..': %s\n" "$(DESTDIR)" >&2; exit 2 ;; \
+		esac; \
+	fi
+
+install: validate-install-layout
+	@set -eu; \
+	if [ ! -f "$(ALFRED_INSTALL_BINARY_SOURCE)" ] || \
+	   [ ! -r "$(ALFRED_INSTALL_BINARY_SOURCE)" ] || \
+	   [ ! -x "$(ALFRED_INSTALL_BINARY_SOURCE)" ]; then \
+		printf "install source must be a readable regular executable: %s\n" \
+			"$(ALFRED_INSTALL_BINARY_SOURCE)" >&2; \
+		exit 1; \
+	fi; \
+	for source in \
+		"$(ALFRED_MAN1_EN_SOURCE)" \
+		"$(ALFRED_MAN5_EN_SOURCE)" \
+		"$(ALFRED_MAN7_EN_SOURCE)" \
+		"$(ALFRED_MAN1_IT_SOURCE)" \
+		"$(ALFRED_MAN5_IT_SOURCE)" \
+		"$(ALFRED_MAN7_IT_SOURCE)"; do \
+		if [ ! -f "$$source" ] || [ ! -r "$$source" ]; then \
+			printf "manual source must be a readable regular file: %s\n" \
+				"$$source" >&2; \
+			exit 1; \
+		fi; \
+	done
+	@$(INSTALL) -d \
+		"$(DESTDIR)$(BINDIR)" \
+		"$(DESTDIR)$(MANDIR)/man1" \
+		"$(DESTDIR)$(MANDIR)/man5" \
+		"$(DESTDIR)$(MANDIR)/man7" \
+		"$(DESTDIR)$(MANDIR)/it/man1" \
+		"$(DESTDIR)$(MANDIR)/it/man5" \
+		"$(DESTDIR)$(MANDIR)/it/man7"
+	@$(INSTALL) -m 0755 "$(ALFRED_INSTALL_BINARY_SOURCE)" "$(ALFRED_INSTALL_BINARY_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN1_EN_SOURCE)" "$(ALFRED_MAN1_EN_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN5_EN_SOURCE)" "$(ALFRED_MAN5_EN_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN7_EN_SOURCE)" "$(ALFRED_MAN7_EN_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN1_IT_SOURCE)" "$(ALFRED_MAN1_IT_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN5_IT_SOURCE)" "$(ALFRED_MAN5_IT_DEST)"
+	@$(INSTALL) -m 0644 "$(ALFRED_MAN7_IT_SOURCE)" "$(ALFRED_MAN7_IT_DEST)"
+	@printf "$(GREEN)[INSTALL]$(RESET) installed seven Alfred files\n"
+
+uninstall: validate-install-layout
+	@rm -f -- \
+		"$(ALFRED_INSTALL_BINARY_DEST)" \
+		"$(ALFRED_MAN1_EN_DEST)" \
+		"$(ALFRED_MAN5_EN_DEST)" \
+		"$(ALFRED_MAN7_EN_DEST)" \
+		"$(ALFRED_MAN1_IT_DEST)" \
+		"$(ALFRED_MAN5_IT_DEST)" \
+		"$(ALFRED_MAN7_IT_DEST)"
+	@printf "$(GREEN)[UNINSTALL]$(RESET) ensured seven Alfred paths are absent\n"
+
+# -----------------------------------------------------------------------------
 # RUN
 # -----------------------------------------------------------------------------
 
@@ -256,6 +358,10 @@ test-scanner:
 
 test-watcher:
 	cd tests/watcher && bash run_all.sh
+
+test-install:
+	$(MAKE) release
+	cd tests/install && bash run_all.sh
 
 smoke-mvp: all
 	cd tests/smoke && bash mvp_smoke.sh
@@ -378,6 +484,9 @@ banner:
 	fclean \
 	re \
 	release \
+	validate-install-layout \
+	install \
+	uninstall \
 	run \
 	test \
 	test-core \
@@ -385,6 +494,7 @@ banner:
 	test-jsonl \
 	test-scanner \
 	test-watcher \
+	test-install \
 	test-backend-diagnostics \
 	smoke-mvp \
 	perf \

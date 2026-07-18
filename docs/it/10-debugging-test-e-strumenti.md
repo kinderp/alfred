@@ -348,6 +348,71 @@ I browser del codice aiutano nella fase di comprensione, non nella validazione
 finale. Dopo ogni modifica restano necessari build e test descritti nella
 sezione successiva.
 
+## Test del contratto di installazione staged
+
+Il comando:
+
+```bash
+make test-install
+```
+
+verifica l'artefatto release come lo vedrebbe un package builder e non richiede
+root. `make release` aggiorna i normali artifact `build/` e `./alfred` nel
+checkout; install, uninstall e casi negativi usano invece soltanto directory
+temporanee e non scrivono nel prefisso installato dell'host. Il percorso e':
+
+```text
+make test-install
+-> make release
+-> tests/install/run_all.sh
+   |-> default: DESTDIR=<tmp>, quindi /usr/local
+   |   -> modi, CLI, sei man page e uninstall idempotente
+   |-> override packaging: PREFIX=/usr
+   |-> override separati: BINDIR e MANDIR
+   |-> ownership: entry inattese e symlink dangling
+   `-> casi negativi: layout, binario e ultima man page
+```
+
+La suite viene eseguita per ultima in CI. `make release` pulisce e ricompila gli
+oggetti senza ASan/UBSan; eseguirla prima delle suite debug altererebbe il
+profilo che quelle suite credono di provare.
+
+### Funzioni del runner install
+
+`tests/install/run_all.sh` separa preparazione, assert e scenari:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `cleanup()` | elimina la directory temporanea o la conserva quando `ALFRED_KEEP_TEST_LOGS=1` |
+| `fail()` | stampa il motivo e l'albero degli artifact prima di terminare |
+| `run_make()` | richiama GNU Make dalla root senza dipendere dalla directory corrente |
+| `assert_layout_rejected()` | verifica che ogni combinazione di path non valida sia rifiutata dal target read-only |
+| `path_is_absent()` | definisce in un solo punto l'assenza: ne' entry risolvibile ne' symlink dangling |
+| `assert_file()` / `assert_absent()` | applicano gli assert di presenza e la semantica condivisa di `path_is_absent()` |
+| `assert_mode()` | verifica `0755` per il binario e `0644` per le man page |
+| `assert_empty_stage()` | prova che un preflight fallito non abbia modificato lo stage |
+| `stage_entry_list()` | enumera in ordine ogni entry staged che non sia una directory, inclusi symlink, FIFO e socket |
+| `assert_exact_entries()` | confronta tutte le entry staged con la lista attesa, inclusi i sentinel |
+| `assert_cli_and_manuals()` | esegue `--version`, `--help`, `--check-config` e sei `man -l` |
+| `test_default_layout()` | prova il vero default `/usr/local`, modi, CLI, man page e uninstall ripetibile |
+| `test_prefix_override_layout()` | prova che `PREFIX=/usr` sposti insieme binario e root delle man page |
+| `test_custom_layout()` | prova override indipendenti di `BINDIR` e `MANDIR` |
+| `test_ownership_helpers_reject_symlink()` | dimostra che inventario e assenza non ignorino un symlink dangling inatteso |
+| `test_unreadable_binary_preflight()` | inietta da `/tmp` un binario regolare ma non leggibile |
+| `test_missing_manual_preflight()` | rende mancante l'ultima sorgente man italiana per provare che tutto il preflight preceda ogni scrittura |
+| `test_invalid_layout_preflight()` | rifiuta path relativi o con `..` in `BINDIR`, `MANDIR` e `DESTDIR` prima di scrivere |
+
+I sentinel sono file estranei creati nelle directory condivise prima di
+install. Dopo uninstall devono esistere ancora. Provano una proprieta' diversa
+dalla semplice assenza di Alfred: dimostrano che la ricetta non cancella per
+errore file appartenenti ad altri programmi.
+
+Le variabili Make `ALFRED_INSTALL_BINARY_SOURCE` e
+`ALFRED_MAN7_IT_SOURCE` usate nei casi negativi sono test seam, cioe' punti di
+iniezione controllati. La seconda seleziona intenzionalmente l'ultima sorgente
+del preflight. Servono per produrre precondizioni difficili senza rinominare o
+cambiare i permessi dei file tracciati nel checkout.
+
 ## Come sono strutturati i test shell
 
 I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,

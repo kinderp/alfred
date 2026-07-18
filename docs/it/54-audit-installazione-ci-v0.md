@@ -8,6 +8,29 @@ E' un audit dello stato corrente, non la descrizione di funzionalita' gia'
 implementate. Quando usa parole come "proposto" o "futuro", sta indicando il
 contratto che verra' implementato nei micro-step successivi.
 
+## Stato successivo all'audit
+
+L'audit fotografa intenzionalmente il repository prima del micro-step
+[#266](https://github.com/kinderp/alfred/issues/266). Quel micro-step ha poi
+implementato il contratto raccomandato senza modificare il runtime C:
+
+- il Makefile espone `PREFIX`, `DESTDIR`, `BINDIR`, `MANDIR`, `install` e
+  `uninstall`;
+- `install` e' copy-only e valida layout e sette sorgenti prima di modificare
+  la destinazione;
+- `uninstall` rimuove soltanto i sette path canonici e conserva file sentinella
+  estranei;
+- `make test-install` costruisce release e prova layout standard e custom,
+  modi, CLI, sei pagine man e casi negativi;
+- il job CI di riferimento installa `man-db`, esegue la suite staged per ultima
+  e conserva lo stage temporaneo come artifact in caso di fallimento.
+
+Le sezioni che seguono restano al passato come evidenza storica del problema e
+delle motivazioni. Il contratto vigente e' descritto nella
+[roadmap della milestone](53-installability-linux-compatibility-v0.md), nella
+[guida Makefile](09-makefile-e-build-system.md) e nella
+[guida ai test](10-debugging-test-e-strumenti.md).
+
 ## Domanda dell'audit
 
 La domanda principale e':
@@ -530,3 +553,4 @@ deve richiedere privilegi.
 - GitHub Milestone: [#15](https://github.com/kinderp/alfred/milestone/15)
 - Issue madre: [#261](https://github.com/kinderp/alfred/issues/261)
 - Issue audit: [#264](https://github.com/kinderp/alfred/issues/264)
+- Issue implementazione staged: [#266](https://github.com/kinderp/alfred/issues/266)
