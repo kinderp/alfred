@@ -304,7 +304,7 @@ install: validate-install-layout
 	@$(INSTALL) -m 0644 "$(ALFRED_MAN1_IT_SOURCE)" "$(ALFRED_MAN1_IT_DEST)"
 	@$(INSTALL) -m 0644 "$(ALFRED_MAN5_IT_SOURCE)" "$(ALFRED_MAN5_IT_DEST)"
 	@$(INSTALL) -m 0644 "$(ALFRED_MAN7_IT_SOURCE)" "$(ALFRED_MAN7_IT_DEST)"
-	@printf "$(GREEN)[INSTALL]$(RESET) staged seven Alfred files\n"
+	@printf "$(GREEN)[INSTALL]$(RESET) installed seven Alfred files\n"
 
 uninstall: validate-install-layout
 	@rm -f -- \
@@ -315,7 +315,7 @@ uninstall: validate-install-layout
 		"$(ALFRED_MAN1_IT_DEST)" \
 		"$(ALFRED_MAN5_IT_DEST)" \
 		"$(ALFRED_MAN7_IT_DEST)"
-	@printf "$(GREEN)[UNINSTALL]$(RESET) removed seven Alfred files\n"
+	@printf "$(GREEN)[UNINSTALL]$(RESET) ensured seven Alfred paths are absent\n"
 
 # -----------------------------------------------------------------------------
 # RUN
