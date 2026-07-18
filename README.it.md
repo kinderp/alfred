@@ -88,6 +88,13 @@ make DESTDIR="$stage_dir" PREFIX=/usr uninstall
 `uninstall` rimuove soltanto il binario Alfred e le sei pagine man. Non rimuove
 directory condivise, configurazioni utente o log runtime.
 
+La gerarchia di destinazione deve essere controllata dall'amministratore o dal
+package builder che esegue il comando. V0 usa normali operazioni sui path del
+filesystem, che possono seguire componenti symlink gia' presenti: non eseguire
+un'installazione privilegiata con un `DESTDIR` controllato da un attaccante.
+Lo staging non-root mostrato sopra rende esplicito questo confine di fiducia e
+ne limita l'impatto.
+
 Avvia Alfred su uno o piu' path:
 
 ```bash

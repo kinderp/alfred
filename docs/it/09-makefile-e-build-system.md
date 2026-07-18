@@ -1497,6 +1497,14 @@ Anche un `DESTDIR` non vuoto deve essere assoluto e non contenere `..`. Questi
 controlli impediscono a un errore di layout di fare uscire install o uninstall
 dalla root attesa.
 
+La validazione e' lessicale, non una sandbox del filesystem. Le normali
+operazioni `install` e `rm` possono attraversare componenti symlink gia'
+presenti nella gerarchia di destinazione. Per questo `DESTDIR` e i path logici
+devono appartenere all'amministratore o al package builder che esegue il
+comando. Non bisogna eseguire `sudo make DESTDIR=<stage-non-fidato> install`:
+un controllo shell preventivo dei symlink sarebbe comunque soggetto a race e
+non trasformerebbe la ricetta in un confine di sicurezza transazionale.
+
 Questa distinzione evita un equivoco comune:
 
 ```text

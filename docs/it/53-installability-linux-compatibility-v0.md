@@ -464,6 +464,14 @@ divieto. `validate-install-layout` applica queste precondizioni prima che
 non deve trasformare una ricetta di copia o rimozione in un'operazione su un
 path ambiguo.
 
+Questo controllo e' lessicale e non promette isolamento da una gerarchia
+ostile. Le utility di installazione e rimozione possono seguire componenti
+symlink intermedi; inoltre un controllo shell separato sarebbe soggetto a race
+prima della copia. Il contratto v0 richiede quindi che l'amministratore o il
+package builder controlli l'intero albero di destinazione. Lo staging non-root
+e' il percorso di test raccomandato; un `DESTDIR` controllato da terzi non deve
+essere usato con privilegi elevati.
+
 Esempio di staging senza root:
 
 ```bash

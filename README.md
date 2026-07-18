@@ -87,6 +87,12 @@ make DESTDIR="$stage_dir" PREFIX=/usr uninstall
 `uninstall` removes only the Alfred binary and six manual pages. It does not
 remove shared directories or user configuration and runtime logs.
 
+The destination hierarchy must be controlled by the administrator or package
+builder running the command. V0 uses normal filesystem pathname operations,
+which may follow pre-existing symlink components; do not run a privileged
+install with an attacker-controlled `DESTDIR`. Non-root staging, as shown
+above, keeps this trust boundary explicit and limits its impact.
+
 Run Alfred on one or more paths:
 
 ```bash
