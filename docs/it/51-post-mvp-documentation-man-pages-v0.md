@@ -116,7 +116,7 @@ Contenuti da lasciare negli MD:
 
 | Item | Stato | Note |
 | --- | --- | --- |
-| Setup milestone, issue madre e roadmap | In progress | Issue madre #244, issue figlia #245 e questo documento. |
+| Setup milestone, issue madre e roadmap | Done | Issue madre #244, issue figlia #245, PR #246 e merge [`e22deb1`](https://github.com/kinderp/alfred/commit/e22deb1dbab0d85decda6bf71248b6c7e7ed3dfa). |
 | Audit README inglese/italiano | In progress | Issue figlia #247. Verifica drift fra README pubblico inglese e italiano dopo CLI parser v0. |
 | Audit man page inglesi | Todo | Controllare `alfred(1)`, `alfred.conf(5)`, `alfred-events(7)`. |
 | Audit man page italiane | Todo | Allineare contenuto e tono alle pagine inglesi. |
@@ -179,6 +179,7 @@ La milestone puo' chiudersi quando:
 - GitHub Milestone: [Post-MVP documentation and man pages v0](https://github.com/kinderp/alfred/milestone/14)
 - Issue madre: [#244](https://github.com/kinderp/alfred/issues/244)
 - Setup roadmap: [#245](https://github.com/kinderp/alfred/issues/245)
+- Setup roadmap PR: [#246](https://github.com/kinderp/alfred/pull/246)
 - Audit README pubblici: [#247](https://github.com/kinderp/alfred/issues/247)
 - MVP usability precedente: [49-mvp-operational-usability-v0.md](49-mvp-operational-usability-v0.md)
 - CLI parser v0: [50-cli-parser-v0.md](50-cli-parser-v0.md)
