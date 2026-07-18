@@ -55,11 +55,15 @@ entrare subito nei dettagli interni.
 5. [Post-MVP documentation and man pages v0](51-post-mvp-documentation-man-pages-v0.md)
    spiega come README, pagine man e documentazione didattica devono restare
    coerenti dopo la stabilizzazione del parser CLI.
-6. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
+6. [Installability and Linux compatibility v0](53-installability-linux-compatibility-v0.md)
+   spiega il layout di installazione proposto, come provarlo senza privilegi e
+   perche' container, VM e kernel specifici dimostrano aspetti diversi della
+   compatibilita' Linux.
+7. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
    spiega come installare su una macchina nuova un profilo Codex sanificato
    con `gpt-5.6-sol`, reasoning `ultra`, multi-agent e sub-agenti locali.
    Serve solo per configurare l'ambiente di sviluppo, non il runtime Alfred.
-7. Pagine man:
+8. Pagine man:
    [alfred(1)](../man/man1/alfred.1),
    [alfred.conf(5)](../man/man5/alfred.conf.5),
    [alfred-events(7)](../man/man7/alfred-events.7).
@@ -95,10 +99,10 @@ test collegati.
 
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
-1. la milestone corrente o una milestone recente di riferimento, per esempio
-   [`Post-MVP documentation and man pages v0`](https://github.com/kinderp/alfred/milestone/14);
-2. la issue madre della milestone, per esempio
-   [`Post-MVP documentation and man pages v0: implementation plan`](https://github.com/kinderp/alfred/issues/244);
+1. la milestone corrente, attualmente
+   [`Installability and Linux compatibility v0`](https://github.com/kinderp/alfred/milestone/15);
+2. la issue madre della milestone, attualmente
+   [`Installability and Linux compatibility v0: implementation plan`](https://github.com/kinderp/alfred/issues/261);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
@@ -340,7 +344,7 @@ queste domande:
 | Audit esplorativi notturni | [audit/README.md](audit/README.md), [audit/nightly-playbook.md](audit/nightly-playbook.md), [audit/maturity-matrix.md](audit/maturity-matrix.md), [tests/exploratory/nightly](../../tests/exploratory/nightly/README.md) |
 | Backend inotify | [05](05-modulo-inotify.md), [20](20-matrice-eventi-inotify.md), [26](26-stato-funzionalita.md) |
 | Backend API v0 | [30](30-backend-api-v0.md), [23](23-roadmap-plugin-backend.md), [29](29-event-model-v0.md) |
-| Build e Makefile | [09](09-makefile-e-build-system.md) |
+| Build e Makefile | [09](09-makefile-e-build-system.md), [53](53-installability-linux-compatibility-v0.md) |
 | Callback, puntatori a funzione e `void *userdata` | [08](08-guida-c-usato-nel-progetto.md), [16](16-mappa-codice-e-strutture.md), [32](32-writer-api-v0.md) |
 | CLI e configurazione | [19](19-roadmap-cli-e-man-page.md), [alfred(1)](../man/man1/alfred.1), [alfred.conf(5)](../man/man5/alfred.conf.5) |
 | Commenti nel codice | [11](11-come-contribuire.md#stile-dei-commenti-nel-codice), `docs/commenting-style.md`, `docs/commenting-progress.md` |
@@ -353,7 +357,8 @@ queste domande:
 | Eventi semantici | [13](13-semantica-eventi.md), [06](06-core-engine.md), [22](22-contratto-log.md) |
 | File ready / close-write | [13](13-semantica-eventi.md#scrittura-file-modify-e-file-ready), [14](14-scenari-test.md) |
 | Fork e pull request | [11](11-come-contribuire.md) |
-| GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr) |
+| GitHub Actions | [11](11-come-contribuire.md#github-actions-sulla-pr), [53](53-installability-linux-compatibility-v0.md) |
+| Installazione, packaging e compatibilita' Linux | [53](53-installability-linux-compatibility-v0.md), [09](09-makefile-e-build-system.md), [10](10-debugging-test-e-strumenti.md), [37](37-roadmap-milestone-progetto.md) |
 | Milestone inotify corrente | [31](31-milestone-inotify-reference-backend.md), [40](40-audit-inotify-backend-api-v0.md), [30](30-backend-api-v0.md), [29](29-event-model-v0.md) |
 | Log e copertura JSONL | [22](22-contratto-log.md#copertura-record-sink-e-output-jsonl), [14](14-scenari-test.md) |
 | Lost-scope recovery | [21](21-roadmap-scanner-resync.md), [16](16-mappa-codice-e-strutture.md), [22](22-contratto-log.md) |

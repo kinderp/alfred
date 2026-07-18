@@ -2038,3 +2038,38 @@ dire che la configurazione passa solo da `ALFRED_CONFIG`, `alfred(1)` italiano
 deve spiegare l'output strutturato opzionale, e `alfred-events(7)` italiano
 deve conservare anche i casi rifiutati dal validatore Backend API v0 e le regole
 di ownership dell'envelope emit.
+
+Aggiornamento successivo: dopo il merge della PR #256, la issue madre #244 e
+la GitHub Milestone #14 sono chiuse. Il registro cronologico marca
+`Post-MVP documentation and man pages v0` come `done`; installazione delle man
+page, packaging e traduzione completa `docs/en` restano debiti espliciti e non
+risultati gia' consegnati.
+
+## Aggiornamento Installability and Linux compatibility v0
+
+La nuova milestone operativa e' `Installability and Linux compatibility v0`,
+collegata alla GitHub Milestone #15 e alla issue madre #261. Il riferimento
+principale e' `53-installability-linux-compatibility-v0.md`; la issue figlia
+#262 traccia questo setup documentale.
+
+La milestone nasce dopo la stabilizzazione dell'MVP, del parser CLI e della
+documentazione pubblica: Alfred puo' essere compilato e provato dal repository,
+ma non ha ancora un contratto `install`/`uninstall`, un layout installato
+verificato o evidenza dichiarata su piu' userspace Linux.
+
+Il setup distingue esplicitamente livelli che non sono intercambiabili:
+
+- la suite locale e la CI GitHub corrente verificano il riferimento Ubuntu;
+- una container matrix potra' verificare distribuzione, libc, toolchain e
+  userspace, ma continuera' a condividere il kernel del runner;
+- `testcloud`/`libvirt` e `virtme-ng` saranno necessari solo quando Alfred
+  dovra' dichiarare evidenza su guest o kernel reali diversi;
+- `tmt` e' un possibile orchestratore futuro, non una dipendenza v0;
+- CodeQL e fuzzing sono corsie di qualita' separate dalla compatibilita';
+- ASan/UBSan sono gia' attivi nella build debug corrente, mentre la build
+  release deve essere provata separatamente per non confondere i due profili.
+
+Il primo perimetro resta piccolo: installazione staged senza root, ownership
+esatta dei file installati, test dell'artefatto installato, matrice userspace
+ridotta ed evidenza dell'ambiente. Nessun documento deve chiamare "kernel
+coverage" un test eseguito soltanto in container.
