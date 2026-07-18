@@ -356,8 +356,10 @@ Il comando:
 make test-install
 ```
 
-verifica l'artefatto release come lo vedrebbe un package builder, ma usa solo
-directory temporanee e non richiede root. Il percorso e':
+verifica l'artefatto release come lo vedrebbe un package builder e non richiede
+root. `make release` aggiorna i normali artifact `build/` e `./alfred` nel
+checkout; install, uninstall e casi negativi usano invece soltanto directory
+temporanee e non scrivono nel prefisso installato dell'host. Il percorso e':
 
 ```text
 make test-install

@@ -538,10 +538,12 @@ validati.
 11. rifiuto di layout relativi o contenenti `..`;
 12. uninstall staged idempotente senza lasciare file posseduti da Alfred.
 
-Il test non richiede root e non scrive fuori dalla directory temporanea creata
-con `mktemp`. In caso di fallimento, la CI pubblica gli artifact sotto
-`/tmp/alfred_install_test.*`; localmente `ALFRED_KEEP_TEST_LOGS=1` conserva lo
-stage per l'ispezione.
+Il test non richiede root e non scrive nel prefisso installato dell'host.
+`make release` aggiorna normalmente `build/` e `./alfred` nel checkout; le
+operazioni install/uninstall, i sentinel e gli artifact dei casi negativi
+restano invece nella directory creata con `mktemp`. In caso di fallimento, la
+CI pubblica questi artifact sotto `/tmp/alfred_install_test.*`; localmente
+`ALFRED_KEEP_TEST_LOGS=1` conserva lo stage per l'ispezione.
 
 La lane stage-install di riferimento deve installare o rendere esplicitamente
 disponibile `man` e deve fallire se il renderer manca o se una delle sei pagine
