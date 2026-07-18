@@ -56,6 +56,16 @@ make release
 -> verifica che siano spariti solo i file Alfred
 ```
 
+In questo percorso `install` e' deliberatamente copy-only: non dipende da
+`all` o `release`, non compila e fallisce prima di modificare lo stage se
+`./alfred` manca o non e' eseguibile. E' il test staged a eseguire
+`make release` come operazione precedente e non privilegiata.
+
+La separazione evita che un comune `sudo make install` ricompili dentro il
+checkout creando file posseduti da root. V0 non puo' pero' dimostrare da solo
+che un `./alfred` gia' presente sia davvero release: fuori dal test staged,
+costruire il profilo corretto resta una precondizione documentata del chiamante.
+
 ## Metodo usato
 
 L'audit ha letto:
@@ -193,6 +203,11 @@ Mancano oggi:
 - `stage-install-test` o nome equivalente;
 - variabili di layout;
 - una lista unica dei file posseduti dall'installazione.
+
+Il contratto raccomandato non deve colmare questo gap facendo dipendere
+`install` da `all` o `release`. Prima deve verificare che gli artefatti sorgente
+esistano; poi deve eseguire soltanto creazione delle directory e copie con modi
+espliciti. `uninstall` non deve avere dipendenze di build.
 
 ## Inventario degli artefatti installabili
 
@@ -406,9 +421,10 @@ v0 sono contratti distinti e non devono essere dedotte l'una dall'altra.
 
 1. variabili `PREFIX`, `DESTDIR`, `BINDIR` e `MANDIR`;
 2. lista unica dei sette file installati;
-3. ricette `install` e `uninstall` con modi espliciti;
-4. stage test non-root con file sentinella;
-5. documentazione Makefile aggiornata.
+3. ricetta `install` copy-only con preflight e modi espliciti;
+4. ricetta `uninstall` senza dipendenze di build;
+5. stage test non-root che esegue prima `make release`, con file sentinella;
+6. documentazione Makefile aggiornata.
 
 ### Necessari prima della container matrix
 

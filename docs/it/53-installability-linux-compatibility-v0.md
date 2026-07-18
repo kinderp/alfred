@@ -455,6 +455,22 @@ make release
 make DESTDIR="$stage_dir" PREFIX=/usr install
 ```
 
+Il confine build/install v0 e' esplicito:
+
+- `install` copia soltanto artefatti gia' costruiti;
+- `install` non dipende da `all` o `release` e non invoca il compilatore;
+- se `$(TARGET)` manca o non e' eseguibile, `install` fallisce prima di
+  modificare `DESTDIR`;
+- il test staged esegue `make release` come passo separato prima di `install`;
+- un eventuale comando privilegiato deve riguardare soltanto la copia, non la
+  compilazione dentro il checkout.
+
+Questa separazione evita sia di installare automaticamente la build debug
+ASan/UBSan sia di creare oggetti posseduti da root con `sudo make install`.
+Il primo contratto non puo' riconoscere dai soli byte di `./alfred` con quali
+flag sia stato compilato: la build release resta responsabilita' del chiamante
+e del test staged finche' i profili non avranno artefatti o metadati separati.
+
 Il test deve poi usare i path dentro `stage_dir`, senza modificare `/usr` o
 `/usr/local` reali.
 
