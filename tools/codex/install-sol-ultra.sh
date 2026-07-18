@@ -6,21 +6,26 @@ usage() {
 }
 
 force=0
-case "${1:-}" in
-    "")
-        ;;
-    --force)
-        force=1
-        ;;
-    -h|--help)
-        usage
-        exit 0
-        ;;
-    *)
-        usage
-        exit 2
-        ;;
-esac
+if [ "$#" -gt 1 ]; then
+    usage
+    exit 2
+fi
+
+if [ "$#" -eq 1 ]; then
+    case "$1" in
+        --force)
+            force=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage
+            exit 2
+            ;;
+    esac
+fi
 
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
 profile_dir="$script_dir/sol-ultra"
