@@ -3,7 +3,8 @@
 Questa milestone introduce il primo parser esplicito della CLI di Alfred dopo
 la chiusura di `MVP operational usability v0`.
 
-Il punto di partenza e' volutamente piccolo. Oggi Alfred supporta:
+Il punto di partenza storico era volutamente piccolo. Prima di questa milestone
+Alfred supportava:
 
 ```bash
 ./alfred PATH...
@@ -13,11 +14,15 @@ ALFRED_CONFIG=FILE ./alfred PATH...
 ./alfred --check-config
 ```
 
-Le opzioni `--help`, `--version` e `--check-config` sono gestite prima del
-runtime. Tutto il resto entra ancora nel percorso storico in cui gli argomenti
-sono path posizionali. Questo ha funzionato per l'MVP, ma non basta per un uso
-piu' naturale: `-c`, `--config`, `--print-config` e `--` devono diventare
+Le opzioni `--help`, `--version` e `--check-config` erano gestite prima del
+runtime, mentre tutto il resto entrava nel percorso storico in cui gli argomenti
+erano path posizionali. Questo ha funzionato per l'MVP, ma non bastava per un
+uso piu' naturale: `-c`, `--config`, `--print-config` e `--` dovevano diventare
 contratti espliciti o restare dichiaratamente rimandati.
+
+Stato corrente dopo il parser v0 e l'audit #240: Alfred supporta `-c FILE`,
+`--config FILE`, `--config=FILE`, `-- PATH...`, `-h`/`--help`,
+`-V`/`--version` e `--check-config`. `--print-config` resta rimandato.
 
 ## Obiettivo
 
@@ -46,10 +51,11 @@ molto concreto:
 
 | Comando | Stato dopo MVP | Problema |
 | --- | --- | --- |
-| `./alfred -c conf /tmp/root` | Non implementato | `-c` e `conf` sarebbero trattati come path. |
-| `./alfred --config conf /tmp/root` | Non implementato | `--config` e `conf` sarebbero trattati come path. |
+| `./alfred -c conf /tmp/root` | Implementato in parser v0 | Prima sarebbe stato trattato come path; ora seleziona config esplicita. |
+| `./alfred --config conf /tmp/root` | Implementato in parser v0 | Prima sarebbe stato trattato come path; ora equivale a `-c FILE`. |
+| `./alfred --config=conf /tmp/root` | Implementato dopo audit #240 | Forma GNU-style equivalente a `--config FILE`. |
 | `./alfred --print-config` | Non implementato | Non esiste ancora un output stabile della configurazione effettiva. |
-| `./alfred -- /tmp/root` | Non implementato | `--` sarebbe trattato come path, non come fine opzioni. |
+| `./alfred -- /tmp/root` | Implementato in parser v0 | `--` termina il parsing delle opzioni. |
 
 Questi problemi sono visibili agli utenti e ai contributori. Risolverli e'
 piu' utile, adesso, che riaprire backend futuri o percorso caldo.
@@ -80,10 +86,10 @@ Questa milestone non implementa:
 Il parser deve orchestrare configurazione e path, non conoscere la semantica
 inotify interna.
 
-## Audit parsing corrente
+## Audit parsing storico pre-parser
 
-Oggi Alfred non ha ancora un parser CLI generale. Il percorso reale e'
-volutamente piu' semplice:
+Prima del parser v0 Alfred non aveva ancora un parser CLI generale. Il percorso
+reale era volutamente piu' semplice:
 
 ```text
 main(argc, argv)
@@ -105,8 +111,8 @@ main(argc, argv)
        -> app_shutdown(&app)
 ```
 
-Questa scelta ha una conseguenza importante: i comandi informativi esistenti
-sono riconosciuti solo nella forma esatta con un unico argomento. Per esempio:
+Quella scelta aveva una conseguenza importante: i comandi informativi esistenti
+erano riconosciuti solo nella forma esatta con un unico argomento. Per esempio:
 
 ```bash
 ./alfred --help
@@ -114,7 +120,7 @@ sono riconosciuti solo nella forma esatta con un unico argomento. Per esempio:
 ./alfred --check-config
 ```
 
-sono comandi speciali e terminano prima del runtime.
+erano comandi speciali e terminavano prima del runtime.
 
 Invece forme come:
 
@@ -126,10 +132,10 @@ Invece forme come:
 ./alfred -- /tmp/root
 ```
 
-non sono ancora interpretate da un parser. Entrano nel percorso normale di
-`app_init()` e gli argomenti vengono considerati path da osservare.
+non erano ancora interpretate da un parser. Entravano nel percorso normale di
+`app_init()` e gli argomenti venivano considerati path da osservare.
 
-Il percorso di configurazione corrente e':
+Il percorso di configurazione storico era:
 
 ```text
 app_init()
@@ -145,34 +151,34 @@ app_init()
            backend_ops->add_target(argv[i])
 ```
 
-Quindi, finche' il parser v0 non esiste, non c'e' un punto in cui `-c`,
-`--config`, `--print-config` o `--` possono essere riconosciuti in modo
-coerente. Questo audit conferma perche' il parser deve stare prima della
-chiamata ad `app_init()` o deve passare ad `app_init()` una struttura gia'
-interpretata, non semplicemente inoltrare `argc/argv` grezzi.
+Questo audit confermava perche' il parser doveva stare prima della chiamata ad
+`app_init()` o doveva passare ad `app_init()` una struttura gia' interpretata,
+non semplicemente inoltrare `argc/argv` grezzi. La soluzione corrente segue
+questa scelta: `main()` chiama `alfred_parse_args()` e poi passa path e config
+gia' interpretati ad `app_init_from_paths()`.
 
 I test CLI correnti sono concentrati in `tests/cli/test_help_version.sh` e
 vengono eseguiti da `make test-cli`. Coprono:
 
 - `--help`: stdout atteso, stderr vuoto, nessun log runtime;
+- `-h`: alias side-effect-free di `--help`;
 - `--version`: formato `alfred MAJOR.MINOR.PATCH`, stderr vuoto, nessun log
   runtime;
+- `-V`: alias side-effect-free di `--version`;
 - `--check-config` con default validi: `configuration OK`, nessun log runtime;
 - `--check-config` con `ALFRED_CONFIG` valido;
 - `--check-config` con `ALFRED_CONFIG` invalido;
-- `--check-config` con `ALFRED_EVENT_ENGINE=shadow`, che deve fallire.
+- `--check-config` con `ALFRED_EVENT_ENGINE=shadow`, che deve fallire;
+- `-c FILE`, `--config FILE` e `--config=FILE` con `--check-config`;
+- precedenza della config esplicita su `ALFRED_CONFIG`;
+- rifiuto di `--config=` vuoto, config duplicate, opzioni sconosciute, opzioni
+  con argomento mancante, opzioni dopo path e path che iniziano con `-` senza
+  `--`;
+- `--` come terminatore per avviare il runtime su path interpretati.
 
-Non coprono ancora:
-
-- `-c FILE`;
-- `--config FILE`;
-- `--print-config`;
-- `--`;
-- opzioni sconosciute;
-- opzioni con argomento mancante;
-- path che iniziano con `-`.
-
-Questi casi sono esattamente il perimetro dei prossimi micro-step.
+`--print-config` resta l'unico caso CLI v0 non implementato: il test verifica
+che sia rifiutato in modo esplicito finche' non esiste un output stabile della
+configurazione effettiva.
 
 ## Grammatica e precedenza decise per v0
 
@@ -183,8 +189,10 @@ alfred [OPTIONS] PATH...
 ```
 
 La grammatica v0 deve essere intenzionalmente piccola. Non introduce
-subcommand, opzioni combinate, forme `--option=value`, file di configurazione
-multipli o override puntuali delle chiavi di configurazione. Il parser deve
+subcommand, opzioni combinate, file di configurazione multipli o override
+puntuali delle chiavi di configurazione. L'unica forma `--option=value`
+supportata in v0 e' `--config=FILE`, per allineare l'opzione lunga con le
+convenzioni GNU senza aggiungere un framework CLI generale. Il parser deve
 rispondere a una domanda sola:
 
 ```text
@@ -203,22 +211,24 @@ Per questo la grammatica v0 va letta rispetto a due livelli:
   `--help`, `--version` e, per opzioni lunghe con argomento, forme come
   `--config FILE` e spesso `--config=FILE`.
 
-Lo stato dopo PR #237 e':
+Lo stato dopo l'audit #240 e':
 
 | Aspetto | Stato | Nota |
 | --- | --- | --- |
 | Opzione corta `-c FILE` | Allineata al sottoinsieme POSIX che ci serve | L'argomento della config e' separato dal nome opzione. |
 | Terminatore `--` | Allineato | Tutto cio' che segue diventa path/operando. |
 | Opzioni prima degli operandi | Allineato e intenzionalmente rigido | `alfred PATH --config conf` e' rifiutato per evitare ambiguita'. |
-| `--help` e `--version` | Allineati alle convenzioni GNU | Terminano senza runtime e scrivono su `stdout`. |
+| `-h` / `--help` e `-V` / `--version` | Allineati alle convenzioni GNU | Terminano senza runtime e scrivono su `stdout`. |
 | `--config FILE` | Estensione GNU-style supportata | Forma lunga equivalente a `-c FILE`. |
-| `--config=FILE` | Da auditare | Probabile gap GNU-style: la milestone non deve chiudersi senza decidere se implementarlo in v0 o rimandarlo esplicitamente. |
-| Alias `-h` / `-V` | Da auditare | Non sono richiesti dal sottoinsieme POSIX usato oggi, ma sono convenzioni storiche diffuse; vanno accettati, rimandati o rifiutati con motivazione. |
+| `--config=FILE` | Supportata | Forma lunga GNU-style equivalente a `--config FILE`; `--config=` vuoto e' errore. |
+| Alias `-h` / `-V` | Supportati | Non sono richiesti da POSIX, ma sono convenzioni storiche diffuse e restano side-effect-free come le forme lunghe. |
 
-La issue #240 traccia questo audit. Finche' #240 non e' chiusa, la readiness
-review non deve chiudere la milestone: non vogliamo dichiarare la CLI
-compatibile POSIX/GNU senza una verifica esplicita delle forme accettate,
-rifiutate e testate.
+La issue #240 traccia questo audit. La decisione v0 e' pragmatica: Alfred
+segue il sottoinsieme POSIX utile per opzioni corte, option-arguments separati,
+operandi finali e terminatore `--`; adotta le forme GNU comuni per opzioni
+lunghe, help/version e `--config=FILE`; e rifiuta ancora le opzioni dopo i path,
+gli abbreviamenti lunghi e le opzioni combinate per mantenere il parser piccolo,
+deterministico e facile da testare.
 
 ### Forme accettate
 
@@ -233,13 +243,15 @@ come path.
 | `alfred -- PATH...` | Avvia il runtime; tutti gli argomenti dopo `--` sono path anche se iniziano con `-`. |
 | `alfred -c FILE PATH...` | Carica `FILE` come configurazione e avvia il runtime sui path. |
 | `alfred --config FILE PATH...` | Forma lunga equivalente a `-c FILE`. |
+| `alfred --config=FILE PATH...` | Forma lunga GNU-style equivalente a `--config FILE`. |
 | `alfred -c FILE -- PATH...` | Carica `FILE`; gli argomenti dopo `--` sono path. |
 | `alfred --config FILE -- PATH...` | Forma lunga equivalente alla precedente. |
 | `alfred --check-config` | Valida la configurazione effettiva e termina senza runtime. |
 | `alfred -c FILE --check-config` | Valida default + `FILE` esplicito + env override e termina senza runtime. `ALFRED_CONFIG` non viene caricato perche' la CLI esplicita vince sull'ambiente. |
 | `alfred --config FILE --check-config` | Forma lunga equivalente alla precedente. |
-| `alfred --help` | Stampa usage e termina senza runtime. |
-| `alfred --version` | Stampa versione e termina senza runtime. |
+| `alfred --config=FILE --check-config` | Forma lunga GNU-style equivalente alla precedente. |
+| `alfred -h` / `alfred --help` | Stampa usage e termina senza runtime. |
+| `alfred -V` / `alfred --version` | Stampa versione e termina senza runtime. |
 | `alfred --print-config` | Se implementato in v0, stampa configurazione effettiva e termina senza runtime. |
 | `alfred -c FILE --print-config` | Se `--print-config` viene implementato, stampa la configurazione dopo aver caricato `FILE`. |
 
@@ -247,13 +259,14 @@ come path.
 
 | Opzione | Significato | Stato v0 |
 | --- | --- | --- |
-| `-c FILE` | Usa `FILE` come configurazione. | Da implementare. |
-| `--config FILE` | Forma lunga di `-c`. | Da implementare. |
-| `--check-config` | Valida configurazione e termina senza runtime. | Gia' implementata, da integrare nel parser. |
-| `--print-config` | Stampa configurazione effettiva e termina. | Da decidere prima del codice; se instabile, rimandare esplicitamente. |
-| `--help` | Stampa usage e termina. | Gia' implementata, da integrare nel parser. |
-| `--version` | Stampa versione e termina. | Gia' implementata, da integrare nel parser. |
-| `--` | Fine opzioni; tutto cio' che segue e' path. | Da implementare. |
+| `-c FILE` | Usa `FILE` come configurazione. | Implementata. |
+| `--config FILE` | Forma lunga di `-c`. | Implementata. |
+| `--config=FILE` | Forma lunga GNU-style di `--config FILE`. | Implementata dopo audit #240. |
+| `--check-config` | Valida configurazione e termina senza runtime. | Implementata e integrata nel parser. |
+| `--print-config` | Stampa configurazione effettiva e termina. | Rimandata: manca un output stabile della configurazione effettiva. |
+| `-h`, `--help` | Stampa usage e termina. | Implementata. |
+| `-V`, `--version` | Stampa versione e termina. | Implementata. |
+| `--` | Fine opzioni; tutto cio' che segue e' path. | Implementata. |
 
 ### Forme rifiutate
 
@@ -265,12 +278,15 @@ dell'utente.
 | `alfred --unknown` | Errore su `stderr`, exit non-zero. | Evita di trattare errori di battitura come path. |
 | `alfred -c` | Errore su `stderr`, exit non-zero. | `-c` richiede un valore. |
 | `alfred --config` | Errore su `stderr`, exit non-zero. | `--config` richiede un valore. |
+| `alfred --config=` | Errore su `stderr`, exit non-zero. | La forma con `=` deve avere un valore non vuoto. |
 | `alfred -c a.conf --config b.conf PATH` | Errore su `stderr`, exit non-zero. | Un solo file config esplicito evita precedenza ambigua. |
 | `alfred -c a.conf -c b.conf PATH` | Errore su `stderr`, exit non-zero. | I duplicati di config sono rifiutati in v0. |
 | `alfred --help PATH` | Errore su `stderr`, exit non-zero. | `--help` e' comando esclusivo, non opzione combinabile. |
 | `alfred -c a.conf --help` | Errore su `stderr`, exit non-zero. | `--help` non carica configurazione e non si combina con altre opzioni. |
+| `alfred -c a.conf -h` | Errore su `stderr`, exit non-zero. | `-h` segue lo stesso contratto esclusivo di `--help`. |
 | `alfred --version PATH` | Errore su `stderr`, exit non-zero. | `--version` e' comando esclusivo. |
 | `alfred -c a.conf --version` | Errore su `stderr`, exit non-zero. | `--version` non carica configurazione e non si combina con altre opzioni. |
+| `alfred -c a.conf -V` | Errore su `stderr`, exit non-zero. | `-V` segue lo stesso contratto esclusivo di `--version`. |
 | `alfred --check-config PATH` | Errore su `stderr`, exit non-zero. | `--check-config` non deve avviare runtime e non valida path. |
 | `alfred --check-config -c a.conf` | Errore su `stderr`, exit non-zero. | I comandi no-runtime non accettano opzioni successive in v0; usare `alfred -c a.conf --check-config`. |
 | `alfred --print-config PATH` | Errore su `stderr`, exit non-zero, se `--print-config` viene implementato. | `--print-config` deve essere no-runtime in v0. |
@@ -288,7 +304,7 @@ La precedenza decisa per v0 e':
 
 ```text
 1. config_defaults()
-2. -c FILE / --config FILE, se presente
+2. -c FILE / --config FILE / --config=FILE, se presente
 3. altrimenti ALFRED_CONFIG, se presente
 4. ALFRED_EVENT_ENGINE, se presente
 5. futuri override CLI specifici, se verranno aggiunti
@@ -297,28 +313,28 @@ La precedenza decisa per v0 e':
 Quindi:
 
 ```bash
-ALFRED_CONFIG=base.conf ./alfred --config debug.conf /tmp/root
+ALFRED_CONFIG=base.conf ./alfred --config=debug.conf /tmp/root
 ```
 
 deve usare `debug.conf`. La CLI e' una scelta esplicita dell'utente al momento
 del comando e deve vincere sul file indicato dall'ambiente. In v0 questo
-significa anche che, quando `-c`/`--config` e' presente, `ALFRED_CONFIG` non
-viene caricato: un ambiente shell sporco non deve impedire a un comando
-esplicito di validare o usare il file scelto dall'utente.
+significa anche che, quando `-c`/`--config`/`--config=FILE` e' presente,
+`ALFRED_CONFIG` non viene caricato: un ambiente shell sporco non deve impedire
+a un comando esplicito di validare o usare il file scelto dall'utente.
 
 `ALFRED_EVENT_ENGINE` resta dopo il file esplicito per compatibilita' con il
 contratto corrente: e' un override/env guard storico che oggi accetta solo
 `core` e rifiuta `shadow`. Non diventa una nuova opzione CLI v0.
 
-I duplicati di `-c`/`--config` sono errore. Questa e' una scelta deliberata:
-evita una regola "last wins" implicita, semplifica i test e rende evidente
-quando uno script sta componendo opzioni in modo sbagliato.
+I duplicati di `-c`/`--config`/`--config=FILE` sono errore. Questa e' una
+scelta deliberata: evita una regola "last wins" implicita, semplifica i test e
+rende evidente quando uno script sta componendo opzioni in modo sbagliato.
 
 ### Output ed exit status
 
 Regole v0:
 
-- successi informativi (`--help`, `--version`, `--check-config` valido,
+- successi informativi (`-h`/`--help`, `-V`/`--version`, `--check-config` valido,
   `--print-config` se implementato) scrivono su `stdout` ed escono con codice
   `0`;
 - errori di parsing scrivono su `stderr`, non inizializzano runtime e escono
@@ -372,12 +388,16 @@ Esempi minimi:
 ./alfred --check-config
 ./alfred -c valid.conf --check-config
 ./alfred --config valid.conf --check-config
+./alfred --config=valid.conf --check-config
 ./alfred -c missing.conf --check-config
 ./alfred -c
 ./alfred --config
+./alfred --config=
 ./alfred -c a.conf -c b.conf /tmp/root
 ./alfred -c a.conf --config b.conf /tmp/root
 ./alfred --unknown
+./alfred -h
+./alfred -V
 ./alfred -- /tmp/root
 ./alfred -c valid.conf -- /tmp/root
 ./alfred --help /tmp/root
@@ -410,14 +430,16 @@ Ogni test deve controllare:
 | Implementare parser minimo | Done | Issue figlia #236, PR #237. Il parser resta nel livello applicazione e supporta `-c`, `--config`, `--`, comandi no-runtime e errori side-effect-free. |
 | Aggiungere test CLI | Done | PR #237 estende `make test-cli` con successi, errori, assenza di log runtime, precedenza config CLI e path dopo `--`. |
 | Aggiornare README/man/doc | Done | PR #237 aggiorna README, pagine man inglesi/italiane, livello applicazione, roadmap CLI e matrice funzionalita'. |
-| Audit POSIX/GNU CLI e man page | Todo | Issue figlia #240. Verificare parser, `--config=FILE`, alias brevi, deviazioni accettate e tutte le man page inglesi/italiane prima della chiusura milestone. |
-| Readiness review | In review | Issue figlia #238, PR #239. Verifica che la milestone non abbia riaperto runtime, backend, hot path, Event Model, Writer Runtime o Agent Guard; resta bloccata finche' #240 non e' risolta. |
+| Audit POSIX/GNU CLI e man page | In progress | Issue figlia #240. Implementa `--config=FILE`, `-h`, `-V`, test focused e allineamento delle man page inglesi/italiane; da chiudere dopo PR/review. |
+| Readiness review | Done | Issue figlia #238, PR #239. Ha verificato che la milestone non abbia riaperto runtime, backend, hot path, Event Model, Writer Runtime o Agent Guard. |
 
 ## Criteri di chiusura
 
 La milestone puo' chiudersi quando:
 
 - `-c FILE` e `--config FILE` sono implementati o esplicitamente rimandati con
+  motivazione;
+- `--config=FILE`, `-h` e `-V` sono implementati o esplicitamente rimandati con
   motivazione;
 - `--` e' implementato o rimandato con motivazione;
 - `--print-config` ha una decisione chiara: implementato, rimandato o escluso
@@ -428,15 +450,14 @@ La milestone puo' chiudersi quando:
 - il runtime normale `./alfred PATH...` resta compatibile;
 - la milestone non introduce dipendenze esterne o framework CLI pesanti.
 
-Stato dopo PR #237: i criteri funzionali sono soddisfatti per `-c`,
-`--config`, `--`, `--help`, `--version`, `--check-config`, test CLI e
-documentazione utente. `--print-config` resta esplicitamente rimandato perche'
-non esiste ancora un output stabile della configurazione effettiva. La
-readiness review #238 / PR #239 chiude la tracciabilita' della PR #237 e
-conferma che il parser non ha allargato il runtime oltre il perimetro v0, ma
-non deve chiudere la milestone finche' l'audit POSIX/GNU #240 non ha deciso le
-forme `--config=FILE`, eventuali alias brevi, le deviazioni deliberate e
-l'allineamento di tutte le man page inglesi/italiane al contratto scelto.
+Stato dopo l'audit #240: il parser supporta il sottoinsieme POSIX/GNU deciso
+per v0: `-c FILE`, `--config FILE`, `--config=FILE`, `--`, `-h`/`--help`,
+`-V`/`--version` e `--check-config`. Restano intenzionalmente rifiutati
+abbreviamenti lunghi, opzioni combinate, opzioni dopo i path, duplicati di
+config e `--config=` vuoto. `--print-config` resta esplicitamente rimandato
+perche' non esiste ancora un output stabile della configurazione effettiva.
+Prima della chiusura finale della milestone servono merge e review della PR
+collegata a #240.
 
 ## Collegamenti
 

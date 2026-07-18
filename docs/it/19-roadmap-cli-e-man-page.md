@@ -1,13 +1,15 @@
 # Roadmap CLI e pagina man
 
-Questo documento raccoglie le decisioni future sull'interfaccia da riga di
-comando di Alfred. Per ora Alfred resta volutamente semplice: i path da
-osservare sono argomenti posizionali e il file di configurazione puo' essere
-indicato con la variabile d'ambiente `ALFRED_CONFIG`.
+Questo documento raccoglie le decisioni sull'interfaccia da riga di comando di
+Alfred. Il parser CLI v0 ora esiste, ma resta volutamente piccolo: i path da
+osservare sono argomenti posizionali, il file di configurazione puo' essere
+indicato con `ALFRED_CONFIG`, `-c FILE`, `--config FILE` o `--config=FILE`, e i
+comandi informativi terminano prima del runtime.
 
-Non implementiamo ancora un parser CLI professionale in questo punto. Lo scopo
-di questa roadmap e' evitare decisioni improvvisate quando aggiungeremo opzioni
-come `-c`, `--config` o la stampa della configurazione effettiva.
+Lo scopo della roadmap resta evitare decisioni improvvisate quando la CLI
+cresce. La milestone corrente di riferimento e'
+[CLI parser v0](50-cli-parser-v0.md); questo file conserva il contesto storico
+e le scelte ancora rimandate, in particolare `--print-config`.
 
 ## Fonti e convenzioni
 
@@ -22,12 +24,14 @@ Le convenzioni da seguire sono:
 
 Punti pratici che useremo:
 
-- supportare `--help`
-- supportare `--version`
+- supportare `-h`/`--help`
+- supportare `-V`/`--version`
 - supportare `--check-config` per validare la configurazione senza avviare il
   runtime
 - usare opzioni brevi per comandi frequenti, per esempio `-c`
 - usare opzioni lunghe descrittive, per esempio `--config`
+- accettare la forma GNU-style `--config=FILE` per l'opzione lunga con
+  argomento principale
 - usare `--` come fine delle opzioni quando serve distinguere path che iniziano
   con `-`
 - tenere gli argomenti posizionali finali come path da osservare
@@ -40,7 +44,9 @@ Oggi l'uso reale e':
 ```bash
 ./alfred /path/da/osservare
 ./alfred --help
+./alfred -h
 ./alfred --version
+./alfred -V
 ./alfred --check-config
 ```
 
@@ -49,13 +55,16 @@ Con file di configurazione:
 ```bash
 ALFRED_CONFIG=./alfred.conf ./alfred /path/da/osservare
 ALFRED_CONFIG=./alfred.conf ./alfred --check-config
+./alfred -c ./alfred.conf /path/da/osservare
+./alfred --config ./alfred.conf /path/da/osservare
+./alfred --config=./alfred.conf /path/da/osservare
 ```
 
 La precedenza attuale e':
 
 ```text
 config_defaults()
-    -> -c FILE / --config FILE, se presente
+    -> -c FILE / --config FILE / --config=FILE, se presente
     -> altrimenti ALFRED_CONFIG, se presente
     -> ALFRED_EVENT_ENGINE, se presente
 ```
@@ -63,10 +72,11 @@ config_defaults()
 `ALFRED_EVENT_ENGINE` esiste solo come validazione di compatibilita': `core` e'
 il runtime ufficiale; `shadow` fallisce.
 
-`--help` e `--version` sono comandi informativi: stampano su `stdout`, escono
-con codice `0` e terminano prima di inizializzare configurazione, logger,
-backend, core, output pipeline o watch. Questo garantisce che non creino
-`raw.log`, `events.log`, `errors.log` o `output.jsonl`.
+`-h`/`--help` e `-V`/`--version` sono comandi informativi: stampano su
+`stdout`, escono con codice `0` e terminano prima di inizializzare
+configurazione, logger, backend, core, output pipeline o watch. Questo
+garantisce che non creino `raw.log`, `events.log`, `errors.log` o
+`output.jsonl`.
 
 `--check-config` e' un comando di validazione: inizializza i default in memoria,
 carica `ALFRED_CONFIG` se presente e applica `ALFRED_EVENT_ENGINE` se presente,
@@ -75,9 +85,9 @@ logger, backend, core, output pipeline o watch. Per questo non crea log runtime
 e non valida i path da osservare: i path richiedono il backend e restano nel
 percorso di startup normale.
 
-## Comportamento desiderato futuro
+## Comportamento CLI v0
 
-Quando aggiungeremo un parser CLI, l'uso principale dovrebbe diventare:
+L'uso principale e':
 
 ```bash
 alfred [OPTIONS] PATH...
@@ -89,26 +99,26 @@ Esempi:
 alfred /tmp/progetto
 alfred -c alfred.conf /tmp/progetto
 alfred --config alfred.conf /tmp/progetto
-alfred --print-config
-alfred --config alfred.conf --print-config
+alfred --config=alfred.conf /tmp/progetto
 alfred -- /tmp/path-che-inizia-con-trattino
 ```
 
 `PATH...` resta obbligatorio quando Alfred deve avviare il monitoraggio.
-Alcune opzioni informative, come `--help` e `--version`, terminano invece senza
-avviare il backend.
+Alcune opzioni informative, come `-h`/`--help` e `-V`/`--version`, terminano
+invece senza avviare il backend.
 
 ## Opzioni pianificate
 
 | Opzione | Significato | Stato |
 | --- | --- | --- |
-| `-c FILE` | carica configurazione da `FILE` | da implementare |
-| `--config FILE` | forma lunga di `-c` | da implementare |
+| `-c FILE` | carica configurazione da `FILE` | implementato |
+| `--config FILE` | forma lunga di `-c` | implementato |
+| `--config=FILE` | forma lunga GNU-style di `--config FILE` | implementato |
 | `--print-config` | stampa la configurazione effettiva e termina senza runtime nel contratto v0, se implementato | da discutere output/implementazione |
 | `--check-config` | valida default, `ALFRED_CONFIG` e `ALFRED_EVENT_ENGINE`, poi termina senza avviare logger/backend/core/output/watch | implementato |
-| `--help` | stampa uso breve e opzioni | implementato |
-| `--version` | stampa versione del programma | implementato |
-| `--` | fine opzioni, tutto cio' che segue e' path | da implementare |
+| `-h`, `--help` | stampa uso breve e opzioni | implementato |
+| `-V`, `--version` | stampa versione del programma | implementato |
+| `--` | fine opzioni, tutto cio' che segue e' path | implementato |
 
 ## Stampa della configurazione effettiva
 
@@ -151,7 +161,7 @@ Quando esistono sia ambiente sia CLI, la precedenza e':
 
 ```text
 1. config_defaults()
-2. -c FILE / --config FILE, se presente
+2. -c FILE / --config FILE / --config=FILE, se presente
 3. altrimenti ALFRED_CONFIG, se presente
 4. variabili d'ambiente di override specifiche
 5. opzioni CLI specifiche
@@ -160,13 +170,14 @@ Quando esistono sia ambiente sia CLI, la precedenza e':
 Questo significa che la CLI vince sul file indicato dall'ambiente. Esempio:
 
 ```bash
-ALFRED_CONFIG=base.conf alfred --config debug.conf /tmp/progetto
+ALFRED_CONFIG=base.conf alfred --config=debug.conf /tmp/progetto
 ```
 
 In questo caso `debug.conf` dovrebbe essere il file usato.
-In v0 `ALFRED_CONFIG` non viene caricato quando `-c` o `--config` e' presente:
-la scelta esplicita sul comando deve essere riproducibile anche se l'ambiente
-della shell contiene una configurazione vecchia o invalida.
+In v0 `ALFRED_CONFIG` non viene caricato quando `-c`, `--config` o
+`--config=FILE` e' presente: la scelta esplicita sul comando deve essere
+riproducibile anche se l'ambiente della shell contiene una configurazione
+vecchia o invalida.
 
 ## Errori e messaggi
 
@@ -177,8 +188,8 @@ Le regole future dovrebbero essere:
   non-zero
 - file configurazione non leggibile: errore su `stderr`, exit non-zero
 - configurazione invalida: errore su `stderr`, exit non-zero
-- `--help`: output su `stdout`, exit `0`
-- `--version`: output su `stdout`, exit `0`
+- `-h`/`--help`: output su `stdout`, exit `0`
+- `-V`/`--version`: output su `stdout`, exit `0`
 
 Esempio di errore:
 

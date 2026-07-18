@@ -69,7 +69,9 @@ Mostra uso breve e versione senza avviare il runtime:
 
 ```bash
 ./alfred --help
+./alfred -h
 ./alfred --version
+./alfred -V
 ```
 
 Valida la configurazione corrente senza avviare il runtime:
@@ -79,6 +81,7 @@ Valida la configurazione corrente senza avviare il runtime:
 ALFRED_CONFIG=./alfred.conf ./alfred --check-config
 ./alfred -c ./alfred.conf --check-config
 ./alfred --config ./alfred.conf --check-config
+./alfred --config=./alfred.conf --check-config
 ```
 
 Avvia Alfred con un file di configurazione:
@@ -87,6 +90,7 @@ Avvia Alfred con un file di configurazione:
 ALFRED_CONFIG=./alfred.conf ./alfred /path/da/osservare
 ./alfred -c ./alfred.conf /path/da/osservare
 ./alfred --config ./alfred.conf /path/da/osservare
+./alfred --config=./alfred.conf /path/da/osservare
 ./alfred -- /path/da/osservare
 ```
 

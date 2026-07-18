@@ -1961,3 +1961,11 @@ blocca pero' la chiusura definitiva finche' non viene auditata la compatibilita'
 con le Utility Syntax Guidelines POSIX / IEEE Std 1003.1 e con le convenzioni
 GNU, in particolare `--config=FILE`, eventuali alias brevi come `-h` o `-V` e
 l'allineamento di tutte le man page inglesi/italiane al contratto CLI scelto.
+
+Aggiornamento successivo: il micro-step #240 sceglie di implementare il gap GNU
+piccolo invece di rimandarlo. Il parser accetta `--config=FILE`, `-h` e `-V`,
+rifiuta `--config=` vuoto e continua a rifiutare duplicati di config, opzioni
+dopo i path e comandi informativi combinati con configurazione o path. README,
+pagine man inglesi/italiane, roadmap CLI e guida applicativa devono restare
+allineati a questo contratto; `--print-config` resta l'unico debito CLI v0
+esplicitamente rimandato.

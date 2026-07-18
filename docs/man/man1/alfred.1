@@ -16,10 +16,17 @@ alfred \- filesystem event engine and future AI agent runtime guard
 .I FILE
 .IR PATH ...
 .br
+.B alfred --config=FILE
+.IR PATH ...
+.br
 .B alfred --
 .IR PATH ...
 .br
+.B alfred -h
+.br
 .B alfred --help
+.br
+.B alfred -V
 .br
 .B alfred --version
 .br
@@ -39,21 +46,21 @@ token ends option parsing so following arguments are treated as paths, including
 paths that start with a dash. Alfred implements
 .B --help
 and
+.B -h
+as aliases, and
 .B --version
+and
+.B -V
 as informational commands that exit before configuration, logging, backend,
 core, output pipeline, or watch initialization.
 .B --check-config
 loads and validates configuration, then exits before logging, backend, core,
 output pipeline, or watch initialization. Configuration can be loaded through
 .BR -c ,
-.BR --config ,
+.BR --config " / " --config=FILE ,
 or the
 .B ALFRED_CONFIG
-environment variable. An explicit
-.B -c
-or
-.B --config
-file wins over
+environment variable. An explicit command-line configuration file wins over
 .BR ALFRED_CONFIG .
 Alfred does not yet implement
 .BR --print-config .
@@ -64,11 +71,11 @@ or environment asks for
 startup fails instead of silently falling back.
 .SH ARGUMENTS
 .TP
-.B --help
+.BR -h ", " --help
 Print short usage information to standard output and exit with status 0. This
 command does not start the runtime and does not create runtime log files.
 .TP
-.B --version
+.BR -V ", " --version
 Print version information to standard output and exit with status 0. This
 command does not start the runtime and does not create runtime log files.
 .TP
@@ -77,6 +84,8 @@ Validate built-in defaults, optional
 .B -c
 or
 .B --config
+or
+.B --config=FILE
 file, otherwise optional
 .B ALFRED_CONFIG
 and optional
@@ -100,10 +109,17 @@ loaded.
 .BI --config " FILE"
 Load configuration from
 .IR FILE .
+.TP
+.BI --config= FILE
+Load configuration from
+.IR FILE .
+This is the GNU-style attached-argument form of
+.BR --config .
 Duplicate
-.B -c
-or
+.BR -c ,
 .B --config
+or
+.B --config=FILE
 options are rejected in CLI v0.
 .TP
 .B --
@@ -125,11 +141,11 @@ before Alfred reports successful startup or enters the event loop.
 .B ALFRED_CONFIG
 Path to a key-value configuration file. If set, Alfred loads this file after
 applying built-in defaults. Invalid configuration makes startup fail unless an
-explicit
-.B -c
-or
+explicit configuration file is provided on the command line with
+.BR -c ,
 .B --config
-file is provided on the command line.
+or
+.BR --config=FILE .
 .TP
 .B ALFRED_EVENT_ENGINE
 Compatibility validation hook. The only accepted value is
@@ -186,11 +202,13 @@ processing failed.
 Show usage:
 .EX
 alfred --help
+alfred -h
 .EE
 .TP
 Show version:
 .EX
 alfred --version
+alfred -V
 .EE
 .TP
 Validate default configuration without starting the runtime:
@@ -203,6 +221,7 @@ Validate an explicit configuration file without starting the runtime:
 ALFRED_CONFIG=./alfred.conf alfred --check-config
 alfred -c ./alfred.conf --check-config
 alfred --config ./alfred.conf --check-config
+alfred --config=./alfred.conf --check-config
 .EE
 .TP
 Watch one directory with defaults:
@@ -220,6 +239,7 @@ Load configuration from a file:
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 alfred -c ./alfred.conf /tmp/project
 alfred --config ./alfred.conf /tmp/project
+alfred --config=./alfred.conf /tmp/project
 .EE
 .TP
 Watch a path after the option terminator:
