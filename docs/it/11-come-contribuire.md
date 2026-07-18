@@ -487,6 +487,7 @@ make test-cli
 make smoke-mvp
 make test-backend-diagnostics
 make test-jsonl
+make test-compatibility-evidence
 make test-install
 ```
 
@@ -498,6 +499,8 @@ dipendenze esplicite
 -> contesto userspace
 -> make test-install
 -> smoke script con ALFRED_BIN puntato al binario release
+-> compatibility-evidence-v0.json
+-> artifact dedicato della lane
 ```
 
 Queste lane verificano distribuzione, libc, compilatore, pacchetti e utility
@@ -546,7 +549,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential man-db
+          sudo apt-get install -y build-essential man-db python3
 
       - name: Build
         run: make
@@ -565,6 +568,9 @@ jobs:
 
       - name: Run JSONL golden tests
         run: make test-jsonl
+
+      - name: Validate compatibility evidence contract
+        run: make test-compatibility-evidence
 
       - name: Run staged installation tests
         run: make test-install
@@ -827,6 +833,51 @@ dalla CI, non una sandbox completa: il codice continua a essere eseguito nel
 container del job e resta soggetto alle risorse e agli accessi concessi da
 GitHub Actions.
 
+### Evidence versionata e artifact per lane
+
+Alla fine del percorso, anche se staged-install o smoke falliscono, lo step con
+`if: always()` prova a eseguire
+`tools/ci/compatibility_evidence.py`. Il file prodotto e':
+
+```text
+.alfred-ci/compatibility-evidence-v0.json
+```
+
+e viene caricato per 30 giorni con un nome distinto per lane:
+
+```text
+alfred-compatibility-evidence-ubuntu-24.04
+alfred-compatibility-evidence-debian-13
+alfred-compatibility-evidence-fedora-44
+```
+
+Poiche' `.alfred-ci` e' una directory nascosta, lo step di upload abilita
+esplicitamente `include-hidden-files: true`; il `path` resta limitato al solo
+JSON previsto e non carica indiscriminatamente altri file nascosti del checkout.
+
+Un artifact GitHub Actions e' un file prodotto dal job e conservato fuori dal
+repository. Non e' un commit e non modifica il prodotto. Serve a poter
+scaricare in seguito la prova esatta associata a una run, invece di dipendere
+solo dal testo temporaneo del log.
+
+Il record contiene esclusivamente campi ammessi: versione schema, revisione,
+run CI, lane, immagine, distribuzione, architettura, libc, compilatore,
+filesystem, kernel e relativo scope, profilo build, sanitizer ed esiti. Non
+contiene hostname, utente, path del workspace, segreti o dump completo delle
+variabili d'ambiente. Una sonda indisponibile produce `unknown`: il generatore
+non inventa un valore e non trasforma l'assenza di prova in successo.
+
+Lo step puo' essere eseguito solo dopo il bootstrap delle dipendenze. Se il
+runner viene cancellato forzatamente, Python non e' stato installato o il job
+non puo' piu' eseguire step finali, l'artifact puo' mancare; il workflow usa
+`if-no-files-found: warn` per non nascondere il fallimento originale dietro un
+secondo errore di upload. L'assenza dell'artifact resta visibile e non vale come
+evidenza positiva.
+
+Per scaricarlo: apri la run, scorri alla sezione `Artifacts` e scegli il nome
+della lane. Il JSON permette di distinguere subito, per esempio, un Fedora
+userspace sul kernel condiviso del runner da una futura VM con kernel guest.
+
 La matrice non e' un benchmark: durata di download e installazione pacchetti
 domina il tempo del job. Non va usata per confrontare le prestazioni di Alfred
 fra distribuzioni.
@@ -854,6 +905,7 @@ Gli step principali sono:
 - `Run MVP smoke test`
 - `Run backend diagnostics`
 - `Run JSONL golden tests`
+- `Validate compatibility evidence contract`
 - `Run staged installation tests`
 
 Ogni step mostra l'output standard e l'output di errore del comando eseguito.
@@ -921,6 +973,11 @@ Per scaricare l'artifact:
 
 L'artifact viene caricato solo su fallimento, per non conservare log inutili
 quando tutto passa.
+
+La matrice userspace segue una regola diversa: il piccolo artifact
+`alfred-compatibility-evidence-<lane>` viene caricato sia su successo sia su
+fallimento, quando lo step finale puo' essere eseguito. E' evidenza di
+compatibilita' e provenienza, non un dump diagnostico dei log Alfred.
 
 ## Review e merge
 

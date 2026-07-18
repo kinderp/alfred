@@ -105,6 +105,7 @@ jobs:
           stat -f -c '%T' .
 
       - name: Build release and test staged installation
+        id: staged_install
         shell: bash
         run: |
           chown -R 1001:1001 "$GITHUB_WORKSPACE"
@@ -113,12 +114,42 @@ jobs:
             make test-install
 
       - name: Run representative MVP smoke test
+        id: mvp_smoke
         shell: bash
         run: |
           setpriv --reuid=1001 --regid=1001 --clear-groups \
             --no-new-privs \
             env ALFRED_BIN="$GITHUB_WORKSPACE/alfred" \
             bash tests/smoke/mvp_smoke.sh
+
+      - name: Record versioned compatibility evidence
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/ci/compatibility_evidence.py \
+            --output "$GITHUB_WORKSPACE/.alfred-ci/compatibility-evidence-v0.json" \
+            --lane "${{ matrix.lane }}" \
+            --container-image "${{ matrix.image }}" \
+            --container-mode github-actions-job-container \
+            --kernel-scope shared-github-runner-kernel \
+            --build-profile release \
+            --sanitizers-enabled false \
+            --source-revision "${{ github.sha }}" \
+            --ci-run-id "${{ github.run_id }}" \
+            --ci-run-attempt "${{ github.run_attempt }}" \
+            --staged-install-outcome "${{ steps.staged_install.outcome }}" \
+            --mvp-smoke-outcome "${{ steps.mvp_smoke.outcome }}"
+          cat "$GITHUB_WORKSPACE/.alfred-ci/compatibility-evidence-v0.json"
+
+      - name: Upload versioned compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-compatibility-evidence-${{ matrix.lane }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 30
+          path: .alfred-ci/compatibility-evidence-v0.json
 
       - name: Upload compatibility artifacts on failure
         if: failure()

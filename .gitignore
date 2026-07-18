@@ -6,6 +6,7 @@ alfred
 raw.log
 events.log
 errors.log
+.alfred-ci/
 tests/functional/raw.log
 tests/functional/events.log
 tests/functional/errors.log

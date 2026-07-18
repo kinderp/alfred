@@ -413,6 +413,69 @@ iniezione controllati. La seconda seleziona intenzionalmente l'ultima sorgente
 del preflight. Servono per produrre precondizioni difficili senza rinominare o
 cambiare i permessi dei file tracciati nel checkout.
 
+## Test della compatibility evidence
+
+Il comando:
+
+```bash
+make test-compatibility-evidence
+```
+
+verifica il piccolo contratto JSON usato dalla matrice userspace. Non avvia
+Alfred e non misura il runtime: controlla che la CI descriva in modo
+riproducibile quale ambiente ha eseguito `make test-install` e lo smoke MVP.
+
+Il percorso e':
+
+```text
+make test-compatibility-evidence
+-> tests/compatibility/run_all.sh
+-> tools/ci/compatibility_evidence.py
+   -> parse_arguments()
+   -> build_evidence()
+      -> distribution_info()
+      -> libc_info()
+      -> compiler_info()
+      -> command_output()
+      -> normalize_status()
+   -> write_atomic()
+-> parsing e assert JSON del test
+```
+
+Le funzioni hanno responsabilita' separate:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `parse_arguments()` | accetta soltanto i metadati espliciti necessari al record |
+| `bounded_value()` / `identifier()` | rifiutano valori vuoti, troppo lunghi, con controlli o identificatori non validi |
+| `distribution_info()` | legge solo ID e versione della distribuzione, senza copiare tutto `os-release` |
+| `libc_info()` | rileva nome e versione libc oppure restituisce `unknown` |
+| `compiler_info()` | rileva compilatore e versione con output limitato |
+| `command_output()` | esegue sonde brevi con timeout e converte indisponibilita' o errore in `unknown` |
+| `normalize_status()` | traduce gli outcome GitHub nel vocabolario pubblico degli esiti |
+| `build_evidence()` | costruisce esattamente lo schema v0 dopo la validazione |
+| `write_atomic()` | scrive un file temporaneo nella stessa directory, esegue `fsync` e lo sostituisce atomicamente |
+
+La scrittura atomica evita che un consumer scarichi un JSON scritto solo a
+meta'. La validazione avviene prima della sostituzione: un input non valido non
+deve sovrascrivere un artifact precedente. I test coprono schema e tipi,
+normalizzazione degli esiti, fallback `unknown`, rifiuto di lane/status non
+validi e assenza dei principali campi sensibili.
+
+Gli esiti salvati sono:
+
+| Evidence | Outcome GitHub | Significato |
+| --- | --- | --- |
+| `passed` | `success` | lo step ha terminato con successo |
+| `failed` | `failure` | lo step e' stato eseguito ed e' fallito |
+| `not_run` | `skipped` | lo step non e' stato eseguito, per esempio per un fallimento precedente |
+| `cancelled` | `cancelled` | l'esecuzione e' stata annullata |
+| `unknown` | `unknown` | l'esito non era disponibile; non equivale a successo |
+
+Per esempio, `staged_install=failed` e `mvp_smoke=not_run` significa che la
+prova di installazione e' fallita e GitHub non ha avviato lo smoke successivo.
+Non significa che lo smoke sia passato o fallito.
+
 ## Come sono strutturati i test shell
 
 I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,

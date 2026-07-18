@@ -38,6 +38,11 @@ userspace successivo senza cambiare questa fotografia storica:
 - i container condividono il kernel del runner e non costituiscono evidenza
   multi-kernel.
 
+La issue [#270](https://github.com/kinderp/alfred/issues/270) rende questa
+evidenza scaricabile e versionata: ogni lane prova a pubblicare un JSON v0 con
+ambiente, provenienza ed esiti normalizzati. Il formato non cambia la fotografia
+pre-implementazione di questo audit; il contratto vigente resta nella roadmap.
+
 Le sezioni che seguono restano al passato come evidenza storica del problema e
 delle motivazioni. Il contratto vigente e' descritto nella
 [roadmap della milestone](53-installability-linux-compatibility-v0.md), nella
