@@ -561,8 +561,8 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 
 | Item | Stato | Note |
 | --- | --- | --- |
-| Setup milestone, issue madre e roadmap | In progress | Issue madre #261 e issue figlia #262; PR setup da aprire |
-| Audit Makefile, artefatti e CI corrente | Todo | Mappare profilo debug/release, path e dipendenze |
+| Setup milestone, issue madre e roadmap | Done | Issue madre #261, issue figlia #262 e PR #263 |
+| Audit Makefile, artefatti e CI corrente | Done | Issue #264 e [audit dedicato](54-audit-installazione-ci-v0.md) |
 | Contratto `PREFIX` / `DESTDIR` / install / uninstall | Todo | Nessuna scrittura root nei test |
 | Test stage-install | Todo | Verificare binario, man page, CLI e cleanup |
 | Prima matrice distribuzioni/userspace | Todo | Container non equivalgono a kernel diversi |

@@ -2073,3 +2073,18 @@ Il primo perimetro resta piccolo: installazione staged senza root, ownership
 esatta dei file installati, test dell'artefatto installato, matrice userspace
 ridotta ed evidenza dell'ambiente. Nessun documento deve chiamare "kernel
 coverage" un test eseguito soltanto in container.
+
+Aggiornamento successivo: dopo il merge della PR #263, il setup documentale e'
+chiuso e la issue figlia #264 apre l'audit di Makefile, artefatti e CI corrente.
+`54-audit-installazione-ci-v0.md` registra che oggi `make release` produce
+soltanto `./alfred`, non esistono target `install`/`uninstall`, le sei pagine
+man non sono installate e la CI esegue una build debug ASan/UBSan su un solo
+runner `ubuntu-latest`.
+
+L'audit separa dipendenze di build, dipendenze delle suite e dipendenze runtime.
+In particolare, smoke e golden JSONL richiedono `python3`, molti test compilano
+helper con `cc` o `gcc`, e Bash/utility GNU sono disponibili implicitamente sul
+runner corrente. Il prossimo micro-step raccomandato e' un contratto staged
+non-root che installi soltanto binario release e sei man page, imponga modi
+espliciti e verifichi con un file sentinella che uninstall non cancelli file
+estranei.
