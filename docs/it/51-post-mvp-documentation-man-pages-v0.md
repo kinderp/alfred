@@ -118,8 +118,8 @@ Contenuti da lasciare negli MD:
 | --- | --- | --- |
 | Setup milestone, issue madre e roadmap | Done | Issue madre #244, issue figlia #245, PR #246 e merge [`e22deb1`](https://github.com/kinderp/alfred/commit/e22deb1dbab0d85decda6bf71248b6c7e7ed3dfa). |
 | Audit README inglese/italiano | Done | Issue figlia #247, PR #248 e merge [`99c8269`](https://github.com/kinderp/alfred/commit/99c82696c314f5eb77376e5e39e32a710ca94273). |
-| Audit man page inglesi | In progress | Issue figlia #249. Controllare `alfred(1)`, `alfred.conf(5)`, `alfred-events(7)`. |
-| Audit man page italiane | Todo | Allineare contenuto e tono alle pagine inglesi. |
+| Audit man page inglesi | Done | Issue figlia #249, PR #250 e merge [`790de79`](https://github.com/kinderp/alfred/commit/790de79607aee439dbcb03a66950d854fe0d2b78). |
+| Audit man page italiane | In progress | Issue figlia #251. Allineare contenuto e tono alle pagine inglesi. |
 | Promuovere dettagli tecnici stabili | Todo | Portare nelle man page solo cio' che serve come riferimento operativo. |
 | Validare rendering man page | Todo | Eseguire `man -l` su tutte le pagine EN/IT toccate. |
 | Readiness closure | Todo | Confermare coerenza, debiti futuri e assenza di scope runtime. |
@@ -182,6 +182,7 @@ La milestone puo' chiudersi quando:
 - Setup roadmap PR: [#246](https://github.com/kinderp/alfred/pull/246)
 - Audit README pubblici: [#247](https://github.com/kinderp/alfred/issues/247)
 - Audit man page inglesi: [#249](https://github.com/kinderp/alfred/issues/249)
+- Audit man page italiane: [#251](https://github.com/kinderp/alfred/issues/251)
 - MVP usability precedente: [49-mvp-operational-usability-v0.md](49-mvp-operational-usability-v0.md)
 - CLI parser v0: [50-cli-parser-v0.md](50-cli-parser-v0.md)
 - Roadmap CLI e pagina man: [19-roadmap-cli-e-man-page.md](19-roadmap-cli-e-man-page.md)

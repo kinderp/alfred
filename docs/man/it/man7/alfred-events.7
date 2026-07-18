@@ -247,17 +247,33 @@ essere registrati in modo prevedibile. In v0, un descriptor operations e'
 invalido quando:
 .IP \(bu 2
 il descriptor operations e' NULL;
-.IP \(bu 2
-.B name
-e' NULL o vuoto;
-.IP \(bu 2
-.B api_version
-e' diverso dalla versione supportata da Alfred;
-.IP \(bu 2
-una callback obbligatoria e' assente.
+.IP \(bu
+il nome backend e' NULL o vuoto;
+.IP \(bu
+la versione API non e' Backend API v0;
+.IP \(bu
+il descriptor capabilities e' NULL;
+.IP \(bu
+il nome backend delle capabilities e' NULL o vuoto;
+.IP \(bu
+il nome backend delle operations e quello delle capabilities non coincidono;
+.IP \(bu
+la versione API delle operations e quella delle capabilities non coincidono;
+.IP \(bu
+il campo flags delle capabilities e' zero;
+.IP \(bu
+una callback lifecycle e' NULL.
 .PP
-Questa pagina resta una panoramica operativa. I contratti dettagliati e le
-limitazioni staged sono mantenuti nei documenti di design italiani.
+Questi casi rifiutati fanno parte del contratto, non sono solo dettagli dei
+test. Sono documentati per fare fallire presto gli adapter backend futuri invece
+di registrare un backend ambiguo.
+.PP
+L'envelope di emit backend e' posseduto dal chiamante. Un backend puo' copiare
+il puntatore a funzione di emit e il valore userdata nel proprio runtime, ma
+non deve conservare l'indirizzo dell'envelope di emit stesso. Il backend non
+possiede userdata e non deve liberarlo. I record emessi tramite quella callback
+sono borrowed per la durata della callback, salvo quando il ricevente li clona
+esplicitamente.
 .SH SEE ALSO
 .BR alfred (1),
 .BR alfred.conf (5),

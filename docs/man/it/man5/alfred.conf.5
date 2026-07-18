@@ -13,12 +13,23 @@ I valori non sono quotati dal parser; il testo dopo il primo
 .B =
 viene usato come valore.
 .PP
-Il file viene caricato solo quando la variabile d'ambiente
+Il file puo' essere selezionato esplicitamente con
+.BR alfred (1)
+.B -c
+o
+.BR --config ,
+oppure tramite la variabile d'ambiente
 .B ALFRED_CONFIG
-punta al file:
+:
 .EX
+alfred -c ./alfred.conf /tmp/project
+alfred --config ./alfred.conf /tmp/project
+alfred --config=./alfred.conf /tmp/project
 ALFRED_CONFIG=./alfred.conf alfred /tmp/project
 .EE
+.PP
+Un file di configurazione esplicito passato dalla riga di comando vince su
+.BR ALFRED_CONFIG .
 .SH BOOLEAN VALUES
 I valori booleani true sono:
 .EX
