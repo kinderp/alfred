@@ -57,9 +57,11 @@ make release
 ```
 
 In questo percorso `install` e' deliberatamente copy-only: non dipende da
-`all` o `release`, non compila e fallisce prima di modificare lo stage se
-`./alfred` manca o non e' eseguibile. E' il test staged a eseguire
-`make release` come operazione precedente e non privilegiata.
+`all` o `release` e non compila. Prima di modificare lo stage esegue un
+preflight read-only di tutti i sette artefatti sorgente: `./alfred` deve essere
+un file regolare eseguibile e ciascuna pagina man deve essere un file regolare
+leggibile. E' il test staged a eseguire `make release` come operazione
+precedente e non privilegiata.
 
 La separazione evita che un comune `sudo make install` ricompili dentro il
 checkout creando file posseduti da root. V0 non puo' pero' dimostrare da solo
@@ -205,9 +207,11 @@ Mancano oggi:
 - una lista unica dei file posseduti dall'installazione.
 
 Il contratto raccomandato non deve colmare questo gap facendo dipendere
-`install` da `all` o `release`. Prima deve verificare che gli artefatti sorgente
-esistano; poi deve eseguire soltanto creazione delle directory e copie con modi
-espliciti. `uninstall` non deve avere dipendenze di build.
+`install` da `all` o `release`. Prima deve verificare tutti i sette artefatti
+sorgente senza modificare la destinazione; soltanto dopo un preflight completo
+puo' creare directory e copiare con modi espliciti. Se una sorgente manca, non
+e' regolare o non rispetta i requisiti di eseguibilita'/leggibilita', lo stage
+deve restare intatto. `uninstall` non deve avere dipendenze di build.
 
 ## Inventario degli artefatti installabili
 
@@ -325,8 +329,9 @@ Il test install v0 deve quindi essere dedicato e piccolo. Deve verificare:
 3. `--version` e `--help` tramite il path staged;
 4. `--check-config` con una configurazione temporanea valida;
 5. rendering con `man -l` di ciascuna delle sei man page;
-6. uninstall dei soli sette file;
-7. conservazione di un file sentinella estraneo nelle directory condivise.
+6. fallimento preflight senza modifiche allo stage quando manca una sorgente;
+7. uninstall dei soli sette file;
+8. conservazione di un file sentinella estraneo nelle directory condivise.
 
 La lane stage-install di riferimento deve rendere disponibile `man` e deve
 fallire se il comando manca o se anche una sola delle sei pagine non viene
@@ -334,6 +339,11 @@ renderizzata. Non e' ammesso trasformare l'assenza del renderer in uno skip
 silenzioso. Una lane ridotta di una distribuzione puo' omettere questo controllo
 soltanto se dichiara esplicitamente la riduzione nell'evidenza della lane e se
 la lane di riferimento obbligatoria continua a possedere il controllo completo.
+
+Il caso negativo del preflight deve rendere temporaneamente indisponibile una
+delle sei sorgenti man, aspettarsi uno status non-zero e verificare che sotto
+`DESTDIR` non sia stata creata o modificata alcuna destinazione. Il cleanup del
+test deve ripristinare la sorgente anche in caso di errore.
 
 Lo smoke MVP puo' essere aggiunto come prova successiva passando
 `ALFRED_BIN=<stage>/usr/bin/alfred`. Non deve sostituire il test di ownership
@@ -430,7 +440,8 @@ v0 sono contratti distinti e non devono essere dedotte l'una dall'altra.
 
 1. variabili `PREFIX`, `DESTDIR`, `BINDIR` e `MANDIR`;
 2. lista unica dei sette file installati;
-3. ricetta `install` copy-only con preflight e modi espliciti;
+3. ricetta `install` copy-only con preflight di tutte le sorgenti e modi
+   espliciti;
 4. ricetta `uninstall` senza dipendenze di build;
 5. stage test non-root che esegue prima `make release`, con file sentinella;
 6. documentazione Makefile aggiornata.

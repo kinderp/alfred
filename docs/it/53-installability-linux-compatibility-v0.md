@@ -459,8 +459,12 @@ Il confine build/install v0 e' esplicito:
 
 - `install` copia soltanto artefatti gia' costruiti;
 - `install` non dipende da `all` o `release` e non invoca il compilatore;
-- se `$(TARGET)` manca o non e' eseguibile, `install` fallisce prima di
-  modificare `DESTDIR`;
+- prima di creare directory o copiare file, `install` esegue un preflight
+  read-only di tutti i sette artefatti sorgente;
+- `$(TARGET)` deve essere un file regolare ed eseguibile e ciascuna delle sei
+  pagine man deve essere un file regolare leggibile;
+- se una precondizione fallisce, `install` termina senza creare o modificare
+  nulla sotto `DESTDIR`;
 - il test staged esegue `make release` come passo separato prima di `install`;
 - un eventuale comando privilegiato deve riguardare soltanto la copia, non la
   compilazione dentro il checkout.
@@ -498,7 +502,8 @@ Il futuro test staging deve verificare almeno:
 5. `alfred --help` dal path staged;
 6. `alfred --check-config` dal path staged;
 7. rendering con `man -l` di ciascuna delle sei pagine man staged;
-8. uninstall staged senza lasciare file posseduti da Alfred.
+8. fallimento preflight senza modifiche a `DESTDIR` quando manca una sorgente;
+9. uninstall staged senza lasciare file posseduti da Alfred.
 
 Il test non deve richiedere root e non deve scrivere fuori dalla directory
 temporanea.
@@ -509,6 +514,11 @@ non viene renderizzata. L'assenza di `man` non e' un successo e non puo' essere
 uno skip silenzioso. Una lane ridotta della matrice puo' omettere il rendering
 solo dichiarandolo nella propria evidenza, mentre la lane di riferimento
 obbligatoria continua a verificare tutte le pagine.
+
+Il caso negativo del preflight deve rendere temporaneamente indisponibile una
+delle sorgenti man, invocare `install` e verificare sia lo status non-zero sia
+l'assenza di qualsiasi nuova directory o file nello stage. Il test deve poi
+ripristinare la sorgente anche quando una verifica fallisce.
 
 ## Evidenza ambiente
 
