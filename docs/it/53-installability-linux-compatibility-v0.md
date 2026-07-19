@@ -655,6 +655,21 @@ permanente. `kernel_scope=shared-github-runner-kernel` impedisce di interpretare
 tre lane userspace come tre kernel guest. `run_id` e `run_attempt` sono stringhe
 decimali per non dipendere dai limiti numerici di consumer JSON diversi.
 
+`source_revision` riceve il valore GitHub `${{ github.sha }}` e identifica la
+revisione effettivamente sottoposta al job. Il significato dipende dall'evento:
+
+- in una run `push` su `main` coincide normalmente con il commit appena
+  pubblicato;
+- in una run `pull_request` puo' essere il commit sintetico
+  `refs/pull/<numero>/merge` creato da GitHub per provare insieme branch e base,
+  quindi puo' differire dall'HEAD del branch proposto.
+
+Questa differenza non rende l'evidence incoerente: il merge ref e' proprio
+l'albero provato dal job. Un consumer non deve pero' interpretare
+`source_revision` come sinonimo universale di branch HEAD. Deve usare anche
+`ci.run_id`, `ci.run_attempt` e i metadati GitHub della run per distinguere
+push, pull request e relativo contesto.
+
 `source_tree_filesystem_type` descrive il filesystem che ospita la root del
 checkout, ricavata dal percorso del generatore; non descrive necessariamente la
 root del container e non dipende dalla directory corrente del chiamante. Le
@@ -718,6 +733,94 @@ almeno una di queste condizioni e' vera:
 
 Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 
+## Esito della readiness audit v0
+
+La readiness audit finale e' tracciata dalla
+[issue #272](https://github.com/kinderp/alfred/issues/272). E' stata eseguita
+il 19 luglio 2026 sulla revisione
+[`9e2b05c`](https://github.com/kinderp/alfred/commit/9e2b05c99235a2e8a71fe3c27b70e7b9b48b17c5),
+dopo avere corretto nella
+[issue #273](https://github.com/kinderp/alfred/issues/273) una race del solo
+fixture di test delle sonde bounded. La correzione non ha cambiato runtime,
+schema evidence, limiti di produzione o contratto di installazione.
+
+La superficie locale verificata e' stata:
+
+| Prova | Esito | Cosa dimostra |
+| --- | --- | --- |
+| `make test` | Passed | core, correlazione e strutture dati di base |
+| `make test-cli` | Passed | contratto del parser CLI |
+| `make test-scanner` | Passed | scanner filesystem |
+| `make test-watcher` | Passed | wrapper watcher focalizzato |
+| `make test-backend-diagnostics` | Passed | diagnostica e percorso backend reale |
+| `make test-jsonl` | Passed | contratto pubblico JSONL rappresentativo |
+| `make test-compatibility-evidence` | Passed | generatore, validatore, limiti e lifecycle delle sonde |
+| `PYTHONOPTIMIZE=1 make test-compatibility-evidence` | Passed | il contratto non dipende dagli `assert` Python |
+| `make smoke-mvp` | Passed | percorso utente MVP end-to-end |
+| `make test-install` | Passed | release, sette artifact staged, CLI/man page, preflight, ownership e uninstall |
+
+`make test-install` e' stato eseguito per ultimo perche' ricostruisce il profilo
+release. La VM locale ha stampato un avviso di clock skew su alcuni dependency
+file con timestamp poco piu' avanti dell'orologio corrente; il target ha
+comunque ricostruito la release e completato tutte le verifiche staged. Questo
+e' un limite ambientale da annotare, non evidenza di incompatibilita' del
+runtime.
+
+### Coerenza della documentazione
+
+L'audit non ha controllato soltanto i comandi. Ha confrontato anche le superfici
+che descrivono il contratto a utenti, contributori e studenti:
+
+| Superficie | Verifica ed esito |
+| --- | --- |
+| `README.md` e `README.it.md` | comandi install/staging, tre userspace testati, assenza di promessa stabile e kernel condiviso allineati |
+| `09-makefile-e-build-system.md` | variabili di layout, sette artifact, build release, preflight e trust boundary allineati |
+| `10-debugging-test-e-strumenti.md` | target staged/evidence e fixture bounded corretto dalla issue #273 allineati |
+| `11-come-contribuire.md` | job di riferimento, matrice userspace, dipendenze e artifact CI allineati |
+| sei pagine man EN/IT | tutte renderizzate dal test staged; nessun claim di compatibilita' in conflitto |
+| `54-audit-installazione-ci-v0.md` | fotografia storica preservata e collegata allo stato implementato |
+| `37-roadmap-milestone-progetto.md` | stato, durata reale, risultato e lavoro rimandato aggiornati |
+| `27-guida-lettura-documentazione.md` | corretto l'unico drift trovato: il layout non e' piu' soltanto proposto, ma implementato |
+
+Non sono emerse altre divergenze. In particolare, nessuna delle superfici
+controllate trasforma le lane container in copertura multi-kernel o gli
+ambienti testati in una promessa generale di supporto.
+
+Sul commit auditato sono passati sia il
+[job CI di riferimento](https://github.com/kinderp/alfred/actions/runs/29673681506)
+sia la
+[matrice userspace](https://github.com/kinderp/alfred/actions/runs/29673681495).
+I tre artifact scaricati e analizzati contengono:
+
+| Lane | Compilatore | libc | Risultati | Scope kernel |
+| --- | --- | --- | --- | --- |
+| Ubuntu 24.04 | GCC 13.3.0 | glibc 2.39 | staged-install e smoke `passed` | runner condiviso `6.17.0-1020-azure` |
+| Debian 13 | GCC 14.2.0 | glibc 2.41 | staged-install e smoke `passed` | runner condiviso `6.17.0-1020-azure` |
+| Fedora 44 | GCC 16.1.1 | glibc 2.43 | staged-install e smoke `passed` | runner condiviso `6.17.0-1020-azure` |
+
+Tutti e tre dichiarano schema `alfred.compatibility-evidence` versione 0,
+`source_revision=9e2b05c99235a2e8a71fe3c27b70e7b9b48b17c5`, run
+`29673681495`, architettura `x86_64`, filesystem della source tree
+`ext2/ext3`, profilo release senza sanitizer e
+`kernel_scope=shared-github-runner-kernel`.
+
+Questa evidenza chiude il perimetro v0: Alfred e' **testato**, non ancora
+promesso come supportato, nei tre userspace elencati. Restano esplicitamente
+rimandati packaging `.deb`/`.rpm`, systemd, musl, altre architetture, VM con
+guest kernel, virtme-ng, tmt, CodeQL e fuzzing. Questi elementi non sono
+fallimenti della milestone: sono livelli distinti che richiedono una futura
+issue e criteri di adozione gia' descritti in questo documento.
+
+Il job CI della PR di chiusura e' passato, ma GitHub ha anche segnalato che
+`actions/checkout@v4` e `actions/upload-artifact@v4` dichiarano ancora il
+runtime Node.js 20 deprecato e vengono forzati sul runtime Node.js 24. Il
+warning non invalida i risultati v0; resta pero' un debito di affidabilita' e
+supply-chain tracciato nella
+[issue #276](https://github.com/kinderp/alfred/issues/276). La scelta della
+versione sostitutiva per entrambe le action e della policy di pinning richiede
+una modifica CI separata, non un aggiornamento opportunistico dentro questa
+chiusura.
+
 ## Checklist della milestone
 
 | Item | Stato | Note |
@@ -728,7 +831,7 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 | Test stage-install | Done | Issue #266; binario, sei man page, CLI, layout, preflight e ownership |
 | Prima matrice distribuzioni/userspace | Done | Issue #268; Ubuntu 24.04, Debian 13 e Fedora 44, tutte sul kernel condiviso del runner |
 | Evidenza ambiente e wording di supporto | Done | Issue #270; JSON v0 per lane, artifact sempre tentato e claim pubblici limitati a userspace testati |
-| Readiness closure | Todo | Documenti, CI e issue GitHub allineati |
+| Readiness closure | Done | [Issue #272](https://github.com/kinderp/alfred/issues/272) e [PR #275](https://github.com/kinderp/alfred/pull/275); suite locali, CI, tre artifact e dichiarazioni pubbliche verificati |
 
 ## Test e validazione
 

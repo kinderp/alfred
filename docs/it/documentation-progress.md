@@ -2125,3 +2125,22 @@ una race nel fixture che verifica il cleanup dei process group delle sonde. Il
 test non riduce piu' il timeout a 200 ms: crea deterministicamente il PID del
 discendente prima di superare il limite di output, cosi' il fallimento esercita
 lo stesso cleanup bounded senza dipendere dallo scheduling della macchina CI.
+
+Aggiornamento finale: la readiness audit #272 ha verificato sul commit
+`9e2b05c` tutte le suite locali rilevanti, il job CI di riferimento e le tre
+lane userspace. Gli artifact Ubuntu 24.04, Debian 13 e Fedora 44 condividono
+schema v0, revisione e run esatti, riportano staged-install e smoke `passed` e
+dichiarano esplicitamente il kernel condiviso del runner. La milestone e' quindi
+chiusa nel suo perimetro v0: installazione staged e userspace testati sono
+evidenza consegnata; packaging, systemd, musl, altre architetture, VM/kernel,
+tmt, CodeQL e fuzzing restano lavoro futuro dichiarato. Il warning GitHub che
+forza `actions/checkout@v4` e `actions/upload-artifact@v4` dal runtime Node.js
+20 deprecato a Node.js 24 e' tracciato separatamente dalla issue #276: non
+invalida i job verdi della readiness, ma richiede un aggiornamento e una
+decisione di pinning dedicati.
+
+La stessa review ha chiarito il contratto di provenienza degli artifact:
+`source_revision` e' il `${{ github.sha }}` realmente testato. Su `push`
+identifica normalmente il commit pubblicato; su `pull_request` puo' identificare
+il merge ref sintetico e quindi differire dall'HEAD del branch. Run ID, attempt
+e metadati GitHub completano l'interpretazione.

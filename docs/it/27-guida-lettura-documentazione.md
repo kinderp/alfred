@@ -56,7 +56,7 @@ entrare subito nei dettagli interni.
    spiega come README, pagine man e documentazione didattica devono restare
    coerenti dopo la stabilizzazione del parser CLI.
 6. [Installability and Linux compatibility v0](53-installability-linux-compatibility-v0.md)
-   spiega il layout di installazione proposto, come provarlo senza privilegi e
+   spiega il layout di installazione implementato, come provarlo senza privilegi e
    perche' container, VM e kernel specifici dimostrano aspetti diversi della
    compatibilita' Linux.
 7. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)

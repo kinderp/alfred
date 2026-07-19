@@ -860,6 +860,15 @@ repository. Non e' un commit e non modifica il prodotto. Serve a poter
 scaricare in seguito la prova esatta associata a una run, invece di dipendere
 solo dal testo temporaneo del log.
 
+Il campo `source_revision` indica la revisione realmente testata dal workflow,
+non sempre l'HEAD visibile del branch. In una run `push` e' normalmente il
+commit pubblicato; in una run `pull_request`, `${{ github.sha }}` puo' indicare
+il merge commit sintetico `refs/pull/<numero>/merge` creato da GitHub. Per
+ricostruire la provenienza bisogna quindi leggere insieme `source_revision`,
+`ci.run_id`, `ci.run_attempt` e i metadati della run/PR. Una differenza fra
+branch HEAD e merge ref non e' da sola un errore: significa che GitHub ha
+verificato l'integrazione proposta con la base corrente.
+
 Il record contiene esclusivamente campi ammessi: versione schema, revisione,
 run CI, lane, immagine, distribuzione, architettura, libc, compilatore,
 filesystem della root sorgente, kernel e relativo scope, profilo build,
