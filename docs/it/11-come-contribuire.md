@@ -305,6 +305,7 @@ passaggio.
 Prima di aprire una PR, esegui almeno:
 
 ```bash
+make test-ci-policy
 make
 make test
 make test-backend-diagnostics
@@ -481,6 +482,7 @@ I workflow si trovano in:
 Il workflow `CI` e' il gate completo di riferimento ed esegue:
 
 ```bash
+make test-ci-policy
 make
 make test
 make test-cli
@@ -746,6 +748,9 @@ I passi di verifica rispecchiano comandi disponibili anche a un contributore in
 locale:
 
 ```yaml
+- name: Validate GitHub Actions pinning policy
+  run: make test-ci-policy
+
 - name: Build
   run: make
 
@@ -763,6 +768,9 @@ locale:
 
 - name: Run JSONL golden tests
   run: make test-jsonl
+
+- name: Validate compatibility evidence contract
+  run: make test-compatibility-evidence
 
 - name: Run staged installation tests
   run: make test-install
