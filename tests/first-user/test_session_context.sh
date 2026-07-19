@@ -9,11 +9,32 @@ SESSION_ID="FU-TEST-$$"
 OUTPUT_FILE="$(mktemp /tmp/alfred_first_user_context_output.XXXXXX)"
 SESSION_ROOT=''
 
+session_root_is_safe_for_cleanup() {
+    local candidate="$1"
+    local canonical
+
+    [[ "$candidate" =~ ^/tmp/alfred-first-user-${SESSION_ID}\.[[:alnum:]]{6}$ ]] ||
+        return 1
+    [[ -d "$candidate" && ! -L "$candidate" && -O "$candidate" ]] ||
+        return 1
+    canonical="$(cd -- "$candidate" && pwd -P)" || return 1
+    [[ "$candidate" == "$canonical" ]]
+}
+
 cleanup() {
-    rm -f -- "$OUTPUT_FILE"
-    if [[ -n "$SESSION_ROOT" && -d "$SESSION_ROOT" ]]; then
-        find "$SESSION_ROOT" -depth -delete
+    local status=$?
+
+    rm -f -- "$OUTPUT_FILE" || status=1
+    if [[ -n "$SESSION_ROOT" ]]; then
+        if session_root_is_safe_for_cleanup "$SESSION_ROOT"; then
+            find "$SESSION_ROOT" -depth -delete || status=1
+        else
+            printf 'REFUSED unsafe test cleanup root: %q\n' \
+                "$SESSION_ROOT" >&2
+            status=1
+        fi
     fi
+    return "$status"
 }
 trap cleanup EXIT
 
@@ -30,6 +51,11 @@ CONTEXT_FILE="$(sed -n 's/^Session context file (local only): //p' \
 
 [[ -n "$SESSION_ROOT" && -d "$SESSION_ROOT" ]] ||
     fail 'create did not produce a session root'
+session_root_is_safe_for_cleanup "$SESSION_ROOT" ||
+    fail 'create produced a session root outside the bounded cleanup contract'
+if session_root_is_safe_for_cleanup /tmp; then
+    fail 'cleanup safety predicate accepted /tmp'
+fi
 [[ "$CONTEXT_FILE" == "$SESSION_ROOT/session.env" ]] ||
     fail 'create printed an unexpected context path'
 [[ "$(stat -c '%a' "$SESSION_ROOT")" == '700' ]] ||
