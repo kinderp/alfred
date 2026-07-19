@@ -21,6 +21,19 @@ Se un audit trova un bug confermato, il bug deve diventare una issue separata
 su GitHub. Se lo scenario e' importante, deve poi essere trasformato in test
 ufficiale o golden test.
 
+## Audit notturno e validazione con primi utenti
+
+Un audit notturno e una validazione pre-release non sono intercambiabili.
+Nell'audit il maintainer o l'agente conosce gia' Alfred e cerca problemi con
+scenari mirati. Nella first-user validation una persona esterna prova anche
+installazione, documentazione e modello mentale: gli interventi del
+facilitatore, il consenso e la privacy diventano parte dell'evidenza.
+
+Quando una sessione coinvolge un primo utente bisogna seguire
+[First-user pre-release validation v0](../55-first-user-pre-release-validation-v0.md).
+Gli script e la struttura artifact degli audit possono essere riusati, ma non
+devono attivare raccolta nascosta o sostituire il consenso del partecipante.
+
 ## Tre modalita' di audit notturno
 
 Gli audit notturni non devono essere tutti uguali. Alfred ha bisogno di tre
