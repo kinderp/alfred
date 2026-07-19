@@ -113,6 +113,9 @@ printf '%s\n' \
 "$source_root/alfred" -c "$run_root/alfred.conf" --check-config
 
 # [029] 2026-07-19T09:04:33Z | runtime | terminal-1
+# REHEARSAL INTERVENTION: orchestration injected source_root, run_root and
+# watch_root into this terminal. The merged guide did not define the handoff.
+# See https://github.com/kinderp/alfred/issues/287.
 cd "$run_root"
 "$source_root/alfred" -c "$run_root/alfred.conf" "$watch_root"
 
@@ -120,6 +123,8 @@ cd "$run_root"
 rg -n 'WATCH_ADDED|application startup complete|event loop started' "$run_root/events.log"
 
 # [031] 2026-07-19T09:05:06Z | runtime | terminal-2
+# REHEARSAL INTERVENTION: orchestration injected watch_root into terminal-2.
+# This is evidence of the missing documented session-context handoff in #287.
 printf 'alpha\n' > "$watch_root/draft.txt"
 
 # [032] 2026-07-19T09:05:06Z | runtime | terminal-2
