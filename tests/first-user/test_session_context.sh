@@ -43,7 +43,8 @@ fail() {
     exit 1
 }
 
-bash "$HELPER" create "$SESSION_ID" > "$OUTPUT_FILE"
+[[ -x "$HELPER" ]] || fail 'the documented session-context helper is not executable'
+"$HELPER" create "$SESSION_ID" > "$OUTPUT_FILE"
 
 SESSION_ROOT="$(sed -n 's/^Session root (local only): //p' "$OUTPUT_FILE")"
 CONTEXT_FILE="$(sed -n 's/^Session context file (local only): //p' \
