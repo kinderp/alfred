@@ -241,6 +241,21 @@ events, representative watch/resync/lost-scope diagnostics, and
 .B SESSION_CONTEXT
 metadata when workspace or ledger session configuration is present.
 .PP
+For semantic filesystem records, create, delete, modify, and ready events use
+.B path
+and omit
+.B old_path
+and
+.BR new_path .
+Rename, move, and relocate events use
+.B old_path
+and
+.B new_path
+and omit
+.BR path .
+Global overflow omits all three fields. JSONL omits non-applicable NULL fields;
+consumers must not depend on redundant path aliases.
+.PP
 JSONL v0 is a golden-test and audit output for Alfred records. It is not the
 Backend API, not a complete lifecycle telemetry stream, and not a stable
 external plugin ABI.

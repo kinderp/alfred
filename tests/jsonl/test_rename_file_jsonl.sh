@@ -179,10 +179,12 @@ renames = [
     and record.get("type") == "FILE_RENAMED"
     and record.get("old_path") == old_path
     and record.get("new_path") == new_path
+    and "path" not in record
 ]
 if not renames:
     raise SystemExit(
-        "missing semantic FILE_RENAMED record with expected old_path/new_path"
+        "missing semantic FILE_RENAMED record with expected old_path/new_path "
+        "and no non-applicable path field"
     )
 PY
 then

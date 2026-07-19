@@ -47,10 +47,12 @@ int alfred_record_from_raw(const alfred_raw_event_t *raw,
  * @event: current semantic core event to describe
  * @out: destination record written by this function
  *
- * The output record is a semantic filesystem record. It borrows all string
- * memory from @event, especially event->src_path and event->dst_path. The
- * caller must keep @event and its pointed-to storage alive while @out is
- * consumed.
+ * The output record is a semantic filesystem record. Single-path events borrow
+ * event->src_path through record.path. Move, rename, and relocate events borrow
+ * event->src_path and event->dst_path through record.old_path and
+ * record.new_path; record.path remains NULL. Global overflow records leave all
+ * path fields NULL. The caller must keep @event and its pointed-to storage alive
+ * while @out is consumed.
  *
  * Return: 0 on success, -1 on invalid input or unsupported event type.
  */
