@@ -105,7 +105,9 @@ terminale coinvolto deve caricarlo attraverso il validator documentato prima di
 usare i path della sessione. Il validator deve rifiutare file mancanti,
 symlink, permessi diversi, chiavi duplicate o assenti, path non canonici e root
 che non siano discendenti della sessione. Non deve usare `eval` ne' assegnare
-variabili parziali dopo un errore.
+variabili parziali dopo un errore. Prima di validare un nuovo contesto deve
+inoltre invalidare le variabili pubbliche di una sessione precedente: un
+bootstrap fallito non puo' lasciare path stale ancora operativi.
 
 L'assenza di evidenza non vale come `PASS`. Un artifact che non puo' essere
 pubblicato per ragioni di privacy puo' restare locale, ma il report deve

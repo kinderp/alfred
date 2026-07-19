@@ -90,11 +90,27 @@ sed 's#^watch_root=.*#watch_root=/tmp#' "$CONTEXT_FILE" \
 mv -- "$SESSION_ROOT/session.env.new" "$CONTEXT_FILE"
 chmod 0600 -- "$CONTEXT_FILE"
 if ! bash -c '
-        unset watch_root
+        session_id=stale
+        repo_root=/stale
+        session_root=/stale
+        watch_root=/stale
+        run_root=/stale
+        stage_root=/stale
+        session_context=/stale
         if source "$1" load "$2"; then
             exit 10
         fi
-        [[ ! ${watch_root+x} ]] || exit 11
+        for variable in \
+            session_id \
+            repo_root \
+            session_root \
+            watch_root \
+            run_root \
+            stage_root \
+            session_context; do
+            [[ ! -v "$variable" ]] || exit 11
+        done
+        ! declare -F _alfred_first_user_load >/dev/null
     ' test "$HELPER" "$CONTEXT_FILE" >/dev/null 2>&1; then
     fail 'load accepted an out-of-scope root or assigned a partial context'
 fi

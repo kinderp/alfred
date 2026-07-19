@@ -116,8 +116,10 @@ session context OK
 
 Se il file manca, e' un symlink, e' stato modificato, ha permessi diversi o un
 path esce dalla root sacrificabile, il bootstrap fallisce senza assegnare un
-contesto parziale. Non ricostruire i path a mano e non proseguire. Il path
-completo e' materiale locale da sanificare; nel report pubblico usare
+contesto parziale. Un tentativo fallito cancella anche le variabili di una
+sessione caricata in precedenza, cosi' i comandi successivi non possono usare
+silenziosamente path stale. Non ricostruire i path a mano e non proseguire. Il
+path completo e' materiale locale da sanificare; nel report pubblico usare
 `<SESSION_ROOT>`, `<WATCH_ROOT>` e `<REPO_ROOT>`.
 
 ### Transcript manuale dei comandi

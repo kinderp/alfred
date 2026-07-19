@@ -12,6 +12,17 @@ _alfred_first_user_has_control_character() {
     [[ "$1" == *$'\n'* || "$1" == *$'\r'* || "$1" == *$'\t'* ]]
 }
 
+_alfred_first_user_clear_context() {
+    unset -v \
+        session_id \
+        repo_root \
+        session_root \
+        watch_root \
+        run_root \
+        stage_root \
+        session_context
+}
+
 _alfred_first_user_script_path() {
     local script_dir
 
@@ -315,6 +326,7 @@ _alfred_first_user_cleanup_functions() {
     unset -f \
         _alfred_first_user_error \
         _alfred_first_user_has_control_character \
+        _alfred_first_user_clear_context \
         _alfred_first_user_script_path \
         _alfred_first_user_repo_root \
         _alfred_first_user_create \
@@ -326,14 +338,21 @@ _alfred_first_user_cleanup_functions() {
 _alfred_first_user_source_entry() {
     local status
 
-    if [[ "${1:-}" != 'load' ]]; then
+    if ! _alfred_first_user_clear_context; then
+        _alfred_first_user_error \
+            'cannot clear a previously loaded session context'
+        status=1
+    elif [[ "${1:-}" != 'load' ]]; then
         _alfred_first_user_error \
             'source this helper with: source session-context.sh load CONTEXT_FILE'
         status=2
     else
         shift
-        _alfred_first_user_load "$@"
-        status=$?
+        if _alfred_first_user_load "$@"; then
+            status=0
+        else
+            status=$?
+        fi
     fi
 
     _alfred_first_user_cleanup_functions
