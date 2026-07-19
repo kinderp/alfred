@@ -1,4 +1,9 @@
 # Sanitized replay transcript for FU-20260719-R1.
+# Evidence only: do not execute or source this file as one script.
+# Replay one numbered entry at a time in the indicated terminal and role.
+# Keep entry 029 active in terminal-1 while entries 031-045 run in terminal-2,
+# then perform the Ctrl+C action in entry 046 before output and cleanup checks.
+# `bash -n` validates quoting and shell syntax only; it does not replay ordering.
 # Replace <REPO_ROOT> before replay. Session and watch roots are generated below.
 # Metadata comments are not commands. Commands preserve the executed shell form.
 
