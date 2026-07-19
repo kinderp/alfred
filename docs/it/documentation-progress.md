@@ -2119,3 +2119,9 @@ filesystem della root sorgente, scope kernel, profilo release ed esiti
 normalizzati di staged-install e smoke. README
 e guide distinguono esplicitamente userspace testati da ambienti supportati e
 da kernel realmente differenti.
+
+Durante la readiness review della milestone, la issue figlia #273 ha corretto
+una race nel fixture che verifica il cleanup dei process group delle sonde. Il
+test non riduce piu' il timeout a 200 ms: crea deterministicamente il PID del
+discendente prima di superare il limite di output, cosi' il fallimento esercita
+lo stesso cleanup bounded senza dipendere dallo scheduling della macchina CI.
