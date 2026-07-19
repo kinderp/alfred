@@ -23,6 +23,8 @@
 - [ ] Non e' attiva registrazione nascosta di terminale, schermo o telemetria.
 - [ ] `commands.txt` viene compilato manualmente durante la sessione, senza
       cronologia shell o cattura automatica.
+- [ ] Il contesto privato `session.env` resta locale, ha modo `0600` e viene
+      caricato con il bootstrap validato in ogni terminale.
 - [ ] L'eventuale uso di `sudo` riguarda solo dipendenze note ed e' stato
       accettato.
 
@@ -92,6 +94,7 @@ Usare solo `PASS`, `FAIL`, `NEEDS_REVIEW`, `BLOCKED` o `NOT_RUN`.
 | Man page staged | `<STATE>` | `<COMMAND/EXIT>` | `<NOTES>` |
 | Uninstall staged | `<STATE>` | `<COMMAND/FILES>` | `<NOTES>` |
 | Config JSONL | `<STATE>` | `<COMMAND/EXIT>` | `<NOTES>` |
+| Handoff contesto tra terminali | `<STATE>` | `<BOOTSTRAP/EXIT>` | `<NOTES>` |
 | Startup e `WATCH_ADDED` | `<STATE>` | `<LOG EXCERPT>` | `<NOTES>` |
 | Create/modify/file-ready | `<STATE>` | `<LOG/JSONL>` | `<NOTES>` |
 | Rename stesso parent | `<STATE>` | `<LOG/JSONL>` | `<NOTES>` |
@@ -150,6 +153,7 @@ Non inserire URL pubblici prima della sanificazione.
 | --- | --- | --- | --- | --- |
 | `environment.txt` | `<YES/NO>` | `<LOCAL/SANITIZED>` | `<HASH_OR_NONE>` | `<NOTES>` |
 | `commands.txt` | `<YES/NO>` | `<LOCAL/SANITIZED>` | `<HASH_OR_NONE>` | `<NOTES>` |
+| `session.env` | `<YES/NO>` | `LOCAL_ONLY` | `<HASH_OR_NONE>` | `<MODE/VALIDATION NOTES>` |
 | `raw.log` | `<YES/NO>` | `<LOCAL/EXCERPT>` | `<HASH_OR_NONE>` | `<NOTES>` |
 | `events.log` | `<YES/NO>` | `<LOCAL/EXCERPT>` | `<HASH_OR_NONE>` | `<NOTES>` |
 | `errors.log` | `<YES/NO>` | `<LOCAL/EXCERPT>` | `<HASH_OR_NONE>` | `<NOTES>` |
@@ -238,6 +242,7 @@ Motivazione delle classificazioni:
 - [ ] Nessun dump completo di ambiente o cronologia shell incluso.
 - [ ] Nessun contenuto estraneo ai file sintetici della sessione incluso.
 - [ ] Comandi e argomenti controllati singolarmente.
+- [ ] `session.env` e il bootstrap con i path reali non sono pubblicati.
 - [ ] Estratti log ridotti alle righe necessarie.
 - [ ] Link pubblici aggiunti solo dopo il controllo.
 - [ ] Artifact grezzi mantenuti locali o in storage approvato.

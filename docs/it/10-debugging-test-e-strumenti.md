@@ -500,6 +500,36 @@ Per esempio, `staged_install=failed` e `mvp_smoke=not_run` significa che la
 prova di installazione e' fallita e GitHub non ha avviato lo smoke successivo.
 Non significa che lo smoke sia passato o fallito.
 
+## Test del contesto first-user tra terminali
+
+Il comando:
+
+```bash
+make test-first-user
+```
+
+verifica l'helper usato dalla guida first-user senza avviare Alfred. Il runner
+crea una root privata, carica lo stesso `session.env` in due processi Bash
+distinti e controlla che entrambi ricevano gli stessi path canonici. I casi
+negativi provano modo della root e del file, chiave mancante, path fuori scope,
+assenza di assegnazioni parziali, symlink e contenuto che sarebbe eseguibile se
+il loader usasse `eval` o `source` sul file dati. Un fixture da `32769` byte
+prova anche che la dimensione venga rifiutata prima del parsing.
+
+Il percorso e':
+
+```text
+make test-first-user
+-> tests/first-user/run_all.sh
+-> tests/first-user/test_session_context.sh
+-> tools/first-user/session-context.sh create
+-> source tools/first-user/session-context.sh load <SESSION_ROOT>/session.env
+```
+
+La suite dimostra il contratto meccanico del bootstrap. Non misura onboarding,
+privacy organizzativa, comprensibilita' della guida o comportamento runtime:
+questi aspetti richiedono ancora rehearsal e sessioni first-user reali.
+
 ## Come sono strutturati i test shell
 
 I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,

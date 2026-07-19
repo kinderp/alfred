@@ -99,6 +99,18 @@ Regole obbligatorie:
    approvata esplicitamente dal partecipante;
 8. verificare il cleanup della root temporanea e dei processi Alfred al termine.
 
+La preparazione deve creare un file di contesto privato dentro la root
+sacrificabile, con modo `0600`, e stampare un unico bootstrap shell-safe. Ogni
+terminale coinvolto deve caricarlo attraverso il validator documentato prima di
+usare i path della sessione. Il validator deve rifiutare file mancanti,
+symlink, permessi diversi, chiavi duplicate o assenti, path non canonici e root
+che non siano discendenti della sessione. Non deve usare `eval` ne' assegnare
+variabili parziali dopo un errore. Prima di validare un nuovo contesto deve
+inoltre invalidare le variabili pubbliche di una sessione precedente: un
+bootstrap fallito non puo' lasciare path stale ancora operativi. Il file dati
+deve essere rifiutato prima del parsing se e' vuoto o supera `32768` byte, cosi'
+anche la gestione di input corrotto resta bounded.
+
 L'assenza di evidenza non vale come `PASS`. Un artifact che non puo' essere
 pubblicato per ragioni di privacy puo' restare locale, ma il report deve
 indicare che esiste, chi lo conserva e quali conclusioni limitate supporta.
@@ -287,6 +299,7 @@ Una sessione puo' usare questa struttura locale:
 
 ```text
 /tmp/alfred-first-user-SESSION_ID/
+  session.env
   environment.txt
   commands.txt
   expected-actual.md
@@ -300,12 +313,20 @@ Una sessione puo' usare questa struttura locale:
 Prima di qualsiasi upload va prodotta una copia sanificata. Il repository
 conserva protocollo, template, report sintetici, comandi riproducibili e link;
 non deve ricevere automaticamente log completi o file del partecipante.
+`session.env` resta sempre locale: non e' un artifact da pubblicare perche'
+contiene i path reali usati dai terminali.
 
 La prima rehearsal controllata e' documentata nel
 [report FU-20260719-R1](first-user/rehearsals/FU-20260719-R1-report.md), con
 [transcript sanificato](first-user/rehearsals/FU-20260719-R1-commands.txt). La
 rehearsal verifica il protocollo ma non sostituisce una sessione esterna e non
 contribuisce alle metriche di usabilita'.
+
+Il finding P1 sul passaggio di contesto tra terminali emerso in R1 e' stato
+verificato nuovamente nella
+[rehearsal focalizzata FU-20260719-R2](first-user/rehearsals/FU-20260719-R2-context-handoff.md),
+con processi Bash separati e senza iniezione diretta dei path. Anche R2 resta
+una prova del maintainer, non una sessione first-user indipendente.
 
 ## Criteri di uscita
 
