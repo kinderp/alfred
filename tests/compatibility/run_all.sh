@@ -128,9 +128,9 @@ if not os.path.isabs(module.SOURCE_TREE_ROOT):
     raise SystemExit("source-tree filesystem probe target is not absolute")
 PY
 
-HANGING_PROBE="$TEST_DIR/hanging-probe"
-DESCENDANT_PID_FILE="$TEST_DIR/hanging-descendant.pid"
-cat >"$HANGING_PROBE" <<'PY'
+OVERSIZED_GROUP_PROBE="$TEST_DIR/oversized-group-probe"
+DESCENDANT_PID_FILE="$TEST_DIR/oversized-group-descendant.pid"
+cat >"$OVERSIZED_GROUP_PROBE" <<'PY'
 #!/usr/bin/env python3
 import os
 import time
@@ -142,24 +142,24 @@ if descendant_pid == 0:
 
 with open(os.environ["ALFRED_TEST_DESCENDANT_PID_FILE"], "w", encoding="ascii") as stream:
     stream.write(f"{descendant_pid}\n")
+os.write(1, b"x" * 8192)
 os._exit(0)
 PY
-chmod +x "$HANGING_PROBE"
+chmod +x "$OVERSIZED_GROUP_PROBE"
 ALFRED_TEST_DESCENDANT_PID_FILE="$DESCENDANT_PID_FILE" \
-    python3 - "$GENERATOR" "$HANGING_PROBE" "$DESCENDANT_PID_FILE" <<'PY'
+    python3 - "$GENERATOR" "$OVERSIZED_GROUP_PROBE" "$DESCENDANT_PID_FILE" <<'PY'
 import importlib.util
 import os
 import sys
 import time
 
-generator_path, hanging_probe, descendant_pid_file = sys.argv[1:]
+generator_path, oversized_group_probe, descendant_pid_file = sys.argv[1:]
 spec = importlib.util.spec_from_file_location("compatibility_evidence", generator_path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-module.PROBE_TIMEOUT_SECONDS = 0.2
 
-if module.command_output([hanging_probe]) != module.UNKNOWN:
-    raise SystemExit("timed-out probe did not degrade to unknown")
+if module.command_output([oversized_group_probe]) != module.UNKNOWN:
+    raise SystemExit("oversized process-group probe did not degrade to unknown")
 
 with open(descendant_pid_file, encoding="ascii") as stream:
     descendant_pid = int(stream.read())
@@ -174,7 +174,7 @@ for _ in range(50):
         break
     time.sleep(0.02)
 else:
-    raise SystemExit("timed-out probe left a running descendant")
+    raise SystemExit("oversized process-group probe left a running descendant")
 PY
 
 NOISY_COMPILER="$TEST_DIR/noisy-cc"

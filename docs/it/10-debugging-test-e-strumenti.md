@@ -478,9 +478,13 @@ Il limite viene applicato durante la lettura dal processo figlio: troncare il
 valore soltanto dopo aver catturato tutto l'output non sarebbe bounded, perche'
 un comando difettoso potrebbe prima consumare memoria senza limite. La sessione
 separata serve anche al lifecycle: se un wrapper termina lasciando un
-discendente con stdout ereditato, il timeout deve chiudere l'intero gruppo e non
-lasciare un processo orfano attivo. Il test dedicato riduce il timeout, crea
-questa situazione e verifica che il discendente non resti in esecuzione.
+discendente con stdout ereditato, un fallimento deve chiudere l'intero gruppo e
+non lasciare un processo orfano attivo. Il fixture dedicato scrive e chiude
+prima il PID del discendente, poi supera deterministicamente il limite di 4096
+byte ed esce. `command_output()` deve restituire `unknown` e il test verifica
+che il discendente non resti in esecuzione. Non viene usato un timeout ridotto:
+in quel caso lo scheduler potrebbe terminare il fixture prima della creazione
+del PID file e rendere il test flaky invece di provare il cleanup.
 
 Gli esiti salvati sono:
 
