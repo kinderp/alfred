@@ -180,6 +180,16 @@ def compiler_info():
     return compiler_id, version
 
 
+def source_tree_filesystem_type():
+    """Return the filesystem type for the deterministic source-tree root."""
+    filesystem_type = command_output(
+        ["stat", "-f", "-c", "%T", SOURCE_TREE_ROOT]
+    )
+    if filesystem_type.upper().startswith("UNKNOWN"):
+        return UNKNOWN
+    return filesystem_type
+
+
 def normalize_status(raw_status, field_name):
     """Map GitHub step outcomes to the public evidence status vocabulary."""
     try:
@@ -245,11 +255,7 @@ def build_evidence(arguments):
         kernel_release = bounded_value(platform.release(), "kernel_release")
     except ValueError:
         kernel_release = UNKNOWN
-    source_tree_filesystem_type = command_output(
-        ["stat", "-f", "-c", "%T", SOURCE_TREE_ROOT]
-    )
-    if source_tree_filesystem_type.upper().startswith("UNKNOWN"):
-        source_tree_filesystem_type = UNKNOWN
+    filesystem_type = source_tree_filesystem_type()
 
     return {
         "schema": SCHEMA_NAME,
@@ -272,7 +278,7 @@ def build_evidence(arguments):
             "architecture": architecture,
             "libc": {"name": libc_name, "version": libc_version},
             "compiler": {"id": compiler_id, "version": compiler_version},
-            "source_tree_filesystem_type": source_tree_filesystem_type,
+            "source_tree_filesystem_type": filesystem_type,
             "kernel_release": kernel_release,
             "kernel_scope": arguments.kernel_scope,
         },

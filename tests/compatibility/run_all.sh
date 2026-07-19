@@ -95,23 +95,37 @@ for forbidden in ("hostname", "username", "workspace", "environment_variables"):
     require(forbidden not in serialized, f"forbidden field present: {forbidden}")
 PY
 
-CWD_INDEPENDENT_EVIDENCE="$TEST_DIR/cwd-independent.json"
-(
-    cd "$TEST_DIR"
-    generate "$CWD_INDEPENDENT_EVIDENCE" success skipped
-)
-python3 - "$EVIDENCE" "$CWD_INDEPENDENT_EVIDENCE" <<'PY'
-import json
+python3 - "$GENERATOR" "$TEST_DIR" <<'PY'
+import importlib.util
+import os
 import sys
 
-with open(sys.argv[1], encoding="utf-8") as stream:
-    reference = json.load(stream)
-with open(sys.argv[2], encoding="utf-8") as stream:
-    from_unrelated_cwd = json.load(stream)
+generator_path, unrelated_cwd = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("compatibility_evidence", generator_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
 
-field = "source_tree_filesystem_type"
-if reference["environment"][field] != from_unrelated_cwd["environment"][field]:
-    raise SystemExit("source-tree filesystem type depends on the caller cwd")
+commands = []
+
+def record_command(command):
+    commands.append(command)
+    return "testfs"
+
+module.command_output = record_command
+previous_cwd = os.getcwd()
+try:
+    os.chdir(unrelated_cwd)
+    filesystem_type = module.source_tree_filesystem_type()
+finally:
+    os.chdir(previous_cwd)
+
+expected = [["stat", "-f", "-c", "%T", module.SOURCE_TREE_ROOT]]
+if filesystem_type != "testfs":
+    raise SystemExit("source-tree filesystem probe did not return its bounded value")
+if commands != expected:
+    raise SystemExit(f"source-tree filesystem probe used unexpected command: {commands!r}")
+if not os.path.isabs(module.SOURCE_TREE_ROOT):
+    raise SystemExit("source-tree filesystem probe target is not absolute")
 PY
 
 NOISY_COMPILER="$TEST_DIR/noisy-cc"

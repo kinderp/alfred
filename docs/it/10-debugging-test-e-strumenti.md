@@ -451,6 +451,7 @@ Le funzioni hanno responsabilita' separate:
 | `distribution_info()` | legge solo ID e versione della distribuzione, senza copiare tutto `os-release` |
 | `libc_info()` | rileva nome e versione libc oppure restituisce `unknown` |
 | `compiler_info()` | rileva compilatore e versione con output limitato |
+| `source_tree_filesystem_type()` | usa `command_output()` per interrogare con `stat` la root sorgente assoluta e deterministica |
 | `command_output()` | legge progressivamente al massimo 4096 byte per sonda, applica un timeout di 5 secondi, termina e raccoglie sempre il processo figlio e converte limite, timeout, indisponibilita' o errore in `unknown` |
 | `normalize_status()` | traduce gli outcome GitHub nel vocabolario pubblico degli esiti |
 | `build_evidence()` | costruisce esattamente lo schema v0 dopo la validazione |
@@ -465,7 +466,10 @@ sonda, indipendenza dalla directory corrente e assenza dei principali campi
 sensibili. `source_tree_filesystem_type` misura sempre il filesystem che ospita
 la root sorgente ricavata dal percorso del generatore: non indica genericamente
 il filesystem root del container e non dipende dalla directory da cui viene
-lanciato il comando. I controlli Python non usano
+lanciato il comando. Il test sostituisce `command_output()` con un recorder e
+controlla direttamente che l'argomento di `stat` sia la root assoluta: il solo
+confronto tra due nomi di filesystem non basterebbe, perche' checkout e `/tmp`
+possono trovarsi sullo stesso mount. I controlli Python non usano
 `assert`, perche' `python -O` e `PYTHONOPTIMIZE` lo eliminerebbero producendo un
 falso test verde: ogni mancata corrispondenza solleva invece esplicitamente
 `SystemExit`.
