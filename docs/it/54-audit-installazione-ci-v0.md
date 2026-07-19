@@ -43,6 +43,15 @@ evidenza scaricabile e versionata: ogni lane prova a pubblicare un JSON v0 con
 ambiente, provenienza ed esiti normalizzati. Il formato non cambia la fotografia
 pre-implementazione di questo audit; il contratto vigente resta nella roadmap.
 
+La readiness audit finale
+[#272](https://github.com/kinderp/alfred/issues/272) ha poi verificato il
+contratto implementato sul commit `9e2b05c`: tutte le suite locali rilevanti,
+il job CI di riferimento e le tre lane userspace sono passati. Gli artifact
+Ubuntu 24.04, Debian 13 e Fedora 44 riportano lo stesso commit, schema v0,
+staged-install e smoke `passed` e lo scope kernel condiviso del runner. I
+dettagli e i limiti residui sono registrati nella sezione
+`Esito della readiness audit v0` della roadmap della milestone.
+
 Le sezioni che seguono restano al passato come evidenza storica del problema e
 delle motivazioni. Il contratto vigente e' descritto nella
 [roadmap della milestone](53-installability-linux-compatibility-v0.md), nella

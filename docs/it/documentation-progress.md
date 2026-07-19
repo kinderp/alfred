@@ -2125,3 +2125,12 @@ una race nel fixture che verifica il cleanup dei process group delle sonde. Il
 test non riduce piu' il timeout a 200 ms: crea deterministicamente il PID del
 discendente prima di superare il limite di output, cosi' il fallimento esercita
 lo stesso cleanup bounded senza dipendere dallo scheduling della macchina CI.
+
+Aggiornamento finale: la readiness audit #272 ha verificato sul commit
+`9e2b05c` tutte le suite locali rilevanti, il job CI di riferimento e le tre
+lane userspace. Gli artifact Ubuntu 24.04, Debian 13 e Fedora 44 condividono
+schema v0, revisione e run esatti, riportano staged-install e smoke `passed` e
+dichiarano esplicitamente il kernel condiviso del runner. La milestone e' quindi
+chiusa nel suo perimetro v0: installazione staged e userspace testati sono
+evidenza consegnata; packaging, systemd, musl, altre architetture, VM/kernel,
+tmt, CodeQL e fuzzing restano lavoro futuro dichiarato.
