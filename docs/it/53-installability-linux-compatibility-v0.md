@@ -724,9 +724,10 @@ La readiness audit finale e' tracciata dalla
 [issue #272](https://github.com/kinderp/alfred/issues/272). E' stata eseguita
 il 19 luglio 2026 sulla revisione
 [`9e2b05c`](https://github.com/kinderp/alfred/commit/9e2b05c99235a2e8a71fe3c27b70e7b9b48b17c5),
-dopo avere corretto nella issue #273 una race del solo fixture di test delle
-sonde bounded. La correzione non ha cambiato runtime, schema evidence, limiti
-di produzione o contratto di installazione.
+dopo avere corretto nella
+[issue #273](https://github.com/kinderp/alfred/issues/273) una race del solo
+fixture di test delle sonde bounded. La correzione non ha cambiato runtime,
+schema evidence, limiti di produzione o contratto di installazione.
 
 La superficie locale verificata e' stata:
 
@@ -749,6 +750,26 @@ file con timestamp poco piu' avanti dell'orologio corrente; il target ha
 comunque ricostruito la release e completato tutte le verifiche staged. Questo
 e' un limite ambientale da annotare, non evidenza di incompatibilita' del
 runtime.
+
+### Coerenza della documentazione
+
+L'audit non ha controllato soltanto i comandi. Ha confrontato anche le superfici
+che descrivono il contratto a utenti, contributori e studenti:
+
+| Superficie | Verifica ed esito |
+| --- | --- |
+| `README.md` e `README.it.md` | comandi install/staging, tre userspace testati, assenza di promessa stabile e kernel condiviso allineati |
+| `09-makefile-e-build-system.md` | variabili di layout, sette artifact, build release, preflight e trust boundary allineati |
+| `10-debugging-test-e-strumenti.md` | target staged/evidence e fixture bounded corretto dalla issue #273 allineati |
+| `11-come-contribuire.md` | job di riferimento, matrice userspace, dipendenze e artifact CI allineati |
+| sei pagine man EN/IT | tutte renderizzate dal test staged; nessun claim di compatibilita' in conflitto |
+| `54-audit-installazione-ci-v0.md` | fotografia storica preservata e collegata allo stato implementato |
+| `37-roadmap-milestone-progetto.md` | stato, durata reale, risultato e lavoro rimandato aggiornati |
+| `27-guida-lettura-documentazione.md` | corretto l'unico drift trovato: il layout non e' piu' soltanto proposto, ma implementato |
+
+Non sono emerse altre divergenze. In particolare, nessuna delle superfici
+controllate trasforma le lane container in copertura multi-kernel o gli
+ambienti testati in una promessa generale di supporto.
 
 Sul commit auditato sono passati sia il
 [job CI di riferimento](https://github.com/kinderp/alfred/actions/runs/29673681506)
