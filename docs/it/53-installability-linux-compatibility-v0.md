@@ -271,11 +271,10 @@ GitHub esegue i container sullo stesso kernel del runner `ubuntu-latest`.
 Per questo ogni lane stampa `kernel_scope=shared-github-runner-kernel`; tre job
 verdi dimostrano tre userspace provati, non tre kernel provati.
 
-Questi dati nel log sono la diagnostica minima necessaria alla matrice, non
-ancora un formato versionato di evidence. La voce successiva della checklist,
-`Evidenza ambiente e wording di supporto`, resta separata: dovra' decidere se e
-come salvare un artifact stabile, come rappresentare valori `unknown` e quale
-tabella pubblica distingue ambienti `tested`, `supported` e `untested`.
+Oltre alla diagnostica immediata nel log, la issue
+[#270](https://github.com/kinderp/alfred/issues/270) introduce un formato JSON
+v0 versionato e un artifact stabile per ogni lane. Il formato e il linguaggio
+pubblico `tested`/`supported`/`untested` sono descritti piu avanti.
 
 Se un test dipende da timing o privilegi non disponibili nel container, deve
 essere classificato e non semplicemente disabilitato senza spiegazione.
@@ -607,38 +606,80 @@ errore iniziale e' innocuo: dimostra che tutte le sorgenti precedenti possono
 superare il controllo senza che install inizi a modificare lo stage prima di
 avere completato il preflight.
 
-## Evidenza ambiente
+## Evidenza ambiente v0
 
-Ogni lane di compatibilita' dovrebbe registrare almeno:
+Ogni lane prova a produrre
+`.alfred-ci/compatibility-evidence-v0.json` tramite
+`tools/ci/compatibility_evidence.py` e lo carica per 30 giorni come
+`alfred-compatibility-evidence-<lane>`. L'upload abilita i file nascosti perche'
+la directory inizia con `.`, ma il path resta vincolato a questo solo JSON. Il
+record ha questo envelope:
 
-```text
-distribution_id
-distribution_version
-kernel_release
-architecture
-libc
-compiler
-compiler_version
-filesystem_type, quando rilevante
-virtualization/container mode
-build_profile
-sanitizers_enabled
+```json
+{
+  "schema": "alfred.compatibility-evidence",
+  "schema_version": 0,
+  "generated_at_utc": "2026-07-18T12:00:00Z",
+  "source_revision": "0123456789abcdef0123456789abcdef01234567",
+  "ci": {
+    "provider": "github-actions",
+    "run_id": "123456",
+    "run_attempt": "1"
+  },
+  "lane": "debian-13",
+  "environment": {
+    "container_image": "debian:13-slim",
+    "container_mode": "github-actions-job-container",
+    "distribution_id": "debian",
+    "distribution_version": "13",
+    "architecture": "x86_64",
+    "libc": {"name": "glibc", "version": "2.41"},
+    "compiler": {"id": "gcc", "version": "14.2.0"},
+    "source_tree_filesystem_type": "overlayfs",
+    "kernel_release": "6.x.y",
+    "kernel_scope": "shared-github-runner-kernel"
+  },
+  "build": {
+    "profile": "release",
+    "sanitizers_enabled": false
+  },
+  "results": {
+    "staged_install": "passed",
+    "mvp_smoke": "passed"
+  }
+}
 ```
 
-Comandi tipici:
+Il record salva revisione e run per la provenienza, non per dichiarare supporto
+permanente. `kernel_scope=shared-github-runner-kernel` impedisce di interpretare
+tre lane userspace come tre kernel guest. `run_id` e `run_attempt` sono stringhe
+decimali per non dipendere dai limiti numerici di consumer JSON diversi.
 
-```bash
-cat /etc/os-release
-uname -a
-getconf GNU_LIBC_VERSION || true
-gcc --version
-clang --version
-stat -f -c %T .
-```
+`source_tree_filesystem_type` descrive il filesystem che ospita la root del
+checkout, ricavata dal percorso del generatore; non descrive necessariamente la
+root del container e non dipende dalla directory corrente del chiamante. Le
+sonde raccolgono soltanto campi ammessi, leggono al massimo 4096 byte e
+limitano ogni processo a 5 secondi. Il limite e' applicato mentre il processo
+scrive, non dopo averne caricato tutto l'output; superamento, timeout ed errore
+producono `unknown`. Ogni probe usa una sessione separata: sui percorsi falliti
+viene terminato il process group, cosi' anche un discendente che eredita stdout
+non resta attivo, e il figlio diretto viene sempre raccolto. Non vengono
+salvati hostname, utente, path del workspace, variabili
+d'ambiente complete o segreti. Se `getconf`, `cc`, `stat` o un dato di sistema
+non sono disponibili, il campo corrispondente vale `unknown`; l'assenza di un
+dato non fa fallire una prova altrimenti valida e non autorizza a inventarlo.
 
-Non tutti i comandi esistono su ogni distribuzione. Lo script futuro deve
-degradare in modo esplicito e scrivere `unknown`, non fallire o inventare il
-valore.
+Gli outcome GitHub sono normalizzati in `passed`, `failed`, `not_run`,
+`cancelled` e `unknown`. Questi valori sono distinti: in particolare `not_run`
+non e' un successo. Il file viene scritto atomicamente solo dopo la validazione
+completa, cosi' un input invalido o un processo interrotto non sostituisce un
+record precedente con JSON parziale.
+
+Gli step finali usano `if: always()`, quindi provano a conservare evidence anche
+quando staged-install o smoke falliscono. Una cancellazione forzata, un errore
+nel bootstrap prima che Python sia disponibile o l'impossibilita' di eseguire
+gli step finali possono comunque impedire la creazione: l'artifact mancante e'
+assenza di evidenza, non un esito positivo.
 
 ## Linguaggio delle dichiarazioni di supporto
 
@@ -686,7 +727,7 @@ Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
 | Contratto `PREFIX` / `DESTDIR` / install / uninstall | Done | Issue #266; copia di sette file e rimozione esatta senza root nei test |
 | Test stage-install | Done | Issue #266; binario, sei man page, CLI, layout, preflight e ownership |
 | Prima matrice distribuzioni/userspace | Done | Issue #268; Ubuntu 24.04, Debian 13 e Fedora 44, tutte sul kernel condiviso del runner |
-| Evidenza ambiente e wording di supporto | Todo | Distinguere supported/tested/untested |
+| Evidenza ambiente e wording di supporto | Done | Issue #270; JSON v0 per lane, artifact sempre tentato e claim pubblici limitati a userspace testati |
 | Readiness closure | Todo | Documenti, CI e issue GitHub allineati |
 
 ## Test e validazione
@@ -703,6 +744,7 @@ Per verificare il contratto Makefile corrente:
 make fclean
 make release
 make test-install
+make test-compatibility-evidence
 make test-cli
 make smoke-mvp
 ```
@@ -745,6 +787,7 @@ La milestone puo' chiudersi quando:
 - GitHub Milestone: [Installability and Linux compatibility v0](https://github.com/kinderp/alfred/milestone/15)
 - Issue madre: [#261](https://github.com/kinderp/alfred/issues/261)
 - Setup documentale: [#262](https://github.com/kinderp/alfred/issues/262)
+- Evidence userspace v0: [#270](https://github.com/kinderp/alfred/issues/270)
 - [Post-MVP documentation and man pages v0](51-post-mvp-documentation-man-pages-v0.md)
 - [MVP operational usability v0](49-mvp-operational-usability-v0.md)
 - [Roadmap CLI e pagina man](19-roadmap-cli-e-man-page.md)

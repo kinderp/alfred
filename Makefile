@@ -331,6 +331,7 @@ run: all
 # test-cli checks user-facing informational commands and exit behavior.
 # test-backend-diagnostics checks backend health logs that are not semantics.
 # test-jsonl checks the structured external output contract.
+# test-compatibility-evidence checks the versioned CI environment record.
 # smoke-mvp runs the short user-facing MVP smoke recipe.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
@@ -362,6 +363,9 @@ test-watcher:
 test-install:
 	$(MAKE) release
 	cd tests/install && bash run_all.sh
+
+test-compatibility-evidence:
+	cd tests/compatibility && bash run_all.sh
 
 smoke-mvp: all
 	cd tests/smoke && bash mvp_smoke.sh
@@ -495,6 +499,7 @@ banner:
 	test-scanner \
 	test-watcher \
 	test-install \
+	test-compatibility-evidence \
 	test-backend-diagnostics \
 	smoke-mvp \
 	perf \

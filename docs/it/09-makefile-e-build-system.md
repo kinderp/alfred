@@ -1282,6 +1282,19 @@ in parallelo ai test testuali. Il suo scopo e' verificare che i comportamenti
 pubblici importanti siano rappresentati come record JSONL parseabili e stabili,
 mentre i log compatibili continuano a essere prodotti per debug e didattica.
 
+### test-compatibility-evidence
+
+```bash
+make test-compatibility-evidence
+```
+
+Il target non compila o avvia Alfred. Lancia
+`tests/compatibility/run_all.sh`, che esercita il generatore Python usato dalla
+matrice Linux userspace. La suite controlla lo schema JSON v0, la
+normalizzazione degli outcome GitHub, i fallback `unknown`, la validazione
+degli input e la scrittura atomica. E' separata da `test-install`: una verifica
+il formato della prova CI, l'altra verifica il prodotto release installato.
+
 ### smoke-mvp
 
 ```bash
@@ -1378,6 +1391,7 @@ Nel progetto sono phony target come:
 - `test-cli`
 - `test-backend-diagnostics`
 - `test-jsonl`
+- `test-compatibility-evidence`
 - `test-scanner`
 - `test-watcher`
 - `smoke-mvp`
@@ -1573,6 +1587,7 @@ Il contratto corrente e i livelli futuri di compatibilita' sono descritti in
 | Installare artefatti gia' costruiti | `make install` |
 | Rimuovere soltanto gli artefatti Alfred | `make uninstall` |
 | Provare install/uninstall senza root | `make test-install` |
+| Validare la compatibility evidence CI | `make test-compatibility-evidence` |
 | Eseguire test ufficiali core | `make test` |
 | Eseguire test end-to-end core espliciti | `make test-core` |
 | Eseguire smoke test MVP breve | `make smoke-mvp` |

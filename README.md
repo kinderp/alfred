@@ -41,6 +41,7 @@ runtime. The core engine is now the official event engine.
 - `make`
 - a C compiler toolchain, such as `gcc`
 - standard shell tools used by the test scripts
+- Python 3 for JSONL, smoke, and compatibility-evidence tests
 
 On Debian or Ubuntu:
 
@@ -54,6 +55,21 @@ Running the staged-install test also requires `man`:
 ```bash
 sudo apt-get install -y man-db
 ```
+
+### Tested environments
+
+Alfred is tested in CI on Ubuntu 24.04, Debian 13, and Fedora 44 userspaces.
+These are tested environments, not a stable support guarantee. The container
+lanes share the GitHub Actions runner kernel, so they do not constitute three
+independent kernel tests. Kernel compatibility is tracked separately.
+
+Each lane attempts to publish a versioned compatibility-evidence artifact
+containing the source revision, userspace identity, toolchain, build profile,
+kernel scope, and normalized staged-install and smoke-test results. A missing
+artifact is not positive evidence. See the
+[Linux compatibility roadmap](docs/it/53-installability-linux-compatibility-v0.md)
+for the evidence contract and the distinction between tested, supported, and
+untested environments.
 
 ## Quick Start
 
@@ -221,9 +237,15 @@ layouts, runs the staged informational CLI, renders all six manual pages, and
 verifies preflight and uninstall ownership. It is intentionally the final CI
 suite because it leaves the checkout in the release build profile.
 
-The CI workflow runs build, core, CLI, MVP smoke, backend diagnostic, JSONL,
-and staged-install tests on pull requests targeting `main` and on pushes to
-`main`.
+Validate the versioned compatibility-evidence schema and generator:
+
+```bash
+make test-compatibility-evidence
+```
+
+The CI workflows run build, core, CLI, MVP smoke, backend diagnostic, JSONL,
+compatibility-evidence, staged-install, and Linux userspace matrix tests on
+pull requests targeting `main` and on pushes to `main`.
 
 To preserve runtime logs while debugging tests locally:
 
@@ -320,6 +342,7 @@ make test-cli
 make smoke-mvp
 make test-jsonl
 make test-backend-diagnostics
+make test-compatibility-evidence
 ```
 
 ## Roadmap

@@ -413,6 +413,89 @@ iniezione controllati. La seconda seleziona intenzionalmente l'ultima sorgente
 del preflight. Servono per produrre precondizioni difficili senza rinominare o
 cambiare i permessi dei file tracciati nel checkout.
 
+## Test della compatibility evidence
+
+Il comando:
+
+```bash
+make test-compatibility-evidence
+```
+
+verifica il piccolo contratto JSON usato dalla matrice userspace. Non avvia
+Alfred e non misura il runtime: controlla che la CI descriva in modo
+riproducibile quale ambiente ha eseguito `make test-install` e lo smoke MVP.
+
+Il percorso e':
+
+```text
+make test-compatibility-evidence
+-> tests/compatibility/run_all.sh
+-> tools/ci/compatibility_evidence.py
+   -> parse_arguments()
+   -> build_evidence()
+      -> distribution_info()
+      -> libc_info()
+      -> compiler_info()
+      -> command_output()
+      -> normalize_status()
+   -> write_atomic()
+-> parsing e controlli JSON espliciti del test
+```
+
+Le funzioni hanno responsabilita' separate:
+
+| Funzione | Responsabilita' |
+| --- | --- |
+| `parse_arguments()` | accetta soltanto i metadati espliciti necessari al record |
+| `bounded_value()` / `identifier()` | rifiutano valori vuoti, troppo lunghi, con controlli o identificatori non validi |
+| `distribution_info()` | legge solo ID e versione della distribuzione, senza copiare tutto `os-release` |
+| `libc_info()` | rileva nome e versione libc oppure restituisce `unknown` |
+| `compiler_info()` | rileva compilatore e versione con output limitato |
+| `source_tree_filesystem_type()` | usa `command_output()` per interrogare con `stat` la root sorgente assoluta e deterministica |
+| `command_output()` | avvia ogni sonda in una sessione separata, legge progressivamente al massimo 4096 byte, applica un timeout di 5 secondi, termina il process group sui percorsi falliti, raccoglie il figlio diretto e converte limite, timeout, indisponibilita' o errore in `unknown` |
+| `normalize_status()` | traduce gli outcome GitHub nel vocabolario pubblico degli esiti |
+| `build_evidence()` | costruisce esattamente lo schema v0 dopo la validazione |
+| `write_atomic()` | scrive un file temporaneo nella stessa directory, esegue `fsync` e lo sostituisce atomicamente |
+
+La scrittura atomica evita che un consumer scarichi un JSON scritto solo a
+meta'. La validazione avviene prima della sostituzione: un input non valido non
+deve sovrascrivere un artifact precedente. I test coprono schema e tipi,
+normalizzazione degli esiti, fallback `unknown`, rifiuto di lane/status non
+validi, tutti gli esiti pubblici incluso `unknown`, output eccessivo di una
+sonda, indipendenza dalla directory corrente e assenza dei principali campi
+sensibili. `source_tree_filesystem_type` misura sempre il filesystem che ospita
+la root sorgente ricavata dal percorso del generatore: non indica genericamente
+il filesystem root del container e non dipende dalla directory da cui viene
+lanciato il comando. Il test sostituisce `command_output()` con un recorder e
+controlla direttamente che l'argomento di `stat` sia la root assoluta: il solo
+confronto tra due nomi di filesystem non basterebbe, perche' checkout e `/tmp`
+possono trovarsi sullo stesso mount. I controlli Python non usano
+`assert`, perche' `python -O` e `PYTHONOPTIMIZE` lo eliminerebbero producendo un
+falso test verde: ogni mancata corrispondenza solleva invece esplicitamente
+`SystemExit`.
+
+Il limite viene applicato durante la lettura dal processo figlio: troncare il
+valore soltanto dopo aver catturato tutto l'output non sarebbe bounded, perche'
+un comando difettoso potrebbe prima consumare memoria senza limite. La sessione
+separata serve anche al lifecycle: se un wrapper termina lasciando un
+discendente con stdout ereditato, il timeout deve chiudere l'intero gruppo e non
+lasciare un processo orfano attivo. Il test dedicato riduce il timeout, crea
+questa situazione e verifica che il discendente non resti in esecuzione.
+
+Gli esiti salvati sono:
+
+| Evidence | Outcome GitHub | Significato |
+| --- | --- | --- |
+| `passed` | `success` | lo step ha terminato con successo |
+| `failed` | `failure` | lo step e' stato eseguito ed e' fallito |
+| `not_run` | `skipped` | lo step non e' stato eseguito, per esempio per un fallimento precedente |
+| `cancelled` | `cancelled` | l'esecuzione e' stata annullata |
+| `unknown` | `unknown` | l'esito non era disponibile; non equivale a successo |
+
+Per esempio, `staged_install=failed` e `mvp_smoke=not_run` significa che la
+prova di installazione e' fallita e GitHub non ha avviato lo smoke successivo.
+Non significa che lo smoke sia passato o fallito.
+
 ## Come sono strutturati i test shell
 
 I test Bash non sono script isolati senza struttura. Sono organizzati a livelli,

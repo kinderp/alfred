@@ -2109,3 +2109,13 @@ distribuzione, libc, compilatore, architettura,
 filesystem e kernel osservato, ma marca esplicitamente il kernel come condiviso
 con il runner GitHub. La matrice aggiunge evidenza userspace; non introduce VM,
 kernel guest, musl, packaging o nuovi claim di supporto.
+
+Aggiornamento successivo: la issue figlia #270 trasforma il contesto temporaneo
+della matrice in `alfred.compatibility-evidence` schema v0. Il generatore Python
+usa solo la libreria standard, valida e limita i metadati, degrada le sonde
+indisponibili a `unknown` e scrive atomicamente il JSON. Ogni lane prova a
+caricare un artifact separato con revisione, run, userspace, toolchain,
+filesystem della root sorgente, scope kernel, profilo release ed esiti
+normalizzati di staged-install e smoke. README
+e guide distinguono esplicitamente userspace testati da ambienti supportati e
+da kernel realmente differenti.
