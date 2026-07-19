@@ -8,6 +8,7 @@ GUIDE="$ROOT_DIR/docs/it/first-user/README.md"
 SESSION_ID="FU-TEST-$$"
 OUTPUT_FILE="$(mktemp /tmp/alfred_first_user_context_output.XXXXXX)"
 SESSION_ROOT=''
+MARKER=''
 
 session_root_is_safe_for_cleanup() {
     local candidate="$1"
@@ -25,6 +26,15 @@ cleanup() {
     local status=$?
 
     rm -f -- "$OUTPUT_FILE" || status=1
+    if [[ -n "$MARKER" ]]; then
+        if [[ "$MARKER" == "/tmp/alfred_first_user_context_eval_$$" ]]; then
+            rm -f -- "$MARKER" || status=1
+        else
+            printf 'REFUSED unsafe test marker cleanup: %q\n' \
+                "$MARKER" >&2
+            status=1
+        fi
+    fi
     if [[ -n "$SESSION_ROOT" ]]; then
         if session_root_is_safe_for_cleanup "$SESSION_ROOT"; then
             find "$SESSION_ROOT" -depth -delete || status=1
