@@ -276,6 +276,13 @@ soltanto come storia della revisione provata.
 
 ## Artifact e report
 
+Prima della sessione usare la
+[guida per partecipante e facilitatore](first-user/README.md) e creare una copia
+locale del [template di report sanificato](first-user/report-template.md). La
+guida traduce questo contratto in una sequenza eseguibile; il template conserva
+ambiente, tempi, interventi, atteso/reale, artifact, triage e cleanup senza
+richiedere la cronologia della chat.
+
 Una sessione puo' usare questa struttura locale:
 
 ```text
@@ -339,4 +346,6 @@ L'ordine corrente e':
 - [Stato funzionalita'](26-stato-funzionalita.md)
 - [Qualita' del prodotto software](35-qualita-prodotto-software.md)
 - [Audit esplorativi notturni](audit/README.md)
+- [Guida alla sessione first-user](first-user/README.md)
+- [Template report first-user](first-user/report-template.md)
 - [Registro milestone](37-roadmap-milestone-progetto.md)

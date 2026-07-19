@@ -73,6 +73,8 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `53-installability-linux-compatibility-v0.md` |
 | Completo | `54-audit-installazione-ci-v0.md` |
 | Parziale | `55-first-user-pre-release-validation-v0.md` |
+| Completo | `first-user/README.md` |
+| Completo | `first-user/report-template.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -2185,3 +2187,12 @@ La roadmap mantiene openSUSE e Arch nella issue #278 dopo questa validazione,
 una lane alla volta. VM/kernel reali, metodi formali, packaging e nuovi backend
 restano debiti futuri espliciti finche' utenti o bug non rendono prioritario il
 loro rischio.
+
+Aggiornamento successivo: la issue figlia #282 aggiunge una guida operativa e
+un template di report sotto `docs/it/first-user/`. La guida mantiene separati
+partecipante e facilitatore, usa solo root temporanee e installazione staged
+non-root, misura i due timer da un unico `T0`, esercita testo e JSONL e rende la
+sanificazione un gate obbligatorio. Il template conserva ambiente, interventi,
+scenari atteso/reale, artifact, feedback, triage e cleanup senza raccogliere
+identita', segreti o dump indiscriminati. Questo step prepara la rehearsal ma
+non esegue ancora sessioni utente e non cambia il runtime Alfred.

@@ -63,11 +63,15 @@ entrare subito nei dettagli interni.
    definisce consenso, root sacrificabile, onboarding, sessioni realistiche,
    evidenza, privacy e triage per chi prova Alfred fuori dal normale ciclo dei
    maintainer.
-8. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
+8. [Guida alla sessione first-user](first-user/README.md)
+   traduce il protocollo in passi eseguibili e rimanda al
+   [template di report](first-user/report-template.md) per conservare evidenza
+   sanificata e confrontabile.
+9. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
    spiega come installare su una macchina nuova un profilo Codex sanificato
    con `gpt-5.6-sol`, reasoning `ultra`, multi-agent e sub-agenti locali.
    Serve solo per configurare l'ambiente di sviluppo, non il runtime Alfred.
-8. Pagine man:
+10. Pagine man:
    [alfred(1)](../man/man1/alfred.1),
    [alfred.conf(5)](../man/man5/alfred.conf.5),
    [alfred-events(7)](../man/man7/alfred-events.7).
@@ -210,6 +214,9 @@ leggere anche:
    aggiunge consenso, onboarding senza conoscenza implicita, privacy e
    confronto fra ambienti indipendenti. Va letto quando l'audit coinvolge un
    utente esterno, perche' un audit del maintainer non misura la stessa cosa.
+6. [Guida alla sessione first-user](first-user/README.md)
+   e [template di report](first-user/report-template.md) definiscono i comandi
+   sicuri, i campi da raccogliere e il gate di sanificazione operativo.
 
 ## Percorso 7: resync, scanner e recovery
 
