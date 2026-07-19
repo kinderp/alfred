@@ -160,6 +160,19 @@ missing = [
 
 if missing:
     raise SystemExit("missing JSONL records: " + ", ".join(missing))
+
+for record in records:
+    if (
+        record.get("layer") == "semantic"
+        and record.get("category") == "filesystem"
+        and record.get("type") in {"FILE_CREATED", "DIR_CREATED"}
+    ):
+        for forbidden in ("old_path", "new_path"):
+            if forbidden in record:
+                raise SystemExit(
+                    f"{record['type']} contains non-applicable {forbidden}: "
+                    f"{record[forbidden]!r}"
+                )
 PY
 then
     fail_with_all_logs "JSONL structural validation failed"

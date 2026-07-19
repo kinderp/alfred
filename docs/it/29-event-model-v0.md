@@ -745,6 +745,14 @@ I record legati al filesystem possono usare questi campi.
 | `cookie` | correlazione move, per esempio inotify `IN_MOVED_FROM`/`IN_MOVED_TO` |
 | `pid` | processo se noto; inotify normalmente non lo fornisce |
 
+Per gli eventi filesystem semantici v0 questi campi sono mutuamente esclusivi
+per famiglia: create, delete, modify e ready valorizzano soltanto `path`;
+rename, move e relocate valorizzano soltanto `old_path` e `new_path`; l'overflow
+globale non valorizza nessuno dei tre. Un campo non applicabile resta `NULL` nel
+record C e viene omesso dal JSONL, invece di duplicare un path con un significato
+diverso. Questa regola evita che un consumer interpreti `old_path` come evidenza
+di una transizione quando il record descrive un singolo path.
+
 `object_kind` e' il campo principale per il futuro. `is_dir` resta utile per
 compatibilita' e per rendere semplice il mapping da `ALFRED_RAW_ISDIR`.
 

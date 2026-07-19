@@ -566,6 +566,15 @@ output.jsonl != ledger completo di Alfred
 output.jsonl != contratto Agent Guard finale
 ```
 
+Per la semantica filesystem v0, l'applicabilita' dei path fa parte del contratto
+strutturato: create, delete, modify e ready contengono `path` ma non `old_path`
+o `new_path`; rename, move e relocate contengono `old_path` e `new_path` ma non
+`path`; `OVERFLOW` non contiene nessuno dei tre. Il formatter omette i campi
+`NULL`. La rimozione del precedente `old_path=path` ridondante dai record a path
+singolo e del precedente `path=old_path` dai record move-style e' una correzione
+del JSONL osservabile: i consumer devono usare i campi applicabili definiti da
+Event Model v0 e non dipendere dai duplicati contrari al contratto.
+
 Oggi `output.jsonl` e' utile per verificare tre percorsi:
 
 ```text

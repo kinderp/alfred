@@ -171,9 +171,30 @@ int alfred_record_from_event(const alfred_event_t *event,
     out->category = ALFRED_RECORD_CATEGORY_FILESYSTEM;
     out->type = type;
     out->pid = event->pid;
-    out->path = event->src_path;
-    out->old_path = event->src_path;
-    out->new_path = event->dst_path;
+
+    switch (type) {
+    case ALFRED_RECORD_TYPE_FILE_CREATED:
+    case ALFRED_RECORD_TYPE_FILE_READY:
+    case ALFRED_RECORD_TYPE_FILE_MODIFIED:
+    case ALFRED_RECORD_TYPE_FILE_DELETED:
+    case ALFRED_RECORD_TYPE_DIR_CREATED:
+    case ALFRED_RECORD_TYPE_DIR_DELETED:
+        out->path = event->src_path;
+        break;
+    case ALFRED_RECORD_TYPE_FILE_RENAMED:
+    case ALFRED_RECORD_TYPE_FILE_MOVED:
+    case ALFRED_RECORD_TYPE_FILE_RELOCATED:
+    case ALFRED_RECORD_TYPE_DIR_RENAMED:
+    case ALFRED_RECORD_TYPE_DIR_MOVED:
+    case ALFRED_RECORD_TYPE_DIR_RELOCATED:
+        out->old_path = event->src_path;
+        out->new_path = event->dst_path;
+        break;
+    case ALFRED_RECORD_TYPE_OVERFLOW:
+        break;
+    default:
+        return -1;
+    }
 
     return 0;
 }
