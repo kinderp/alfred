@@ -513,7 +513,8 @@ crea una root privata, carica lo stesso `session.env` in due processi Bash
 distinti e controlla che entrambi ricevano gli stessi path canonici. I casi
 negativi provano modo della root e del file, chiave mancante, path fuori scope,
 assenza di assegnazioni parziali, symlink e contenuto che sarebbe eseguibile se
-il loader usasse `eval` o `source` sul file dati.
+il loader usasse `eval` o `source` sul file dati. Un fixture da `32769` byte
+prova anche che la dimensione venga rifiutata prima del parsing.
 
 Il percorso e':
 

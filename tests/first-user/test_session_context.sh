@@ -132,6 +132,15 @@ fi
 cp -- "$SESSION_ROOT/session.env.saved" "$CONTEXT_FILE"
 chmod 0600 -- "$CONTEXT_FILE"
 
+head -c 32769 /dev/zero | tr '\0' x > "$CONTEXT_FILE"
+chmod 0600 -- "$CONTEXT_FILE"
+if bash -c 'source "$1" load "$2"' test "$HELPER" "$CONTEXT_FILE" \
+    >/dev/null 2>&1; then
+    fail 'load accepted a context larger than 32768 bytes'
+fi
+cp -- "$SESSION_ROOT/session.env.saved" "$CONTEXT_FILE"
+chmod 0600 -- "$CONTEXT_FILE"
+
 sed 's#^watch_root=.*#watch_root=/tmp#' "$CONTEXT_FILE" \
     > "$SESSION_ROOT/session.env.new"
 mv -- "$SESSION_ROOT/session.env.new" "$CONTEXT_FILE"

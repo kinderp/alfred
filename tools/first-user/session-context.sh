@@ -122,6 +122,7 @@ _alfred_first_user_load() {
     local context_dir
     local canonical_context
     local mode
+    local context_size
     local line
     local key
     local value
@@ -169,6 +170,16 @@ _alfred_first_user_load() {
     }
     if [[ "$mode" != '600' ]]; then
         _alfred_first_user_error 'the context file mode must be 0600'
+        return 2
+    fi
+    context_size="$(stat -c '%s' -- "$context_file" 2>/dev/null)" || {
+        _alfred_first_user_error 'cannot inspect context file size'
+        return 1
+    }
+    if [[ ! "$context_size" =~ ^[0-9]+$ ]] ||
+       ((context_size == 0 || context_size > 32768)); then
+        _alfred_first_user_error \
+            'the context file size must be between 1 and 32768 bytes'
         return 2
     fi
 

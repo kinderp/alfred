@@ -107,8 +107,10 @@ transcript locale: sara' il bootstrap esplicito di ogni nuovo terminale.
 `load` non usa `eval` e non esegue il contenuto di `session.env`. Prima di
 assegnare `repo_root`, `session_root`, `watch_root`, `run_root` e `stage_root`
 verifica versione, chiavi, proprietario, modo `0600`, path canonici e
-discendenza dalla root `/tmp/alfred-first-user-SESSION_ID.XXXXXX`. Il solo
-risultato accettabile e':
+discendenza dalla root `/tmp/alfred-first-user-SESSION_ID.XXXXXX`. Rifiuta
+inoltre file vuoti o maggiori di `32768` byte prima di leggere le righe: il
+formato contiene soltanto sette campi e non deve diventare un input senza
+limite. Il solo risultato accettabile e':
 
 ```text
 session context OK

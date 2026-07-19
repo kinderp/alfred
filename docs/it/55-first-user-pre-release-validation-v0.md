@@ -107,7 +107,9 @@ symlink, permessi diversi, chiavi duplicate o assenti, path non canonici e root
 che non siano discendenti della sessione. Non deve usare `eval` ne' assegnare
 variabili parziali dopo un errore. Prima di validare un nuovo contesto deve
 inoltre invalidare le variabili pubbliche di una sessione precedente: un
-bootstrap fallito non puo' lasciare path stale ancora operativi.
+bootstrap fallito non puo' lasciare path stale ancora operativi. Il file dati
+deve essere rifiutato prima del parsing se e' vuoto o supera `32768` byte, cosi'
+anche la gestione di input corrotto resta bounded.
 
 L'assenza di evidenza non vale come `PASS`. Un artifact che non puo' essere
 pubblicato per ragioni di privacy puo' restare locale, ma il report deve
