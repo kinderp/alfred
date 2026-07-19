@@ -86,6 +86,7 @@ leggerlo e quando.
 | --- | --- | --- | --- |
 | [Guida alla sessione first-user](first-user/README.md) | Procedura autonoma e sicura per consenso, ambiente, onboarding, installazione staged, runtime testuale/JSONL, sessione user-like, sanificazione e cleanup. | Partecipanti, facilitatori e maintainer. | Prima e durante ogni sessione first-user. |
 | [Template report first-user](first-user/report-template.md) | Modello copiabile per tempi, interventi, scenari, atteso/reale, artifact, feedback, sanificazione e triage. | Facilitatori, partecipanti e reviewer. | Creare una copia locale prima della sessione e sanificarla prima della pubblicazione. |
+| [Prima rehearsal first-user](first-user/rehearsals/FU-20260719-R1-report.md) | Evidenza sanificata dell'esecuzione controllata del protocollo, limiti dei risultati e finding derivato. | Maintainer, QA e reviewer. | Prima delle sessioni esterne e quando si valuta se il protocollo e' eseguibile. |
 
 ## Come usare questi documenti
 

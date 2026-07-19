@@ -301,6 +301,12 @@ Prima di qualsiasi upload va prodotta una copia sanificata. Il repository
 conserva protocollo, template, report sintetici, comandi riproducibili e link;
 non deve ricevere automaticamente log completi o file del partecipante.
 
+La prima rehearsal controllata e' documentata nel
+[report FU-20260719-R1](first-user/rehearsals/FU-20260719-R1-report.md), con
+[transcript sanificato](first-user/rehearsals/FU-20260719-R1-commands.txt). La
+rehearsal verifica il protocollo ma non sostituisce una sessione esterna e non
+contribuisce alle metriche di usabilita'.
+
 ## Criteri di uscita
 
 La milestone puo' essere chiusa quando:

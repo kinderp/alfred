@@ -75,6 +75,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Parziale | `55-first-user-pre-release-validation-v0.md` |
 | Completo | `first-user/README.md` |
 | Completo | `first-user/report-template.md` |
+| Completo | `first-user/rehearsals/FU-20260719-R1-report.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -2196,3 +2197,15 @@ sanificazione un gate obbligatorio. Il template conserva ambiente, interventi,
 scenari atteso/reale, artifact, feedback, triage e cleanup senza raccogliere
 identita', segreti o dump indiscriminati. Questo step prepara la rehearsal ma
 non esegue ancora sessioni utente e non cambia il runtime Alfred.
+
+La rehearsal `FU-20260719-R1` esegue la guida sulla revisione merged `fbf03c7`
+in un worktree detached e in una root temporanea. Build, CLI, installazione
+staged, man page, configurazione, runtime, eventi rappresentativi, JSONL e
+cleanup passano. La fase user-like e' compressa e non produce evidenza di
+usabilita'. Il controllo atteso/reale identifica il finding P2 #285: gli eventi
+semantici a path singolo serializzano `old_path=path` nonostante Event Model v0
+riservi `old_path` a move, rename e recovery. La review del replay identifica
+anche il finding P1 #287: le variabili create nella shell di preparazione non
+sono disponibili automaticamente nei due terminali runtime e la rehearsal le
+aveva iniettate tramite orchestrazione. Report e transcript pubblici rendono
+ora esplicito l'intervento; i log completi restano fuori dal repository.
