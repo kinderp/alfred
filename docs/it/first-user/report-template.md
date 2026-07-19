@@ -21,6 +21,8 @@
 - [ ] La prova usa soltanto una root temporanea sacrificabile.
 - [ ] Non vengono osservati home, credenziali o progetti confidenziali.
 - [ ] Non e' attiva registrazione nascosta di terminale, schermo o telemetria.
+- [ ] `commands.txt` viene compilato manualmente durante la sessione, senza
+      cronologia shell o cattura automatica.
 - [ ] L'eventuale uso di `sudo` riguarda solo dipendenze note ed e' stato
       accettato.
 

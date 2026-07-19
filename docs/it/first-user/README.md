@@ -101,11 +101,27 @@ run_root="$session_root/run"
 stage_root="$session_root/stage"
 mkdir -p "$watch_root" "$run_root" "$stage_root"
 cp docs/it/first-user/report-template.md "$session_root/report.md"
+: > "$session_root/commands.txt"
 printf 'session_root=%s\n' "$session_root"
 ```
 
 Il path completo e' materiale locale da sanificare. Nel report pubblico usare
 `<SESSION_ROOT>`, `<WATCH_ROOT>` e `<REPO_ROOT>`.
+
+### Transcript manuale dei comandi
+
+Da questo momento il facilitatore aggiorna `commands.txt` mentre la sessione e'
+in corso. Per ogni comando registra numero progressivo, timestamp UTC, fase,
+terminale e testo esatto eseguito. Per una azione GUI annota applicazione,
+azione e path sintetico interessato. Errori di battitura e tentativi falliti
+restano nel transcript: fanno parte dell'evidenza di onboarding.
+
+Il transcript e' manuale e limitato alla sessione. Non usare `history`, il
+comando `script`, keylogger, screen recording, terminal capture o altri sistemi
+automatici: potrebbero raccogliere comandi precedenti, output, segreti o dati
+estranei. `commands.txt` resta grezzo e locale fino alla sanificazione; prima
+della pubblicazione i path reali vengono sostituiti con i placeholder definiti
+dal protocollo.
 
 ## Evidenza ambiente minimizzata
 
