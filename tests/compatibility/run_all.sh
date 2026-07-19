@@ -45,34 +45,54 @@ path, source_revision = sys.argv[1:]
 with open(path, encoding="utf-8") as stream:
     evidence = json.load(stream)
 
-assert set(evidence) == {
+def require(condition, message):
+    if not condition:
+        raise SystemExit(message)
+
+
+require(set(evidence) == {
     "schema", "schema_version", "generated_at_utc", "source_revision",
     "ci", "lane", "environment", "build", "results",
-}
-assert evidence["schema"] == "alfred.compatibility-evidence"
-assert evidence["schema_version"] == 0
-assert evidence["source_revision"] == source_revision
-assert evidence["ci"] == {
+}, "unexpected top-level evidence fields")
+require(evidence["schema"] == "alfred.compatibility-evidence", "unexpected schema")
+require(evidence["schema_version"] == 0, "unexpected schema version")
+require(
+    evidence["source_revision"] == source_revision,
+    "unexpected source revision",
+)
+require(evidence["ci"] == {
     "provider": "github-actions", "run_id": "123456", "run_attempt": "2"
-}
-assert evidence["lane"] == "ubuntu-24.04"
-assert set(evidence["environment"]) == {
+}, "unexpected CI provenance")
+require(evidence["lane"] == "ubuntu-24.04", "unexpected lane")
+require(set(evidence["environment"]) == {
     "container_image", "container_mode", "distribution_id",
     "distribution_version", "architecture", "libc", "compiler",
     "filesystem_type", "kernel_release", "kernel_scope",
-}
-assert set(evidence["environment"]["libc"]) == {"name", "version"}
-assert set(evidence["environment"]["compiler"]) == {"id", "version"}
-assert evidence["environment"]["container_image"] == "ubuntu:24.04"
-assert evidence["environment"]["kernel_scope"] == "shared-github-runner-kernel"
-assert evidence["environment"]["compiler"]["id"] in {"gcc", "clang"}
-assert evidence["build"] == {"profile": "release", "sanitizers_enabled": False}
-assert evidence["results"] == {"staged_install": "passed", "mvp_smoke": "not_run"}
-datetime.datetime.fromisoformat(evidence["generated_at_utc"].replace("Z", "+00:00"))
+}, "unexpected environment fields")
+require(set(evidence["environment"]["libc"]) == {"name", "version"},
+        "unexpected libc fields")
+require(set(evidence["environment"]["compiler"]) == {"id", "version"},
+        "unexpected compiler fields")
+require(evidence["environment"]["container_image"] == "ubuntu:24.04",
+        "unexpected container image")
+require(evidence["environment"]["kernel_scope"] == "shared-github-runner-kernel",
+        "unexpected kernel scope")
+require(evidence["environment"]["compiler"]["id"] in {"gcc", "clang"},
+        "unexpected compiler identity")
+require(evidence["build"] == {"profile": "release", "sanitizers_enabled": False},
+        "unexpected build metadata")
+require(evidence["results"] == {"staged_install": "passed", "mvp_smoke": "not_run"},
+        "unexpected normalized results")
+try:
+    datetime.datetime.fromisoformat(
+        evidence["generated_at_utc"].replace("Z", "+00:00")
+    )
+except (KeyError, TypeError, ValueError) as error:
+    raise SystemExit("invalid generation timestamp") from error
 
 serialized = json.dumps(evidence)
 for forbidden in ("hostname", "username", "workspace", "environment_variables"):
-    assert forbidden not in serialized
+    require(forbidden not in serialized, f"forbidden field present: {forbidden}")
 PY
 
 NOISY_COMPILER="$TEST_DIR/noisy-cc"
@@ -116,9 +136,24 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     evidence = json.load(stream)
-assert evidence["environment"]["compiler"] == {"id": "unknown", "version": "unknown"}
-assert evidence["environment"]["filesystem_type"] == "unknown"
-assert evidence["results"] == {"staged_install": "failed", "mvp_smoke": "cancelled"}
+if evidence["environment"]["compiler"] != {"id": "unknown", "version": "unknown"}:
+    raise SystemExit("missing unknown compiler fallback")
+if evidence["environment"]["filesystem_type"] != "unknown":
+    raise SystemExit("missing unknown filesystem fallback")
+if evidence["results"] != {"staged_install": "failed", "mvp_smoke": "cancelled"}:
+    raise SystemExit("unexpected failure/cancelled status mapping")
+PY
+
+UNKNOWN_STATUS_EVIDENCE="$TEST_DIR/unknown-status.json"
+generate "$UNKNOWN_STATUS_EVIDENCE" unknown unknown
+python3 - "$UNKNOWN_STATUS_EVIDENCE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    evidence = json.load(stream)
+if evidence["results"] != {"staged_install": "unknown", "mvp_smoke": "unknown"}:
+    raise SystemExit("unexpected unknown status mapping")
 PY
 
 INVALID_EVIDENCE="$TEST_DIR/invalid.json"

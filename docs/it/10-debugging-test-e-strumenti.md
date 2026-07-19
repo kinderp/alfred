@@ -439,7 +439,7 @@ make test-compatibility-evidence
       -> command_output()
       -> normalize_status()
    -> write_atomic()
--> parsing e assert JSON del test
+-> parsing e controlli JSON espliciti del test
 ```
 
 Le funzioni hanno responsabilita' separate:
@@ -460,7 +460,12 @@ La scrittura atomica evita che un consumer scarichi un JSON scritto solo a
 meta'. La validazione avviene prima della sostituzione: un input non valido non
 deve sovrascrivere un artifact precedente. I test coprono schema e tipi,
 normalizzazione degli esiti, fallback `unknown`, rifiuto di lane/status non
-validi, output eccessivo di una sonda e assenza dei principali campi sensibili.
+validi, tutti gli esiti pubblici incluso `unknown`, output eccessivo di una
+sonda e assenza dei principali campi sensibili. I controlli Python non usano
+`assert`, perche' `python -O` e `PYTHONOPTIMIZE` lo eliminerebbero producendo un
+falso test verde: ogni mancata corrispondenza solleva invece esplicitamente
+`SystemExit`.
+
 Il limite viene applicato durante la lettura dal processo figlio: troncare il
 valore soltanto dopo aver catturato tutto l'output non sarebbe bounded, perche'
 un comando difettoso potrebbe prima consumare memoria senza limite.
