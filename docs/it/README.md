@@ -80,6 +80,13 @@ leggerlo e quando.
 | [Playbook test notturni](audit/nightly-playbook.md) | Procedura operativa autonoma: bootstrap, scenari, log, issue, upload artifact e report. | Agenti AI e maintainer. | Quando viene richiesto un audit notturno. |
 | [Matrice maturita' audit](audit/maturity-matrix.md) | Dimensioni di maturita', freshness, confidence e come leggere i risultati degli audit. | Maintainer, studenti, QA. | Dopo audit o quando si valuta una funzionalita'. |
 
+## Validazione con primi utenti
+
+| Capitolo | Cosa contiene | Chi dovrebbe leggerlo | Quando leggerlo |
+| --- | --- | --- | --- |
+| [Guida alla sessione first-user](first-user/README.md) | Procedura autonoma e sicura per consenso, ambiente, onboarding, installazione staged, runtime testuale/JSONL, sessione user-like, sanificazione e cleanup. | Partecipanti, facilitatori e maintainer. | Prima e durante ogni sessione first-user. |
+| [Template report first-user](first-user/report-template.md) | Modello copiabile per tempi, interventi, scenari, atteso/reale, artifact, feedback, sanificazione e triage. | Facilitatori, partecipanti e reviewer. | Creare una copia locale prima della sessione e sanificarla prima della pubblicazione. |
+
 ## Come usare questi documenti
 
 Leggi i capitoli in ordine se parti da zero. Se invece stai lavorando su una
