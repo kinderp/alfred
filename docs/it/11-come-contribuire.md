@@ -305,6 +305,7 @@ passaggio.
 Prima di aprire una PR, esegui almeno:
 
 ```bash
+make test-ci-policy
 make
 make test
 make test-backend-diagnostics
@@ -481,6 +482,7 @@ I workflow si trovano in:
 Il workflow `CI` e' il gate completo di riferimento ed esegue:
 
 ```bash
+make test-ci-policy
 make
 make test
 make test-cli
@@ -544,12 +546,15 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential man-db python3
+
+      - name: Validate GitHub Actions pinning policy
+        run: make test-ci-policy
 
       - name: Build
         run: make
@@ -577,7 +582,7 @@ jobs:
 
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: alfred-test-logs
           if-no-files-found: ignore
@@ -670,12 +675,14 @@ Un passo puo' usare un'action gia' pronta:
 
 ```yaml
 - name: Check out repository
-  uses: actions/checkout@v4
+  uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 ```
 
-`uses` indica un'action esterna. `actions/checkout@v4` scarica il codice della
-PR dentro la macchina virtuale, cosi' i comandi successivi possono compilare il
-repository.
+`uses` indica un'action esterna. In questo caso `actions/checkout` scarica il
+codice della PR dentro la macchina virtuale, cosi' i comandi successivi possono
+compilare il repository. Il valore dopo `@` e' lo SHA completo e immutabile del
+commit corrispondente alla release `v6.0.2`; il commento mantiene leggibile la
+versione senza affidare l'esecuzione a un tag mobile.
 
 Un passo puo' anche eseguire comandi shell:
 
@@ -727,7 +734,8 @@ with:
     /tmp/alfred_install_test.*/**
 ```
 
-Questi campi configurano `actions/upload-artifact@v4`:
+Questi campi configurano `actions/upload-artifact` alla release `v7.0.1`,
+fissata al relativo SHA completo:
 
 - `name`: nome dell'artifact scaricabile dalla pagina della run
 - `if-no-files-found`: non fallire se non trova log da caricare
@@ -740,6 +748,9 @@ I passi di verifica rispecchiano comandi disponibili anche a un contributore in
 locale:
 
 ```yaml
+- name: Validate GitHub Actions pinning policy
+  run: make test-ci-policy
+
 - name: Build
   run: make
 
@@ -758,18 +769,74 @@ locale:
 - name: Run JSONL golden tests
   run: make test-jsonl
 
+- name: Validate compatibility evidence contract
+  run: make test-compatibility-evidence
+
 - name: Run staged installation tests
   run: make test-install
 
 - name: Upload test logs on failure
   if: failure()
-  uses: actions/upload-artifact@v4
+  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
 ```
 
 Questa scelta e' intenzionale: la CI non deve avere una procedura misteriosa
 diversa da quella umana. Deve automatizzare gli stessi comandi documentati per i
 contributori. `make test-install` resta ultimo perche' ricostruisce il profilo
 release dopo che le suite ASan/UBSan hanno gia' verificato la build debug.
+
+### Policy di pinning delle GitHub Actions
+
+Ogni action esterna usata nei file sotto `.github/workflows/` deve rispettare
+due requisiti:
+
+1. il riferimento dopo `@` deve essere uno SHA Git completo, minuscolo e di 40
+   caratteri;
+2. la stessa riga deve terminare con un commento di release leggibile nella
+   forma `# vX.Y.Z`.
+
+Un tag come `actions/checkout@v6` e' leggibile, ma puo' essere spostato dal
+repository che pubblica l'action. Lo SHA seleziona invece esattamente il codice
+revisionato. Il commento rende immediato capire quale release ufficiale
+corrisponde al commit senza indebolire il pin. Questa policy segue la
+[raccomandazione GitHub per l'uso sicuro delle action di terze parti](https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions).
+
+Il controllo locale e CI e':
+
+```bash
+make test-ci-policy
+```
+
+Lo script usa soltanto la libreria standard di Python, scandisce sia i file
+`.yml` sia gli eventuali `.yaml`, ignora action locali e immagini
+`docker://`, rifiuta revisioni mobili o commenti di versione mancanti e
+fallisce anche se non trova alcuna action esterna. Il job `CI` esegue questo
+controllo prima della build; non serve ripeterlo in ogni lane della matrice
+perche' la scansione copre tutti i workflow del repository.
+
+Per aggiornare un'action bisogna leggere le release note ufficiali, risolvere
+la release scelta nel relativo SHA, aggiornare insieme SHA e commento e
+verificare sia il job di riferimento sia la matrice userspace quando l'action
+e' condivisa. Il pin immutabile protegge dallo spostamento del tag, non rende
+automaticamente affidabile il codice upstream: provenienza, modifiche e
+permessi restano parte della review. Alfred mantiene per ora questi due
+aggiornamenti in PR piccole e dedicate; introdurre automazione come Dependabot
+non e' giustificato finche' il numero di dipendenze CI resta cosi' limitato.
+
+Il contratto e il suo limite possono essere riassunti cosi':
+
+| Il test verifica | Il test non verifica |
+| --- | --- |
+| tutti i file workflow `.yml` e `.yaml` nella directory GitHub prevista | che lo SHA appartenga davvero alla release scritta nel commento |
+| presenza di una revisione su ogni action GitHub esterna | sicurezza o affidabilita' del codice upstream |
+| SHA minuscolo completo di 40 caratteri | sintassi YAML completa o semantica del workflow |
+| commento di release `# vX.Y.Z` | immagini `docker://` e tag delle immagini container dei job |
+| presenza di almeno una action esterna, evitando un successo vuoto | aggiornamenti automatici o disponibilita' futura della release |
+
+Quindi `make test-ci-policy` e' un guardrail statico sulla configurazione del
+repository, non un test del runtime Alfred e non uno scanner generale della
+supply chain. La review umana deve ancora confrontare tag, SHA, release note,
+permessi e comportamento osservato sui runner GitHub.
 
 Se in futuro aggiungiamo un nuovo controllo obbligatorio, per esempio un
 formatter o una suite di test aggiuntiva, bisogna aggiornare il workflow
@@ -796,6 +863,12 @@ Il job gira comunque su `runs-on: ubuntu-latest`; la chiave `container.image`
 sposta i comandi dentro l'immagine selezionata. Questo cambia lo userspace, ma
 non avvia un kernel guest. Il workflow stampa quindi sia l'immagine sia
 `uname -a` e marca esplicitamente il kernel come condiviso con il runner.
+
+Le tre lane applicano lo stesso contratto release/install/smoke. Non duplicano
+la CI completa: Ubuntu, Debian e Fedora aggiungono evidenza userspace, mentre il
+job `CI` resta l'autorita' per suite core, CLI, backend, JSONL e sanitizer.
+La tabella completa di copertura, log, artifact e debiti e' mantenuta in
+[Installability and Linux compatibility v0](53-installability-linux-compatibility-v0.md#contratto-operativo-delle-lane-userspace-v0).
 
 La strategia usa:
 
