@@ -806,7 +806,7 @@ issue e criteri di adozione gia' descritti in questo documento.
 | Test stage-install | Done | Issue #266; binario, sei man page, CLI, layout, preflight e ownership |
 | Prima matrice distribuzioni/userspace | Done | Issue #268; Ubuntu 24.04, Debian 13 e Fedora 44, tutte sul kernel condiviso del runner |
 | Evidenza ambiente e wording di supporto | Done | Issue #270; JSON v0 per lane, artifact sempre tentato e claim pubblici limitati a userspace testati |
-| Readiness closure | Done | Issue #272; suite locali, CI, tre artifact e dichiarazioni pubbliche verificati |
+| Readiness closure | Done | [Issue #272](https://github.com/kinderp/alfred/issues/272) e [PR #275](https://github.com/kinderp/alfred/pull/275); suite locali, CI, tre artifact e dichiarazioni pubbliche verificati |
 
 ## Test e validazione
 
