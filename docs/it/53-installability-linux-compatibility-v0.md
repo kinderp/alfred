@@ -661,7 +661,9 @@ root del container e non dipende dalla directory corrente del chiamante. Le
 sonde raccolgono soltanto campi ammessi, leggono al massimo 4096 byte e
 limitano ogni processo a 5 secondi. Il limite e' applicato mentre il processo
 scrive, non dopo averne caricato tutto l'output; superamento, timeout ed errore
-producono `unknown` e il figlio viene sempre terminato e raccolto. Non vengono
+producono `unknown`. Ogni probe usa una sessione separata: sui percorsi falliti
+viene terminato il process group, cosi' anche un discendente che eredita stdout
+non resta attivo, e il figlio diretto viene sempre raccolto. Non vengono
 salvati hostname, utente, path del workspace, variabili
 d'ambiente complete o segreti. Se `getconf`, `cc`, `stat` o un dato di sistema
 non sono disponibili, il campo corrispondente vale `unknown`; l'assenza di un

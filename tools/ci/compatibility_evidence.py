@@ -9,6 +9,7 @@ import platform
 import re
 import select
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -56,11 +57,13 @@ def identifier(value, field_name):
 def command_output(command):
     """Read bounded probe output, or return unknown after error or timeout."""
     process = None
+    probe_succeeded = False
     try:
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
         output = bytearray()
         deadline = time.monotonic() + PROBE_TIMEOUT_SECONDS
@@ -89,23 +92,28 @@ def command_output(command):
         if return_code != 0:
             return UNKNOWN
         decoded_output = output.decode("utf-8")
+
+        first_line = decoded_output.splitlines()[0].strip() if decoded_output else ""
+        if not first_line:
+            return UNKNOWN
+        try:
+            value = bounded_value(first_line, "probe output")
+        except ValueError:
+            return UNKNOWN
+        probe_succeeded = True
+        return value
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         return UNKNOWN
     finally:
         if process is not None:
             if process.stdout is not None:
                 process.stdout.close()
-            if process.poll() is None:
-                process.kill()
+            if not probe_succeeded:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             process.wait()
-
-    first_line = decoded_output.splitlines()[0].strip() if decoded_output else ""
-    if not first_line:
-        return UNKNOWN
-    try:
-        return bounded_value(first_line, "probe output")
-    except ValueError:
-        return UNKNOWN
 
 
 def distribution_info():

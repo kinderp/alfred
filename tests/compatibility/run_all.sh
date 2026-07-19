@@ -128,6 +128,55 @@ if not os.path.isabs(module.SOURCE_TREE_ROOT):
     raise SystemExit("source-tree filesystem probe target is not absolute")
 PY
 
+HANGING_PROBE="$TEST_DIR/hanging-probe"
+DESCENDANT_PID_FILE="$TEST_DIR/hanging-descendant.pid"
+cat >"$HANGING_PROBE" <<'PY'
+#!/usr/bin/env python3
+import os
+import time
+
+descendant_pid = os.fork()
+if descendant_pid == 0:
+    time.sleep(30)
+    os._exit(0)
+
+with open(os.environ["ALFRED_TEST_DESCENDANT_PID_FILE"], "w", encoding="ascii") as stream:
+    stream.write(f"{descendant_pid}\n")
+os._exit(0)
+PY
+chmod +x "$HANGING_PROBE"
+ALFRED_TEST_DESCENDANT_PID_FILE="$DESCENDANT_PID_FILE" \
+    python3 - "$GENERATOR" "$HANGING_PROBE" "$DESCENDANT_PID_FILE" <<'PY'
+import importlib.util
+import os
+import sys
+import time
+
+generator_path, hanging_probe, descendant_pid_file = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("compatibility_evidence", generator_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.PROBE_TIMEOUT_SECONDS = 0.2
+
+if module.command_output([hanging_probe]) != module.UNKNOWN:
+    raise SystemExit("timed-out probe did not degrade to unknown")
+
+with open(descendant_pid_file, encoding="ascii") as stream:
+    descendant_pid = int(stream.read())
+
+for _ in range(50):
+    try:
+        with open(f"/proc/{descendant_pid}/stat", encoding="ascii") as stream:
+            process_state = stream.read().split()[2]
+    except FileNotFoundError:
+        break
+    if process_state == "Z":
+        break
+    time.sleep(0.02)
+else:
+    raise SystemExit("timed-out probe left a running descendant")
+PY
+
 NOISY_COMPILER="$TEST_DIR/noisy-cc"
 cat >"$NOISY_COMPILER" <<'PY'
 #!/usr/bin/env python3

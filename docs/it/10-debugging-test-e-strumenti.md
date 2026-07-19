@@ -452,7 +452,7 @@ Le funzioni hanno responsabilita' separate:
 | `libc_info()` | rileva nome e versione libc oppure restituisce `unknown` |
 | `compiler_info()` | rileva compilatore e versione con output limitato |
 | `source_tree_filesystem_type()` | usa `command_output()` per interrogare con `stat` la root sorgente assoluta e deterministica |
-| `command_output()` | legge progressivamente al massimo 4096 byte per sonda, applica un timeout di 5 secondi, termina e raccoglie sempre il processo figlio e converte limite, timeout, indisponibilita' o errore in `unknown` |
+| `command_output()` | avvia ogni sonda in una sessione separata, legge progressivamente al massimo 4096 byte, applica un timeout di 5 secondi, termina il process group sui percorsi falliti, raccoglie il figlio diretto e converte limite, timeout, indisponibilita' o errore in `unknown` |
 | `normalize_status()` | traduce gli outcome GitHub nel vocabolario pubblico degli esiti |
 | `build_evidence()` | costruisce esattamente lo schema v0 dopo la validazione |
 | `write_atomic()` | scrive un file temporaneo nella stessa directory, esegue `fsync` e lo sostituisce atomicamente |
@@ -476,7 +476,11 @@ falso test verde: ogni mancata corrispondenza solleva invece esplicitamente
 
 Il limite viene applicato durante la lettura dal processo figlio: troncare il
 valore soltanto dopo aver catturato tutto l'output non sarebbe bounded, perche'
-un comando difettoso potrebbe prima consumare memoria senza limite.
+un comando difettoso potrebbe prima consumare memoria senza limite. La sessione
+separata serve anche al lifecycle: se un wrapper termina lasciando un
+discendente con stdout ereditato, il timeout deve chiudere l'intero gruppo e non
+lasciare un processo orfano attivo. Il test dedicato riduce il timeout, crea
+questa situazione e verifica che il discendente non resti in esecuzione.
 
 Gli esiti salvati sono:
 
