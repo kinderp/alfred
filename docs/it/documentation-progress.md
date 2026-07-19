@@ -2153,3 +2153,13 @@ ogni action esterna sia il pin immutabile di 40 caratteri sia il commento
 leggibile `# vX.Y.Z`. La modifica non tocca runtime, Event Model, Backend API o
 schema dell'evidenza; nomi, provenienza e contenuto degli artifact di
 compatibilita' devono restare identici e saranno verificati dai job della PR.
+
+Lo stesso aggiornamento documentale rende esplicito il contratto operativo
+della matrice userspace: bootstrap root limitato ai pacchetti, esecuzione
+release non-root con `no_new_privs`, staged-install, smoke sullo stesso binario,
+evidence v0 e artifact diagnostici. Una tabella distingue per Ubuntu, Debian e
+Fedora cosa viene realmente esercitato e cosa resta escluso; un registro del
+debito separa kernel, filesystem, architetture, musl, packaging, servizi, suite
+complete, security analysis, stress e performance. La issue #278 pianifica
+openSUSE e poi Arch Linux una lane alla volta, ma la validazione pre-release con
+primi utenti resta il prossimo passo di prodotto.

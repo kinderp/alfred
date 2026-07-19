@@ -279,6 +279,83 @@ pubblico `tested`/`supported`/`untested` sono descritti piu avanti.
 Se un test dipende da timing o privilegi non disponibili nel container, deve
 essere classificato e non semplicemente disabilitato senza spiegazione.
 
+### Contratto operativo delle lane userspace v0
+
+Ogni lane deve seguire lo stesso processo osservabile. Cambiano immagine,
+package manager, pacchetti, toolchain e libc; non cambiano criteri di successo
+o significato pubblico dell'evidenza.
+
+| Fase | Identita' | Controllo | Traccia prodotta |
+| --- | --- | --- | --- |
+| Checkout | runner/container | recupera l'albero esatto della PR o del push | revisione GitHub della run |
+| Bootstrap | `root` nel container | installa esplicitamente toolchain, Bash, Python, `man` e utility richieste | log package manager |
+| Contesto | `root` nel container | stampa immagine, `/etc/os-release`, kernel, architettura, libc, compilatore e filesystem | log GitHub Actions |
+| Riduzione privilegi | passaggio a UID/GID 1001 | pulisce gruppi supplementari e applica `no_new_privs` | comando e relativo esito nel log |
+| Stage install | UID/GID 1001 | `make test-install`: release, sette artifact, modi, CLI, sei man page, layout, preflight, ownership e uninstall | esito step e log temporanei quando disponibili |
+| Smoke runtime | UID/GID 1001 | esegue lo scenario MVP sullo stesso binario release tramite `ALFRED_BIN` | esito step e log smoke |
+| Evidence | `if: always()` | normalizza ambiente, provenienza ed esiti nello schema v0 | `compatibility-evidence-v0.json` |
+| Upload | `if: always()` o `if: failure()` | conserva evidence per 30 giorni e diagnostica temporanea sui fallimenti | artifact per lane o artifact failure |
+
+`fail-fast: false` e' parte del processo diagnostico: una lane rossa non
+cancella le altre. Il confronto fra esiti permette di distinguere un problema
+comune da un problema legato a package manager, libreria o toolchain di una
+sola distribuzione.
+
+### Copertura ed esclusioni per distribuzione
+
+| Lane v0 | Differenza esercitata | Test eseguiti | Cosa non dimostra |
+| --- | --- | --- | --- |
+| Ubuntu 24.04 | baseline LTS Debian-like, `apt`, glibc e toolchain Ubuntu | stage-install release non-root e smoke MVP release | kernel Ubuntu guest, pacchetto `.deb`, systemd, tutta la suite su Ubuntu release |
+| Debian 13 | userspace stable/slim, `apt`, versioni Debian di glibc e GCC | stesso contratto stage-install/smoke ed evidence v0 | kernel Debian guest, pacchetto `.deb`, comportamento su Debian precedenti o futuri |
+| Fedora 44 | famiglia RPM, `dnf`, glibc e GCC piu' recenti della baseline | stesso contratto stage-install/smoke ed evidence v0 | kernel Fedora guest, pacchetto `.rpm`, SELinux/systemd o tutta la suite su Fedora |
+
+Per tutte e tre valgono inoltre le stesse esclusioni:
+
+- condividono il kernel e l'architettura `x86_64` del runner GitHub;
+- usano glibc, quindi non provano musl;
+- non provano ARM64, filesystem guest distinti o configurazioni kernel
+  differenti;
+- non duplicano suite core/backend/JSONL sanitizzate, stress, benchmark, fuzzy
+  audit o test notturni;
+- non installano pacchetti nativi della distribuzione e non avviano un sistema
+  completo con init, servizi o policy host;
+- una lane verde significa `tested` per quello userspace e quella run, non
+  `supported` per tutte le versioni della distribuzione.
+
+### Log, artifact e interpretazione degli errori
+
+Il log GitHub Actions conserva output del bootstrap, sonde ambiente, build,
+stage-install, smoke, generatore evidence e upload. Il job CI completo, quando
+fallisce, prova inoltre a caricare `alfred-test-logs` con log core, CLI,
+backend, JSONL e directory temporanee. Ogni lane userspace:
+
+- prova sempre a caricare `alfred-compatibility-evidence-<lane>`;
+- in caso di errore prova anche a caricare
+  `alfred-userspace-<lane>-failure` con gli stage temporanei disponibili;
+- registra separatamente gli outcome di staged-install e smoke, quindi
+  `not_run`, `cancelled` e `unknown` non vengono confusi con `passed`;
+- puo' non produrre artifact se la run viene cancellata, il bootstrap fallisce
+  prima di Python o GitHub non riesce piu' a eseguire gli step finali.
+
+Un artifact mancante non e' un successo. Il processo di audit deve leggere
+insieme stato degli step, log, evidence JSON, revisione, run ID e run attempt.
+I log diagnostici spiegano il fallimento; l'evidence versionata permette di
+confrontare run e ambienti senza trasformare output umano non strutturato in un
+contratto pubblico.
+
+### Debito di compatibilita' ancora aperto
+
+| Debito | Perche' non e' coperto dai container v0 | Strumento o passo futuro |
+| --- | --- | --- |
+| Kernel diversi | i container condividono il kernel del runner | VM `testcloud`/`libvirt`, poi `virtme-ng` per versioni mirate |
+| Filesystem reali differenti | il checkout resta sul filesystem del runner/container | dischi o mount guest ext4, XFS, Btrfs in VM dedicate |
+| Architetture | le lane correnti sono `x86_64` | runner o VM ARM64 reali |
+| musl | tutte le lane correnti usano glibc | issue Alpine/musl con contratto di portabilita' dedicato |
+| Packaging e servizi | stage install non e' `.deb`/`.rpm` e il container non avvia init | milestone packaging e systemd separate |
+| Suite completa per distro | duplicarla ora aumenterebbe costo senza evidenza di bisogno | estensione mirata dopo bug o utenti reali |
+| Security analysis e fuzzing | sono dimensioni diverse dalla compatibilita' userspace | CodeQL, libFuzzer/ClusterFuzzLite in corsie dedicate |
+| Stress, performance e uso lungo | stage-install e smoke sono scenari brevi | benchmark e audit notturni separati |
+
 ## Livello 3 - tmt per i piani
 
 `tmt` permette di descrivere piani che separano discovery, provisioning,
@@ -732,6 +809,35 @@ almeno una di queste condizioni e' vera:
 - aggiunge evidenza non gia' equivalente a una lane esistente.
 
 Non aggiungiamo ambienti solo per aumentare il numero di badge verdi.
+
+### Roadmap ordinata: openSUSE e Arch Linux
+
+L'espansione e' tracciata dalla
+[issue #278](https://github.com/kinderp/alfred/issues/278) e non precede la
+validazione pre-release con primi utenti. Si procede una distribuzione alla
+volta, con issue figlia e PR separate, misurando durata e stabilita' prima di
+rendere permanente la lane.
+
+| Ordine | Distribuzione | Evidenza nuova | Stima iniziale | Criterio di adozione |
+| --- | --- | --- | --- | --- |
+| 1 | openSUSE | `zypper`, famiglia RPM indipendente da Fedora, release userspace distinta | 1-2 giornate incluse CI, documentazione, evidence e review | stessa pipeline non-root v0; lane blocking solo dopo run stabili |
+| 2 | Arch Linux | `pacman`, toolchain e librerie rolling recenti | 1-2 giornate piu' un periodo di osservazione | decidere esplicitamente se blocking o periodica in base al rumore esterno |
+
+Gentoo resta fuori da questa espansione: il bootstrap source-based e i tempi di
+compilazione stimati in 2-5 giornate iniziali, oltre alla manutenzione, non
+comprano oggi evidenza proporzionata. Va riaperta solo per domanda di utenti,
+bug riproducibile o requisito di portabilita' concreto.
+
+L'ordine di prodotto resta quindi:
+
+```text
+chiusura debito action/pinning #276
+-> validazione pre-release e primi utenti
+-> openSUSE come prima espansione userspace
+-> valutazione dei risultati
+-> Arch Linux come seconda espansione
+-> kernel/VM e altri debiti soltanto con un obiettivo misurabile
+```
 
 ## Esito della readiness audit v0
 

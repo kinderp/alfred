@@ -115,6 +115,30 @@ Quando la milestone viene chiusa:
 | 15 | [Installability and Linux compatibility v0](53-installability-linux-compatibility-v0.md) | done | 2026-07-18 -> 2026-07-19 UTC | Circa 1 settimana | 2 giorni di calendario | Consegnati install/uninstall staged bounded a sette artifact, test release non-root, matrice userspace Ubuntu/Debian/Fedora, evidence v0 versionata e audit finale; i claim restano limitati ad ambienti testati. | Post-MVP documentation and man pages v0, CLI parser v0, smoke test MVP, install/uninstall staged e CI di riferimento. | Sblocca packaging futuro e primi utenti esterni; restano rimandati `.deb`/`.rpm`, systemd, musl, altre architetture, VM/kernel reali, tmt, CodeQL, fuzzing e aggiornamento del runtime delle GitHub Actions. | [Milestone #15](https://github.com/kinderp/alfred/milestone/15), [Issue #261](https://github.com/kinderp/alfred/issues/261), [Issue #262](https://github.com/kinderp/alfred/issues/262), [Issue #264](https://github.com/kinderp/alfred/issues/264), [Issue #266](https://github.com/kinderp/alfred/issues/266), [Issue #268](https://github.com/kinderp/alfred/issues/268), [Issue #270](https://github.com/kinderp/alfred/issues/270), [Issue #272](https://github.com/kinderp/alfred/issues/272), [PR #275](https://github.com/kinderp/alfred/pull/275), [Issue #276](https://github.com/kinderp/alfred/issues/276) | [53](53-installability-linux-compatibility-v0.md), [54](54-audit-installazione-ci-v0.md), [09](09-makefile-e-build-system.md), [10](10-debugging-test-e-strumenti.md), [35](35-qualita-prodotto-software.md), [51](51-post-mvp-documentation-man-pages-v0.md) |
 | 16 | [Universal Observation Runtime research](38-visione-observation-runtime.md) | future | Non pianificata | Non stimata | Non ancora nota | Serve evitare che il modello comune venga chiuso dentro filesystem/inotify se Alfred dovra' rappresentare osservazioni, inferenze, azioni e feedback. | Backend API v0 reale, almeno piu' domini/sensori, replay, projection layer minimo. | Possibile modello Observation, knowledge graph, world model digitale, agenti e LLM come adapter/interfaccia. | Da creare solo quando diventa lavoro operativo. | [39](39-principi-architetturali-futuri.md), [24](24-roadmap-ai-agent-guardrail.md) |
 
+## Sequenza operativa dopo la milestone 15
+
+Questa sequenza ordina il backlog senza aprire prematuramente nuove milestone o
+assegnare date prive di evidenza:
+
+1. chiudere il debito runtime/pinning delle GitHub Actions con
+   [issue #276](https://github.com/kinderp/alfred/issues/276) e
+   [PR #277](https://github.com/kinderp/alfred/pull/277);
+2. aprire come prossimo lavoro di prodotto la validazione pre-release con primi
+   utenti e scenari reali, usando i risultati per scegliere la feature
+   successiva;
+3. espandere la matrice userspace in modo incrementale tramite
+   [issue #278](https://github.com/kinderp/alfred/issues/278): prima openSUSE,
+   poi Arch Linux, una issue e una PR per lane;
+4. valutare VM/kernel reali e il pilot formale solo quando bug, utenti o nuovi
+   backend rendono misurabile il beneficio;
+5. mantenere `Universal Observation Runtime research` come direzione lunga, non
+   come scope immediato dell'MVP.
+
+openSUSE e Arch sono quindi roadmap di compatibilita', non blocchi per i primi
+utenti. Se una delle due riproduce un problema reale, la priorita' puo' salire;
+in assenza di tale evidenza non deve interrompere il percorso di validazione
+gia' preventivato.
+
 ## Come leggere la durata
 
 La durata stimata risponde alla domanda:
