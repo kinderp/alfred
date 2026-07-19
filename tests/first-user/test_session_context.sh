@@ -73,8 +73,20 @@ CLEANUP_BLOCK="$(sed -n '/^## Cleanup$/,/^## Dopo la sessione$/p' "$GUIDE")"
 grep -F ': "${repo_root:?contesto sessione non caricato}"' \
     <<< "$CLEANUP_BLOCK" >/dev/null ||
     fail 'cleanup does not guard repo_root'
-grep -F 'cd "$repo_root"' <<< "$CLEANUP_BLOCK" >/dev/null ||
-    fail 'cleanup does not return to the repository root before make'
+CLEANUP_CD_LINES="$(grep -nF 'cd "$repo_root"' <<< "$CLEANUP_BLOCK" || true)"
+CLEANUP_MAKE_LINES="$(grep -nF \
+    'make DESTDIR="$stage_root" PREFIX=/usr uninstall' \
+    <<< "$CLEANUP_BLOCK" || true)"
+[[ "$CLEANUP_CD_LINES" =~ ^[0-9]+: ]] &&
+    [[ "$CLEANUP_CD_LINES" != *$'\n'* ]] ||
+    fail 'cleanup must contain exactly one repository cd'
+[[ "$CLEANUP_MAKE_LINES" =~ ^[0-9]+: ]] &&
+    [[ "$CLEANUP_MAKE_LINES" != *$'\n'* ]] ||
+    fail 'cleanup must contain exactly one staged uninstall command'
+CLEANUP_CD_LINE="${CLEANUP_CD_LINES%%:*}"
+CLEANUP_MAKE_LINE="${CLEANUP_MAKE_LINES%%:*}"
+((CLEANUP_CD_LINE < CLEANUP_MAKE_LINE)) ||
+    fail 'cleanup must return to the repository before make'
 
 for terminal in 1 2; do
     bash -c '
