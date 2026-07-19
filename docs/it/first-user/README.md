@@ -373,7 +373,9 @@ scenario in `FAIL`: e' un problema di gestione dell'evidenza.
 Con Alfred gia' fermo:
 
 ```bash
+: "${repo_root:?contesto sessione non caricato}"
 : "${stage_root:?contesto sessione non caricato}"
+cd "$repo_root"
 make DESTDIR="$stage_root" PREFIX=/usr uninstall
 test ! -e "$stage_root/usr/bin/alfred"
 ```

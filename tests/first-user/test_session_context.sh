@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 HELPER="$ROOT_DIR/tools/first-user/session-context.sh"
+GUIDE="$ROOT_DIR/docs/it/first-user/README.md"
 SESSION_ID="FU-TEST-$$"
 OUTPUT_FILE="$(mktemp /tmp/alfred_first_user_context_output.XXXXXX)"
 SESSION_ROOT=''
@@ -41,6 +42,13 @@ CONTEXT_FILE="$(sed -n 's/^Session context file (local only): //p' \
 printf -v EXPECTED_BOOTSTRAP 'source %q load %q' "$HELPER" "$CONTEXT_FILE"
 grep -Fx -- "$EXPECTED_BOOTSTRAP" "$OUTPUT_FILE" >/dev/null ||
     fail 'create did not print the shell-quoted bootstrap command'
+
+CLEANUP_BLOCK="$(sed -n '/^## Cleanup$/,/^## Dopo la sessione$/p' "$GUIDE")"
+grep -F ': "${repo_root:?contesto sessione non caricato}"' \
+    <<< "$CLEANUP_BLOCK" >/dev/null ||
+    fail 'cleanup does not guard repo_root'
+grep -F 'cd "$repo_root"' <<< "$CLEANUP_BLOCK" >/dev/null ||
+    fail 'cleanup does not return to the repository root before make'
 
 for terminal in 1 2; do
     bash -c '
