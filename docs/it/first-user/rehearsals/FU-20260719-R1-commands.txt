@@ -1,0 +1,50 @@
+001 | 2026-07-19T09:03:20Z | preparation | facilitator | git worktree add --detach <SESSION_ROOT>/source fbf03c7
+002 | 2026-07-19T09:03:20Z | environment | participant | git rev-parse HEAD
+003 | 2026-07-19T09:03:20Z | environment | participant | date -u +%Y-%m-%dT%H:%M:%SZ
+004 | 2026-07-19T09:03:20Z | environment | participant | uname -s
+005 | 2026-07-19T09:03:20Z | environment | participant | uname -r
+006 | 2026-07-19T09:03:20Z | environment | participant | uname -m
+007 | 2026-07-19T09:03:20Z | environment | participant | getconf GNU_LIBC_VERSION
+008 | 2026-07-19T09:03:20Z | environment | participant | cc --version | sed -n 1p
+009 | 2026-07-19T09:03:20Z | environment | participant | make --version | sed -n 1p
+010 | 2026-07-19T09:03:20Z | environment | participant | stat -f -c %T <WATCH_ROOT>
+011 | 2026-07-19T09:03:20Z | environment | participant | source /etc/os-release; printf NAME VERSION_ID
+012 | 2026-07-19T09:03:20Z | preflight | facilitator | pgrep -x alfred
+013 | 2026-07-19T09:03:38Z | onboarding | participant | make
+014 | 2026-07-19T09:03:45Z | onboarding | participant | ./alfred --help
+015 | 2026-07-19T09:03:45Z | onboarding | participant | ./alfred --version
+016 | 2026-07-19T09:03:45Z | onboarding | participant | ./alfred --check-config
+017 | 2026-07-19T09:04:05Z | staged-install | participant | make release
+018 | 2026-07-19T09:04:10Z | staged-install | participant | make DESTDIR=<SESSION_ROOT>/stage PREFIX=/usr install
+019 | 2026-07-19T09:04:10Z | staged-install | participant | <SESSION_ROOT>/stage/usr/bin/alfred --version
+020 | 2026-07-19T09:04:10Z | staged-install | participant | MANPAGER=cat man <SESSION_ROOT>/stage/usr/share/man/man1/alfred.1
+021 | 2026-07-19T09:04:10Z | staged-install | participant | make DESTDIR=<SESSION_ROOT>/stage PREFIX=/usr uninstall
+022 | 2026-07-19T09:04:10Z | staged-install | participant | test ! -e <SESSION_ROOT>/stage/usr/bin/alfred
+023 | 2026-07-19T09:04:26Z | jsonl-config | participant | printf config keys > <SESSION_ROOT>/run/alfred.conf
+024 | 2026-07-19T09:04:26Z | jsonl-config | participant | <REPO_ROOT>/alfred -c <SESSION_ROOT>/run/alfred.conf --check-config
+025 | 2026-07-19T09:04:33Z | runtime | terminal-1 | cd <SESSION_ROOT>/run; <REPO_ROOT>/alfred -c <SESSION_ROOT>/run/alfred.conf <WATCH_ROOT>
+026 | 2026-07-19T09:05:06Z | runtime | facilitator | rg WATCH_ADDED <SESSION_ROOT>/run/events.log
+027 | 2026-07-19T09:05:06Z | runtime | terminal-2 | printf alpha > <WATCH_ROOT>/draft.txt
+028 | 2026-07-19T09:05:06Z | runtime | terminal-2 | printf beta >> <WATCH_ROOT>/draft.txt
+029 | 2026-07-19T09:05:06Z | runtime | terminal-2 | mv <WATCH_ROOT>/draft.txt <WATCH_ROOT>/report.txt
+030 | 2026-07-19T09:05:07Z | runtime | terminal-2 | mkdir <WATCH_ROOT>/inbox <WATCH_ROOT>/archive
+031 | 2026-07-19T09:05:07Z | runtime | terminal-2 | printf item > <WATCH_ROOT>/inbox/item.txt
+032 | 2026-07-19T09:05:07Z | runtime | terminal-2 | mv <WATCH_ROOT>/inbox/item.txt <WATCH_ROOT>/archive/item.txt
+033 | 2026-07-19T09:05:07Z | runtime | terminal-2 | rm <WATCH_ROOT>/archive/item.txt
+034 | 2026-07-19T09:05:07Z | runtime | terminal-2 | rmdir <WATCH_ROOT>/inbox <WATCH_ROOT>/archive
+035 | 2026-07-19T09:05:39Z | user-like-rehearsal | terminal-2 | mkdir <WATCH_ROOT>/src <WATCH_ROOT>/build
+036 | 2026-07-19T09:05:39Z | user-like-rehearsal | terminal-2 | printf synthetic-C-source > <WATCH_ROOT>/src/hello.c
+037 | 2026-07-19T09:05:39Z | user-like-rehearsal | terminal-2 | cc -o <WATCH_ROOT>/build/hello <WATCH_ROOT>/src/hello.c
+038 | 2026-07-19T09:05:40Z | user-like-rehearsal | terminal-2 | <WATCH_ROOT>/build/hello
+039 | 2026-07-19T09:05:40Z | user-like-rehearsal | terminal-2 | mv <WATCH_ROOT>/src/hello.c <WATCH_ROOT>/src/main.c
+040 | 2026-07-19T09:05:40Z | user-like-rehearsal | terminal-2 | printf newline >> <WATCH_ROOT>/src/main.c
+041 | 2026-07-19T09:05:40Z | user-like-rehearsal | terminal-2 | rm <WATCH_ROOT>/build/hello
+042 | 2026-07-19T09:05:51Z | runtime | terminal-1 | Ctrl+C
+043 | 2026-07-19T09:06:17Z | output-check | participant | python3 -c JSON-lines-validation < <SESSION_ROOT>/run/output.jsonl
+044 | 2026-07-19T09:06:17Z | output-check | facilitator | inspect raw.log events.log errors.log output.jsonl
+045 | 2026-07-19T09:11:24Z | cleanup | participant | make DESTDIR=<SESSION_ROOT>/stage PREFIX=/usr uninstall
+046 | 2026-07-19T09:11:24Z | cleanup | participant | test ! -e <SESSION_ROOT>/stage/usr/bin/alfred
+047 | 2026-07-19T09:11:24Z | cleanup | facilitator | pgrep -x alfred
+048 | 2026-07-19T09:11:24Z | cleanup | facilitator | git worktree remove --force <SESSION_ROOT>/source
+049 | 2026-07-19T09:11:24Z | cleanup | facilitator | rm -rf <SESSION_ROOT>
+050 | 2026-07-19T09:12:54Z | cleanup | facilitator | find <SESSION_ROOT> -depth -delete
