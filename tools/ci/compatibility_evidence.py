@@ -7,15 +7,19 @@ import json
 import os
 import platform
 import re
+import select
 import shutil
 import subprocess
 import tempfile
+import time
 
 
 SCHEMA_NAME = "alfred.compatibility-evidence"
 SCHEMA_VERSION = 0
 UNKNOWN = "unknown"
 MAX_VALUE_LENGTH = 256
+MAX_PROBE_OUTPUT_BYTES = 4096
+PROBE_TIMEOUT_SECONDS = 5
 IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 REVISION_RE = re.compile(r"^[0-9a-f]{40,64}$")
 RUN_ID_RE = re.compile(r"^[0-9]{1,32}$")
@@ -47,22 +51,52 @@ def identifier(value, field_name):
 
 
 def command_output(command):
-    """Return one bounded output line, or unknown when a probe is unavailable."""
+    """Read bounded probe output, or return unknown after error or timeout."""
+    process = None
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             command,
-            check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=5,
         )
-    except (OSError, subprocess.SubprocessError, UnicodeError):
-        return UNKNOWN
+        output = bytearray()
+        deadline = time.monotonic() + PROBE_TIMEOUT_SECONDS
 
-    if result.returncode != 0:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return UNKNOWN
+            readable, _, _ = select.select([process.stdout], [], [], remaining)
+            if not readable:
+                return UNKNOWN
+
+            bytes_left = MAX_PROBE_OUTPUT_BYTES + 1 - len(output)
+            chunk = os.read(process.stdout.fileno(), min(4096, bytes_left))
+            if not chunk:
+                break
+            output.extend(chunk)
+            if len(output) > MAX_PROBE_OUTPUT_BYTES:
+                return UNKNOWN
+
+        remaining = max(0, deadline - time.monotonic())
+        try:
+            return_code = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            return UNKNOWN
+        if return_code != 0:
+            return UNKNOWN
+        decoded_output = output.decode("utf-8")
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         return UNKNOWN
-    first_line = result.stdout.splitlines()[0].strip() if result.stdout else ""
+    finally:
+        if process is not None:
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+    first_line = decoded_output.splitlines()[0].strip() if decoded_output else ""
     if not first_line:
         return UNKNOWN
     try:

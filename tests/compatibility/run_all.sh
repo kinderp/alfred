@@ -16,8 +16,9 @@ generate() {
     local output=$1
     local install_outcome=$2
     local smoke_outcome=$3
+    local compiler=${4:-cc}
 
-    CC=cc python3 "$GENERATOR" \
+    CC="$compiler" python3 "$GENERATOR" \
         --output "$output" \
         --lane ubuntu-24.04 \
         --container-image ubuntu:24.04 \
@@ -72,6 +73,26 @@ datetime.datetime.fromisoformat(evidence["generated_at_utc"].replace("Z", "+00:0
 serialized = json.dumps(evidence)
 for forbidden in ("hostname", "username", "workspace", "environment_variables"):
     assert forbidden not in serialized
+PY
+
+NOISY_COMPILER="$TEST_DIR/noisy-cc"
+cat >"$NOISY_COMPILER" <<'PY'
+#!/usr/bin/env python3
+import os
+
+os.write(1, b"x" * 8192)
+PY
+chmod +x "$NOISY_COMPILER"
+NOISY_EVIDENCE="$TEST_DIR/noisy-probe.json"
+generate "$NOISY_EVIDENCE" success success "$NOISY_COMPILER"
+python3 - "$NOISY_EVIDENCE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    evidence = json.load(stream)
+if evidence["environment"]["compiler"] != {"id": "unknown", "version": "unknown"}:
+    raise SystemExit("noisy compiler probe did not degrade to unknown")
 PY
 
 UNKNOWN_EVIDENCE="$TEST_DIR/unknown.json"

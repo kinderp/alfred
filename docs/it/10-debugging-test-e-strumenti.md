@@ -451,7 +451,7 @@ Le funzioni hanno responsabilita' separate:
 | `distribution_info()` | legge solo ID e versione della distribuzione, senza copiare tutto `os-release` |
 | `libc_info()` | rileva nome e versione libc oppure restituisce `unknown` |
 | `compiler_info()` | rileva compilatore e versione con output limitato |
-| `command_output()` | esegue sonde brevi con timeout e converte indisponibilita' o errore in `unknown` |
+| `command_output()` | legge progressivamente al massimo 4096 byte per sonda, applica un timeout di 5 secondi, termina e raccoglie sempre il processo figlio e converte limite, timeout, indisponibilita' o errore in `unknown` |
 | `normalize_status()` | traduce gli outcome GitHub nel vocabolario pubblico degli esiti |
 | `build_evidence()` | costruisce esattamente lo schema v0 dopo la validazione |
 | `write_atomic()` | scrive un file temporaneo nella stessa directory, esegue `fsync` e lo sostituisce atomicamente |
@@ -460,7 +460,10 @@ La scrittura atomica evita che un consumer scarichi un JSON scritto solo a
 meta'. La validazione avviene prima della sostituzione: un input non valido non
 deve sovrascrivere un artifact precedente. I test coprono schema e tipi,
 normalizzazione degli esiti, fallback `unknown`, rifiuto di lane/status non
-validi e assenza dei principali campi sensibili.
+validi, output eccessivo di una sonda e assenza dei principali campi sensibili.
+Il limite viene applicato durante la lettura dal processo figlio: troncare il
+valore soltanto dopo aver catturato tutto l'output non sarebbe bounded, perche'
+un comando difettoso potrebbe prima consumare memoria senza limite.
 
 Gli esiti salvati sono:
 

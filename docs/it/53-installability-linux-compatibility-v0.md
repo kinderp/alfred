@@ -655,8 +655,11 @@ permanente. `kernel_scope=shared-github-runner-kernel` impedisce di interpretare
 tre lane userspace come tre kernel guest. `run_id` e `run_attempt` sono stringhe
 decimali per non dipendere dai limiti numerici di consumer JSON diversi.
 
-Le sonde raccolgono soltanto campi ammessi e limitano lunghezza e tempo di
-esecuzione. Non vengono salvati hostname, utente, path del workspace, variabili
+Le sonde raccolgono soltanto campi ammessi, leggono al massimo 4096 byte e
+limitano ogni processo a 5 secondi. Il limite e' applicato mentre il processo
+scrive, non dopo averne caricato tutto l'output; superamento, timeout ed errore
+producono `unknown` e il figlio viene sempre terminato e raccolto. Non vengono
+salvati hostname, utente, path del workspace, variabili
 d'ambiente complete o segreti. Se `getconf`, `cc`, `stat` o un dato di sistema
 non sono disponibili, il campo corrispondente vale `unknown`; l'assenza di un
 dato non fa fallire una prova altrimenti valida e non autorizza a inventarlo.
