@@ -461,7 +461,11 @@ meta'. La validazione avviene prima della sostituzione: un input non valido non
 deve sovrascrivere un artifact precedente. I test coprono schema e tipi,
 normalizzazione degli esiti, fallback `unknown`, rifiuto di lane/status non
 validi, tutti gli esiti pubblici incluso `unknown`, output eccessivo di una
-sonda e assenza dei principali campi sensibili. I controlli Python non usano
+sonda, indipendenza dalla directory corrente e assenza dei principali campi
+sensibili. `source_tree_filesystem_type` misura sempre il filesystem che ospita
+la root sorgente ricavata dal percorso del generatore: non indica genericamente
+il filesystem root del container e non dipende dalla directory da cui viene
+lanciato il comando. I controlli Python non usano
 `assert`, perche' `python -O` e `PYTHONOPTIMIZE` lo eliminerebbero producendo un
 falso test verde: ogni mancata corrispondenza solleva invece esplicitamente
 `SystemExit`.

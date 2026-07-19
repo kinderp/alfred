@@ -635,7 +635,7 @@ record ha questo envelope:
     "architecture": "x86_64",
     "libc": {"name": "glibc", "version": "2.41"},
     "compiler": {"id": "gcc", "version": "14.2.0"},
-    "filesystem_type": "overlayfs",
+    "source_tree_filesystem_type": "overlayfs",
     "kernel_release": "6.x.y",
     "kernel_scope": "shared-github-runner-kernel"
   },
@@ -655,7 +655,10 @@ permanente. `kernel_scope=shared-github-runner-kernel` impedisce di interpretare
 tre lane userspace come tre kernel guest. `run_id` e `run_attempt` sono stringhe
 decimali per non dipendere dai limiti numerici di consumer JSON diversi.
 
-Le sonde raccolgono soltanto campi ammessi, leggono al massimo 4096 byte e
+`source_tree_filesystem_type` descrive il filesystem che ospita la root del
+checkout, ricavata dal percorso del generatore; non descrive necessariamente la
+root del container e non dipende dalla directory corrente del chiamante. Le
+sonde raccolgono soltanto campi ammessi, leggono al massimo 4096 byte e
 limitano ogni processo a 5 secondi. Il limite e' applicato mentre il processo
 scrive, non dopo averne caricato tutto l'output; superamento, timeout ed errore
 producono `unknown` e il figlio viene sempre terminato e raccolto. Non vengono

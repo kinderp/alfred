@@ -67,7 +67,7 @@ require(evidence["lane"] == "ubuntu-24.04", "unexpected lane")
 require(set(evidence["environment"]) == {
     "container_image", "container_mode", "distribution_id",
     "distribution_version", "architecture", "libc", "compiler",
-    "filesystem_type", "kernel_release", "kernel_scope",
+    "source_tree_filesystem_type", "kernel_release", "kernel_scope",
 }, "unexpected environment fields")
 require(set(evidence["environment"]["libc"]) == {"name", "version"},
         "unexpected libc fields")
@@ -93,6 +93,25 @@ except (KeyError, TypeError, ValueError) as error:
 serialized = json.dumps(evidence)
 for forbidden in ("hostname", "username", "workspace", "environment_variables"):
     require(forbidden not in serialized, f"forbidden field present: {forbidden}")
+PY
+
+CWD_INDEPENDENT_EVIDENCE="$TEST_DIR/cwd-independent.json"
+(
+    cd "$TEST_DIR"
+    generate "$CWD_INDEPENDENT_EVIDENCE" success skipped
+)
+python3 - "$EVIDENCE" "$CWD_INDEPENDENT_EVIDENCE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    reference = json.load(stream)
+with open(sys.argv[2], encoding="utf-8") as stream:
+    from_unrelated_cwd = json.load(stream)
+
+field = "source_tree_filesystem_type"
+if reference["environment"][field] != from_unrelated_cwd["environment"][field]:
+    raise SystemExit("source-tree filesystem type depends on the caller cwd")
 PY
 
 NOISY_COMPILER="$TEST_DIR/noisy-cc"
@@ -138,7 +157,7 @@ with open(sys.argv[1], encoding="utf-8") as stream:
     evidence = json.load(stream)
 if evidence["environment"]["compiler"] != {"id": "unknown", "version": "unknown"}:
     raise SystemExit("missing unknown compiler fallback")
-if evidence["environment"]["filesystem_type"] != "unknown":
+if evidence["environment"]["source_tree_filesystem_type"] != "unknown":
     raise SystemExit("missing unknown filesystem fallback")
 if evidence["results"] != {"staged_install": "failed", "mvp_smoke": "cancelled"}:
     raise SystemExit("unexpected failure/cancelled status mapping")

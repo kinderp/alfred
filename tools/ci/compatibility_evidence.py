@@ -20,6 +20,9 @@ UNKNOWN = "unknown"
 MAX_VALUE_LENGTH = 256
 MAX_PROBE_OUTPUT_BYTES = 4096
 PROBE_TIMEOUT_SECONDS = 5
+SOURCE_TREE_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 REVISION_RE = re.compile(r"^[0-9a-f]{40,64}$")
 RUN_ID_RE = re.compile(r"^[0-9]{1,32}$")
@@ -242,9 +245,11 @@ def build_evidence(arguments):
         kernel_release = bounded_value(platform.release(), "kernel_release")
     except ValueError:
         kernel_release = UNKNOWN
-    filesystem_type = command_output(["stat", "-f", "-c", "%T", "."])
-    if filesystem_type.upper().startswith("UNKNOWN"):
-        filesystem_type = UNKNOWN
+    source_tree_filesystem_type = command_output(
+        ["stat", "-f", "-c", "%T", SOURCE_TREE_ROOT]
+    )
+    if source_tree_filesystem_type.upper().startswith("UNKNOWN"):
+        source_tree_filesystem_type = UNKNOWN
 
     return {
         "schema": SCHEMA_NAME,
@@ -267,7 +272,7 @@ def build_evidence(arguments):
             "architecture": architecture,
             "libc": {"name": libc_name, "version": libc_version},
             "compiler": {"id": compiler_id, "version": compiler_version},
-            "filesystem_type": filesystem_type,
+            "source_tree_filesystem_type": source_tree_filesystem_type,
             "kernel_release": kernel_release,
             "kernel_scope": arguments.kernel_scope,
         },

@@ -862,7 +862,8 @@ solo dal testo temporaneo del log.
 
 Il record contiene esclusivamente campi ammessi: versione schema, revisione,
 run CI, lane, immagine, distribuzione, architettura, libc, compilatore,
-filesystem, kernel e relativo scope, profilo build, sanitizer ed esiti. Non
+filesystem della root sorgente, kernel e relativo scope, profilo build,
+sanitizer ed esiti. Non
 contiene hostname, utente, path del workspace, segreti o dump completo delle
 variabili d'ambiente. Una sonda indisponibile produce `unknown`: il generatore
 non inventa un valore e non trasforma l'assenza di prova in successo.
