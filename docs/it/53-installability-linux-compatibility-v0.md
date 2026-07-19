@@ -797,12 +797,14 @@ fallimenti della milestone: sono livelli distinti che richiedono una futura
 issue e criteri di adozione gia' descritti in questo documento.
 
 Il job CI della PR di chiusura e' passato, ma GitHub ha anche segnalato che
-`actions/checkout@v4` dichiara ancora il runtime Node.js 20 deprecato e viene
-forzato sul runtime Node.js 24. Il warning non invalida i risultati v0; resta
-pero' un debito di affidabilita' e supply-chain tracciato nella
+`actions/checkout@v4` e `actions/upload-artifact@v4` dichiarano ancora il
+runtime Node.js 20 deprecato e vengono forzati sul runtime Node.js 24. Il
+warning non invalida i risultati v0; resta pero' un debito di affidabilita' e
+supply-chain tracciato nella
 [issue #276](https://github.com/kinderp/alfred/issues/276). La scelta della
-versione sostitutiva e della policy di pinning richiede una modifica CI
-separata, non un aggiornamento opportunistico dentro questa chiusura.
+versione sostitutiva per entrambe le action e della policy di pinning richiede
+una modifica CI separata, non un aggiornamento opportunistico dentro questa
+chiusura.
 
 ## Checklist della milestone
 

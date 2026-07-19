@@ -2134,6 +2134,7 @@ dichiarano esplicitamente il kernel condiviso del runner. La milestone e' quindi
 chiusa nel suo perimetro v0: installazione staged e userspace testati sono
 evidenza consegnata; packaging, systemd, musl, altre architetture, VM/kernel,
 tmt, CodeQL e fuzzing restano lavoro futuro dichiarato. Il warning GitHub che
-forza `actions/checkout@v4` dal runtime Node.js 20 deprecato a Node.js 24 e'
-tracciato separatamente dalla issue #276: non invalida i job verdi della
-readiness, ma richiede un aggiornamento e una decisione di pinning dedicati.
+forza `actions/checkout@v4` e `actions/upload-artifact@v4` dal runtime Node.js
+20 deprecato a Node.js 24 e' tracciato separatamente dalla issue #276: non
+invalida i job verdi della readiness, ma richiede un aggiornamento e una
+decisione di pinning dedicati.
