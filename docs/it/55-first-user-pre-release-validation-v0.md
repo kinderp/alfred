@@ -149,8 +149,17 @@ prova a:
 4. validare la configurazione con `./alfred --check-config`;
 5. spiegare con parole proprie quali file di log si aspetta.
 
-Si registra il tempo fino al primo comando riuscito e ogni punto in cui il
-facilitatore deve intervenire.
+All'inizio dell'onboarding senza suggerimenti si fissa un unico istante `T0`.
+Da quel punto si misurano separatamente:
+
+- `time-to-first-command`: da `T0` al primo comando documentato che termina con
+  exit status `0`;
+- `time-to-first-event`: da `T0` al primo evento semantico atteso che il
+  partecipante riesce a riconoscere in `events.log` o `output.jsonl`.
+
+Si registra inoltre ogni punto in cui il facilitatore deve intervenire. Gli
+interventi non fermano i timer: restano un dato separato che spiega perche' il
+tempo osservato puo' essere maggiore o non rappresentare uso indipendente.
 
 ### 3. Installazione staged non-root
 
@@ -251,7 +260,7 @@ il comportamento e' automatizzabile.
 
 Le metriche servono a confrontare sessioni, non a costruire una classifica:
 
-- tempo fino al primo evento semantico riconosciuto;
+- `time-to-first-command` e `time-to-first-event`, misurati dallo stesso `T0`;
 - percentuale di passi completati senza aiuto;
 - numero e tipo degli interventi del facilitatore;
 - numero di `FAIL`, `NEEDS_REVIEW` e `BLOCKED`;
