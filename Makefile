@@ -333,6 +333,7 @@ run: all
 # test-jsonl checks the structured external output contract.
 # test-ci-policy checks immutable external GitHub Actions references.
 # test-compatibility-evidence checks the versioned CI environment record.
+# test-first-user checks the privacy-bounded cross-terminal session handoff.
 # smoke-mvp runs the short user-facing MVP smoke recipe.
 # test is the official core alias.
 # -----------------------------------------------------------------------------
@@ -370,6 +371,9 @@ test-ci-policy:
 
 test-compatibility-evidence:
 	cd tests/compatibility && bash run_all.sh
+
+test-first-user:
+	cd tests/first-user && bash run_all.sh
 
 smoke-mvp: all
 	cd tests/smoke && bash mvp_smoke.sh
@@ -505,6 +509,7 @@ banner:
 	test-install \
 	test-ci-policy \
 	test-compatibility-evidence \
+	test-first-user \
 	test-backend-diagnostics \
 	smoke-mvp \
 	perf \

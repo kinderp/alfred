@@ -51,6 +51,9 @@ jobs:
       - name: Validate compatibility evidence contract
         run: make test-compatibility-evidence
 
+      - name: Validate first-user session context handoff
+        run: make test-first-user
+
       # Keep this last: test-install deliberately rebuilds the release profile.
       - name: Run staged installation tests
         run: make test-install

@@ -8,6 +8,7 @@ progetto_3a_inf/
 ├── core/
 ├── modules/
 ├── tests/
+├── tools/
 ├── docs/
 ├── Makefile
 └── README.md
@@ -104,14 +105,42 @@ diagnostica backend, non eventi semantici finali.
 
 ## tests/
 
-Contiene test funzionali, stress test e helper di test.
+Contiene suite contrattuali, test funzionali, test di installazione, controlli
+documentali e workload esplorativi o prestazionali.
 
 ```text
 tests/
-├── functional/
-├── stress/
-└── lib/
+├── core/
+├── backend/
+├── jsonl/
+├── install/
+├── compatibility/
+├── first-user/
+├── perf/
+└── exploratory/
 ```
+
+`tests/first-user/` verifica il passaggio privato e validato del contesto di
+sessione tra shell realmente separate. Non sostituisce una sessione con un
+partecipante: protegge soltanto il contratto eseguibile della guida.
+
+## tools/
+
+Contiene strumenti di sviluppo e helper operativi che non fanno parte del
+runtime installato di Alfred.
+
+```text
+tools/
+├── ci/
+├── code-browsing/
+├── codex/
+└── first-user/
+```
+
+`tools/first-user/session-context.sh` crea la root sacrificabile della
+validazione first-user e carica in ogni terminale soltanto path verificati. E'
+un helper del protocollo: non modifica Event Model, backend, core o CLI e non
+viene installato da `make install`.
 
 ## docs/
 

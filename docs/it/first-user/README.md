@@ -93,19 +93,31 @@ Il Session ID deve essere pseudonimo e contenere solo lettere ASCII, numeri e
 trattini, per esempio `FU-20260719-01`. Dalla root del repository:
 
 ```bash
-repo_root=$(pwd -P)
 session_id=FU-20260719-01
-session_root=$(mktemp -d "/tmp/alfred-first-user-${session_id}.XXXXXX")
-watch_root="$session_root/watch"
-run_root="$session_root/run"
-stage_root="$session_root/stage"
-mkdir -p "$watch_root" "$run_root" "$stage_root"
-cp docs/it/first-user/report-template.md "$session_root/report.md"
-: > "$session_root/commands.txt"
-printf 'session_root=%s\n' "$session_root"
+tools/first-user/session-context.sh create "$session_id"
 ```
 
-Il path completo e' materiale locale da sanificare. Nel report pubblico usare
+Il comando crea la root sacrificabile, `watch/`, `run/`, `stage/`, la copia del
+report, `commands.txt` e `session.env`. La root ha modo `0700`; il file di
+contesto ha modo `0600` e resta locale perche' contiene i path reali della
+sessione. L'helper stampa un unico comando `source ... load ...` gia' quotato
+per la shell. Eseguire quel comando nella shell corrente e conservarlo nel
+transcript locale: sara' il bootstrap esplicito di ogni nuovo terminale.
+
+`load` non usa `eval` e non esegue il contenuto di `session.env`. Prima di
+assegnare `repo_root`, `session_root`, `watch_root`, `run_root` e `stage_root`
+verifica versione, chiavi, proprietario, modo `0600`, path canonici e
+discendenza dalla root `/tmp/alfred-first-user-SESSION_ID.XXXXXX`. Il solo
+risultato accettabile e':
+
+```text
+session context OK
+```
+
+Se il file manca, e' un symlink, e' stato modificato, ha permessi diversi o un
+path esce dalla root sacrificabile, il bootstrap fallisce senza assegnare un
+contesto parziale. Non ricostruire i path a mano e non proseguire. Il path
+completo e' materiale locale da sanificare; nel report pubblico usare
 `<SESSION_ROOT>`, `<WATCH_ROOT>` e `<REPO_ROOT>`.
 
 ### Transcript manuale dei comandi
@@ -128,6 +140,7 @@ dal protocollo.
 Eseguire e riportare gli output utili in forma sanificata:
 
 ```bash
+: "${watch_root:?eseguire prima il bootstrap della sessione}"
 git rev-parse HEAD
 date -u +%Y-%m-%dT%H:%M:%SZ
 uname -s
@@ -189,6 +202,8 @@ quando il partecipante riconosce un evento semantico atteso.
 Il partecipante usa il contratto pubblico senza modificare il sistema:
 
 ```bash
+: "${repo_root:?eseguire prima il bootstrap della sessione}"
+: "${stage_root:?eseguire prima il bootstrap della sessione}"
 make release
 make DESTDIR="$stage_root" PREFIX=/usr install
 "$stage_root/usr/bin/alfred" --version
@@ -212,6 +227,8 @@ l'evidenza; non installarlo silenziosamente durante la misura.
 Creare una configurazione dedicata sotto la root temporanea:
 
 ```bash
+: "${repo_root:?eseguire prima il bootstrap della sessione}"
+: "${run_root:?eseguire prima il bootstrap della sessione}"
 printf '%s\n' \
     'output_enabled=true' \
     'output_format=jsonl' \
@@ -227,17 +244,23 @@ pubblicare la configurazione se e' stata modificata con path o valori privati.
 
 ## Fase 4: runtime rappresentativo
 
-Nel primo terminale:
+Aprire il primo terminale ed eseguire come primo comando il bootstrap stampato
+dalla preparazione. Procedere soltanto dopo `session context OK`, quindi:
 
 ```bash
+: "${repo_root:?contesto sessione non caricato}"
+: "${run_root:?contesto sessione non caricato}"
+: "${watch_root:?contesto sessione non caricato}"
 cd "$run_root"
 "$repo_root/alfred" -c "$run_root/alfred.conf" "$watch_root"
 ```
 
 Attendere che `events.log` mostri `WATCH_ADDED` per la root prima di iniziare.
-Nel secondo terminale eseguire una operazione alla volta:
+Aprire il secondo terminale, eseguire lo stesso bootstrap e attendere
+`session context OK`. Eseguire poi una operazione alla volta:
 
 ```bash
+: "${watch_root:?contesto sessione non caricato}"
 printf 'alpha\n' > "$watch_root/draft.txt"
 printf 'beta\n' >> "$watch_root/draft.txt"
 mv "$watch_root/draft.txt" "$watch_root/report.txt"
@@ -336,6 +359,7 @@ Prima di pubblicare report o estratti:
   sessione;
 - ridurre i log alle righe necessarie, conservando timestamp e tipo evento;
 - verificare che `commands.txt` non contenga path o argomenti privati;
+- non pubblicare `session.env` o il bootstrap con i path reali;
 - registrare chi ha eseguito il controllo di sanificazione;
 - mantenere gli artifact grezzi locali salvo consenso separato.
 
@@ -347,6 +371,7 @@ scenario in `FAIL`: e' un problema di gestione dell'evidenza.
 Con Alfred gia' fermo:
 
 ```bash
+: "${stage_root:?contesto sessione non caricato}"
 make DESTDIR="$stage_root" PREFIX=/usr uninstall
 test ! -e "$stage_root/usr/bin/alfred"
 ```
@@ -354,7 +379,8 @@ test ! -e "$stage_root/usr/bin/alfred"
 Verificare manualmente che non restino processi Alfred della sessione. Prima di
 rimuovere `session_root`, decidere se gli artifact grezzi devono restare locali
 per la riproduzione. Non cancellarli prima del triage e non caricarli senza
-sanificazione e consenso.
+sanificazione e consenso. `session.env` viene eliminato insieme alla root e non
+deve essere copiato nel repository o in uno storage pubblico.
 
 ## Dopo la sessione
 
