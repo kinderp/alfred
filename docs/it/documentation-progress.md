@@ -2138,3 +2138,9 @@ forza `actions/checkout@v4` e `actions/upload-artifact@v4` dal runtime Node.js
 20 deprecato a Node.js 24 e' tracciato separatamente dalla issue #276: non
 invalida i job verdi della readiness, ma richiede un aggiornamento e una
 decisione di pinning dedicati.
+
+La stessa review ha chiarito il contratto di provenienza degli artifact:
+`source_revision` e' il `${{ github.sha }}` realmente testato. Su `push`
+identifica normalmente il commit pubblicato; su `pull_request` puo' identificare
+il merge ref sintetico e quindi differire dall'HEAD del branch. Run ID, attempt
+e metadati GitHub completano l'interpretazione.

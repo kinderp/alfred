@@ -655,6 +655,21 @@ permanente. `kernel_scope=shared-github-runner-kernel` impedisce di interpretare
 tre lane userspace come tre kernel guest. `run_id` e `run_attempt` sono stringhe
 decimali per non dipendere dai limiti numerici di consumer JSON diversi.
 
+`source_revision` riceve il valore GitHub `${{ github.sha }}` e identifica la
+revisione effettivamente sottoposta al job. Il significato dipende dall'evento:
+
+- in una run `push` su `main` coincide normalmente con il commit appena
+  pubblicato;
+- in una run `pull_request` puo' essere il commit sintetico
+  `refs/pull/<numero>/merge` creato da GitHub per provare insieme branch e base,
+  quindi puo' differire dall'HEAD del branch proposto.
+
+Questa differenza non rende l'evidence incoerente: il merge ref e' proprio
+l'albero provato dal job. Un consumer non deve pero' interpretare
+`source_revision` come sinonimo universale di branch HEAD. Deve usare anche
+`ci.run_id`, `ci.run_attempt` e i metadati GitHub della run per distinguere
+push, pull request e relativo contesto.
+
 `source_tree_filesystem_type` descrive il filesystem che ospita la root del
 checkout, ricavata dal percorso del generatore; non descrive necessariamente la
 root del container e non dipende dalla directory corrente del chiamante. Le
