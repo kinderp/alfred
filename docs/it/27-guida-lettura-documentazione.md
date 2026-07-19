@@ -59,7 +59,11 @@ entrare subito nei dettagli interni.
    spiega il layout di installazione implementato, come provarlo senza privilegi e
    perche' container, VM e kernel specifici dimostrano aspetti diversi della
    compatibilita' Linux.
-7. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
+7. [First-user pre-release validation v0](55-first-user-pre-release-validation-v0.md)
+   definisce consenso, root sacrificabile, onboarding, sessioni realistiche,
+   evidenza, privacy e triage per chi prova Alfred fuori dal normale ciclo dei
+   maintainer.
+8. [Configurazione Codex Sol Ultra](52-configurazione-codex-sol-ultra.md)
    spiega come installare su una macchina nuova un profilo Codex sanificato
    con `gpt-5.6-sol`, reasoning `ultra`, multi-agent e sub-agenti locali.
    Serve solo per configurare l'ambiente di sviluppo, non il runtime Alfred.
@@ -100,9 +104,9 @@ test collegati.
 Per capire anche il lavoro in corso su GitHub, leggere in questo ordine:
 
 1. la milestone corrente, attualmente
-   [`Installability and Linux compatibility v0`](https://github.com/kinderp/alfred/milestone/15);
+   [`First-user pre-release validation v0`](https://github.com/kinderp/alfred/milestone/16);
 2. la issue madre della milestone, attualmente
-   [`Installability and Linux compatibility v0: implementation plan`](https://github.com/kinderp/alfred/issues/261);
+   [`First-user pre-release validation v0: implementation plan`](https://github.com/kinderp/alfred/issues/279);
 3. il Project nella pagina
    [`Repository Projects`](https://github.com/kinderp/alfred/projects), dove
    [`Alfred Roadmap`](https://github.com/users/kinderp/projects/1) mostra issue
@@ -202,6 +206,10 @@ leggere anche:
    confonderla con la sola copertura della suite ufficiale.
 4. [Scenari esplorativi nightly](../../tests/exploratory/nightly/README.md)
    mostra gli script rilanciabili e spiega quali log ispezionare.
+5. [First-user pre-release validation v0](55-first-user-pre-release-validation-v0.md)
+   aggiunge consenso, onboarding senza conoscenza implicita, privacy e
+   confronto fra ambienti indipendenti. Va letto quando l'audit coinvolge un
+   utente esterno, perche' un audit del maintainer non misura la stessa cosa.
 
 ## Percorso 7: resync, scanner e recovery
 

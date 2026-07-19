@@ -72,6 +72,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `52-configurazione-codex-sol-ultra.md` |
 | Parziale | `53-installability-linux-compatibility-v0.md` |
 | Completo | `54-audit-installazione-ci-v0.md` |
+| Parziale | `55-first-user-pre-release-validation-v0.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |
@@ -2163,3 +2164,24 @@ debito separa kernel, filesystem, architetture, musl, packaging, servizi, suite
 complete, security analysis, stress e performance. La issue #278 pianifica
 openSUSE e poi Arch Linux una lane alla volta, ma la validazione pre-release con
 primi utenti resta il prossimo passo di prodotto.
+
+## Aggiornamento first-user pre-release validation v0
+
+Dopo il merge della PR #277, la Milestone GitHub #16 e la issue madre #279
+aprono la prima validazione pre-release con utenti esterni al normale ciclo dei
+maintainer. `55-first-user-pre-release-validation-v0.md` definisce il contratto
+duraturo: consenso informato, root sacrificabile, metadati minimi
+dell'ambiente, onboarding, installazione staged, scenari filesystem, sessione
+user-like, artifact sanificati, classificazione degli esiti e criteri di
+uscita.
+
+La issue figlia #280 implementa il setup documentale senza cambiare runtime,
+Event Model, Backend API o Writer Runtime. Il documento distingue la first-user
+validation dalle suite automatiche e dagli audit notturni: misura anche
+comprensibilita' e conoscenza implicita, ma non dimostra fuzzing, benchmark,
+supporto generale di una distribuzione o copertura di kernel differenti.
+
+La roadmap mantiene openSUSE e Arch nella issue #278 dopo questa validazione,
+una lane alla volta. VM/kernel reali, metodi formali, packaging e nuovi backend
+restano debiti futuri espliciti finche' utenti o bug non rendono prioritario il
+loro rischio.
