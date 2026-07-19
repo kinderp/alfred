@@ -1,0 +1,99 @@
+# Sanitized transcript for the focused FU-20260719-R2 rehearsal.
+# Evidence only: replay one numbered entry at a time in the indicated shell.
+# Replace placeholders locally; never publish the generated session.env or the
+# bootstrap after substitution with real paths.
+
+# [001] preparation shell | create private context
+cd '<REPO_ROOT>'
+tools/first-user/session-context.sh create FU-20260719-R2
+
+# [002] preparation shell | exact bootstrap printed by [001]
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+
+# [003] preparation shell | build and configuration
+make
+printf '%s\n' \
+    'output_enabled=true' \
+    'output_format=jsonl' \
+    'output_buffer_size=65536' \
+    'output_log=output.jsonl' \
+    > "$run_root/alfred.conf"
+"$repo_root/alfred" -c "$run_root/alfred.conf" --check-config
+
+# [004] terminal-1, fresh Bash process | same bootstrap
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+
+# [005] terminal-1 | Alfred remains in foreground
+: "${repo_root:?}" "${run_root:?}" "${watch_root:?}"
+cd "$run_root"
+exec "$repo_root/alfred" -c "$run_root/alfred.conf" "$watch_root"
+
+# [006] terminal-2, fresh Bash process | same bootstrap
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+
+# [007] terminal-2 | representative first pass
+: "${watch_root:?}" "${run_root:?}"
+for attempt in {1..50}; do
+    if grep -F 'WATCH_ADDED' "$run_root/events.log" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
+grep -F 'WATCH_ADDED' "$run_root/events.log" >/dev/null
+printf 'alpha\n' > "$watch_root/draft.txt"
+printf 'beta\n' >> "$watch_root/draft.txt"
+mv "$watch_root/draft.txt" "$watch_root/report.txt"
+mkdir "$watch_root/inbox" "$watch_root/archive"
+printf 'item\n' > "$watch_root/inbox/item.txt"
+mv "$watch_root/inbox/item.txt" "$watch_root/archive/item.txt"
+rm "$watch_root/archive/item.txt"
+rmdir "$watch_root/inbox" "$watch_root/archive"
+
+# [008] terminal-1 | ACTION, NOT SHELL
+# Press Ctrl+C. Alfred returned exit status 0.
+
+# [009] terminal-1, fresh process | restart for paced move proof
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+cd "$run_root"
+exec "$repo_root/alfred" -c "$run_root/alfred.conf" "$watch_root"
+
+# [010] terminal-2, fresh process | wait for both watches before moving
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+mkdir "$watch_root/inbox-paced" "$watch_root/archive-paced"
+for attempt in {1..50}; do
+    if grep -F 'WATCH_ADDED' "$run_root/events.log" |
+           grep -F "$watch_root/inbox-paced" >/dev/null &&
+       grep -F 'WATCH_ADDED' "$run_root/events.log" |
+           grep -F "$watch_root/archive-paced" >/dev/null; then
+        break
+    fi
+    sleep 0.1
+done
+grep -F 'WATCH_ADDED' "$run_root/events.log" |
+    grep -F "$watch_root/inbox-paced" >/dev/null
+grep -F 'WATCH_ADDED' "$run_root/events.log" |
+    grep -F "$watch_root/archive-paced" >/dev/null
+printf 'item\n' > "$watch_root/inbox-paced/item.txt"
+sleep 0.2
+mv "$watch_root/inbox-paced/item.txt" "$watch_root/archive-paced/item.txt"
+sleep 0.2
+rm "$watch_root/archive-paced/item.txt"
+rmdir "$watch_root/inbox-paced" "$watch_root/archive-paced"
+
+# [011] terminal-1 | ACTION, NOT SHELL
+# Press Ctrl+C. Alfred returned exit status 0.
+
+# [012] verification shell, fresh Bash process | output and lifecycle checks
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+python3 -c \
+    'import json, sys; [json.loads(line) for line in sys.stdin if line.strip()]' \
+    < "$run_root/output.jsonl"
+grep -F 'FILE_MOVED' "$run_root/events.log"
+if pgrep -x alfred >/dev/null; then
+    printf 'unexpected alfred process remains\n' >&2
+    exit 1
+fi
+
+# [013] cleanup shell | after hashes and sanitized evidence were recorded
+source '<REPO_ROOT>/tools/first-user/session-context.sh' load '<SESSION_ROOT>/session.env'
+find "$session_root" -depth -delete

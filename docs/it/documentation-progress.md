@@ -76,6 +76,7 @@ attivi, quali sono incompleti e quali sono stati rimossi perche' superati.
 | Completo | `first-user/README.md` |
 | Completo | `first-user/report-template.md` |
 | Completo | `first-user/rehearsals/FU-20260719-R1-report.md` |
+| Completo | `first-user/rehearsals/FU-20260719-R2-context-handoff.md` |
 | Completo | `lab/README.md` |
 | Completo | `lab/scenarios/create-file.md` |
 | Completo | `lab/scenarios/file-ready.md` |

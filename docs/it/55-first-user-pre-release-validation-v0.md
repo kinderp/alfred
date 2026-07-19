@@ -318,6 +318,12 @@ La prima rehearsal controllata e' documentata nel
 rehearsal verifica il protocollo ma non sostituisce una sessione esterna e non
 contribuisce alle metriche di usabilita'.
 
+Il finding P1 sul passaggio di contesto tra terminali emerso in R1 e' stato
+verificato nuovamente nella
+[rehearsal focalizzata FU-20260719-R2](first-user/rehearsals/FU-20260719-R2-context-handoff.md),
+con processi Bash separati e senza iniezione diretta dei path. Anche R2 resta
+una prova del maintainer, non una sessione first-user indipendente.
+
 ## Criteri di uscita
 
 La milestone puo' essere chiusa quando:
