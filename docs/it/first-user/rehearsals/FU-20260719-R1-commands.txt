@@ -1,8 +1,10 @@
 # Sanitized replay transcript for FU-20260719-R1.
-# Replace <REPO_ROOT>, <SESSION_ROOT> and <WATCH_ROOT> before replay.
+# Replace <REPO_ROOT> before replay. Session and watch roots are generated below.
 # Metadata comments are not commands. Commands preserve the executed shell form.
 
 # [001] 2026-07-19T09:03:20Z | preparation | facilitator
+control_repo_root='<REPO_ROOT>'
+cd "$control_repo_root"
 session_id=FU-20260719-R1
 
 # [002] 2026-07-19T09:03:20Z | preparation | facilitator
@@ -21,7 +23,6 @@ printf 'session_root=%s\n' "$session_root"
 
 # [005] 2026-07-19T09:03:20Z | preparation | facilitator
 git worktree add --detach "$session_root/source" fbf03c7
-control_repo_root='<REPO_ROOT>'
 source_root="$session_root/source"
 cd "$source_root"
 
