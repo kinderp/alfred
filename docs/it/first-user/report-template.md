@@ -48,7 +48,7 @@ Note sul consenso, senza dati identificativi:
 | Kernel osservato | `<KERNEL RELEASE>` | `uname -r` |
 | Kernel scope | `<HOST/VM_GUEST/SHARED_CONTAINER/UNKNOWN>` | ambiente sessione |
 | Filesystem root di prova | `<TYPE_OR_UNKNOWN>` | `stat -f` sulla root |
-| Profilo build | `DEBUG | RELEASE` | comando eseguito |
+| Profilo build | `<DEBUG/RELEASE>` | comando eseguito |
 | Documentazione usata | `<README_IT/README_EN/MAN/OTHER>` | osservazione |
 
 Interpretazione limitata dell'ambiente:
