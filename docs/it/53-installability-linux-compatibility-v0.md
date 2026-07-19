@@ -821,6 +821,18 @@ versione sostitutiva per entrambe le action e della policy di pinning richiede
 una modifica CI separata, non un aggiornamento opportunistico dentro questa
 chiusura.
 
+La issue #276 chiude quel debito senza cambiare il contratto degli artifact:
+`actions/checkout` passa alla release `v6.0.2`, fissata allo SHA completo
+`de0fac2e4500dabe0009e67214ff5f5447ce83dd`, e `actions/upload-artifact` alla
+release `v7.0.1`, fissata allo SHA completo
+`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`. Entrambe usano il runtime Node.js
+24. Il target `make test-ci-policy` impedisce nuovi riferimenti esterni mobili
+e richiede un commento di versione leggibile accanto a ogni SHA. I nomi degli
+artifact, lo schema `alfred.compatibility-evidence` v0, la provenienza, gli
+esiti e la dichiarazione del kernel condiviso restano invariati e devono essere
+ricontrollati sui job GitHub dopo l'aggiornamento. Il paragrafo precedente
+resta come motivazione storica del debito osservato durante la readiness.
+
 ## Checklist della milestone
 
 | Item | Stato | Note |

@@ -544,12 +544,15 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential man-db python3
+
+      - name: Validate GitHub Actions pinning policy
+        run: make test-ci-policy
 
       - name: Build
         run: make
@@ -577,7 +580,7 @@ jobs:
 
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: alfred-test-logs
           if-no-files-found: ignore
@@ -670,12 +673,14 @@ Un passo puo' usare un'action gia' pronta:
 
 ```yaml
 - name: Check out repository
-  uses: actions/checkout@v4
+  uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 ```
 
-`uses` indica un'action esterna. `actions/checkout@v4` scarica il codice della
-PR dentro la macchina virtuale, cosi' i comandi successivi possono compilare il
-repository.
+`uses` indica un'action esterna. In questo caso `actions/checkout` scarica il
+codice della PR dentro la macchina virtuale, cosi' i comandi successivi possono
+compilare il repository. Il valore dopo `@` e' lo SHA completo e immutabile del
+commit corrispondente alla release `v6.0.2`; il commento mantiene leggibile la
+versione senza affidare l'esecuzione a un tag mobile.
 
 Un passo puo' anche eseguire comandi shell:
 
@@ -727,7 +732,8 @@ with:
     /tmp/alfred_install_test.*/**
 ```
 
-Questi campi configurano `actions/upload-artifact@v4`:
+Questi campi configurano `actions/upload-artifact` alla release `v7.0.1`,
+fissata al relativo SHA completo:
 
 - `name`: nome dell'artifact scaricabile dalla pagina della run
 - `if-no-files-found`: non fallire se non trova log da caricare
@@ -763,13 +769,51 @@ locale:
 
 - name: Upload test logs on failure
   if: failure()
-  uses: actions/upload-artifact@v4
+  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
 ```
 
 Questa scelta e' intenzionale: la CI non deve avere una procedura misteriosa
 diversa da quella umana. Deve automatizzare gli stessi comandi documentati per i
 contributori. `make test-install` resta ultimo perche' ricostruisce il profilo
 release dopo che le suite ASan/UBSan hanno gia' verificato la build debug.
+
+### Policy di pinning delle GitHub Actions
+
+Ogni action esterna usata nei file sotto `.github/workflows/` deve rispettare
+due requisiti:
+
+1. il riferimento dopo `@` deve essere uno SHA Git completo, minuscolo e di 40
+   caratteri;
+2. la stessa riga deve terminare con un commento di release leggibile nella
+   forma `# vX.Y.Z`.
+
+Un tag come `actions/checkout@v6` e' leggibile, ma puo' essere spostato dal
+repository che pubblica l'action. Lo SHA seleziona invece esattamente il codice
+revisionato. Il commento rende immediato capire quale release ufficiale
+corrisponde al commit senza indebolire il pin. Questa policy segue la
+[raccomandazione GitHub per l'uso sicuro delle action di terze parti](https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions).
+
+Il controllo locale e CI e':
+
+```bash
+make test-ci-policy
+```
+
+Lo script usa soltanto la libreria standard di Python, scandisce sia i file
+`.yml` sia gli eventuali `.yaml`, ignora action locali e immagini
+`docker://`, rifiuta revisioni mobili o commenti di versione mancanti e
+fallisce anche se non trova alcuna action esterna. Il job `CI` esegue questo
+controllo prima della build; non serve ripeterlo in ogni lane della matrice
+perche' la scansione copre tutti i workflow del repository.
+
+Per aggiornare un'action bisogna leggere le release note ufficiali, risolvere
+la release scelta nel relativo SHA, aggiornare insieme SHA e commento e
+verificare sia il job di riferimento sia la matrice userspace quando l'action
+e' condivisa. Il pin immutabile protegge dallo spostamento del tag, non rende
+automaticamente affidabile il codice upstream: provenienza, modifiche e
+permessi restano parte della review. Alfred mantiene per ora questi due
+aggiornamenti in PR piccole e dedicate; introdurre automazione come Dependabot
+non e' giustificato finche' il numero di dipendenze CI resta cosi' limitato.
 
 Se in futuro aggiungiamo un nuovo controllo obbligatorio, per esempio un
 formatter o una suite di test aggiuntiva, bisogna aggiornare il workflow
